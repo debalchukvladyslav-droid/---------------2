@@ -1,0 +1,461 @@
+// === js/calendar.js ===
+import { state } from './state.js';
+import { saveToLocal, loadMonth } from './storage.js';
+import { showPrompt } from './utils.js';
+
+function sanitizeHTML(str) {
+    const div = document.createElement('div');
+    div.textContent = String(str ?? '');
+    return div.innerHTML;
+}
+
+export function getDaylossForMonth(year, monthIndex) {
+    let key = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+    const monthly = state.appData?.settings?.monthlyDayloss ?? {};
+    const def = state.appData?.settings?.defaultDayloss ?? -100;
+    return monthly[key] !== undefined ? monthly[key] : def;
+}
+
+export async function updateAutoFlags() {
+    // Не завантажуємо всі місяці — рахуємо рекорди тільки з вже завантажених даних
+
+    let maxPnL = 0;
+    let records = new Set();
+    let absoluteRecord = null;
+    
+    let sortedDates = Object.keys(state.appData.journal)
+        .filter(d => d.match(/^\d{4}-\d{2}-\d{2}$/) && state.appData.journal[d].pnl !== null && state.appData.journal[d].pnl !== undefined && state.appData.journal[d].pnl !== "")
+        .sort((a, b) => new Date(a) - new Date(b));
+        
+    for (let d of sortedDates) {
+        let pnl = parseFloat(state.appData.journal[d].pnl);
+        if (!isNaN(pnl) && pnl > 0) {
+            if (pnl > maxPnL) {
+                maxPnL = pnl;
+                records.add(d);
+                absoluteRecord = d; 
+            }
+        }
+    }
+    state.autoFlagsCache = { records, absoluteRecord };
+}
+
+export function getWinstreak() {
+    let sortedDates = Object.keys(state.appData.journal)
+        .filter(d => d.match(/^\d{4}-\d{2}-\d{2}$/) && state.appData.journal[d].pnl !== null && state.appData.journal[d].pnl !== "")
+        .sort((a, b) => new Date(a) - new Date(b));
+
+    let streak = 0;
+    for (let d of sortedDates) {
+        let pnl = parseFloat(state.appData.journal[d].pnl);
+        let [y, m, day] = d.split('-');
+        let dl = getDaylossForMonth(y, parseInt(m) - 1);
+        let halfDl = dl / 2;
+
+        if (pnl <= halfDl) streak = 0; 
+        else if (pnl > 0) streak++; 
+    }
+    return streak;
+}
+
+export function shiftDate(offset) {
+    let parts = state.selectedDateStr.split('-');
+    let d = new Date(parts[0], parts[1] - 1, parts[2]); 
+    do {
+        d.setDate(d.getDate() + offset);
+    } while (d.getDay() === 0 || d.getDay() === 6); 
+    
+    let newYear = d.getFullYear();
+    let newMonth = String(d.getMonth() + 1).padStart(2, '0');
+    let newDay = String(d.getDate()).padStart(2, '0');
+    let newDateStr = `${newYear}-${newMonth}-${newDay}`;
+    
+    document.getElementById('month-select').value = d.getMonth();
+    document.getElementById('year-select').value = d.getFullYear();
+    
+    selectDate(newDateStr);
+    renderView(); 
+}
+
+export function updateDisplayDate(dateStr) {
+    let parts = dateStr.split('-');
+    let dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
+    const options = { weekday: 'long', month: 'long', day: 'numeric' };
+    document.getElementById('display-date').innerText = dateObj.toLocaleDateString('uk-UA', options);
+}
+
+export function selectDateFromInput(dateStr) {
+    let parts = dateStr.split('-');
+    document.getElementById('month-select').value = parseInt(parts[1]) - 1; 
+    document.getElementById('year-select').value = parseInt(parts[0]);
+    selectDate(dateStr); 
+    renderView();
+}
+
+export function selectDate(dateStr) {
+    state.selectedDateStr = dateStr; 
+    document.getElementById('trade-date').value = dateStr; 
+    updateDisplayDate(dateStr);
+    
+    document.querySelectorAll('.day-cell').forEach(c => c.classList.remove('active-day'));
+    const cell = document.getElementById(`cell-${dateStr}`); 
+    if (cell) cell.classList.add('active-day');
+
+    const dayData = state.appData.journal[dateStr] || {};
+    document.getElementById('trade-pnl').value = dayData.pnl !== undefined && dayData.pnl !== null ? parseFloat(dayData.pnl).toFixed(2) : '';
+    document.getElementById('trade-gross').value = dayData.gross_pnl !== undefined && dayData.gross_pnl !== null ? parseFloat(dayData.gross_pnl).toFixed(2) : '';
+    document.getElementById('trade-comm').value = dayData.commissions !== undefined && dayData.commissions !== null ? parseFloat(dayData.commissions).toFixed(2) : '';
+    document.getElementById('trade-locates').value = dayData.locates !== undefined && dayData.locates !== null ? parseFloat(dayData.locates).toFixed(2) : '';
+    document.getElementById('trade-kf').value = dayData.kf !== undefined && dayData.kf !== null ? parseFloat(dayData.kf).toFixed(2) : '';
+    document.getElementById('trade-notes').value = dayData.notes || '';
+    document.getElementById('mentor-notes').value = dayData.mentor_comment || '';
+    
+    state.appData.errorTypes?.forEach((err, index) => { 
+        const checkbox = document.getElementById(`err-${index}`); 
+        if (checkbox) checkbox.checked = (dayData.errors || []).includes(err); 
+    });
+    
+    // Викликаємо функції UI, якщо вони доступні
+    if (window.renderChecklistDisplay) window.renderChecklistDisplay();
+    if (window.renderSidebarSliders) window.renderSidebarSliders();
+    if (window.renderAIAdviceUI) window.renderAIAdviceUI();
+    if (window.renderAssignedScreens) window.renderAssignedScreens();
+    
+    let viewScreens = document.getElementById('view-screens');
+    if (viewScreens && viewScreens.classList.contains('active') && window.loadImages) {
+        window.loadImages();
+    }
+
+    if (window.loadPrivateNote) window.loadPrivateNote();
+
+    // Якщо вкладка "Угоди" активна — оновлюємо пілюлі для нової дати
+    const viewTrades = document.getElementById('view-trades');
+    if (viewTrades && viewTrades.classList.contains('active')) {
+        if (window.populateSymbolSelect) window.populateSymbolSelect(dateStr);
+    }
+
+    // Завантажуємо дані сесії
+    const sessionGoal = document.getElementById('session-goal');
+    const sessionPlan = document.getElementById('session-plan');
+    const sessionReadiness = document.getElementById('session-readiness');
+    const sessionReadinessVal = document.getElementById('session-readiness-val');
+    const sessionAiResult = document.getElementById('session-ai-result');
+    if (sessionGoal) sessionGoal.value = dayData.sessionGoal || '';
+    if (sessionPlan) sessionPlan.value = dayData.sessionPlan || '';
+    if (sessionReadiness) { sessionReadiness.value = dayData.sessionReadiness || 5; }
+    if (sessionReadinessVal) sessionReadinessVal.textContent = (dayData.sessionReadiness || 5) + '/10';
+    if (sessionAiResult) {
+        if (dayData.sessionAiResult) {
+            sessionAiResult.style.display = 'block';
+            sessionAiResult.style.background = 'rgba(139,92,246,0.08)';
+            sessionAiResult.style.border = '1px solid var(--accent)';
+            sessionAiResult.textContent = '';
+            dayData.sessionAiResult.split('\n').forEach((line, i, arr) => {
+                sessionAiResult.appendChild(document.createTextNode(line));
+                if (i < arr.length - 1) sessionAiResult.appendChild(document.createElement('br'));
+            });
+        } else {
+            sessionAiResult.style.display = 'none';
+            sessionAiResult.innerHTML = '';
+        }
+    }
+    if (window.renderSessionPlaybook) window.renderSessionPlaybook();
+
+    // Рендер типів трейдів (щоб saveEntry() міг зчитати .tt-input-pnl/.tt-input-kf)
+    const ttContainer = document.getElementById('trade-types-container');
+    if (ttContainer && state.appData?.tradeTypes) {
+        const savedTT = dayData.tradeTypesData || {};
+        let ttHtml = '';
+        state.appData.tradeTypes.forEach(tt => {
+            const pnl = savedTT[tt]?.pnl !== undefined ? savedTT[tt].pnl : '';
+            const kf = savedTT[tt]?.kf !== undefined ? savedTT[tt].kf : '';
+            const safeTT = sanitizeHTML(tt);
+            const safePnl = sanitizeHTML(String(pnl));
+            const safeKf = sanitizeHTML(String(kf));
+            ttHtml += `
+                <div style="display: flex; gap: 5px; align-items: center;">
+                    <label style="flex: 1; margin:0;">${safeTT}</label>
+                    <input type="number" step="0.01" class="tt-input-pnl" data-name="${safeTT}" placeholder="PnL $" value="${safePnl}" style="width: 70px; padding: 6px;">
+                    <input type="number" step="0.01" class="tt-input-kf" data-name="${safeTT}" placeholder="КФ" value="${safeKf}" style="width: 60px; padding: 6px;">
+                </div>`;
+        });
+        ttContainer.innerHTML = ttHtml;
+    }
+}
+
+export function saveEntry() {
+    if (!state.selectedDateStr) return; // Ніяких алертів, просто тихий вихід, якщо день не обрано
+    
+    // Збираємо типи трейдів
+    let ttData = Object.create(null);
+    const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+    document.querySelectorAll('.tt-input-pnl').forEach(el => {
+        let name = el.getAttribute('data-name');
+        if (!name || FORBIDDEN_KEYS.has(name) || Object.prototype.hasOwnProperty.call(Object.prototype, name)) return;
+        let pnlVal = el.value;
+        let kfInput = document.querySelector(`.tt-input-kf[data-name="${CSS.escape(name)}"]`);
+        let kfVal = kfInput ? kfInput.value : '';
+        ttData[name] = { pnl: pnlVal, kf: kfVal };
+    });
+
+    let errors = [];
+    document.querySelectorAll('.error-checkbox:checked').forEach(el => errors.push(el.value));
+    
+    let checklist = [];
+    document.querySelectorAll('.checklist-checkbox:checked').forEach(el => checklist.push(el.value));
+    
+    // Жорсткий захист від порожніх ключів у повзунках
+    const sliders = Object.create(null);
+    document.querySelectorAll('.slider-input').forEach(el => {
+        if (el.id) {
+            const key = el.id.replace('slider-', '');
+            if (key && !Object.prototype.hasOwnProperty.call(Object.prototype, key)) sliders[key] = el.value;
+        }
+    });
+
+    let pnlVal = document.getElementById('trade-pnl').value;
+    let kfValMain = document.getElementById('trade-kf').value;
+    const grossValRaw = document.getElementById('trade-gross').value;
+    const commValRaw = document.getElementById('trade-comm').value;
+    const locValRaw = document.getElementById('trade-locates').value;
+
+    // Формуємо об'єкт дня (захист від NaN)
+    let dayData = {
+        pnl: (pnlVal && !isNaN(pnlVal)) ? parseFloat(pnlVal) : null,
+        gross_pnl: (grossValRaw && !isNaN(grossValRaw)) ? parseFloat(grossValRaw) : null,
+        commissions: (commValRaw && !isNaN(commValRaw)) ? parseFloat(commValRaw) : null,
+        locates: (locValRaw && !isNaN(locValRaw)) ? parseFloat(locValRaw) : null,
+        kf: (kfValMain && !isNaN(kfValMain)) ? parseFloat(kfValMain) : null,
+        notes: document.getElementById('trade-notes').value || "",
+        errors: errors,
+        checkedParams: checklist,
+        sliders: sliders,
+        tradeTypesData: ttData
+    };
+
+    let oldData = state.appData.journal[state.selectedDateStr] || {};
+    dayData.screenshots = oldData.screenshots || { good: [], normal: [], bad: [], error: [] };
+    if (oldData.mentor_comment) dayData.mentor_comment = oldData.mentor_comment;
+    if (oldData.tickers) dayData.tickers = oldData.tickers;
+    // Не перетираємо дані, які користувач не редагує в цьому екрані,
+    // але вони потрібні для UI (tickers/ai_advice) та обчислень.
+    if (oldData.traded_tickers !== undefined) dayData.traded_tickers = oldData.traded_tickers;
+    if (oldData.fondexx !== undefined) dayData.fondexx = oldData.fondexx;
+    if (oldData.ppro !== undefined) dayData.ppro = oldData.ppro;
+    if (oldData.ai_advice !== undefined) dayData.ai_advice = oldData.ai_advice;
+    if (oldData.sessionGoal !== undefined) dayData.sessionGoal = oldData.sessionGoal;
+    if (oldData.sessionPlan !== undefined) dayData.sessionPlan = oldData.sessionPlan;
+    if (oldData.sessionReadiness !== undefined) dayData.sessionReadiness = oldData.sessionReadiness;
+    if (oldData.sessionSetups !== undefined) dayData.sessionSetups = oldData.sessionSetups;
+    if (oldData.sessionAiResult !== undefined) dayData.sessionAiResult = oldData.sessionAiResult;
+    if (oldData.trades !== undefined) dayData.trades = oldData.trades;
+    if (oldData.sessionDone !== undefined) dayData.sessionDone = oldData.sessionDone;
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(state.selectedDateStr) || Object.prototype.hasOwnProperty.call(Object.prototype, state.selectedDateStr)) return;
+    state.appData.journal[state.selectedDateStr] = dayData;
+    
+    // Тихе збереження
+    import('./storage.js').then(module => {
+        module.saveToLocal().then(() => {
+            if (window.renderView) window.renderView();
+            if (window.updateAutoFlags) window.updateAutoFlags().then(() => { if (window.renderView) window.renderView(); });
+            if (window.refreshStatsView) window.refreshStatsView();
+            if (window.innerWidth <= 1024 && window.toggleMobileSidebar) window.toggleMobileSidebar(false);
+        }).catch(err => console.error("Помилка фонового збереження:", err));
+    });
+}
+
+// Допоміжні функції для календаря
+export function getMonday(d) { 
+    d = new Date(d); 
+    var day = d.getDay(), diff = d.getDate() - day + (day == 0 ? -6 : 1); 
+    return new Date(d.setDate(diff)).toISOString().split('T')[0]; 
+}
+
+export function createWeekLabel(wkKey) {
+    let w = document.createElement('div'); 
+    let hasComment = state.appData.weeklyComments[wkKey] && state.appData.weeklyComments[wkKey].trim() !== '';
+    let tooltip = document.getElementById('tooltip');
+    
+    w.className = 'week-label' + (hasComment ? ' has-comment' : ''); w.innerHTML = '📝'; 
+    w.onmouseenter = (e) => { tooltip.innerText = hasComment ? `Підсумок тижня:\n${state.appData.weeklyComments[wkKey]}` : "Клікніть, щоб додати підсумок."; tooltip.style.display = 'block'; };
+    w.onmousemove = (e) => { tooltip.style.left = e.pageX + 15 + 'px'; tooltip.style.top = e.pageY + 15 + 'px'; };
+    w.onmouseleave = () => { tooltip.style.display = 'none'; };
+    w.onclick = () => { showPrompt(`Підсумок за тиждень (${wkKey}):`, state.appData.weeklyComments[wkKey] || "").then(c => { if (c !== null && /^\d{4}-\d{2}-\d{2}$/.test(wkKey) && !Object.prototype.hasOwnProperty.call(Object.prototype, wkKey)) { state.appData.weeklyComments[wkKey] = c; saveToLocal(); renderView(); } }); };
+    return w;
+}
+
+export async function renderView() {
+    let yearInput = document.getElementById('year-select');
+    let monthInput = document.getElementById('month-select');
+    
+    // БРОНЕБІЙНИЙ ЗАХИСТ: Якщо інпутів немає або вони порожні - беремо поточний рік і місяць
+    let year = yearInput && yearInput.value ? parseInt(yearInput.value) : state.todayObj.getFullYear(); 
+    let month = monthInput && monthInput.value ? parseInt(monthInput.value) : state.todayObj.getMonth();
+    
+    if (isNaN(year)) year = state.todayObj.getFullYear();
+    if (isNaN(month)) month = state.todayObj.getMonth();
+
+    // Підвантажуємо місяць якщо ще не завантажений
+    const mk = `${year}-${String(month + 1).padStart(2, '0')}`;
+    if (state.CURRENT_VIEWED_USER) await loadMonth(state.CURRENT_VIEWED_USER, mk);
+
+    const grid = document.getElementById('calendar-grid');
+    if (!grid) return; // Якщо таблиці взагалі немає в HTML - виходимо
+    
+    const tooltip = document.getElementById('tooltip');
+    
+    grid.innerHTML = `<div class="day-header"></div><div class="day-header">Пн</div><div class="day-header">Вв</div><div class="day-header">Ср</div><div class="day-header">Чт</div><div class="day-header">Пт</div>`;
+    grid.classList.add('stretch-rows');
+    
+    const firstDayIndex = new Date(year, month, 1).getDay(); 
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    let startPadding = (firstDayIndex === 0 || firstDayIndex === 6) ? 0 : firstDayIndex - 1;
+    
+    if (startPadding > 0) { 
+        grid.appendChild(createWeekLabel(getMonday(new Date(year, month, 1)))); 
+        for (let i=0; i<startPadding; i++) { 
+            let e = document.createElement('div'); e.className='day-cell empty'; grid.appendChild(e); 
+        } 
+    }
+
+    let totalPnl = 0, totalComm = 0, totalLocates = 0;
+    let currentMonthDayloss = getDaylossForMonth(year, month);
+    
+    let settingsInput = document.getElementById('setting-dayloss-limit');
+    if (settingsInput) settingsInput.value = currentMonthDayloss;
+    
+    let settingsLabel = document.getElementById('settings-current-month-label');
+    if (settingsLabel) {
+        let monthsNames = ["Січень", "Лютий", "Березень", "Квітень", "Травень", "Червень", "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень"];
+        settingsLabel.innerText = `${monthsNames[month]} ${year}`;
+    }
+
+    let currentStreak = getWinstreak();
+    let streakEl = document.getElementById('winstreak-counter');
+    if (streakEl) {
+        if (currentStreak > 0) {
+            streakEl.style.display = 'flex';
+            document.getElementById('winstreak-val').innerText = currentStreak;
+            streakEl.style.textShadow = currentStreak >= 5 ? '0 0 12px rgba(249, 115, 22, 0.6)' : 'none';
+        } else {
+            streakEl.style.display = 'none';
+        }
+    }
+    
+    for (let i = 1; i <= daysInMonth; i++) {
+        let d = new Date(year, month, i); if (d.getDay() === 0 || d.getDay() === 6) continue;
+        if (d.getDay() === 1) grid.appendChild(createWeekLabel(getMonday(d)));
+        
+        let dateKey = `${year}-${(month+1).toString().padStart(2, '0')}-${i.toString().padStart(2, '0')}`;
+        let cell = document.createElement('div'); cell.className = 'day-cell'; cell.id = `cell-${dateKey}`;
+        let pnlDisplay = ''; let data = state.appData.journal[dateKey];
+
+        const dayNum = document.createElement('div');
+        dayNum.className = 'day-number';
+        dayNum.style.cssText = 'display:flex; align-items:center; justify-content:space-between;';
+        dayNum.textContent = i;
+        const dayPnl = document.createElement('div');
+
+        if (data) {
+            if (data.pnl !== null && data.pnl !== undefined && data.pnl !== "") { 
+                let roundedPnl = parseFloat(data.pnl.toFixed(2));
+                pnlDisplay = roundedPnl >= 0 ? `+${roundedPnl}$` : `${roundedPnl}$`; 
+                
+                cell.classList.add(roundedPnl >= 0 ? 'green' : 'red'); 
+                totalPnl += roundedPnl; 
+                totalComm += parseFloat(data.commissions) || 0;
+                totalLocates += parseFloat(data.locates) || 0; 
+                
+                if (state.autoFlagsCache.absoluteRecord === dateKey) { cell.classList.add('record-day'); } 
+                else if (state.autoFlagsCache.records.has(dateKey)) { cell.classList.add('record-day-old'); }
+                
+                if (roundedPnl <= currentMonthDayloss) { cell.classList.add('dayloss-day'); }
+            }
+            
+            let hasErrors = data.errors && data.errors.length > 0; 
+            if (hasErrors) {
+                const errBadge = document.createElement('span');
+                errBadge.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#f59e0b" style="width:13px;height:13px;vertical-align:middle;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>`;
+                errBadge.style.cssText = 'display:inline-flex; align-items:center;';
+                dayNum.appendChild(errBadge);
+            }
+            
+            let scrCount = 0; 
+            if(data.screenshots) scrCount = (data.screenshots.good?.length||0) + (data.screenshots.normal?.length||0) + (data.screenshots.bad?.length||0) + (data.screenshots.error?.length||0);
+            
+            let tContent = "";
+            if (data.mentor_comment && data.mentor_comment.trim() !== '') {
+                tContent += `👑 Наставник:\n${data.mentor_comment}\n\n`;
+                cell.style.boxShadow = "inset 0 0 0 2px #eab308";
+            }
+            if (state.autoFlagsCache.absoluteRecord === dateKey) tContent += `🏆 Абсолютний Рекорд!\n\n`;
+            else if (state.autoFlagsCache.records.has(dateKey)) tContent += `⭐ Старий Рекорд\n\n`;
+            if (data.pnl !== null && data.pnl !== "" && parseFloat(data.pnl) <= currentMonthDayloss) tContent += `🛑 Дейлос!\n\n`;
+
+            if (data.notes) tContent += `📝 ${data.notes}\n`;
+            if (data.kf !== undefined && data.kf !== null) tContent += `🎯 КФ: ${parseFloat(data.kf).toFixed(2)}\n`;
+            
+            let checkedNames = [];
+            if (data.checkedParams && data.checkedParams.length > 0) {
+                data.checkedParams.forEach(pid => { 
+                    let found = state.appData?.settings?.checklist?.find(p => p.id === pid); 
+                    if(found) checkedNames.push(found.name); 
+                });
+            }
+            if (checkedNames.length > 0) tContent += `✅ Відмічено: ${checkedNames.join(', ')}\n`;
+            if (scrCount > 0) tContent += `🖼️ Скріншотів: ${scrCount}\n`;
+            if (hasErrors) tContent += `⚠️ Помилки:\n- ${data.errors.join('\n- ')}`;
+            
+            if (tContent !== "" && tooltip) {
+                cell.onmouseenter = () => { tooltip.innerText = tContent.trim(); tooltip.style.display = 'block'; };
+                cell.onmousemove = (e) => { tooltip.style.left = e.pageX + 15 + 'px'; tooltip.style.top = e.pageY + 15 + 'px'; };
+                cell.onmouseleave = () => { tooltip.style.display = 'none'; };
+            }
+        } 
+        dayPnl.className = 'day-pnl' + ((data && data.pnl !== null && data.pnl !== '') ? (data.pnl >= 0 ? ' text-green' : ' text-red') : '');
+        dayPnl.textContent = pnlDisplay;
+        cell.appendChild(dayNum);
+        cell.appendChild(dayPnl);
+        cell.onclick = () => selectDate(dateKey);
+        if (dateKey === state.selectedDateStr) cell.classList.add('active-day');
+        grid.appendChild(cell);
+    }
+    
+    let totalEl = document.getElementById('total-pnl');
+    if(totalEl) {
+        totalPnl = parseFloat(totalPnl.toFixed(2));
+        totalEl.innerText = `${totalPnl}$`;
+        totalEl.className = totalPnl >= 0 ? 'text-green' : 'text-red';
+    }
+    let commEl = document.getElementById('total-comm'); if(commEl) commEl.innerText = `${parseFloat(totalComm).toFixed(2)}$`;
+    let locEl = document.getElementById('total-locates'); if(locEl) locEl.innerText = `${parseFloat(totalLocates).toFixed(2)}$`;
+}
+
+export function initSelectors() {
+    let ySel = document.getElementById('year-select');
+    let mSel = document.getElementById('month-select');
+    
+    if (ySel) {
+        ySel.innerHTML = '';
+        for (let y = 2024; y <= 2030; y++) {
+            const opt = document.createElement('option');
+            opt.value = y;
+            opt.textContent = y;
+            ySel.appendChild(opt);
+        }
+        ySel.value = state.todayObj.getFullYear();
+    }
+
+    if (mSel) {
+        mSel.innerHTML = '';
+        const months = ["Січень", "Лютий", "Березень", "Квітень", "Травень", "Червень", "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень"];
+        months.forEach((m, i) => {
+            const opt = document.createElement('option');
+            opt.value = i;
+            opt.textContent = m;
+            mSel.appendChild(opt);
+        });
+        mSel.value = state.todayObj.getMonth();
+    }
+}
