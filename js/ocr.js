@@ -268,38 +268,81 @@ export function updateBadgeUI(encodedPath, isLoading = false) {
     }
 }
 
+const TICKER_GARBAGE = new Set([
+    'FLEXIBLE','GRID','MAIN','THINKORSWIM','BUILD','VWAP','NASDAQ',
+    'VOPRE','VDPRE','PRE','SHARE','STYLE','DRAWINGS','STUDIES','PATTERNS',
+    'SELL','BUY','DAY','MIN','TOS','FE','FI','FL','AM','PM',
+    'W','M','D','Y','H','S','L','O','C','V','P','R','T','N','E',
+    'EXT','AH','PM','EST','USD','PNL','NET','AVG','QTY','POS',
+    'OPEN','CLOSE','HIGH','LOW','LAST','MARK','BID','ASK','VOL',
+    'CHART','SCAN','TRADE','LEVEL','PRICE','SIZE','TIME','DATE'
+]);
+
+function extractTickerFromText(rawText, tradedTickers = []) {
+    const clean = rawText.toUpperCase().replace(/[^A-Z\s]/g, ' ');
+    const words = clean.split(/\s+/).filter(w => w.length >= 2 && w.length <= 5 && !TICKER_GARBAGE.has(w));
+
+    // 1. Пріоритет — збіг з traded_tickers
+    for (const w of words) {
+        if (tradedTickers.includes(w)) return w;
+    }
+
+    // 2. Найчастіше слово що виглядає як тікер (2-5 літер, тільки A-Z)
+    const freq = {};
+    for (const w of words) freq[w] = (freq[w] || 0) + 1;
+    const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+    if (sorted.length) return sorted[0][0];
+
+    return '???';
+}
+
 export async function runOCR(encodedPath, force = false) {
-    if (!window.Tesseract) return; let safePath = decodeURIComponent(encodedPath);
-    if (!force && state.appData.tickers[safePath] && state.appData.tickers[safePath] !== "???" && state.appData.tickers[safePath] !== "⏳") { updateBadgeUI(encodedPath, false); return; }
+    if (!window.Tesseract) return;
+    const safePath = decodeURIComponent(encodedPath);
+    const existing = state.appData.tickers[safePath];
+    if (!force && existing && existing !== '???' && existing !== '⏳') { updateBadgeUI(encodedPath, false); return; }
+
     try {
         updateBadgeUI(encodedPath, true);
-        let src = await getStorageUrl(safePath);
-        let imgObj = new Image();
+        const src = await getStorageUrl(safePath);
+
+        const imgObj = new Image();
         imgObj.crossOrigin = 'Anonymous';
         await new Promise((resolve, reject) => { imgObj.onload = resolve; imgObj.onerror = reject; imgObj.src = src; });
-        
-        let rect = state.appData.settings.ocrRect || { top: 0, left: 0, width: 250, height: 80 };
-        let canvas = document.createElement('canvas'); canvas.width = rect.width; canvas.height = rect.height; let ctx = canvas.getContext('2d');
-        ctx.drawImage(imgObj, rect.left, rect.top, rect.width, rect.height, 0, 0, rect.width, rect.height);
-        
-        let imgData = ctx.getImageData(0, 0, canvas.width, canvas.height); let data = imgData.data;
-        for (let i = 0; i < data.length; i += 4) { let avg = (data[i] + data[i+1] + data[i+2]) / 3; let inverted = 255 - avg; let contrast = inverted > 140 ? 255 : (inverted < 100 ? 0 : inverted); data[i] = data[i+1] = data[i+2] = contrast; }
-        ctx.putImageData(imgData, 0, 0); let processedSrc = canvas.toDataURL('image/png');
-        
-        const { data: { text } } = await Tesseract.recognize(processedSrc, 'eng');
-        let cleanText = text.toUpperCase().replace(/[^A-Z]/g, ' '); let words = cleanText.split(/\s+/);
-        let garbage = ['FLEXIBLE', 'GRID', 'MAIN', 'THINKORSWIM', 'BUILD', 'VWAP', 'NASDAQ', 'VOPRE', 'VDPRE', 'PRE', 'SHARE', 'STYLE', 'DRAWINGS', 'STUDIES', 'PATTERNS', 'SELL', 'BUY', 'DAY', 'MIN', 'TOS', 'FE', 'FI', 'FL', 'AM', 'PM', 'W', 'M', 'D', 'Y'];
-        let validWords = words.filter(w => w.length >= 2 && w.length <= 5 && !garbage.includes(w));
-        
-        let dayData = state.appData.journal[state.selectedDateStr]; let traded = dayData && dayData.traded_tickers ? dayData.traded_tickers : []; let matchedTicker = null;
-        for (let w of validWords) { if (traded.includes(w)) { matchedTicker = w; break; } }
-        if (!matchedTicker && validWords.length > 0) { matchedTicker = validWords[0]; } else if (!matchedTicker) { let singleMatch = cleanText.match(/\b[A-Z]\b/); matchedTicker = singleMatch ? singleMatch[0] : "???"; }
-        
-        state.appData.tickers[safePath] = matchedTicker;
+
+        // Масштабуємо до макс 1200px по ширині — Tesseract точніший на середніх розмірах
+        const MAX_W = 1200;
+        const scale = imgObj.naturalWidth > MAX_W ? MAX_W / imgObj.naturalWidth : 1;
+        const w = Math.round(imgObj.naturalWidth * scale);
+        const h = Math.round(imgObj.naturalHeight * scale);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(imgObj, 0, 0, w, h);
+
+        // Контраст для кращого розпізнавання
+        const imgData = ctx.getImageData(0, 0, w, h);
+        const d = imgData.data;
+        for (let i = 0; i < d.length; i += 4) {
+            const avg = (d[i] + d[i+1] + d[i+2]) / 3;
+            const v = avg > 128 ? 255 : 0;
+            d[i] = d[i+1] = d[i+2] = v;
+        }
+        ctx.putImageData(imgData, 0, 0);
+
+        const { data: { text } } = await Tesseract.recognize(canvas.toDataURL('image/png'), 'eng');
+
+        const dayData = state.appData.journal[state.selectedDateStr];
+        const traded = dayData?.traded_tickers || [];
+        const ticker = extractTickerFromText(text, traded);
+
+        state.appData.tickers[safePath] = ticker;
         saveToLocal();
         updateBadgeUI(encodedPath, false);
-    } catch(e) {
-        console.error("Помилка OCR:", e);
-        state.appData.tickers[safePath] = "???"; updateBadgeUI(encodedPath, false);
+    } catch (e) {
+        console.error('Помилка OCR:', e);
+        state.appData.tickers[safePath] = '???';
+        updateBadgeUI(encodedPath, false);
     }
 }
