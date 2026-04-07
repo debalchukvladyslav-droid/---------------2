@@ -382,6 +382,23 @@ window.updateDriveUI = updateDriveUI;
 window.disconnectGoogleDrive = disconnectGoogleDrive;
 window.loadBackgroundGallery = loadBackgroundGallery;
 
+window.saveDaylossSetting = function() {
+    const input = document.getElementById('setting-dayloss-limit');
+    if (!input) return;
+    const val = parseFloat(input.value);
+    if (isNaN(val)) return;
+    const yearEl = document.getElementById('year-select');
+    const monthEl = document.getElementById('month-select');
+    if (!yearEl || !monthEl) return;
+    const mk = `${yearEl.value}-${String(parseInt(monthEl.value) + 1).padStart(2, '0')}`;
+    if (!state.appData.settings.monthlyDayloss) state.appData.settings.monthlyDayloss = {};
+    state.appData.settings.monthlyDayloss[mk] = val;
+    saveToLocal().then(() => {
+        if (window.renderView) window.renderView();
+        import('./utils.js').then(m => m.showToast(`✅ Дейлос для ${mk} збережено: ${val}$`));
+    });
+};
+
 // ─── Background helpers ───────────────────────────────────────────────────────
 
 function _applyBackgroundUrl(url) {
@@ -700,9 +717,7 @@ supabase.auth.onAuthStateChange(async (_event, session) => {
         startLiveSync();
         startDriveAutoSync();
 
-        if (state.appData?.settings?.driveToken?.expires > Date.now()) {
-            await syncDriveScreenshots(true);
-        }
+        await syncDriveScreenshots(true);
 
         setTimeout(() => window._checkSessionModal?.(), 1500);
     } else {
