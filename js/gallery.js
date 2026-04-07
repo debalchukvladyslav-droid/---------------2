@@ -29,8 +29,28 @@ export function getImgUrl(path) {
 }
 
 // Кеш свіжих URL з інвалідацією (Firebase URL живуть ~1 год)
-const _urlCache = {}; // { path: { url, ts } }
+const _memUrlCache = {};
 const URL_CACHE_TTL = 50 * 60 * 1000; // 50 хвилин
+
+function _getCachedUrl(path) {
+    if (_memUrlCache[path] && Date.now() - _memUrlCache[path].ts < URL_CACHE_TTL) return _memUrlCache[path].url;
+    try {
+        const raw = localStorage.getItem('sc:' + path);
+        if (raw) {
+            const e = JSON.parse(raw);
+            if (Date.now() - e.ts < URL_CACHE_TTL) { _memUrlCache[path] = e; return e.url; }
+            localStorage.removeItem('sc:' + path);
+        }
+    } catch (_) {}
+    return null;
+}
+
+function _setCachedUrl(path, url) {
+    const e = { url, ts: Date.now() };
+    _memUrlCache[path] = e;
+    try { localStorage.setItem('sc:' + path, JSON.stringify(e)); } catch (_) {}
+}
+
 export async function getStorageUrl(pathOrUrl) {
     if (!pathOrUrl) return '';
     if (pathOrUrl.startsWith('http') && !pathOrUrl.includes('firebasestorage')) return pathOrUrl;
@@ -39,11 +59,11 @@ export async function getStorageUrl(pathOrUrl) {
         const match = pathOrUrl.match(/\/o\/([^?]+)/);
         if (match) storagePath = decodeURIComponent(match[1]);
     }
-    const cached = _urlCache[storagePath];
-    if (cached && Date.now() - cached.ts < URL_CACHE_TTL) return cached.url;
+    const cached = _getCachedUrl(storagePath);
+    if (cached) return cached;
     try {
         const url = await getSupabaseStorageUrl(storagePath);
-        _urlCache[storagePath] = { url, ts: Date.now() };
+        _setCachedUrl(storagePath, url);
         return url;
     } catch(e) {
         console.warn('Storage URL error:', e.message);
