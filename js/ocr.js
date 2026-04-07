@@ -269,31 +269,57 @@ export function updateBadgeUI(encodedPath, isLoading = false) {
 }
 
 const TICKER_GARBAGE = new Set([
-    'FLEXIBLE','GRID','MAIN','THINKORSWIM','BUILD','VWAP','NASDAQ',
+    'FLEXIBLE','GRID','MAIN','THINKORSWIM','BUILD','VWAP','NASDAQ','NYSE',
     'VOPRE','VDPRE','PRE','SHARE','STYLE','DRAWINGS','STUDIES','PATTERNS',
-    'SELL','BUY','DAY','MIN','TOS','FE','FI','FL','AM','PM',
-    'W','M','D','Y','H','S','L','O','C','V','P','R','T','N','E',
-    'EXT','AH','PM','EST','USD','PNL','NET','AVG','QTY','POS',
-    'OPEN','CLOSE','HIGH','LOW','LAST','MARK','BID','ASK','VOL',
-    'CHART','SCAN','TRADE','LEVEL','PRICE','SIZE','TIME','DATE'
+    'SELL','BUY','DAY','MIN','TOS','FE','FI','FL','AM','PM','EXT',
+    'W','M','D','Y','H','S','L','O','C','V','P','R','T','N','E','A','B',
+    'AH','EST','USD','PNL','NET','AVG','QTY','POS','ALL','NEW','SET',
+    'OPEN','CLOSE','HIGH','LOW','LAST','MARK','BID','ASK','VOL','HALT',
+    'CHART','SCAN','TRADE','LEVEL','PRICE','SIZE','TIME','DATE','BETA',
+    'CALL','PUT','EXP','ITM','OTM','ATM','THEO','DELTA','GAMMA','THETA',
+    'AFTER','HOURS','MARKET','LIMIT','STOP','ORDER','FILLED','CANCEL'
 ]);
 
 function extractTickerFromText(rawText, tradedTickers = []) {
     const clean = rawText.toUpperCase().replace(/[^A-Z\s]/g, ' ');
-    const words = clean.split(/\s+/).filter(w => w.length >= 2 && w.length <= 5 && !TICKER_GARBAGE.has(w));
+    const words = clean.split(/\s+/).filter(w =>
+        w.length >= 2 && w.length <= 5 &&
+        /^[A-Z]+$/.test(w) &&
+        !TICKER_GARBAGE.has(w)
+    );
 
-    // 1. Пріоритет — збіг з traded_tickers
+    // 1. Збіг з traded_tickers — найвищий пріоритет
     for (const w of words) {
         if (tradedTickers.includes(w)) return w;
     }
 
-    // 2. Найчастіше слово що виглядає як тікер (2-5 літер, тільки A-Z)
+    // 2. Найчастіше слово
     const freq = {};
     for (const w of words) freq[w] = (freq[w] || 0) + 1;
     const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
-    if (sorted.length) return sorted[0][0];
+    return sorted.length ? sorted[0][0] : '???';
+}
 
-    return '???';
+// Вирізаємо зону з зображення для OCR
+function cropCanvas(imgObj, x, y, w, h) {
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(imgObj, x, y, w, h, 0, 0, w, h);
+    return canvas;
+}
+
+// Підвищуємо контраст для Tesseract
+function applyContrast(canvas) {
+    const ctx = canvas.getContext('2d');
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const d = imgData.data;
+    for (let i = 0; i < d.length; i += 4) {
+        const avg = (d[i] + d[i+1] + d[i+2]) / 3;
+        const v = avg > 128 ? 255 : 0;
+        d[i] = d[i+1] = d[i+2] = v;
+    }
+    ctx.putImageData(imgData, 0, 0);
+    return canvas;
 }
 
 export async function runOCR(encodedPath, force = false) {
@@ -310,32 +336,37 @@ export async function runOCR(encodedPath, force = false) {
         imgObj.crossOrigin = 'Anonymous';
         await new Promise((resolve, reject) => { imgObj.onload = resolve; imgObj.onerror = reject; imgObj.src = src; });
 
-        // Масштабуємо до макс 1200px по ширині — Tesseract точніший на середніх розмірах
-        const MAX_W = 1200;
-        const scale = imgObj.naturalWidth > MAX_W ? MAX_W / imgObj.naturalWidth : 1;
-        const w = Math.round(imgObj.naturalWidth * scale);
-        const h = Math.round(imgObj.naturalHeight * scale);
+        const iw = imgObj.naturalWidth;
+        const ih = imgObj.naturalHeight;
 
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(imgObj, 0, 0, w, h);
-
-        // Контраст для кращого розпізнавання
-        const imgData = ctx.getImageData(0, 0, w, h);
-        const d = imgData.data;
-        for (let i = 0; i < d.length; i += 4) {
-            const avg = (d[i] + d[i+1] + d[i+2]) / 3;
-            const v = avg > 128 ? 255 : 0;
-            d[i] = d[i+1] = d[i+2] = v;
-        }
-        ctx.putImageData(imgData, 0, 0);
-
-        const { data: { text } } = await Tesseract.recognize(canvas.toDataURL('image/png'), 'eng');
+        // ThinkorSwim: тікер завжди у верхньому лівому кутку.
+        // Читаємо ліву четверть ширини, верхню шосту висоти.
+        const zones = [
+            { x: 0,       y: 0,       w: Math.round(iw * 0.25), h: Math.round(ih * 0.08) }, // верх ліво
+            { x: 0,       y: 0,       w: Math.round(iw * 0.35), h: Math.round(ih * 0.12) }, // ширше якщо перша зона не дала результату
+            { x: 0,       y: 0,       w: iw,                    h: Math.round(ih * 0.15) }, // весь верх як фолбек
+        ];
 
         const dayData = state.appData.journal[state.selectedDateStr];
         const traded = dayData?.traded_tickers || [];
-        const ticker = extractTickerFromText(text, traded);
+
+        let ticker = '???';
+        for (const zone of zones) {
+            // Масштабуємо зону до 2x — Tesseract краще читає великий текст
+            const scale = 2;
+            const canvas = document.createElement('canvas');
+            canvas.width = zone.w * scale;
+            canvas.height = zone.h * scale;
+            canvas.getContext('2d').drawImage(imgObj, zone.x, zone.y, zone.w, zone.h, 0, 0, canvas.width, canvas.height);
+            applyContrast(canvas);
+
+            const { data: { text } } = await Tesseract.recognize(canvas.toDataURL('image/png'), 'eng', {
+                tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ '
+            });
+
+            ticker = extractTickerFromText(text, traded);
+            if (ticker !== '???') break; // знайшли — зупиняємось
+        }
 
         state.appData.tickers[safePath] = ticker;
         saveToLocal();
