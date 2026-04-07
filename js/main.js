@@ -476,43 +476,8 @@ function hideLoadingToast() {
     if (t) { t.style.opacity = '0'; setTimeout(() => t.style.display = 'none', 300); }
 }
 
-// AUTH RESOLVING SPINNER — shown immediately on page load, hidden once
-// onAuthStateChanged fires (whether user is logged in or not).
-// This prevents the blank-screen / hang that happens while Firebase
-// is still verifying the cached auth token.
-function showAuthResolvingSpinner() {
-    const overlay = document.getElementById('auth-overlay');
-    if (!overlay) return;
-    let spinner = document.getElementById('_auth-resolving-spinner');
-    if (spinner) return; // already shown
-    spinner = document.createElement('div');
-    spinner.id = '_auth-resolving-spinner';
-    spinner.style.cssText = 'margin-top:18px; color:var(--text-muted,#94a3b8); font-size:0.85rem; text-align:center;';
-    spinner.innerHTML = '<span style="display:inline-block;animation:spin 1s linear infinite;margin-right:6px;">⏳</span>Перевірка сесії...';
-    // Inject keyframe once
-    if (!document.getElementById('_spin-style')) {
-        const style = document.createElement('style');
-        style.id = '_spin-style';
-        style.textContent = '@keyframes spin{to{transform:rotate(360deg)}}';
-        document.head.appendChild(style);
-    }
-    const card = overlay.querySelector('.auth-card');
-    if (card) card.appendChild(spinner);
-}
-
-function hideAuthResolvingSpinner() {
-    const spinner = document.getElementById('_auth-resolving-spinner');
-    if (spinner) spinner.remove();
-}
-
-// 3. СИНХРОНІЗАЦІЯ БАЗИ (Картинки)
-// onSnapshot is intentionally delayed by 5 s so it does NOT open a Listen
-// stream during the critical init window — the stream gets blocked (404) on
-// some networks and was the root cause of the 10-second hang.
-let _liveSyncUnsub = null;
-function startLiveSync() {
-    _liveSyncUnsub = null;
-}
+// 3. СИНХРОНІЗАЦІЯ БАЗИ
+function startLiveSync() {}
 
 // 4. СЛУХАЧІ ПОДІЙ
 document.addEventListener('click', function(e) {
@@ -584,43 +549,15 @@ window.saveProfileName = async function() {
     }
 };
 
-// === ІНІЦІАЛІЗАЦІЯ ПРИ АВТОРИЗАЦІЇ ===
-//
-// RACE CONDITION FIX:
-// Firebase restores a cached auth session asynchronously. Without a guard the
-// page renders the login overlay, then onAuthStateChanged fires ~200-800 ms
-// later and the app initialises correctly — BUT if the token refresh takes
-// longer (slow network, cold start) the user sees a blank/hung screen and
-// has to manually refresh.
-//
-// Solution:
-//  1. Show a "checking session…" spinner inside the auth overlay immediately
-//     so the user always sees feedback.
-//  2. A single _appInitialized flag prevents double-init on token refreshes.
-//  3. The 6-second fallback banner only appears if onAuthStateChanged has
-//     NOT fired at all (i.e. Firebase itself is unreachable).
-//  4. initializeApp() is called ONLY inside the confirmed-user branch —
-//     never at module load time.
+// === ІНІЦІАЛІЗАЦІЯ ===
 
 let _appInitialized = false;
 
-// ─── DIAGNOSTIC TIMER ────────────────────────────────────────────────────────
-const _diag = {
-    authStart: 0,
-    dataStart: 0,
-    mark(label) { console.log(`[DIAG] ${label}`); },
-    authBegin() { this.authStart = performance.now(); this.mark('Start Auth check'); },
-    authDone() { this.mark(`Auth confirmed (Time: ${(performance.now() - this.authStart).toFixed(0)} ms)`); },
-    fetchBegin() { this.dataStart = performance.now(); this.mark('Start Supabase fetch'); },
-    fetchDone() { this.mark(`Supabase data received (Time: ${(performance.now() - this.dataStart).toFixed(0)} ms)`); },
-};
-window._diag = _diag; // expose for manual console checks
-
-// ─── GLOBAL INIT TIMEOUT (10 s) ──────────────────────────────────────────────
+// ─── TIMEOUT (10 s) ──────────────────────────────────────────────────────────
 let _initTimeoutId = null;
 function startInitTimeout() {
     _initTimeoutId = setTimeout(() => {
-        console.warn('[DIAG] ⏱ Init timeout — loading took > 10 s');
+        console.warn('[DIAG] ⏱ Init timeout > 10 s');
         let t = document.getElementById('_load-toast');
         if (!t) {
             t = document.createElement('div');
@@ -632,103 +569,114 @@ function startInitTimeout() {
         const btn = document.createElement('button');
         btn.style.cssText = 'display:block;margin:8px auto 0;padding:6px 16px;border-radius:6px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:0.9rem;';
         btn.textContent = '🔄 Повторити';
-        btn.addEventListener('click', () => { hideLoadingToast(); _appInitialized = false; location.reload(); });
+        btn.addEventListener('click', () => { location.reload(); });
         t.appendChild(btn);
         t.style.opacity = '1'; t.style.display = 'block';
     }, 10000);
 }
 function clearInitTimeout() { if (_initTimeoutId) { clearTimeout(_initTimeoutId); _initTimeoutId = null; } }
 
-// ─── 403 / SESSION-EXPIRED GUARD ─────────────────────────────────────────────
-// Firebase token refresh hits securetoken.googleapis.com — a 403 means the
-// key is invalid or the token is permanently revoked. Force logout + message.
-// We retry once after 5 s before forcing logout — a transient 403 (e.g. right
-// after a network reconnect) should not kick the user out.
-// Intercept fetch — тільки логуємо 403, не викидаємо з акаунту
-const _origFetch = window.fetch;
-window.fetch = async function(...args) {
-    const res = await _origFetch.apply(this, args);
-    if (res.status === 403) console.warn('[DIAG] 403:', typeof args[0] === 'string' ? args[0] : args[0]?.url);
-    return res;
-};
+// ─── SPINNER ─────────────────────────────────────────────────────────────────
+function showAuthSpinner() {
+    const overlay = document.getElementById('auth-overlay');
+    if (!overlay || document.getElementById('_auth-spinner')) return;
+    const spinner = document.createElement('div');
+    spinner.id = '_auth-spinner';
+    spinner.style.cssText = 'margin-top:18px;color:var(--text-muted,#94a3b8);font-size:0.85rem;text-align:center;';
+    spinner.innerHTML = '⏳ Перевірка сесії...';
+    overlay.querySelector('.auth-card')?.appendChild(spinner);
+}
+function hideAuthSpinner() {
+    document.getElementById('_auth-spinner')?.remove();
+}
 
-// Show spinner right away — before Firebase has a chance to respond.
-showAuthResolvingSpinner();
-_diag.authBegin();
+// ─── ЯДРО ІНІЦІАЛІЗАЦІЇ ───────────────────────────────────────────────────────
+async function bootApp(user) {
+    if (_appInitialized) return;
+    _appInitialized = true;
 
-// ─── CLEAR CACHE & FIX LOGIN ──────────────────────────────────────────────────
-// Attach to a "Clear Cache & Fix Login" button: onclick="window.clearAuthCache()"
-// Nukes corrupted IndexedDB/localStorage session data that causes the
-// "refresh 5 times" symptom, then forces a clean login.
+    const nick = user.user_metadata?.nick || user.user_metadata?.display_name || user.email.split('@')[0];
+    state.USER_DOC_NAME = `${nick}_stats`;
+    state.CURRENT_VIEWED_USER = state.USER_DOC_NAME;
+
+    document.getElementById('auth-overlay').style.display = 'none';
+    const errEl = document.getElementById('auth-error');
+    if (errEl) errEl.style.display = 'none';
+
+    startInitTimeout();
+    try {
+        await loadTeams();
+        await loadMentorStatusForAccount();
+        await initializeApp();
+
+        if (window.renderTeamSidebar) window.renderTeamSidebar();
+        if (window.renderStatsSourceSelector) window.renderStatsSourceSelector();
+        if (window.renderSettingsTradeTypes) window.renderSettingsTradeTypes();
+        if (window.renderSettingsSituations) window.renderSettingsSituations();
+        if (window.applyAccessRights) window.applyAccessRights();
+        if (window.loadAIChatHistory) window.loadAIChatHistory();
+
+        _applyPersistedBackground();
+        loadBackgroundGallery();
+    } catch (e) {
+        console.error('[INIT] Помилка ініціалізації:', e);
+    } finally {
+        clearInitTimeout();
+        hideLoadingToast();
+    }
+
+    setupOCRDrawing();
+    startLiveSync();
+    startDriveAutoSync();
+    syncDriveScreenshots(true);
+    setTimeout(() => window._checkSessionModal?.(), 1500);
+}
+
+function showLoginScreen() {
+    _appInitialized = false;
+    state.USER_DOC_NAME = '';
+    state.CURRENT_VIEWED_USER = '';
+    const overlay = document.getElementById('auth-overlay');
+    if (overlay) overlay.style.display = 'flex';
+    loadTeams();
+}
+
+// ─── CLEAR CACHE ──────────────────────────────────────────────────────────────
 window.clearAuthCache = async function() {
     try { await supabase.auth.signOut(); } catch (_) {}
     localStorage.clear();
     sessionStorage.clear();
-    console.log('[AUTH] Cache cleared — reloading.');
     location.reload();
 };
 
-supabase.auth.onAuthStateChange(async (_event, session) => {
-    const user = session?.user || null;
-    hideAuthResolvingSpinner();
-    document.getElementById('_auth-retry-banner')?.remove();
-    _diag.authDone();
+// ─── КРОК 1: getSession() — синхронна перевірка кешованої сесії ──────────────
+// Supabase зберігає токен у localStorage. getSession() читає його одразу,
+// без мережевого запиту — тому додаток не зависає при перезавантаженні.
+showAuthSpinner();
 
-    if (user) {
-        if (_appInitialized) return;
-        _appInitialized = true;
+(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    hideAuthSpinner();
 
-        const nick = user.user_metadata?.nick || user.user_metadata?.display_name || user.email.split('@')[0];
-        state.USER_DOC_NAME = `${nick}_stats`;
-        state.CURRENT_VIEWED_USER = state.USER_DOC_NAME;
-
-        document.getElementById('auth-overlay').style.display = 'none';
-        const errEl = document.getElementById('auth-error');
-        if (errEl) errEl.style.display = 'none';
-        document.getElementById('_clear-cache-btn')?.remove();
-
-        startInitTimeout();
-
-        try {
-            _diag.fetchBegin();
-            await loadTeams();
-            await loadMentorStatusForAccount();
-            await initializeApp();
-            _diag.fetchDone();
-
-            if (window.renderTeamSidebar) window.renderTeamSidebar();
-            if (window.renderStatsSourceSelector) window.renderStatsSourceSelector();
-            if (window.renderSettingsTradeTypes) window.renderSettingsTradeTypes();
-            if (window.renderSettingsSituations) window.renderSettingsSituations();
-            if (window.applyAccessRights) window.applyAccessRights();
-            if (window.loadAIChatHistory) window.loadAIChatHistory();
-
-            _applyPersistedBackground();
-            loadBackgroundGallery();
-        } catch (e) {
-            console.error('[INIT] Помилка на етапі ініціалізації:', e);
-            throw e;
-        } finally {
-            clearInitTimeout();
-            hideLoadingToast();
-        }
-
-        setupOCRDrawing();
-        startLiveSync();
-        startDriveAutoSync();
-
-        await syncDriveScreenshots(true);
-
-        setTimeout(() => window._checkSessionModal?.(), 1500);
+    if (session?.user) {
+        console.log('[AUTH] getSession: сесія знайдена, запускаємо додаток');
+        await bootApp(session.user);
     } else {
-        // user === null — session definitively absent, show login IMMEDIATELY.
-        _appInitialized = false;
-        hideAuthResolvingSpinner();
-        const overlay = document.getElementById('auth-overlay');
-        if (overlay) overlay.style.display = 'flex';
-        state.USER_DOC_NAME = '';
-        state.CURRENT_VIEWED_USER = '';
-        console.log('[DIAG] user === null — no session, login screen shown.');
-        await loadTeams();
+        console.log('[AUTH] getSession: сесії немає, показуємо логін');
+        showLoginScreen();
+    }
+})();
+
+// ─── КРОК 2: onAuthStateChange — реагуємо на вхід/вихід після старту ─────────
+// Не дублюємо bootApp якщо вже ініціалізовано через getSession.
+// Обробляємо тільки SIGNED_IN (новий логін) та SIGNED_OUT (логаут).
+supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_IN' && session?.user && !_appInitialized) {
+        console.log('[AUTH] onAuthStateChange: SIGNED_IN');
+        bootApp(session.user);
+    }
+    if (event === 'SIGNED_OUT') {
+        console.log('[AUTH] onAuthStateChange: SIGNED_OUT');
+        showLoginScreen();
     }
 });

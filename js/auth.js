@@ -329,11 +329,12 @@ export function showError(text) {
 
 export async function logout() {
     try {
-        const { error } = await supabase.auth.signOut();
-        if (error) throw error;
-        location.reload();
+        await supabase.auth.signOut();
     } catch (e) {
-        console.error('Помилка при виході:', e);
+        console.error('Помилка signOut:', e);
+    } finally {
+        // Очищаємо state незалежно від результату signOut
+        location.href = location.pathname;
     }
 }
 
