@@ -25,11 +25,9 @@ function sanitizeAIHtml(html) {
 }
 
 export function getGeminiKeys() {
-    const sysKeys = Array.isArray(state.systemConfig?.gemini_keys) ? state.systemConfig.gemini_keys : [];
-    const s = state.appData?.settings;
-    const userKeys = (s?.gemini_keys || []).filter(k => k && k.trim());
-    if (s?.gemini_key && s.gemini_key.trim()) userKeys.unshift(s.gemini_key.trim());
-    return [...new Set([...sysKeys, ...userKeys].filter(Boolean))];
+    // Виклики йдуть через проксі — ключ не потрібен на фронтенді.
+    // Повертаємо ['proxy'] щоб перевірки !keys.length не блокували AI.
+    return ['proxy'];
 }
 
 let sosChatHistory = []; 
@@ -83,7 +81,7 @@ export async function callGemini(key, payload) {
  * Повертає чистий рядок JSON без HTML-encoding.
  */
 export async function callGeminiViaProxy(payload, model = 'gemini-2.5-flash') {
-    const PROXY_URL = 'https://geminiproxy-nomiedviea-uc.a.run.app';
+    const PROXY_URL = '/api/gemini';
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20000);

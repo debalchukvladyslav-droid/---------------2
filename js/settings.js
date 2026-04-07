@@ -2,32 +2,6 @@
 import { state } from './state.js';
 import { saveToLocal } from './storage.js';
 import { showToast, showConfirm } from './utils.js';
-import { supabase } from './supabase.js';
-
-// --- GEMINI API KEY ---
-export function renderGeminiKeys() {
-    const input = document.getElementById('gemini-key-input');
-    if (input) input.value = state.appData?.settings?.gemini_key || '';
-}
-
-export async function saveGeminiKey() {
-    const input = document.getElementById('gemini-key-input');
-    if (!input) return;
-    const apiKey = input.value.trim();
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { showToast('❌ Не авторизовано'); return; }
-
-    const { error } = await supabase
-        .from('profiles')
-        .update({ gemini_api_key: apiKey })
-        .eq('id', user.id);
-
-    if (error) { showToast('❌ Помилка збереження: ' + error.message); return; }
-
-    state.appData.settings.gemini_key = apiKey;
-    showToast('✅ Gemini API ключ збережено!');
-}
 
 // --- ПОМИЛКИ ---
 export function renderErrorsList() {
