@@ -1,44 +1,24 @@
-export const config = { runtime: 'edge' };
-
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
-export default async function handler(req) {
-    if (req.method === 'OPTIONS') {
-        return new Response(null, {
-            status: 204,
-            headers: corsHeaders(),
-        });
-    }
+export default async function handler(req, res) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-    if (req.method !== 'POST') {
-        return json({ message: 'Method not allowed' }, 405);
-    }
+    if (req.method === 'OPTIONS') return res.status(204).end();
+    if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' });
 
-    if (!GEMINI_API_KEY) {
-        return json({ message: 'GEMINI_API_KEY not configured' }, 500);
-    }
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    if (!GEMINI_API_KEY) return res.status(500).json({ message: 'GEMINI_API_KEY not configured on server' });
 
-    let body;
-    try {
-        body = await req.json();
-    } catch {
-        return json({ message: 'Invalid JSON' }, 400);
-    }
+    const { payload, model: rawModel } = req.body || {};
+    if (!payload || typeof payload !== 'object') return res.status(400).json({ message: 'Missing payload' });
 
-    const model = typeof body.model === 'string' && body.model.startsWith('gemini-')
-        ? body.model
+    const model = typeof rawModel === 'string' && rawModel.startsWith('gemini-')
+        ? rawModel
         : 'gemini-2.5-flash';
 
-    const payload = body.payload;
-    if (!payload || typeof payload !== 'object') {
-        return json({ message: 'Missing payload' }, 400);
-    }
-
     const url = `${GEMINI_BASE}/${model}:generateContent?key=${GEMINI_API_KEY}`;
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 25000);
 
     let geminiRes;
     try {
@@ -46,21 +26,17 @@ export default async function handler(req) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
-            signal: controller.signal,
+            signal: AbortSignal.timeout(25000),
         });
     } catch (e) {
-        return json({ message: e.message || 'Gemini fetch failed' }, 502);
-    } finally {
-        clearTimeout(timeout);
+        return res.status(502).json({ message: e.message || 'Gemini fetch failed' });
     }
 
-    const raw = await geminiRes.text();
     let data;
-    try { data = JSON.parse(raw); } catch { return json({ message: 'Invalid JSON from Gemini' }, 502); }
+    try { data = await geminiRes.json(); } catch { return res.status(502).json({ message: 'Invalid JSON from Gemini' }); }
 
     if (!geminiRes.ok) {
-        const msg = data?.error?.message || `Gemini error ${geminiRes.status}`;
-        return json({ message: msg }, geminiRes.status);
+        return res.status(geminiRes.status).json({ message: data?.error?.message || `Gemini error ${geminiRes.status}` });
     }
 
     const parts = data?.candidates?.[0]?.content?.parts;
@@ -68,22 +44,7 @@ export default async function handler(req) {
         ? parts.map(p => (typeof p.text === 'string' ? p.text : '')).join('').trim()
         : '';
 
-    if (!text) return json({ message: 'Empty response from Gemini' }, 502);
+    if (!text) return res.status(502).json({ message: 'Empty response from Gemini' });
 
-    return json({ text }, 200);
-}
-
-function corsHeaders() {
-    return {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-    };
-}
-
-function json(data, status = 200) {
-    return new Response(JSON.stringify(data), {
-        status,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders() },
-    });
+    return res.status(200).json({ text });
 }
