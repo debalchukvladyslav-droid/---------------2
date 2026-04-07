@@ -1,7 +1,94 @@
 // === js/auth.js ===
-import { auth, db } from './firebase.js';
+import { supabase } from './supabase.js';
 import { state } from './state.js';
 
+const PROFILE_SUFFIX = '_stats';
+
+function getNickFromDocName(docName = '') {
+    return String(docName).replace(/_stats$/, '');
+}
+
+function isMissingRelationError(error) {
+    const message = String(error?.message || '').toLowerCase();
+    return message.includes('relation') && message.includes('does not exist');
+}
+
+function mapAuthError(error, fallback = 'Помилка') {
+    const code = String(error?.code || '').toLowerCase();
+    const message = String(error?.message || '').toLowerCase();
+
+    if (
+        code === 'user_already_exists' ||
+        message.includes('already registered') ||
+        message.includes('already been registered') ||
+        message.includes('email address is already')
+    ) {
+        return 'Акаунт вже створено!';
+    }
+
+    if (
+        code === 'invalid_credentials' ||
+        message.includes('invalid login credentials') ||
+        message.includes('invalid email or password') ||
+        message.includes('email not confirmed') ||
+        message.includes('invalid credentials')
+    ) {
+        return 'Невірний логін або пароль!';
+    }
+
+    if (message.includes('password should be at least')) {
+        return 'Пароль має бути мін. 6 символів';
+    }
+
+    return `${fallback}: ${error?.message || 'Невідома помилка'}`;
+}
+
+async function getProfileByNick(nick, columns = 'id, nick, email, first_name, last_name, team, mentor_enabled, private_notes') {
+    const { data, error } = await supabase
+        .from('profiles')
+        .select(columns)
+        .eq('nick', nick)
+        .maybeSingle();
+
+    if (error) throw error;
+    return data;
+}
+
+async function saveProfilePatchByDocName(docName, patch) {
+    const nick = getNickFromDocName(docName);
+    if (!nick) return;
+
+    const { error } = await supabase
+        .from('profiles')
+        .update(patch)
+        .eq('nick', nick);
+
+    if (error) throw error;
+}
+
+async function saveJournalMonth(docName, monthKey, monthData) {
+    const nick = getNickFromDocName(docName);
+    const { error } = await supabase
+        .from('journal_months')
+        .upsert(
+            [{
+                user_doc_name: docName,
+                nick,
+                month_key: monthKey,
+                data: monthData
+            }],
+            { onConflict: 'user_doc_name,month_key' }
+        );
+
+    if (error) throw error;
+}
+
+function syncTeamGroupState(selectedTeam, displayFullName) {
+    if (!state.TEAM_GROUPS[selectedTeam]) state.TEAM_GROUPS[selectedTeam] = [];
+    if (!state.TEAM_GROUPS[selectedTeam].includes(displayFullName)) {
+        state.TEAM_GROUPS[selectedTeam].push(displayFullName);
+    }
+}
 
 export function toggleAuthMode() {
     state.isRegisterMode = !state.isRegisterMode;
@@ -9,71 +96,96 @@ export function toggleAuthMode() {
     const switchText = document.getElementById('auth-switch-text');
     const subtitle = document.getElementById('auth-subtitle');
     const toggleBtn = document.querySelector('[onclick="window.toggleAuthMode?.()"]');
-    
+
     document.getElementById('register-fields').style.display = state.isRegisterMode ? 'block' : 'none';
-    
+
     if (state.isRegisterMode) {
         submitBtn.innerText = 'Зареєструватись';
-        subtitle.innerText = 'Створення нового акаунта'; switchText.innerText = 'Вже є акаунт?'; toggleBtn.innerText = 'Увійти';
+        subtitle.innerText = 'Створення нового акаунта';
+        switchText.innerText = 'Вже є акаунт?';
+        toggleBtn.innerText = 'Увійти';
     } else {
         submitBtn.innerText = 'Увійти';
-        subtitle.innerText = 'Вхід у систему'; switchText.innerText = 'Ще немає акаунта?'; toggleBtn.innerText = 'Створити';
+        subtitle.innerText = 'Вхід у систему';
+        switchText.innerText = 'Ще немає акаунта?';
+        toggleBtn.innerText = 'Створити';
     }
-    showError("");
+    showError('');
 }
 
 export async function handleAuth() {
     const nick = document.getElementById('auth-nick').value.trim().toLowerCase();
     const pass = document.getElementById('auth-pass').value;
-    
-    if (!nick || nick.length < 3) { showError("Введіть коректний логін (мін 3 символи)"); return; }
-    if (!pass || pass.length < 6) { showError("Пароль має бути мін. 6 символів"); return; }
-    
-    showError("");
-    
-    // ПОВЕРНУЛИ СТАРУ ЛОГІКУ: Формуємо технічний email для Firebase
-    const systemEmail = `${nick}@prop-journal.com`;
+
+    if (!nick || nick.length < 3) { showError('Введіть коректний логін (мін 3 символи)'); return; }
+    if (!pass || pass.length < 6) { showError('Пароль має бути мін. 6 символів'); return; }
+
+    showError('');
 
     try {
         if (state.isRegisterMode) {
-            const realEmail = document.getElementById('auth-email').value.trim();
+            const realEmail = document.getElementById('auth-email').value.trim().toLowerCase();
             const fname = document.getElementById('auth-fname').value.trim();
             const lname = document.getElementById('auth-lname').value.trim();
             const selectedTeam = document.getElementById('auth-team').value;
-            
-            if (!realEmail.includes('@')) { showError("Введіть коректну реальну пошту"); return; }
+
+            if (!realEmail.includes('@')) { showError('Введіть коректну реальну пошту'); return; }
             if (!fname || !lname) { showError("Введіть Ім'я та Прізвище"); return; }
-            if (!selectedTeam) { showError("Оберіть свій кущ!"); return; }
+            if (!selectedTeam) { showError('Оберіть свій кущ!'); return; }
 
-            await auth.createUserWithEmailAndPassword(realEmail, pass);
-            await auth.currentUser.updateProfile({ displayName: nick });
+            const { data: authData, error: signUpError } = await supabase.auth.signUp({
+                email: realEmail,
+                password: pass,
+                options: {
+                    data: {
+                        nick,
+                        display_name: nick,
+                        first_name: fname,
+                        last_name: lname,
+                        team: selectedTeam
+                    }
+                }
+            });
 
-            await db.collection("journal").doc(`${nick}_stats`).set({ 
-                trader_email: realEmail, 
-                first_name: fname, 
-                last_name: lname, 
-                created_at: new Date().toISOString() 
-            }, { merge: true });
-            
-            if (!state.TEAM_GROUPS[selectedTeam]) state.TEAM_GROUPS[selectedTeam] = [];
-            let displayFullName = `${lname} ${fname} (${nick})`;
-            if (!state.TEAM_GROUPS[selectedTeam].includes(displayFullName)) {
-                state.TEAM_GROUPS[selectedTeam].push(displayFullName);
-                await db.collection("system").doc("teams").set(state.TEAM_GROUPS);
+            if (signUpError) throw signUpError;
+
+            const userId = authData?.user?.id;
+            if (!userId) {
+                throw new Error('Не вдалося отримати ID користувача після реєстрації');
             }
 
+            const { error: profileInsertError } = await supabase.from('profiles').insert([{
+                id: userId,
+                nick,
+                email: realEmail,
+                first_name: fname,
+                last_name: lname,
+                team: selectedTeam
+            }]);
+
+            if (profileInsertError) throw profileInsertError;
+
+            syncTeamGroupState(selectedTeam, `${lname} ${fname} (${nick})`);
             showError('✅ Акаунт створено!');
             return;
-        } else {
-            const statsDoc = await db.collection('journal').doc(`${nick}_stats`).get({ source: 'server' });
-            const storedEmail = statsDoc.exists ? statsDoc.data().trader_email : null;
-            const loginEmail = storedEmail || `${nick}@prop-journal.com`;
-            await auth.signInWithEmailAndPassword(loginEmail, pass);
         }
+
+        const profile = await getProfileByNick(nick, 'email');
+        const foundEmail = profile?.email;
+
+        if (!foundEmail) {
+            showError('Невірний логін або пароль!');
+            return;
+        }
+
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+            email: foundEmail,
+            password: pass
+        });
+
+        if (signInError) throw signInError;
     } catch (e) {
-        if (e.code === 'auth/email-already-in-use') showError("Акаунт вже створено!");
-        else if (e.code === 'auth/wrong-password' || e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential' || e.code === 'auth/invalid-email') showError("Невірний логін або пароль!");
-        else showError("Помилка: " + e.message);
+        showError(mapAuthError(e, 'Помилка'));
     }
 }
 
@@ -106,41 +218,43 @@ async function doMigration(nick, oldEmail, pass) {
     const btn = document.getElementById('migration-btn');
 
     if (!newEmail.endsWith('@gmail.com')) {
-        errEl.textContent = 'Введіть адресу @gmail.com'; errEl.style.display = 'block'; return;
+        errEl.textContent = 'Введіть адресу @gmail.com';
+        errEl.style.display = 'block';
+        return;
     }
 
-    btn.disabled = true; btn.textContent = 'Мігруємо...';
+    btn.disabled = true;
+    btn.textContent = 'Мігруємо...';
     errEl.style.display = 'none';
 
     try {
-        // 1. Входимо через старий email щоб перевірити пароль
-        await auth.signInWithEmailAndPassword(oldEmail, pass);
-        await auth.signOut();
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+            email: oldEmail,
+            password: pass
+        });
+        if (signInError) throw signInError;
 
-        // 2. Створюємо новий акаунт на gmail з тим самим паролем
-        await auth.createUserWithEmailAndPassword(newEmail, pass);
-        await auth.currentUser.updateProfile({ displayName: nick });
+        const { error: updateUserError } = await supabase.auth.updateUser({
+            email: newEmail,
+            data: { nick, display_name: nick }
+        });
+        if (updateUserError) throw updateUserError;
 
-        // 3. Оновлюємо trader_email в Firestore
-        await db.collection('journal').doc(`${nick}_stats`).set({ trader_email: newEmail }, { merge: true });
+        const { error: updateProfileError } = await supabase
+            .from('profiles')
+            .update({ email: newEmail })
+            .eq('nick', nick);
 
-        // 4. Видаляємо старий акаунт
-        try {
-            const oldCred = firebase.auth.EmailAuthProvider.credential(oldEmail, pass);
-            const tempUser = await auth.signInWithEmailAndPassword(oldEmail, pass);
-            await tempUser.user.delete();
-            await auth.signInWithEmailAndPassword(newEmail, pass);
-        } catch (delErr) {
-            console.warn('Старий акаунт не вдалось видалити:', delErr.message);
-        }
+        if (updateProfileError) throw updateProfileError;
 
         document.getElementById('migration-overlay').remove();
         console.log(`✅ Міграція ${nick}: ${oldEmail} → ${newEmail}`);
     } catch (e) {
-        btn.disabled = false; btn.textContent = "✅ Прив'язати та увійти";
-        if (e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') errEl.textContent = 'Невірний пароль';
-        else if (e.code === 'auth/email-already-in-use') errEl.textContent = 'Ця Gmail вже зайнята іншим акаунтом';
-        else errEl.textContent = 'Помилка: ' + e.message;
+        btn.disabled = false;
+        btn.textContent = "✅ Прив'язати та увійти";
+        if (mapAuthError(e, 'Помилка') === 'Невірний логін або пароль!') errEl.textContent = 'Невірний пароль';
+        else if (mapAuthError(e, 'Помилка') === 'Акаунт вже створено!') errEl.textContent = 'Ця Gmail вже зайнята іншим акаунтом';
+        else errEl.textContent = 'Помилка: ' + (e?.message || 'Невідома помилка');
         errEl.style.display = 'block';
     }
 }
@@ -178,18 +292,19 @@ export async function sendResetCode() {
     if (btn) { btn.disabled = true; btn.textContent = 'Надсилаємо...'; }
 
     try {
-        const profileDoc = await db.collection('journal').doc(`${nick}_stats`).get();
-        const authEmail = profileDoc.exists ? profileDoc.data().trader_email : null;
+        const profile = await getProfileByNick(nick, 'email');
+        const authEmail = profile?.email || null;
 
         if (!authEmail) { showResetError(1, 'Нікнейм не знайдено'); return; }
         if (authEmail.toLowerCase() !== emailInput) { showResetError(1, 'Пошта не збігається з акаунтом'); return; }
 
-        await auth.sendPasswordResetEmail(authEmail);
+        const { error } = await supabase.auth.resetPasswordForEmail(authEmail);
+        if (error) throw error;
+
         showResetStep(0);
         showError('✅ Лист для скидання паролю надіслано на вашу пошту!');
     } catch (e) {
-        if (e.code === 'auth/user-not-found') showResetError(1, 'Акаунт з такою поштою не знайдено в Firebase');
-        else showResetError(1, 'Помилка: ' + e.message);
+        showResetError(1, 'Помилка: ' + (e?.message || 'Невідома помилка'));
     } finally {
         if (btn) { btn.disabled = false; btn.textContent = '📨 Надіслати лист'; }
     }
@@ -212,40 +327,14 @@ export function showError(text) {
     if (el) { el.innerText = text; el.style.display = text ? 'block' : 'none'; }
 }
 
-export function logout() {
-    const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:99999;';
-
-    const box = document.createElement('div');
-    box.style.cssText = 'background:var(--bg-panel,#1e293b);border:1px solid var(--border,#334155);border-radius:12px;padding:24px 28px;max-width:320px;width:90%;text-align:center;';
-
-    const msg = document.createElement('p');
-    msg.style.cssText = 'margin:0 0 20px;color:var(--text-main,#f8fafc);font-size:1rem;';
-    msg.textContent = 'Ви дійсно хочете вийти з акаунту?';
-
-    const btnRow = document.createElement('div');
-    btnRow.style.cssText = 'display:flex;gap:12px;justify-content:center;';
-
-    const btnYes = document.createElement('button');
-    btnYes.textContent = 'Вийти';
-    btnYes.style.cssText = 'padding:8px 22px;border-radius:8px;border:none;background:var(--loss,#ef4444);color:#fff;cursor:pointer;font-size:0.95rem;';
-    btnYes.onclick = () => {
-        overlay.remove();
-        auth.signOut().then(() => location.reload()).catch(e => console.error('Помилка при виході:', e));
-    };
-
-    const btnNo = document.createElement('button');
-    btnNo.textContent = 'Скасувати';
-    btnNo.style.cssText = 'padding:8px 22px;border-radius:8px;border:1px solid var(--border,#334155);background:transparent;color:var(--text-main,#f8fafc);cursor:pointer;font-size:0.95rem;';
-    btnNo.onclick = () => overlay.remove();
-
-    btnRow.appendChild(btnYes);
-    btnRow.appendChild(btnNo);
-    box.appendChild(msg);
-    box.appendChild(btnRow);
-    overlay.appendChild(box);
-    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
-    document.body.appendChild(overlay);
+export async function logout() {
+    try {
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+        location.reload();
+    } catch (e) {
+        console.error('Помилка при виході:', e);
+    }
 }
 
 export async function loadMentorStatusForAccount() {
@@ -253,12 +342,12 @@ export async function loadMentorStatusForAccount() {
         state.IS_MENTOR_MODE = false;
         return false;
     }
+
     try {
-        let doc = await db.collection("system").doc("mentor_accounts").get({ source: 'server' });
-        let mentorMap = doc.exists ? (doc.data() || {}) : {};
-        state.IS_MENTOR_MODE = mentorMap[state.USER_DOC_NAME] === true;
+        const profile = await getProfileByNick(getNickFromDocName(state.USER_DOC_NAME), 'mentor_enabled');
+        state.IS_MENTOR_MODE = profile?.mentor_enabled === true;
     } catch (e) {
-        console.error("Помилка статусу ментора:", e);
+        console.error('Помилка статусу ментора:', e);
         state.IS_MENTOR_MODE = false;
     }
     return state.IS_MENTOR_MODE;
@@ -266,7 +355,7 @@ export async function loadMentorStatusForAccount() {
 
 export async function saveMentorStatusForAccount(enabled) {
     if (!state.USER_DOC_NAME) return;
-    await db.collection("system").doc("mentor_accounts").set({ [state.USER_DOC_NAME]: enabled }, { merge: true });
+    await saveProfilePatchByDocName(state.USER_DOC_NAME, { mentor_enabled: enabled });
     state.IS_MENTOR_MODE = enabled;
 }
 
@@ -283,12 +372,10 @@ export function applyAccessRights() {
     let hasAccess = (state.CURRENT_VIEWED_USER === state.USER_DOC_NAME) || state.IS_MENTOR_MODE;
     let isLookingAtSomeoneElse = (state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME);
 
-    // СТВОРЮЄМО ПЛАШКУ СТАТУСУ ЗВЕРХУ ЕКРАНА
-   let statusBanner = document.getElementById('status-banner');
+    let statusBanner = document.getElementById('status-banner');
     if (!statusBanner) {
         statusBanner = document.createElement('div');
         statusBanner.id = 'status-banner';
-        // Зробили її маленькою, напівпрозорою і в правому верхньому куті!
         statusBanner.style.cssText = 'position: fixed; top: 10px; right: 10px; padding: 4px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: normal; z-index: 9999; opacity: 0.5; pointer-events: none;';
         document.body.appendChild(statusBanner);
     }
@@ -309,7 +396,6 @@ export function applyAccessRights() {
         statusBanner.style.display = 'none';
     }
 
-    // Блокуємо інпути, якщо немає доступу (але залишаємо фільтри років/місяців робочими)
     document.querySelectorAll('input, textarea, select').forEach(el => {
         const safeIds = ['month-select', 'year-select', 'trade-date', 'stats-filter-year', 'stats-filter-month', 'stats-filter-user'];
         if (!safeIds.includes(el.id) && !el.id.includes('theme-') && !el.id.includes('font-')) {
@@ -317,7 +403,6 @@ export function applyAccessRights() {
         }
     });
 
-    // Ховаємо кнопки збереження/видалення
     let saveBtn = document.querySelector('.sidebar .btn-primary');
     if (saveBtn) saveBtn.style.display = hasAccess ? 'block' : 'none';
 
@@ -327,14 +412,11 @@ export function applyAccessRights() {
         }
     });
 
-    // Панелі Ментора
     let mentorPanel = document.getElementById('mentor-trade-types-panel');
     if (mentorPanel) mentorPanel.style.display = (state.IS_MENTOR_MODE && isLookingAtSomeoneElse) ? 'block' : 'none';
     let btnManage = document.getElementById('btn-manage-teams');
     if (btnManage) btnManage.style.display = state.IS_MENTOR_MODE ? 'block' : 'none';
 
-    // Only re-render sidebar if auth is confirmed — avoids triggering
-    // Firestore profile fetches before USER_DOC_NAME is set.
     if (state.USER_DOC_NAME) {
         if (window.renderTeamSidebar) window.renderTeamSidebar();
         if (window.renderStatsSourceSelector) window.renderStatsSourceSelector();
@@ -467,7 +549,7 @@ export async function saveMentorComment() {
     state.appData.journal[state.selectedDateStr].mentor_comment = comment;
 
     let btn = document.getElementById('btn-save-mentor');
-    btn.innerText = "⏳ Збереження...";
+    btn.innerText = '⏳ Збереження...';
 
     try {
         const mk = state.selectedDateStr.slice(0, 7);
@@ -475,14 +557,19 @@ export async function saveMentorComment() {
         for (const d in state.appData.journal) {
             if (d.slice(0, 7) === mk) monthData[d] = state.appData.journal[d];
         }
-        await db.collection('journal').doc(state.CURRENT_VIEWED_USER).collection('months').doc(mk).set(monthData);
-        btn.innerText = "✓ Збережено!";
-        btn.style.background = "var(--profit)";
-        setTimeout(() => { btn.innerText = "✓ Зберегти коментар"; btn.style.background = "#eab308"; }, 2000);
+
+        await saveJournalMonth(state.CURRENT_VIEWED_USER, mk, monthData);
+        btn.innerText = '✓ Збережено!';
+        btn.style.background = 'var(--profit)';
+        setTimeout(() => { btn.innerText = '✓ Зберегти коментар'; btn.style.background = '#eab308'; }, 2000);
         if (window.renderView) window.renderView();
     } catch (e) {
-        showToast('Помилка збереження: ' + e.message);
-        btn.innerText = "❌ Помилка";
+        if (isMissingRelationError(e)) {
+            showToast('Таблиця journal_months ще не створена в Supabase');
+        } else {
+            showToast('Помилка збереження: ' + e.message);
+        }
+        btn.innerText = '❌ Помилка';
     }
 }
 
@@ -490,17 +577,14 @@ export async function savePrivateNote() {
     let noteText = document.getElementById('private-user-note').value;
     let targetUser = state.CURRENT_VIEWED_USER.replace('_stats', '');
     let date = state.selectedDateStr;
-    
-    // Завантажуємо НАШУ базу (бо ми зараз дивимось чужу)
-    let myDoc = await db.collection("journal").doc(state.USER_DOC_NAME).get();
-    let myData = myDoc.exists ? myDoc.data() : {};
-    
-    if (!myData.privateNotes) myData.privateNotes = {};
-    if (!myData.privateNotes[targetUser]) myData.privateNotes[targetUser] = {};
-    
-    myData.privateNotes[targetUser][date] = noteText;
-    
-    await db.collection("journal").doc(state.USER_DOC_NAME).set({ privateNotes: myData.privateNotes }, { merge: true });
+
+    let profile = await getProfileByNick(getNickFromDocName(state.USER_DOC_NAME), 'private_notes');
+    let privateNotes = profile?.private_notes || {};
+
+    if (!privateNotes[targetUser]) privateNotes[targetUser] = {};
+    privateNotes[targetUser][date] = noteText;
+
+    await saveProfilePatchByDocName(state.USER_DOC_NAME, { private_notes: privateNotes });
     showToast('🔒 Приватну нотатку успішно збережено у ваш профіль!');
 }
 
@@ -508,22 +592,18 @@ export async function loadPrivateNote() {
     let container = document.getElementById('private-note-container');
     let textarea = document.getElementById('private-user-note');
     if (!container || !textarea) return;
-    if (!state.USER_DOC_NAME) return; // Guard: auth must be resolved first
+    if (!state.USER_DOC_NAME) return;
 
-    // Показуємо панель ТІЛЬКИ якщо дивимось чужий профіль і ми не ментор
     if (state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME && !state.IS_MENTOR_MODE) {
         container.style.display = 'block';
         let targetUser = state.CURRENT_VIEWED_USER.replace('_stats', '');
         let date = state.selectedDateStr;
         try {
-            let myDoc = await db.collection("journal").doc(state.USER_DOC_NAME).get({ source: 'server' });
-            textarea.value = myDoc.exists
-                ? (myDoc.data()?.privateNotes?.[targetUser]?.[date] || '')
-                : '';
+            let profile = await getProfileByNick(getNickFromDocName(state.USER_DOC_NAME), 'private_notes');
+            textarea.value = profile?.private_notes?.[targetUser]?.[date] || '';
         } catch (e) {
             console.error('loadPrivateNote error:', e);
         } finally {
-            // Spinner/loading state is always cleared, even on failure
             container.style.display = 'block';
         }
     } else {

@@ -1,7 +1,7 @@
 // === js/main.js ===
 
 // 1. ІМПОРТИ
-import { auth, db } from './firebase.js';
+import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { getDefaultDayEntry } from './data_utils.js';
 import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm } from './auth.js';
@@ -494,21 +494,7 @@ function hideAuthResolvingSpinner() {
 // some networks and was the root cause of the 10-second hang.
 let _liveSyncUnsub = null;
 function startLiveSync() {
-    if (!state.USER_DOC_NAME) return;
-    setTimeout(() => {
-        if (!state.USER_DOC_NAME) return;
-        _liveSyncUnsub = db.collection("journal").doc(state.USER_DOC_NAME).onSnapshot((doc) => {
-            if (doc.exists) {
-                const serverData = doc.data();
-                if (serverData.unassignedImages && state.appData) {
-                    if (JSON.stringify(state.appData.unassignedImages) !== JSON.stringify(serverData.unassignedImages)) {
-                        state.appData.unassignedImages = serverData.unassignedImages;
-                        loadImages();
-                    }
-                }
-            }
-        }, (err) => console.warn('LiveSync error:', err.message));
-    }, 5000);
+    _liveSyncUnsub = null;
 }
 
 // 4. СЛУХАЧІ ПОДІЙ
@@ -560,8 +546,13 @@ window.saveProfileName = async function() {
     }
     if (errEl) errEl.style.display = 'none';
     try {
-        await db.collection('journal').doc(state.USER_DOC_NAME).set({ first_name: fname, last_name: lname }, { merge: true });
         const nick = state.USER_DOC_NAME.replace('_stats', '');
+        const { error: profileError } = await supabase
+            .from('profiles')
+            .update({ first_name: fname, last_name: lname })
+            .eq('nick', nick);
+        if (profileError) throw profileError;
+
         const displayName = `${lname} ${fname} (${nick})`;
         let changed = false;
         for (let group in state.TEAM_GROUPS) {
@@ -569,7 +560,6 @@ window.saveProfileName = async function() {
             const idx = arr.findIndex(t => t === nick || t.endsWith(`(${nick})`));
             if (idx > -1) { arr[idx] = displayName; changed = true; }
         }
-        if (changed) await db.collection('system').doc('teams').set(state.TEAM_GROUPS);
         document.getElementById('name-modal').style.display = 'none';
         if (window.renderTeamSidebar) window.renderTeamSidebar();
     } catch(e) {
@@ -600,12 +590,12 @@ let _appInitialized = false;
 // ─── DIAGNOSTIC TIMER ────────────────────────────────────────────────────────
 const _diag = {
     authStart: 0,
-    firestoreStart: 0,
+    dataStart: 0,
     mark(label) { console.log(`[DIAG] ${label}`); },
     authBegin() { this.authStart = performance.now(); this.mark('Start Auth check'); },
     authDone() { this.mark(`Auth confirmed (Time: ${(performance.now() - this.authStart).toFixed(0)} ms)`); },
-    fetchBegin() { this.firestoreStart = performance.now(); this.mark('Start Firestore fetch'); },
-    fetchDone() { this.mark(`Firestore data received (Time: ${(performance.now() - this.firestoreStart).toFixed(0)} ms)`); },
+    fetchBegin() { this.dataStart = performance.now(); this.mark('Start Supabase fetch'); },
+    fetchDone() { this.mark(`Supabase data received (Time: ${(performance.now() - this.dataStart).toFixed(0)} ms)`); },
 };
 window._diag = _diag; // expose for manual console checks
 
@@ -654,24 +644,15 @@ _diag.authBegin();
 // Nukes corrupted IndexedDB/localStorage session data that causes the
 // "refresh 5 times" symptom, then forces a clean login.
 window.clearAuthCache = async function() {
-    try { await auth.signOut(); } catch (_) {}
+    try { await supabase.auth.signOut(); } catch (_) {}
     localStorage.clear();
     sessionStorage.clear();
-    // Delete Firebase IndexedDB databases where corrupted tokens live
-    const dbNames = [
-        'firebaseLocalStorageDb',
-        'firebase-heartbeat-database',
-        'firebase-installations-database',
-    ];
-    await Promise.allSettled(dbNames.map(name => new Promise((res) => {
-        const req = indexedDB.deleteDatabase(name);
-        req.onsuccess = req.onerror = req.onblocked = res;
-    })));
     console.log('[AUTH] Cache cleared — reloading.');
     location.reload();
 };
 
-auth.onAuthStateChanged(async (user) => {
+supabase.auth.onAuthStateChange(async (_event, session) => {
+    const user = session?.user || null;
     hideAuthResolvingSpinner();
     document.getElementById('_auth-retry-banner')?.remove();
     _diag.authDone();
@@ -680,7 +661,7 @@ auth.onAuthStateChanged(async (user) => {
         if (_appInitialized) return;
         _appInitialized = true;
 
-        const nick = user.displayName || user.email.split('@')[0];
+        const nick = user.user_metadata?.nick || user.user_metadata?.display_name || user.email.split('@')[0];
         state.USER_DOC_NAME = `${nick}_stats`;
         state.CURRENT_VIEWED_USER = state.USER_DOC_NAME;
 
