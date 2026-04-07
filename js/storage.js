@@ -1,10 +1,10 @@
 // === js/storage.js ===
-import { storage } from './firebase.js';
 import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { normalizeAppData, normalizeDayEntry, getDefaultAppData } from './data_utils.js';
 import { loadPlaybook } from './playbook.js';
 import { clearStatsCache } from './stats.js';
+import { uploadToSupabaseStorage, deleteFromSupabaseStorage } from './supabase_storage.js';
 
 function monthKey(dateStr) {
     return dateStr.slice(0, 7);
@@ -372,13 +372,7 @@ export async function initializeApp() {
 export async function uploadBackground(file, userId) {
     const safeName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
     const storagePath = `backgrounds/${userId}/${safeName}`;
-
-    const ref = storage.ref(storagePath);
-    const uploadTask = await ref.put(file, {
-        customMetadata: { type: 'background' },
-    });
-
-    const downloadURL = await uploadTask.ref.getDownloadURL();
+    const downloadURL = await uploadToSupabaseStorage(storagePath, file);
 
     if (!Array.isArray(state.appData.backgrounds)) state.appData.backgrounds = [];
     if (!state.appData.backgrounds.includes(downloadURL)) {
@@ -399,9 +393,9 @@ export async function setActiveBackground(url, userId) {
 
 export async function deleteBackground(url, userId) {
     try {
-        await storage.refFromURL(url).delete();
+        await deleteFromSupabaseStorage(url);
     } catch (e) {
-        if (e.code !== 'storage/object-not-found') console.warn('[BgDelete]', e);
+        console.warn('[BgDelete]', e);
     }
 
     state.appData.backgrounds = (state.appData.backgrounds || []).filter(u => u !== url);

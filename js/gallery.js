@@ -3,6 +3,7 @@ import { state, SCREEN_CATS } from './state.js';
 import { saveToLocal } from './storage.js';
 import { showToast } from './utils.js';
 import { getDefaultDayEntry } from './data_utils.js';
+import { deleteFromSupabaseStorage, getSupabaseStorageUrl, uploadToSupabaseStorage } from './supabase_storage.js';
 
 export function openZoom(src) {
     state.currentZoomedSrc = src;
@@ -41,8 +42,7 @@ export async function getStorageUrl(pathOrUrl) {
     const cached = _urlCache[storagePath];
     if (cached && Date.now() - cached.ts < URL_CACHE_TTL) return cached.url;
     try {
-        const { storage } = await import('./firebase.js');
-        const url = await storage.ref(storagePath).getDownloadURL();
+        const url = await getSupabaseStorageUrl(storagePath);
         _urlCache[storagePath] = { url, ts: Date.now() };
         return url;
     } catch(e) {
@@ -323,10 +323,9 @@ function showConfirmModal(message, onConfirm) {
 
 async function deleteFromStorage(path) {
     try {
-        const { storage } = await import('./firebase.js');
-        await storage.ref(path).delete();
+        await deleteFromSupabaseStorage(path);
     } catch(e) {
-        if (e.code !== 'storage/object-not-found') console.warn('Storage delete error:', e.message);
+        console.warn('Storage delete error:', e.message);
     }
 }
 
@@ -655,17 +654,14 @@ window.viewLeaderScreens = async function() {
         let data = state.statsDocCache[docKey];
         if (!data) {
             try {
-                const { db } = await import('./firebase.js');
-                const [metaDoc, monthsSnap] = await Promise.all([
-                    db.collection('journal').doc(docKey).get(),
-                    db.collection('journal').doc(docKey).collection('months').doc(state.selectedDateStr.slice(0,7)).get()
+                const { getStatsDocData } = await import('./stats.js');
+                data = await getStatsDocData(docKey, [
+                    {
+                        type: 'month',
+                        val: `${state.todayObj.getFullYear()}-${state.todayObj.getMonth()}`,
+                        label: state.selectedDateStr.slice(0, 7)
+                    }
                 ]);
-                data = metaDoc.exists ? metaDoc.data() : {};
-                data.journal = {};
-                if (monthsSnap.exists) {
-                    const days = monthsSnap.data();
-                    for (const d in days) { if (/^\d{4}-\d{2}-\d{2}$/.test(d)) data.journal[d] = days[d]; }
-                }
                 state.statsDocCache[docKey] = data;
             } catch(e) { data = null; }
         }
@@ -739,12 +735,10 @@ window.addEventListener('paste', async function(e) {
     titleEl.innerHTML = '⏳ Завантаження картинки в хмару...';
 
     try {
-        const { storage } = await import('./firebase.js');
         const nick = state.USER_DOC_NAME.replace('_stats', '');
         const ext = file.type.includes('png') ? 'png' : 'jpg';
         const filename = `screenshots/${nick}/${Date.now()}.${ext}`;
-        const ref = storage.ref(filename);
-        await ref.put(file);
+        await uploadToSupabaseStorage(filename, file);
         // Зберігаємо шлях файлу (не URL) — URL генеруємо динамічно через SDK
 
         if (!state.appData.unassignedImages) state.appData.unassignedImages = [];

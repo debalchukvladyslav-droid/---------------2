@@ -1,8 +1,10 @@
 // === js/playbook.js ===
-import { db } from './firebase.js';
 import { state } from './state.js';
 import { saveToLocal } from './storage.js';
 import { initSetupChart, getChartData } from './playbook_chart.js';
+function getPlaybookStorageKey(nick) {
+    return `pj:${nick}:playbook`;
+}
 
 // ── Playbook is stored in its own document: journal/{nick}_playbook ──
 // This keeps it out of the main _stats document which is fetched on every load.
@@ -11,8 +13,8 @@ export async function loadPlaybook() {
     const nick = state.USER_DOC_NAME;
     if (!nick) return;
     try {
-        const doc = await db.collection('journal').doc(`${nick.replace('_stats','')}_playbook`).get({ source: 'server' });
-        state.appData.playbook = doc.exists ? (doc.data().playbook || []) : [];
+        const raw = localStorage.getItem(getPlaybookStorageKey(nick));
+        state.appData.playbook = raw ? (JSON.parse(raw) || []) : [];
     } catch (e) {
         console.warn('loadPlaybook error:', e.message);
         state.appData.playbook = state.appData.playbook || [];
@@ -23,8 +25,7 @@ async function savePlaybook() {
     const nick = state.USER_DOC_NAME;
     if (!nick) return;
     if (state.CURRENT_VIEWED_USER !== nick) return;
-    await db.collection('journal').doc(`${nick.replace('_stats','')}_playbook`)
-        .set({ playbook: state.appData.playbook || [] });
+    localStorage.setItem(getPlaybookStorageKey(nick), JSON.stringify(state.appData.playbook || []));
 }
 
 function getPlaybook() {

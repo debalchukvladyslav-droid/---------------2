@@ -1,8 +1,8 @@
 // === js/trades_view2.js ===
 import { state } from './state.js';
-import { db } from './firebase.js';
 import { buildTradeContext, analyzeTradeStory, renderStoryOverlay } from './trade_story.js';
 import { sleep } from './ai.js';
+import { saveToLocal } from './storage.js';
 
 function sanitizeHTML(str) {
     const div = document.createElement('div');
@@ -648,16 +648,11 @@ function _ensureFullscreenButton(wrapper) {
 }
 
 // ─── Firestore: зберегти analysisResult в документ угоди ────────────────────
-async function saveAnalysisToFirestore(dateStr, tradeIndex, result) {
-    const nick = state.USER_DOC_NAME;
-    if (!nick) return;
-    const mk = dateStr.slice(0, 7);
+async function saveAnalysisToJournal(dateStr, tradeIndex, result) {
     try {
         // Зберігаємо в місячний документ — оновлюємо конкретну угоду
-        const ref = db.collection('journal').doc(nick).collection('months').doc(mk);
+        const dayData = state.appData.journal[dateStr] || {};
         // Читаємо поточний стан дня, щоб не перезаписати інші угоди
-        const snap = await ref.get();
-        const dayData = snap.exists ? (snap.data()[dateStr] || {}) : {};
         const trades = [...(dayData.trades || [])];
         if (!trades[tradeIndex]) return;
 
@@ -665,14 +660,13 @@ async function saveAnalysisToFirestore(dateStr, tradeIndex, result) {
         const { _ctx, ...safeResult } = result;
         trades[tradeIndex] = { ...trades[tradeIndex], analysisResult: safeResult };
 
-        await ref.set({ [dateStr]: { ...dayData, trades } }, { merge: true });
+        state.appData.journal[dateStr] = { ...dayData, trades };
+        await saveToLocal();
 
         // Оновлюємо локальний state
-        if (state.appData.journal[dateStr]?.trades?.[tradeIndex]) {
-            state.appData.journal[dateStr].trades[tradeIndex].analysisResult = safeResult;
-        }
+        
     } catch (e) {
-        console.error('[TradeStory] Firestore save error:', e);
+        console.error('[TradeStory] Save error:', e);
     }
 }
 
@@ -732,7 +726,7 @@ function _ensureStoryButton(container, trades, candles, dateStr) {
                 const result = await analyzeTradeStory(trades[0], candles, dateStr);
                 _storyCache.set(cacheKey, result);
                 // Зберігаємо в Firestore асинхронно (не блокуємо UI)
-                saveAnalysisToFirestore(dateStr, tradeIndex, result);
+                saveAnalysisToJournal(dateStr, tradeIndex, result);
                 _storyPanelOpen = true;
                 renderStoryOverlay(result, lwChart, wrapper, dateStr);
                 // Замінюємо кнопку «AI Аналіз» на «Показати аналіз»

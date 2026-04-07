@@ -1,5 +1,5 @@
 // === js/stats.js ===
-import { db } from './firebase.js';
+import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { normalizeAppData, getDefaultAppData } from './data_utils.js';
 import { loadMonth } from './storage.js';
@@ -10,6 +10,7 @@ import { loadMonth } from './storage.js';
 // Value = { journal: {}, ts: Date.now() }. TTL = 24 h.
 const _statsCache = new Map();
 const _CACHE_TTL = 24 * 60 * 60 * 1000;
+const _profileIdCache = new Map();
 
 function _cacheGet(key) {
     const entry = _statsCache.get(key);
@@ -29,6 +30,151 @@ export function clearStatsCache(docName) {
         if (key.startsWith(`${docName}|`)) _statsCache.delete(key);
     }
 }
+
+function journalRowToEntry(row) {
+    const metrics = row?.daily_metrics && typeof row.daily_metrics === 'object' ? row.daily_metrics : {};
+    return {
+        pnl: row?.pnl ?? null,
+        gross_pnl: row?.gross_pnl ?? null,
+        commissions: row?.commissions ?? null,
+        locates: row?.locates ?? null,
+        kf: row?.kf ?? null,
+        notes: row?.notes ?? '',
+        mentor_comment: row?.mentor_comment ?? '',
+        ai_advice: row?.ai_advice ?? '',
+        errors: metrics.errors || [],
+        checkedParams: metrics.checkedParams || [],
+        sliders: metrics.sliders || {},
+        tradeTypesData: metrics.tradeTypesData || {},
+        screenshots: metrics.screenshots || { good: [], normal: [], bad: [], error: [] },
+        tickers: metrics.tickers || {},
+        traded_tickers: metrics.traded_tickers || [],
+        fondexx: metrics.fondexx || { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
+        ppro: metrics.ppro || { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
+        sessionGoal: metrics.sessionGoal ?? '',
+        sessionPlan: metrics.sessionPlan ?? '',
+        sessionReadiness: metrics.sessionReadiness ?? null,
+        sessionSetups: metrics.sessionSetups || [],
+        sessionAiResult: metrics.sessionAiResult ?? '',
+        sessionDone: metrics.sessionDone ?? false,
+        trades: metrics.trades || []
+    };
+}
+
+async function getProfileForDocName(docName) {
+    if (!docName) return null;
+    if (_profileIdCache.has(docName)) return _profileIdCache.get(docName);
+
+    const nick = String(docName).replace(/_stats$/, '');
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('id, nick, first_name, last_name, team, mentor_enabled')
+        .eq('nick', nick)
+        .maybeSingle();
+
+    if (error) throw error;
+    _profileIdCache.set(docName, data || null);
+    return data || null;
+}
+
+async function fetchJournalRowsForDoc(docName, monthKeys = null) {
+    const profile = await getProfileForDocName(docName);
+    if (!profile?.id) return {};
+
+    let query = supabase
+        .from('journal_days')
+        .select('*')
+        .eq('user_id', profile.id)
+        .order('trade_date', { ascending: true });
+
+    if (monthKeys && monthKeys.size) {
+        const sortedMonths = [...monthKeys].sort();
+        query = query
+            .gte('trade_date', `${sortedMonths[0]}-01`)
+            .lte('trade_date', `${sortedMonths[sortedMonths.length - 1]}-31`);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const journal = {};
+    const monthFilter = monthKeys ? new Set(monthKeys) : null;
+    (data || []).forEach(row => {
+        if (monthFilter && !monthFilter.has(String(row.trade_date).slice(0, 7))) return;
+        journal[row.trade_date] = journalRowToEntry(row);
+    });
+    return journal;
+}
+
+function makeDocSnapshot(id, payload) {
+    return {
+        id,
+        exists: !!payload && Object.keys(payload).length > 0,
+        data: () => payload || {}
+    };
+}
+
+function aggregateJournal(journal) {
+    let allTimePnl = 0;
+    let allTimeWinDays = 0;
+    let allTimeLossDays = 0;
+    let allTimeBeDays = 0;
+
+    Object.values(journal || {}).forEach(entry => {
+        const pnl = parseFloat(entry?.pnl);
+        if (Number.isNaN(pnl)) return;
+        allTimePnl += pnl;
+        if (pnl > 0) allTimeWinDays++;
+        else if (pnl < 0) allTimeLossDays++;
+        else allTimeBeDays++;
+    });
+
+    return { allTimePnl, allTimeWinDays, allTimeLossDays, allTimeBeDays };
+}
+
+const db = {
+    collection(name) {
+        if (name !== 'journal') throw new Error(`Unsupported collection: ${name}`);
+        return {
+            doc(docName) {
+                return {
+                    async get() {
+                        const [profile, journal] = await Promise.all([
+                            getProfileForDocName(docName),
+                            fetchJournalRowsForDoc(docName, null)
+                        ]);
+                        return makeDocSnapshot(docName, { ...(profile || {}), ...aggregateJournal(journal) });
+                    },
+                    collection(childName) {
+                        if (childName !== 'months') throw new Error(`Unsupported subcollection: ${childName}`);
+                        return {
+                            async get() {
+                                const journal = await fetchJournalRowsForDoc(docName, null);
+                                const months = {};
+                                Object.entries(journal).forEach(([dateStr, entry]) => {
+                                    const mk = dateStr.slice(0, 7);
+                                    if (!months[mk]) months[mk] = {};
+                                    months[mk][dateStr] = entry;
+                                });
+                                return {
+                                    docs: Object.entries(months).map(([id, payload]) => makeDocSnapshot(id, payload))
+                                };
+                            },
+                            doc(monthKey) {
+                                return {
+                                    async get() {
+                                        const payload = await fetchJournalRowsForDoc(docName, new Set([monthKey]));
+                                        return makeDocSnapshot(monthKey, payload);
+                                    }
+                                };
+                            }
+                        };
+                    }
+                };
+            }
+        };
+    }
+};
 
 // ─── PERIOD HELPERS ───────────────────────────────────────────────────────────
 // Derives the minimal set of YYYY-MM keys that the current activeFilters
@@ -72,26 +218,13 @@ function _monthKeysForFilters(filters) {
 // Uses { source: 'server' } on every read — no cache, no WebChannel.
 async function fetchMonthsForPeriod(docName, filters) {
     const monthKeys = _monthKeysForFilters(filters);
+    if (!monthKeys) return fetchJournalRowsForDoc(docName, null);
     const cacheKey = `${docName}|${[...monthKeys].sort().join(',')}`;
 
     const cached = _cacheGet(cacheKey);
     if (cached) return cached;
 
-    const journal = {};
-    const fetches = [...monthKeys].map(mk =>
-        db.collection('journal').doc(docName).collection('months').doc(mk)
-            .get({ source: 'server' })
-            .then(doc => {
-                if (!doc.exists) return;
-                const days = doc.data();
-                for (const dateStr in days) {
-                    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) journal[dateStr] = days[dateStr];
-                }
-            })
-            .catch(e => console.warn(`fetchMonthsForPeriod: ${docName}/${mk}:`, e.message))
-    );
-    await Promise.all(fetches);
-
+    const journal = await fetchJournalRowsForDoc(docName, monthKeys);
     _cacheSet(cacheKey, journal);
     return journal;
 }
@@ -138,11 +271,11 @@ export async function getStatsDocData(docName, filters) {
     }
 
     try {
-        const [metaDoc, journal] = await Promise.all([
-            db.collection('journal').doc(docName).get({ source: 'server' }),
+        const [profile, journal] = await Promise.all([
+            getProfileForDocName(docName),
             fetchMonthsForPeriod(docName, filters),
         ]);
-        const data = normalizeAppData(metaDoc.exists ? metaDoc.data() : {});
+        const data = normalizeAppData(profile || {});
         data.journal = journal;
         return data;
     } catch (e) {

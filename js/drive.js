@@ -3,6 +3,7 @@ import { state } from './state.js';
 import { saveToLocal } from './storage.js';
 import { loadImages } from './gallery.js';
 import { showToast } from './utils.js';
+import { uploadToSupabaseStorage } from './supabase_storage.js';
 
 const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
 
@@ -177,7 +178,6 @@ export async function syncDriveScreenshots(silent = false) {
             }
         }
 
-        const { storage } = await import('./firebase.js');
         const nick = state.USER_DOC_NAME.replace('_stats', '');
 
         const newFiles = files.filter(file => {
@@ -204,7 +204,7 @@ export async function syncDriveScreenshots(silent = false) {
                 console.warn(`Drive: пропускаємо ${file.name} — blob ${blob.size} перевищує ліміт`);
                 return;
             }
-            await storage.ref(storagePath).put(blob);
+            await uploadToSupabaseStorage(storagePath, blob, { contentType: blob.type });
             if (!state.appData.unassignedImages) state.appData.unassignedImages = [];
             state.appData.unassignedImages.push(storagePath);
             newCount++;

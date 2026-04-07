@@ -1,11 +1,9 @@
 // === js/learn.js ===
 import { state } from './state.js';
 import { callGemini, getGeminiKeys } from './ai.js';
-import { db } from './firebase.js';
 
 async function getYoutubeApiKey() {
-    const doc = await db.collection('system').doc('config').get();
-    const key = doc.exists ? doc.data().youtube_api_key : null;
+    const key = state.systemConfig?.youtube_api_key || state.appData?.settings?.youtube_api_key || null;
     if (!key) throw new Error('YouTube API ключ не налаштовано. Зверніться до адміністратора.');
     return key;
 }
