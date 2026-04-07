@@ -102,19 +102,9 @@ function openFolderPicker(token) {
 }
 
 async function getTokenSilently() {
-    if (_accessToken) return _accessToken;
-    if (!state.appData?.settings?.driveFolderId) return null;
-    try {
-        await Promise.all([initGapi(), initGsi()]);
-    } catch { return null; }
-    return new Promise((resolve) => {
-        _tokenClient.callback = (resp) => {
-            if (resp.error) { resolve(null); return; }
-            _accessToken = resp.access_token;
-            resolve(_accessToken);
-        };
-        _tokenClient.requestAccessToken({ prompt: '' });
-    });
+    // Повертаємо тільки існуючий токен — не запитуємо новий автоматично.
+    // Новий токен видається тільки через явний клік користувача (connectGoogleDrive).
+    return _accessToken || null;
 }
 
 export async function syncDriveScreenshots(silent = false) {
