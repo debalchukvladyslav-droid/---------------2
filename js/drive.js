@@ -101,6 +101,22 @@ function openFolderPicker(token) {
     picker.setVisible(true);
 }
 
+async function getTokenSilently() {
+    if (_accessToken) return _accessToken;
+    if (!state.appData?.settings?.driveFolderId) return null;
+    try {
+        await Promise.all([initGapi(), initGsi()]);
+    } catch { return null; }
+    return new Promise((resolve) => {
+        _tokenClient.callback = (resp) => {
+            if (resp.error) { resolve(null); return; }
+            _accessToken = resp.access_token;
+            resolve(_accessToken);
+        };
+        _tokenClient.requestAccessToken({ prompt: '' });
+    });
+}
+
 export async function syncDriveScreenshots(silent = false) {
     if (_syncInProgress) return;
     if (state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) return;
@@ -114,10 +130,12 @@ export async function syncDriveScreenshots(silent = false) {
     try {
         await Promise.all([initGapi(), initGsi()]);
 
-        if (!_accessToken) {
+        const token = await getTokenSilently();
+        if (!token) {
             if (statusEl) statusEl.textContent = '⚠️ Потрібна авторизація';
             return;
         }
+        _accessToken = token;
 
         let files;
         if (_driveFilesCache && Date.now() - _driveFilesCache.ts < DRIVE_FILES_CACHE_TTL) {
@@ -128,7 +146,7 @@ export async function syncDriveScreenshots(silent = false) {
             listUrl.searchParams.set('fields', 'files(id,name,modifiedTime,size)');
             listUrl.searchParams.set('orderBy', 'modifiedTime desc');
             listUrl.searchParams.set('pageSize', '20');
-            const resp = await fetch(listUrl.toString(), { headers: { Authorization: `Bearer ${_accessToken}` } });
+            const resp = await fetch(listUrl.toString(), { headers: { Authorization: `Bearer ${token}` } });
             const data = await resp.json();
             if (!data.files) { if (statusEl) statusEl.textContent = '⚠️ Помилка отримання файлів'; return; }
             files = data.files;
@@ -159,7 +177,7 @@ export async function syncDriveScreenshots(silent = false) {
             const storagePath = `screenshots/${nick}/${file.id}_${file.name}`;
             const fileUrl = new URL(`https://www.googleapis.com/drive/v3/files/${file.id}`);
             fileUrl.searchParams.set('alt', 'media');
-            const fileResp = await fetch(fileUrl.toString(), { headers: { Authorization: `Bearer ${_accessToken}` } });
+            const fileResp = await fetch(fileUrl.toString(), { headers: { Authorization: `Bearer ${token}` } });
             const blob = await fileResp.blob();
             if (blob.size > MAX_FILE_SIZE_BYTES) {
                 console.warn(`Drive: пропускаємо ${file.name} — blob перевищує ліміт`);
