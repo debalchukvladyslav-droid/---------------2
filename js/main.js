@@ -11,7 +11,7 @@ import { saveToLocal, initializeApp, exportData, importData, loadMonth,
 import { applyTheme, saveThemeSettings, switchTab, toggleMobileSidebar, switchMainTab, scrollMainTabs, toggleMoreTabs, toggleMobileMoreMenu, closeMobileMoreMenu } from './ui.js';
 import { shiftDate, selectDateFromInput, saveEntry, renderView, selectDate, updateAutoFlags, initSelectors } from './calendar.js';
 import { toggleStatsDropdown, toggleTree, toggleStatsFilter, refreshStatsView, closeStatsDropdown, renderStatsSourceSelector, selectStatsSource, renderTradeTypeSelector, selectTradeTypeFilter } from './stats.js';
-import { renderErrorsList, addNewErrorType, deleteErrorType, renderChecklistDisplay, renderSettingsChecklist, addNewChecklistItem, deleteChecklistItem, saveChecklist, renderSidebarSliders, renderSettingsSliders, addNewSliderItem, deleteSliderItem, saveSlidersSettings, renderSettingsTradeTypes, addNewTradeType, deleteTradeType, saveTradeTypes, renderMyTradeTypes, addMyTradeType, deleteMyTradeType, saveMyTradeTypes, renderSettingsSituations, addPlaybookSituation, deletePlaybookSituation, savePlaybookSituations } from './settings.js';
+import { renderErrorsList, addNewErrorType, deleteErrorType, renderChecklistDisplay, renderSettingsChecklist, addNewChecklistItem, deleteChecklistItem, saveChecklist, renderSidebarSliders, renderSettingsSliders, addNewSliderItem, deleteSliderItem, saveSlidersSettings, renderSettingsTradeTypes, addNewTradeType, deleteTradeType, saveTradeTypes, renderMyTradeTypes, addMyTradeType, deleteMyTradeType, saveMyTradeTypes, renderSettingsSituations, addPlaybookSituation, deletePlaybookSituation, savePlaybookSituations, renderGeminiKeys, saveGeminiKey } from './settings.js';
 import { openZoom, closeZoom, openOriginal, loadMoreUnassigned, assignImage, removeAssignedImage, deleteFileFromPC, loadImages, renderAssignedScreens } from './gallery.js';
 import { getAIAdvice, analyzeChart, analyzeTagPatterns, openSOSModal, closeSOSModal, sendSOSMessage, sendDataChatMessage, renderAIAdviceUI, loadAIChatHistory, switchAITab, bookmarkAIChat, renderSavedAIChats, deleteSavedAI } from './ai.js';
 import { setupOCRDrawing, loadLatestImageForOCR, saveVisualOCRSettings, editTicker, forceScan, updateBadgeUI, runOCR } from './ocr.js';
@@ -374,6 +374,8 @@ window.deletePlaybookSituation = deletePlaybookSituation;
 window.savePlaybookSituations = savePlaybookSituations;
 window.getPlaybookForSituation = getPlaybookForSituation;
 window.loadAIChatHistory = loadAIChatHistory;
+window.renderGeminiKeys = renderGeminiKeys;
+window.saveGeminiKey = saveGeminiKey;
 window.savePrivateNote = savePrivateNote;
 window.loadMonth = loadMonth;
 window.connectGoogleDrive = connectGoogleDrive;
@@ -598,6 +600,10 @@ async function bootApp(user) {
     const nick = user.user_metadata?.nick || user.user_metadata?.display_name || user.email.split('@')[0];
     state.USER_DOC_NAME = `${nick}_stats`;
     state.CURRENT_VIEWED_USER = state.USER_DOC_NAME;
+
+    // Завантажуємо gemini_api_key з profiles
+    const { data: profile } = await supabase.from('profiles').select('gemini_api_key').eq('id', user.id).single();
+    if (profile?.gemini_api_key) state.appData.settings.gemini_key = profile.gemini_api_key;
 
     document.getElementById('auth-overlay').style.display = 'none';
     const errEl = document.getElementById('auth-error');
