@@ -117,8 +117,42 @@ function journalRowToDayEntry(row) {
 let _saveQueue = Promise.resolve();
 
 export function saveToLocal() {
-    _saveQueue = _saveQueue.then(() => _doSave()).catch(e => console.error('saveToLocal queue error:', e));
+    _saveQueue = _saveQueue.then(() => Promise.all([_doSave(), saveSettings()])).catch(e => console.error('saveToLocal queue error:', e));
     return _saveQueue;
+}
+
+export async function saveSettings() {
+    try {
+        const { user } = await getCurrentUserContext();
+        if (!user) return;
+        const { error } = await supabase
+            .from('profiles')
+            .update({ settings: state.appData.settings })
+            .eq('id', user.id);
+        if (error) throw error;
+        console.log('✅ Settings збережено в Supabase');
+    } catch (e) {
+        console.error('❌ Помилка збереження settings:', e);
+    }
+}
+
+export async function loadSettings() {
+    try {
+        const { user } = await getCurrentUserContext();
+        if (!user) return;
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('settings')
+            .eq('id', user.id)
+            .single();
+        if (error) throw error;
+        if (data?.settings && typeof data.settings === 'object') {
+            state.appData.settings = { ...state.appData.settings, ...data.settings };
+            console.log('✅ Settings завантажено з Supabase');
+        }
+    } catch (e) {
+        console.error('❌ Помилка завантаження settings:', e);
+    }
 }
 
 export async function saveMonth() {
@@ -314,6 +348,7 @@ export async function initializeApp() {
         const prevMk = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
 
         await Promise.all([
+            loadSettings(),
             loadMonth(nick, currentMk),
             loadMonth(nick, prevMk),
             loadPlaybook(),
