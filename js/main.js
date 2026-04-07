@@ -673,29 +673,24 @@ supabase.auth.onAuthStateChange(async (_event, session) => {
         startInitTimeout();
 
         try {
-            // CRITICAL PATH: only initializeApp on the hot path.
-            // loadMentorStatusForAccount is intentionally moved AFTER initializeApp
-            // — its .get() call was triggering a WebChannel Listen stream that
-            // blocked the Firestore transport for 8-10 s before any data fetch.
             _diag.fetchBegin();
+            await loadTeams();
+            await loadMentorStatusForAccount();
             await initializeApp();
             _diag.fetchDone();
 
-            // Non-critical — run after main data is ready, do not block.
-            loadMentorStatusForAccount().then(() => {
-                if (window.renderSettingsTradeTypes) window.renderSettingsTradeTypes();
-                if (window.renderSettingsSituations) window.renderSettingsSituations();
-                if (window.applyAccessRights) window.applyAccessRights();
-            });
-            loadTeams().then(() => {
-                if (window.renderTeamSidebar) window.renderTeamSidebar();
-                if (window.renderStatsSourceSelector) window.renderStatsSourceSelector();
-            });
+            if (window.renderTeamSidebar) window.renderTeamSidebar();
+            if (window.renderStatsSourceSelector) window.renderStatsSourceSelector();
+            if (window.renderSettingsTradeTypes) window.renderSettingsTradeTypes();
+            if (window.renderSettingsSituations) window.renderSettingsSituations();
+            if (window.applyAccessRights) window.applyAccessRights();
             if (window.loadAIChatHistory) window.loadAIChatHistory();
 
-            // Restore persisted background + render gallery (non-blocking).
             _applyPersistedBackground();
             loadBackgroundGallery();
+        } catch (e) {
+            console.error('[INIT] Помилка на етапі ініціалізації:', e);
+            throw e;
         } finally {
             clearInitTimeout();
             hideLoadingToast();
@@ -706,7 +701,7 @@ supabase.auth.onAuthStateChange(async (_event, session) => {
         startDriveAutoSync();
 
         if (state.appData?.settings?.driveToken?.expires > Date.now()) {
-            syncDriveScreenshots(true);
+            await syncDriveScreenshots(true);
         }
 
         setTimeout(() => window._checkSessionModal?.(), 1500);
