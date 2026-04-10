@@ -27,21 +27,34 @@ import { initPlaybookChart } from './playbook_chart.js';
 
 // 2. ПРОКИДАННЯ ФУНКЦІЙ ДЛЯ HTML (window)
 window.toggleRightSidebar = function() {
-    const sidebar = document.querySelector('.sidebar');
+    const sidebar = document.getElementById('form-sidebar') || document.querySelector('.sidebar');
+    const backdrop = document.getElementById('form-sidebar-backdrop');
     const btn = document.getElementById('sidebar-toggle-btn');
     const isMobile = window.innerWidth <= 1024;
-    if (isMobile) { if (window.toggleMobileSidebar) window.toggleMobileSidebar(); return; }
-    if (sidebar.classList.contains('collapsed')) {
+
+    // On mobile, reuse mobile handler which also controls backdrop
+    if (isMobile) {
+        if (window.toggleMobileSidebar) window.toggleMobileSidebar();
+        return;
+    }
+
+    if (!sidebar) return;
+
+    const isCollapsed = sidebar.classList.contains('collapsed');
+    if (isCollapsed) {
         sidebar.classList.remove('collapsed');
-        const desk = btn.querySelector('.sidebar-btn-desktop');
+        if (backdrop) backdrop.classList.add('visible');
+        const desk = btn?.querySelector('.sidebar-btn-desktop');
         if (desk) desk.innerHTML = '◂ Сховати';
-        btn.style.color = 'var(--text-muted)';
+        if (btn) btn.style.color = 'var(--text-muted)';
     } else {
         sidebar.classList.add('collapsed');
-        const desk = btn.querySelector('.sidebar-btn-desktop');
+        if (backdrop) backdrop.classList.remove('visible');
+        const desk = btn?.querySelector('.sidebar-btn-desktop');
         if (desk) desk.innerHTML = '▸ Панель';
-        btn.style.color = 'var(--accent)';
+        if (btn) btn.style.color = 'var(--accent)';
     }
+
     setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 320);
 };
 window.getDefaultDayEntry = getDefaultDayEntry;
@@ -78,6 +91,10 @@ window.selectDate = selectDate;
 window.updateAutoFlags = updateAutoFlags;
 window.toggleStatsDropdown = toggleStatsDropdown;
 window.toggleTree = toggleTree;
+// Ensure these functions are available on window for inline HTML handlers (modules scope may hide them)
+window.toggleRightSidebar = window.toggleRightSidebar;
+window.openTeamSidebar = window.openTeamSidebar;
+window.closeTeamSidebar = window.closeTeamSidebar;
 window.toggleStatsFilter = toggleStatsFilter;
 window.refreshStatsView = refreshStatsView;
 window.closeStatsDropdown = closeStatsDropdown;
@@ -632,6 +649,10 @@ async function bootApp(user) {
         if (profileData?.role === 'admin') {
             const adminBtn = document.getElementById('main-btn-admin');
             if (adminBtn) adminBtn.style.display = '';
+            const adminMobileBtn = document.querySelector('.admin-tab-mobile');
+            if (adminMobileBtn) adminMobileBtn.style.display = '';
+            const adminSidebarBtn = document.querySelector('.admin-nav-item');
+            if (adminSidebarBtn) adminSidebarBtn.style.display = '';
             window.renderAdminPanel = renderAdminPanel;
         }
 

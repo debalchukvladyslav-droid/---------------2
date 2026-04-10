@@ -293,12 +293,18 @@ const TAB_TITLES = {
 };
 
 export function switchMainTab(tab) {
-    document.querySelectorAll('.main-tab-btn, .more-tab-item').forEach(b => b.classList.remove('active'));
+    // Очищаємо старі активні стани
+    document.querySelectorAll('.main-tab-btn, .more-tab-item, .sidebar-nav-item').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.view-content').forEach(v => {
         v.classList.remove('active');
         v.style.display = 'none';
     });
     
+    // Активуємо кнопку в лівому меню
+    let sidebarBtn = document.querySelector(`.sidebar-nav-item[data-tab="${tab}"]`);
+    if(sidebarBtn) sidebarBtn.classList.add('active');
+    
+    // Активуємо стару кнопку (для сумісності)
     let btn = document.getElementById('main-btn-' + tab);
     if(btn) btn.classList.add('active');
     
@@ -321,9 +327,12 @@ export function switchMainTab(tab) {
     const moreBtn = document.querySelector('.mobile-nav-more-btn');
     if (moreBtn) moreBtn.classList.toggle('more-open', moreTabIds.includes(tab));
 
-    // Оновлюємо заголовок в хедері
-    const titleEl = document.getElementById('mobile-section-title');
-    if (titleEl) titleEl.textContent = TAB_TITLES[tab] || '';
+    // Оновлюємо заголовки
+    const pageTitleEl = document.getElementById('page-title');
+    const mobileTitleEl = document.getElementById('mobile-section-title');
+    const title = TAB_TITLES[tab] || '';
+    if (pageTitleEl) pageTitleEl.textContent = title;
+    if (mobileTitleEl) mobileTitleEl.textContent = title;
 
     if (tab === 'stats' && window.refreshStatsView) {
         // Скидаємо all-time фільтр при поверненні на вкладку — щоб не тригерило важке завантаження
@@ -370,15 +379,19 @@ export function toggleMoreTabs(forceState) {
 export function toggleMobileMoreMenu() {
     const menu = document.getElementById('mobile-more-menu');
     if (!menu) return;
-    const isOpen = menu.style.display === 'block';
-    menu.style.display = isOpen ? 'none' : 'block';
+    const isOpen = menu.classList.contains('open');
+    if (isOpen) {
+        menu.classList.remove('open');
+    } else {
+        menu.classList.add('open');
+    }
     const btn = document.querySelector('.mobile-nav-more-btn');
     if (btn) btn.classList.toggle('more-open', !isOpen);
 }
 
 export function closeMobileMoreMenu() {
     const menu = document.getElementById('mobile-more-menu');
-    if (menu) menu.style.display = 'none';
+    if (menu) menu.classList.remove('open');
     const btn = document.querySelector('.mobile-nav-more-btn');
     if (btn) btn.classList.remove('more-open');
 }
@@ -398,3 +411,13 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
+export function toggleLeftSidebar() {
+    const sidebar = document.querySelector('.app-sidebar');
+    const main = document.querySelector('.main-content');
+    if (!sidebar) return;
+    const isCollapsed = sidebar.classList.toggle('collapsed');
+    main?.classList.toggle('expanded', !isCollapsed);
+}
+
+window.toggleLeftSidebar = toggleLeftSidebar;
