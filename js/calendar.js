@@ -1,7 +1,9 @@
 // === js/calendar.js ===
 import { state } from './state.js';
-import { saveToLocal, loadMonth } from './storage.js';
+import { saveToLocal, loadMonth, loadDayDetails } from './storage.js';
 import { showPrompt } from './utils.js';
+
+let _selectDateRequestId = 0;
 
 function sanitizeHTML(str) {
     const div = document.createElement('div');
@@ -92,11 +94,19 @@ export function selectDateFromInput(dateStr) {
     renderView();
 }
 
-export function selectDate(dateStr) {
-    state.selectedDateStr = dateStr; 
+function setDayDetailsLoading(isLoading) {
+    state.dayDetailsLoading = isLoading;
+    ['trade-pnl', 'trade-gross', 'trade-comm', 'trade-locates', 'trade-kf', 'trade-notes', 'session-goal', 'session-plan', 'session-readiness']
+        .forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.disabled = isLoading;
+        });
+}
+
+function fillSelectedDateUI(dateStr) {
     document.getElementById('trade-date').value = dateStr; 
     updateDisplayDate(dateStr);
-    
+
     document.querySelectorAll('.day-cell').forEach(c => c.classList.remove('active-day'));
     const cell = document.getElementById(`cell-${dateStr}`); 
     if (cell) cell.classList.add('active-day');
@@ -183,8 +193,29 @@ export function selectDate(dateStr) {
     }
 }
 
+export async function selectDate(dateStr) {
+    const requestId = ++_selectDateRequestId;
+    state.selectedDateStr = dateStr;
+    fillSelectedDateUI(dateStr);
+
+    const dayData = state.appData.journal[dateStr];
+    if (dayData?.__detailsLoaded) return;
+
+    setDayDetailsLoading(true);
+    try {
+        await loadDayDetails(dateStr);
+        if (requestId !== _selectDateRequestId || state.selectedDateStr !== dateStr) return;
+        fillSelectedDateUI(dateStr);
+    } finally {
+        if (requestId === _selectDateRequestId && state.selectedDateStr === dateStr) {
+            setDayDetailsLoading(false);
+        }
+    }
+}
+
 export function saveEntry() {
     if (!state.selectedDateStr) return; // Ніяких алертів, просто тихий вихід, якщо день не обрано
+    if (state.dayDetailsLoading) return;
     
     // Збираємо типи трейдів
     let ttData = Object.create(null);
@@ -252,13 +283,17 @@ export function saveEntry() {
     if (oldData.sessionDone !== undefined) dayData.sessionDone = oldData.sessionDone;
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(state.selectedDateStr) || Object.prototype.hasOwnProperty.call(Object.prototype, state.selectedDateStr)) return;
+    dayData.__detailsLoaded = true;
     state.appData.journal[state.selectedDateStr] = dayData;
     
     // Тихе збереження
     import('./storage.js').then(module => {
         module.saveToLocal().then(() => {
-            if (window.renderView) window.renderView();
-            if (window.updateAutoFlags) window.updateAutoFlags().then(() => { if (window.renderView) window.renderView(); });
+            if (window.updateAutoFlags) {
+                window.updateAutoFlags().then(() => { if (window.renderView) window.renderView(); });
+            } else if (window.renderView) {
+                window.renderView();
+            }
             if (window.refreshStatsView) window.refreshStatsView();
             if (window.innerWidth <= 1024 && window.toggleMobileSidebar) window.toggleMobileSidebar(false);
         }).catch(err => console.error("Помилка фонового збереження:", err));
@@ -417,7 +452,7 @@ export async function renderView() {
         dayPnl.textContent = pnlDisplay;
         cell.appendChild(dayNum);
         cell.appendChild(dayPnl);
-        cell.onclick = () => selectDate(dateKey);
+        cell.onclick = () => { void selectDate(dateKey); };
         if (dateKey === state.selectedDateStr) cell.classList.add('active-day');
         grid.appendChild(cell);
     }

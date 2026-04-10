@@ -26,11 +26,14 @@ function mapAuthError(error, fallback = 'Помилка') {
         return 'Акаунт вже створено!';
     }
 
+    if (message.includes('email not confirmed')) {
+        return 'Пошта не підтверджена. Перевірте вашу скриньку та перейдіть за посиланням у листі.';
+    }
+
     if (
         code === 'invalid_credentials' ||
         message.includes('invalid login credentials') ||
         message.includes('invalid email or password') ||
-        message.includes('email not confirmed') ||
         message.includes('invalid credentials')
     ) {
         return 'Невірний логін або пароль!';
@@ -166,7 +169,15 @@ export async function handleAuth() {
             if (profileInsertError) throw profileInsertError;
 
             syncTeamGroupState(selectedTeam, `${lname} ${fname} (${nick})`);
-            showError('✅ Акаунт створено!');
+
+            if (authData.user && authData.session === null) {
+                const card = document.querySelector('.auth-card');
+                if (card) {
+                    card.innerHTML = `<p style="color:var(--text-main,#f8fafc);font-size:1rem;line-height:1.6;">✅ Реєстрація успішна! Ми відправили посилання для підтвердження на вашу пошту. Будь ласка, перейдіть за ним, щоб активувати акаунт.</p>`;
+                }
+            } else {
+                showError('✅ Акаунт створено!');
+            }
             return;
         }
 
@@ -356,8 +367,13 @@ export async function loadMentorStatusForAccount() {
 
 export async function saveMentorStatusForAccount(enabled) {
     if (!state.USER_DOC_NAME) return;
-    await saveProfilePatchByDocName(state.USER_DOC_NAME, { mentor_enabled: enabled });
-    state.IS_MENTOR_MODE = enabled;
+    try {
+        await saveProfilePatchByDocName(state.USER_DOC_NAME, { mentor_enabled: enabled });
+        state.IS_MENTOR_MODE = enabled;
+    } catch (e) {
+        console.error('Помилка збереження статусу ментора:', e);
+        throw e;
+    }
 }
 
 export function updateMentorButtons() {
@@ -575,18 +591,23 @@ export async function saveMentorComment() {
 }
 
 export async function savePrivateNote() {
-    let noteText = document.getElementById('private-user-note').value;
-    let targetUser = state.CURRENT_VIEWED_USER.replace('_stats', '');
-    let date = state.selectedDateStr;
+    try {
+        let noteText = document.getElementById('private-user-note').value;
+        let targetUser = state.CURRENT_VIEWED_USER.replace('_stats', '');
+        let date = state.selectedDateStr;
 
-    let profile = await getProfileByNick(getNickFromDocName(state.USER_DOC_NAME), 'private_notes');
-    let privateNotes = profile?.private_notes || {};
+        let profile = await getProfileByNick(getNickFromDocName(state.USER_DOC_NAME), 'private_notes');
+        let privateNotes = profile?.private_notes || {};
 
-    if (!privateNotes[targetUser]) privateNotes[targetUser] = {};
-    privateNotes[targetUser][date] = noteText;
+        if (!privateNotes[targetUser]) privateNotes[targetUser] = {};
+        privateNotes[targetUser][date] = noteText;
 
-    await saveProfilePatchByDocName(state.USER_DOC_NAME, { private_notes: privateNotes });
-    showToast('🔒 Приватну нотатку успішно збережено у ваш профіль!');
+        await saveProfilePatchByDocName(state.USER_DOC_NAME, { private_notes: privateNotes });
+        showToast('🔒 Приватну нотатку успішно збережено у ваш профіль!');
+    } catch (e) {
+        console.error('savePrivateNote error:', e);
+        showToast('Помилка збереження приватної нотатки: ' + (e?.message || 'Невідома помилка'));
+    }
 }
 
 export async function loadPrivateNote() {

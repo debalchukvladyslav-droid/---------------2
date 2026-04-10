@@ -114,7 +114,28 @@ function journalRowToDayEntry(row) {
     });
 }
 
+function journalRowToMonthEntry(row) {
+    return {
+        ...normalizeDayEntry({
+            pnl: row?.pnl ?? null,
+            gross_pnl: row?.gross_pnl ?? null
+        }),
+        id: row?.id ?? null,
+        user_id: row?.user_id ?? null,
+        trade_date: row?.trade_date ?? null,
+        __detailsLoaded: false
+    };
+}
+
+function markDayEntryDetailsLoaded(entry, loaded) {
+    return {
+        ...normalizeDayEntry(entry),
+        __detailsLoaded: loaded
+    };
+}
+
 let _saveQueue = Promise.resolve();
+const _dayDetailsPromises = new Map();
 
 export function saveToLocal() {
     _saveQueue = _saveQueue.then(() => Promise.all([_doSave(), saveSettings()])).catch(e => console.error('saveToLocal queue error:', e));
@@ -232,7 +253,7 @@ export async function loadMonth(nick, mk) {
         const { start, end } = getMonthRange(mk);
         const { data, error } = await supabase
             .from('journal_days')
-            .select('*')
+            .select('id, user_id, trade_date, pnl, gross_pnl')
             .eq('user_id', userId)
             .gte('trade_date', start)
             .lte('trade_date', end)
@@ -243,7 +264,7 @@ export async function loadMonth(nick, mk) {
         (data || []).forEach(row => {
             const dateStr = row.trade_date;
             if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-                state.appData.journal[dateStr] = journalRowToDayEntry(row);
+                state.appData.journal[dateStr] = journalRowToMonthEntry(row);
             }
         });
 
@@ -254,6 +275,59 @@ export async function loadMonth(nick, mk) {
     } catch (e) {
         console.error(`❌ Помилка завантаження місяця ${mk}:`, e);
     }
+}
+
+export async function loadDayDetails(dateStr) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+
+    const existing = state.appData.journal[dateStr];
+    if (existing?.__detailsLoaded) return existing;
+
+    const requestKey = `${state.CURRENT_VIEWED_USER}:${dateStr}`;
+    if (_dayDetailsPromises.has(requestKey)) {
+        return _dayDetailsPromises.get(requestKey);
+    }
+
+    const request = (async () => {
+        try {
+            const { user, userId } = await getCurrentUserContext();
+            if (!user || !userId) throw new Error('РќРµРјР°С” Р°РІС‚РѕСЂРёР·РѕРІР°РЅРѕРіРѕ РєРѕСЂРёСЃС‚СѓРІР°С‡Р° Supabase');
+
+            const { data, error } = await supabase
+                .from('journal_days')
+                .select('*')
+                .eq('user_id', userId)
+                .eq('trade_date', dateStr)
+                .maybeSingle();
+
+            if (error) throw error;
+
+            if (!data) {
+                const fallbackEntry = markDayEntryDetailsLoaded(existing || {}, true);
+                state.appData.journal[dateStr] = fallbackEntry;
+                return fallbackEntry;
+            }
+
+            const fullEntry = {
+                ...journalRowToDayEntry(data),
+                id: data?.id ?? null,
+                user_id: data?.user_id ?? null,
+                trade_date: data?.trade_date ?? dateStr,
+                __detailsLoaded: true
+            };
+
+            state.appData.journal[dateStr] = fullEntry;
+            return fullEntry;
+        } catch (e) {
+            console.error(`[LOAD] Day details failed for ${dateStr}:`, e);
+            return existing || null;
+        } finally {
+            _dayDetailsPromises.delete(requestKey);
+        }
+    })();
+
+    _dayDetailsPromises.set(requestKey, request);
+    return request;
 }
 
 export async function loadAllMonths(nick) {

@@ -150,6 +150,7 @@ window.saveSessionData = function() {
     state.appData.journal[state.selectedDateStr].sessionPlan = plan;
     state.appData.journal[state.selectedDateStr].sessionReadiness = parseInt(readiness);
     state.appData.journal[state.selectedDateStr].sessionSetups = setups;
+    state.appData.journal[state.selectedDateStr].__detailsLoaded = true;
     import('./storage.js').then(m => m.saveToLocal());
 };
 
@@ -220,6 +221,7 @@ window.saveSessionModal = async function() {
     state.appData.journal[today].sessionReadiness = parseInt(document.getElementById('sm-readiness')?.value) || 5;
     state.appData.journal[today].sessionSetups = [...document.querySelectorAll('#sm-playbook-checks input:checked')].map(cb => cb.value);
     state.appData.journal[today].sessionDone = true;
+    state.appData.journal[today].__detailsLoaded = true;
     const { saveToLocal } = await import('./storage.js');
     await saveToLocal();
     if (state.selectedDateStr === today) {
@@ -655,15 +657,22 @@ window.clearAuthCache = async function() {
 showAuthSpinner();
 
 (async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    hideAuthSpinner();
+    try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
 
-    if (session?.user) {
-        console.log('[AUTH] getSession: сесія знайдена, запускаємо додаток');
-        await bootApp(session.user);
-    } else {
-        console.log('[AUTH] getSession: сесії немає, показуємо логін');
+        if (session?.user) {
+            console.log('[AUTH] getSession: session found, booting app');
+            await bootApp(session.user);
+        } else {
+            console.log('[AUTH] getSession: no session, showing login');
+            showLoginScreen();
+        }
+    } catch (e) {
+        console.error('[AUTH] getSession error:', e);
         showLoginScreen();
+    } finally {
+        hideAuthSpinner();
     }
 })();
 
