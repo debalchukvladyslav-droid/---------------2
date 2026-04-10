@@ -6,7 +6,7 @@ import { state } from './state.js';
 import { getDefaultDayEntry } from './data_utils.js';
 import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm } from './auth.js';
 import { loadTeams, openTeamManager, createNewTeam, moveTrader, deleteTeam, deleteTraderProfile, renderTeamSidebar, switchUser } from './teams.js';
-import { saveToLocal, initializeApp, exportData, importData, loadMonth,
+import { saveToLocal, initializeApp, exportData, importData, loadMonth, resolveViewedUserId, setCurrentViewedUserId,
          uploadBackground, setActiveBackground, deleteBackground, loadBackgroundGallery } from './storage.js';
 import { applyTheme, saveThemeSettings, switchTab, toggleMobileSidebar, switchMainTab, scrollMainTabs, toggleMoreTabs, toggleMobileMoreMenu, closeMobileMoreMenu } from './ui.js';
 import { shiftDate, selectDateFromInput, saveEntry, renderView, selectDate, updateAutoFlags, initSelectors } from './calendar.js';
@@ -18,6 +18,7 @@ import { setupOCRDrawing, loadLatestImageForOCR, saveVisualOCRSettings, editTick
 import { importFondexxReport, importPPROReport, importFondexxTrades } from './parsers.js';
 import { renderPlaybook, addPlaybookSetup, editPlaybookSetup, savePlaybookSetup, deletePlaybookSetup, getPlaybookContext, getPlaybookForSituation, loadPlaybook } from './playbook.js';
 import { loadLearnContent, renderLearnCache } from './learn.js';
+import { renderAdminPanel } from './admin.js';
 
 import { initTradesView, populateDateSelect, populateSymbolSelect, loadTradeChart } from './trades_view2.js';
 import { connectGoogleDrive, syncDriveScreenshots, updateDriveUI, disconnectGoogleDrive, startDriveAutoSync } from './drive.js';
@@ -117,6 +118,7 @@ window.deletePlaybookSetup = deletePlaybookSetup;
 window.getPlaybookContext = getPlaybookContext;
 window.loadLearnContent = loadLearnContent;
 window.renderLearnCache = renderLearnCache;
+window.renderAdminPanel = renderAdminPanel;
 
 window.renderSessionPlaybook = function() {
     const container = document.getElementById('session-playbook-checks');
@@ -600,6 +602,9 @@ async function bootApp(user) {
     const nick = user.user_metadata?.nick || user.user_metadata?.display_name || user.email.split('@')[0];
     state.USER_DOC_NAME = `${nick}_stats`;
     state.CURRENT_VIEWED_USER = state.USER_DOC_NAME;
+    state.myUserId = user.id || null;
+    setCurrentViewedUserId(user.id || null);
+    await resolveViewedUserId(state.CURRENT_VIEWED_USER);
 
     document.getElementById('auth-overlay').style.display = 'none';
     const errEl = document.getElementById('auth-error');
@@ -617,6 +622,18 @@ async function bootApp(user) {
         if (window.renderSettingsSituations) window.renderSettingsSituations();
         if (window.applyAccessRights) window.applyAccessRights();
         if (window.loadAIChatHistory) window.loadAIChatHistory();
+
+        // Перевіряємо роль адміна
+        const { data: profileData } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+        if (profileData?.role === 'admin') {
+            const adminBtn = document.getElementById('main-btn-admin');
+            if (adminBtn) adminBtn.style.display = '';
+            window.renderAdminPanel = renderAdminPanel;
+        }
 
         _applyPersistedBackground();
         loadBackgroundGallery();
@@ -638,6 +655,8 @@ function showLoginScreen() {
     _appInitialized = false;
     state.USER_DOC_NAME = '';
     state.CURRENT_VIEWED_USER = '';
+    state.myUserId = null;
+    setCurrentViewedUserId(null);
     const overlay = document.getElementById('auth-overlay');
     if (overlay) overlay.style.display = 'flex';
     loadTeams();

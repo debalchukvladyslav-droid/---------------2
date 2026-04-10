@@ -352,12 +352,21 @@ export async function switchUser(nick) {
     if (state.CURRENT_VIEWED_USER === `${nick}_stats`) return;
 
     _isSwitching = true;
-    state.CURRENT_VIEWED_USER = `${nick}_stats`;
+    const selectedDocName = `${nick}_stats`;
+    state.CURRENT_VIEWED_USER = selectedDocName;
     _renderTeamSidebarDOM(document.getElementById('team-list-container'));
 
     try {
-        const { initializeApp } = await import('./storage.js');
+        const { initializeApp, resolveViewedUserId, setCurrentViewedUserId } = await import('./storage.js');
+        const selectedUserId = await resolveViewedUserId(selectedDocName, { force: true });
+        setCurrentViewedUserId(selectedUserId);
+        state.statsLoadRequestId++;
+        state.appData = { ...state.appData, journal: {} };
+        state.loadedMonths[selectedDocName] = new Set();
+        state._availableMonthKeys = new Set();
+        if (window.renderView) window.renderView();
         await initializeApp();
+        if (window.refreshStatsView) await window.refreshStatsView();
     } catch (e) {
         console.error('switchUser: initializeApp failed:', e);
     } finally {

@@ -33,6 +33,55 @@ async function getCurrentSupabaseUser() {
     return user || null;
 }
 
+const _profileIdCache = new Map();
+
+export function setCurrentViewedUserId(userId) {
+    const normalizedUserId = userId || null;
+    state.currentViewedUserId = normalizedUserId;
+    if (typeof window !== 'undefined') window.currentViewedUserId = normalizedUserId;
+    return normalizedUserId;
+}
+
+export function getCurrentViewedUserId(userId = null) {
+    const resolvedUserId = userId
+        || state.currentViewedUserId
+        || (typeof window !== 'undefined' ? window.currentViewedUserId : null)
+        || null;
+
+    if (resolvedUserId !== state.currentViewedUserId) {
+        setCurrentViewedUserId(resolvedUserId);
+    } else if (typeof window !== 'undefined' && window.currentViewedUserId !== resolvedUserId) {
+        window.currentViewedUserId = resolvedUserId;
+    }
+
+    return resolvedUserId;
+}
+
+export async function resolveViewedUserId(docName = state.CURRENT_VIEWED_USER, options = {}) {
+    if (!docName) return setCurrentViewedUserId(null);
+
+    const { force = false, syncGlobal = true } = options;
+    if (!force && _profileIdCache.has(docName)) {
+        const cachedUserId = _profileIdCache.get(docName) || null;
+        if (syncGlobal) setCurrentViewedUserId(cachedUserId);
+        return cachedUserId;
+    }
+
+    const nick = String(docName).replace(/_stats$/, '');
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('nick', nick)
+        .maybeSingle();
+
+    if (error) throw error;
+
+    const resolvedUserId = data?.id || null;
+    _profileIdCache.set(docName, resolvedUserId);
+    if (syncGlobal) setCurrentViewedUserId(resolvedUserId);
+    return resolvedUserId;
+}
+
 async function getCurrentUserContext() {
     const user = await getCurrentSupabaseUser();
     return {
@@ -239,22 +288,22 @@ function _computeAggregation(journal) {
     };
 }
 
-export async function loadMonth(nick, mk) {
+export async function loadMonth(nick, mk, userId = null) {
     if (!state.loadedMonths[nick]) state.loadedMonths[nick] = new Set();
     if (state.loadedMonths[nick].has(mk)) {
         console.log(`[LOAD] Кеш: ${mk} вже в пам'яті, запит пропущено`);
         return;
     }
 
-    try {
-        const { user, userId } = await getCurrentUserContext();
-        if (!user || !userId) throw new Error('Немає авторизованого користувача Supabase');
+    const targetUserId = getCurrentViewedUserId(userId) || await resolveViewedUserId(nick);
+    if (!targetUserId) { console.warn('[LOAD] loadMonth: currentViewedUserId не встановлено'); return; }
 
+    try {
         const { start, end } = getMonthRange(mk);
         const { data, error } = await supabase
             .from('journal_days')
             .select('id, user_id, trade_date, pnl, gross_pnl')
-            .eq('user_id', userId)
+            .eq('user_id', targetUserId)
             .gte('trade_date', start)
             .lte('trade_date', end)
             .order('trade_date', { ascending: true });
@@ -277,26 +326,33 @@ export async function loadMonth(nick, mk) {
     }
 }
 
-export async function loadDayDetails(dateStr) {
+export async function loadDayDetails(dateStr, userId = null) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
 
     const existing = state.appData.journal[dateStr];
     if (existing?.__detailsLoaded) return existing;
 
-    const requestKey = `${state.CURRENT_VIEWED_USER}:${dateStr}`;
+    const targetUserId = getCurrentViewedUserId(userId) || await resolveViewedUserId(state.CURRENT_VIEWED_USER);
+    if (!targetUserId) {
+        console.warn(`[LOAD] loadDayDetails: missing userId for ${dateStr}`);
+        return existing || null;
+    }
+
+    const requestKey = `${targetUserId}:${dateStr}`;
     if (_dayDetailsPromises.has(requestKey)) {
         return _dayDetailsPromises.get(requestKey);
     }
 
     const request = (async () => {
+        const user = true;
+        const userId = targetUserId;
         try {
-            const { user, userId } = await getCurrentUserContext();
             if (!user || !userId) throw new Error('РќРµРјР°С” Р°РІС‚РѕСЂРёР·РѕРІР°РЅРѕРіРѕ РєРѕСЂРёСЃС‚СѓРІР°С‡Р° Supabase');
 
             const { data, error } = await supabase
                 .from('journal_days')
                 .select('*')
-                .eq('user_id', userId)
+                .eq('user_id', targetUserId)
                 .eq('trade_date', dateStr)
                 .maybeSingle();
 
@@ -330,15 +386,15 @@ export async function loadDayDetails(dateStr) {
     return request;
 }
 
-export async function loadAllMonths(nick) {
-    try {
-        const { user, userId } = await getCurrentUserContext();
-        if (!user || !userId) throw new Error('Немає авторизованого користувача Supabase');
+export async function loadAllMonths(nick, userId = null) {
+    const targetUserId = getCurrentViewedUserId(userId) || await resolveViewedUserId(nick);
+    if (!targetUserId) { console.warn('[LOAD] loadAllMonths: currentViewedUserId не встановлено'); return; }
 
+    try {
         const { data, error } = await supabase
             .from('journal_days')
             .select('*')
-            .eq('user_id', userId)
+            .eq('user_id', targetUserId)
             .gte('trade_date', '2024-01-01')
             .lte('trade_date', '2030-12-31')
             .order('trade_date', { ascending: true });
@@ -403,6 +459,8 @@ export async function initializeApp() {
 
     try {
         const nick = state.CURRENT_VIEWED_USER;
+        const viewedUserId = getCurrentViewedUserId() || await resolveViewedUserId(nick, { force: true });
+        if (!viewedUserId) throw new Error(`Не вдалося визначити userId для ${nick}`);
         const previousAppData = state.appData && typeof state.appData === 'object' ? state.appData : {};
 
         state.appData = normalizeAppData({
@@ -423,15 +481,15 @@ export async function initializeApp() {
 
         await Promise.all([
             loadSettings(),
-            loadMonth(nick, currentMk),
-            loadMonth(nick, prevMk),
+            loadMonth(nick, currentMk, viewedUserId),
+            loadMonth(nick, prevMk, viewedUserId),
             loadPlaybook(),
         ]);
 
         if (state.selectedDateStr) {
             const selMk = monthKey(state.selectedDateStr);
             if (selMk !== currentMk && selMk !== prevMk) {
-                await loadMonth(nick, selMk);
+                await loadMonth(nick, selMk, viewedUserId);
             }
         }
 

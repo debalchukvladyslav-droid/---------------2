@@ -289,6 +289,7 @@ const TAB_TITLES = {
     ai: '🤖 AI Аналітик',
     playbook: '📖 Плейбук',
     settings: '⚙️ Налаштування',
+    admin: '🛡 Адмін-панель',
 };
 
 export function switchMainTab(tab) {
@@ -346,6 +347,7 @@ export function switchMainTab(tab) {
     if (tab === 'playbook' && window.renderPlaybook) window.renderPlaybook();
     if (tab === 'learn' && window.renderLearnCache) window.renderLearnCache();
 
+    if (tab === 'admin' && window.renderAdminPanel) window.renderAdminPanel();
     let sosBtn = document.getElementById('sos-btn');
     if (sosBtn) sosBtn.style.display = tab === 'dash' ? 'flex' : 'none';
 }

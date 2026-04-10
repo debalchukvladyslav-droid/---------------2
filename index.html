@@ -328,6 +328,7 @@
                         <button id="main-btn-playbook" class="more-tab-item" onclick="switchMainTab('playbook');document.getElementById('more-tabs-dropdown').style.display='none'">📖 Плейбук</button>
                         <button id="main-btn-learn" class="more-tab-item" onclick="switchMainTab('learn');document.getElementById('more-tabs-dropdown').style.display='none'">🎓 Навчання</button>
                         <button id="main-btn-settings" class="more-tab-item" onclick="switchMainTab('settings');document.getElementById('more-tabs-dropdown').style.display='none'">⚙️ Налаштування</button>
+                        <button id="main-btn-admin" class="more-tab-item" style="display:none; color:#f59e0b; border-color:rgba(245,158,11,0.3);" onclick="switchMainTab('admin');document.getElementById('more-tabs-dropdown').style.display='none'">🛡 Адмін-панель</button>
                     </div>
                 </div>
             </div>
@@ -807,6 +808,16 @@
                     </div>
                 </div>
                 <button class="btn-primary" style="background: var(--loss); border: none; width: 100%;" onclick="logout()">🚪 Вийти з акаунту</button>
+            </div>
+        </div>
+
+        <div id="view-admin" class="view-content" style="display:none;">
+            <div class="panel" style="width:100%; max-width:900px; margin:0 auto;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <h3 style="margin:0; color:#f59e0b;">🛡 Адмін-панель</h3>
+                    <button class="btn-secondary" style="width:auto; margin:0;" onclick="window.renderAdminPanel?.()">&#x1f504; Оновити</button>
+                </div>
+                <div id="admin-users-list" style="display:flex; flex-direction:column; gap:10px;"></div>
             </div>
         </div>
 

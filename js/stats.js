@@ -2,7 +2,7 @@
 import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { normalizeAppData, getDefaultAppData } from './data_utils.js';
-import { loadMonth } from './storage.js';
+import { loadMonth, loadAllMonths, getCurrentViewedUserId, resolveViewedUserId } from './storage.js';
 
 // ─── STATS CACHE ───────────────────────────────────────────────────────────────────────────────
 // Module-level Map survives filter switches and profile switches within the
@@ -77,21 +77,38 @@ async function getProfileForDocName(docName) {
     return data || null;
 }
 
-async function fetchJournalRowsForDoc(docName, monthKeys = null) {
-    const profile = await getProfileForDocName(docName);
-    if (!profile?.id) return {};
+async function fetchJournalRowsForDoc(docName, monthKeys = null, userId = null) {
+    let resolvedUserId = userId;
+    if (!resolvedUserId && docName === state.CURRENT_VIEWED_USER) {
+        resolvedUserId = getCurrentViewedUserId();
+    }
+
+    let profile = null;
+    if (!resolvedUserId) {
+        profile = await getProfileForDocName(docName);
+        resolvedUserId = profile?.id || null;
+    }
+
+    if (!resolvedUserId && docName === state.CURRENT_VIEWED_USER) {
+        resolvedUserId = await resolveViewedUserId(docName);
+    }
+
+    if (!resolvedUserId) return {};
 
     let query = supabase
         .from('journal_days')
         .select('*')
-        .eq('user_id', profile.id)
+        .eq('user_id', resolvedUserId)
         .order('trade_date', { ascending: true });
 
     if (monthKeys && monthKeys.size) {
         const sortedMonths = [...monthKeys].sort();
+        const lastMonth = sortedMonths[sortedMonths.length - 1];
+        const [year, month] = lastMonth.split('-').map(Number);
+        const lastDay = new Date(year, month, 0).getDate();
         query = query
             .gte('trade_date', `${sortedMonths[0]}-01`)
-            .lte('trade_date', `${sortedMonths[sortedMonths.length - 1]}-31`);
+            .lte('trade_date', `${lastMonth}-${String(lastDay).padStart(2, '0')}`);
     }
 
     const { data, error } = await query;
@@ -216,15 +233,15 @@ function _monthKeysForFilters(filters) {
 // Fetches only the month sub-documents that are required by the current
 // filters for a given trader doc. Returns a merged flat journal object.
 // Uses { source: 'server' } on every read — no cache, no WebChannel.
-async function fetchMonthsForPeriod(docName, filters) {
+async function fetchMonthsForPeriod(docName, filters, userId = null) {
     const monthKeys = _monthKeysForFilters(filters);
-    if (!monthKeys) return fetchJournalRowsForDoc(docName, null);
+    if (!monthKeys) return fetchJournalRowsForDoc(docName, null, userId);
     const cacheKey = `${docName}|${[...monthKeys].sort().join(',')}`;
 
     const cached = _cacheGet(cacheKey);
     if (cached) return cached;
 
-    const journal = await fetchJournalRowsForDoc(docName, monthKeys);
+    const journal = await fetchJournalRowsForDoc(docName, monthKeys, userId);
     _cacheSet(cacheKey, journal);
     return journal;
 }
@@ -252,13 +269,14 @@ async function fetchAggregation(docName) {
     }
 }
 
-export async function getStatsDocData(docName, filters) {
+export async function getStatsDocData(docName, filters, userId = null) {
     if (!docName) return getDefaultAppData();
     if (docName === state.CURRENT_VIEWED_USER) {
         const data = normalizeAppData(state.appData);
         const needed = _monthKeysForFilters(filters); // null = all-time
+        const currentUserId = getCurrentViewedUserId(userId) || await resolveViewedUserId(docName);
         if (needed) {
-            await Promise.all([...needed].map(mk => loadMonth(docName, mk)));
+            await Promise.all([...needed].map(mk => loadMonth(docName, mk, currentUserId)));
             const journal = {};
             for (const dateStr in state.appData.journal) {
                 if (needed.has(dateStr.slice(0, 7))) journal[dateStr] = state.appData.journal[dateStr];
@@ -273,7 +291,7 @@ export async function getStatsDocData(docName, filters) {
     try {
         const [profile, journal] = await Promise.all([
             getProfileForDocName(docName),
-            fetchMonthsForPeriod(docName, filters),
+            fetchMonthsForPeriod(docName, filters, userId),
         ]);
         const data = normalizeAppData(profile || {});
         data.journal = journal;
@@ -504,6 +522,7 @@ function mergeJournals(journals) {
 export async function refreshStatsView() {
     if (window.renderStatsSourceSelector) window.renderStatsSourceSelector();
     let requestId = ++state.statsLoadRequestId;
+    const currentUserId = getCurrentViewedUserId() || await resolveViewedUserId(state.CURRENT_VIEWED_USER);
 
     // Invalidate the per-request month cache is no longer needed —
     // _statsCache is persistent with TTL; invalidation happens via clearStatsCache()
@@ -564,8 +583,7 @@ export async function refreshStatsView() {
         if (sel.type === 'current') {
             if (isAllTime) {
                 if (loadingText) loadingText.textContent = 'Завантаження всіх місяців...';
-                const { loadAllMonths } = await import('./storage.js');
-                await loadAllMonths(state.CURRENT_VIEWED_USER);
+                await loadAllMonths(state.CURRENT_VIEWED_USER, currentUserId);
                 journal = state.appData.journal || {};
             } else {
                 // Перевіряємо чи потрібні місяці вже завантажені
@@ -584,7 +602,7 @@ export async function refreshStatsView() {
                 } else {
                     console.log(`[STATS] Запит до Firestore: не вистачає місяців: ${missing.join(', ')}`);
                     if (loadingText) loadingText.textContent = 'Завантаження даних...';
-                    const data = await getStatsDocData(nick, filters);
+                    const data = await getStatsDocData(nick, filters, currentUserId);
                     journal = data.journal || {};
                 }
             }

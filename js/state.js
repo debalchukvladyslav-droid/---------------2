@@ -4,9 +4,11 @@ export const state = {
     systemConfig: {},
 
     // Авторизація та доступи
-    USER_DOC_NAME: "", 
+    USER_DOC_NAME: "",
     CURRENT_VIEWED_USER: "",
-    isRegisterMode: false, 
+    currentViewedUserId: null,  // UUID профілю що зараз переглядається
+    myUserId: null,             // UUID авторизованого юзера (незмінний)
+    isRegisterMode: false,
     IS_MENTOR_MODE: false,
     
     // Команди (Кущі)
