@@ -565,21 +565,67 @@ export function loadBackgroundGallery() {
 }
 
 export async function exportData() {
-    showLoadingToast('⏳ Підготовка експорту...', true);
-    await loadAllMonths(state.USER_DOC_NAME);
-    hideLoadingToast();
+    const targetDocName = state.CURRENT_VIEWED_USER || state.USER_DOC_NAME;
+    const nick = targetDocName.replace(/_stats$/, '');
 
-    const exportData = { ...state.appData };
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(exportData));
-    const dl = document.createElement('a');
-    dl.setAttribute('href', dataStr);
-    dl.setAttribute('download', 'trader_app_backup.json');
-    document.body.appendChild(dl);
-    dl.click();
-    dl.remove();
+    showLoadingToast('⏳ Підготовка експорту...', true);
+
+    try {
+        // Отримуємо user_id для поточного профілю що переглядається
+        const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('nick', nick)
+            .maybeSingle();
+
+        if (profileError) throw profileError;
+        if (!profile?.id) throw new Error(`Профіль "${nick}" не знайдено`);
+
+        const targetUserId = profile.id;
+
+        const { data: rows, error: rowsError } = await supabase
+            .from('journal_days')
+            .select('*')
+            .eq('user_id', targetUserId)
+            .gte('trade_date', '2024-01-01')
+            .lte('trade_date', '2030-12-31')
+            .order('trade_date', { ascending: true });
+
+        if (rowsError) throw rowsError;
+
+        const journal = {};
+        (rows || []).forEach(row => {
+            if (/^\d{4}-\d{2}-\d{2}$/.test(row.trade_date)) {
+                journal[row.trade_date] = journalRowToDayEntry(row);
+            }
+        });
+
+        const year = new Date().getFullYear();
+        const payload = { nick, exportedAt: new Date().toISOString(), journal };
+        const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(payload, null, 2));
+        const dl = document.createElement('a');
+        dl.setAttribute('href', dataStr);
+        dl.setAttribute('download', `export_${nick}_${year}.json`);
+        document.body.appendChild(dl);
+        dl.click();
+        dl.remove();
+    } catch (e) {
+        console.error('❌ Помилка експорту:', e);
+        showLoadingToast('❌ Помилка експорту: ' + (e?.message || 'Невідома помилка'));
+        setTimeout(hideLoadingToast, 3000);
+        return;
+    }
+
+    hideLoadingToast();
 }
 
 export function importData(event) {
+    if (state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) {
+        alert('❌ Імпорт заборонено: ви переглядаєте чужий профіль.');
+        event.target.value = '';
+        return;
+    }
+
     const file = event.target.files[0];
     if (!file) return;
 
