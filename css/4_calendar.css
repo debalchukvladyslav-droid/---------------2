@@ -35,6 +35,40 @@
     position: relative;
 }
 
+/* === КОЛЬОРИ ДНІВ КАЛЕНДАРЯ === */
+.day-cell.green {
+    background: color-mix(in srgb, var(--profit) 12%, var(--bg-panel));
+    border-color: color-mix(in srgb, var(--profit) 35%, transparent);
+}
+.day-cell.green .day-pnl { color: var(--profit); font-weight: 700; }
+
+.day-cell.red {
+    background: color-mix(in srgb, var(--loss) 12%, var(--bg-panel));
+    border-color: color-mix(in srgb, var(--loss) 35%, transparent);
+}
+.day-cell.red .day-pnl { color: var(--loss); font-weight: 700; }
+
+.day-cell.record-day {
+    border-color: var(--gold) !important;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--gold) 40%, transparent),
+                inset 0 0 0 1px color-mix(in srgb, var(--gold) 20%, transparent);
+}
+.day-cell.record-day-old {
+    border-color: color-mix(in srgb, var(--gold) 50%, transparent) !important;
+}
+.day-cell.dayloss-day {
+    border-color: var(--loss) !important;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--loss) 30%, transparent);
+}
+
+.day-number { font-size: 0.78rem; color: var(--text-muted); font-weight: 600; }
+.day-cell.green .day-number,
+.day-cell.red .day-number { color: var(--text-main); }
+
+.day-pnl { font-size: 0.92rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.day-pnl.text-green { color: var(--profit); }
+.day-pnl.text-red   { color: var(--loss); }
+
 .day-cell:hover:not(.empty) {
     border-color: color-mix(in srgb, var(--primary) 50%, transparent);
     background: color-mix(in srgb, var(--bg-panel) 80%, transparent);

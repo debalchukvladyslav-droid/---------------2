@@ -193,8 +193,10 @@ body[data-theme="light"] .sidebar-nav-item.active .ti-icon { background-color: v
         padding: 10px; justify-content: center; gap: 0;
     }
     .app-sidebar.collapsed .sidebar-nav-item .ti-icon {
-        margin-right: 0;
-        color: var(--muted-foreground, var(--text-muted));
+        margin-right: 0 !important;
+        width: 20px;
+        height: 20px;
+        flex-shrink: 0;
     }
     .app-sidebar.collapsed .sidebar-nav-item:hover .ti-icon,
     .app-sidebar.collapsed .sidebar-nav-item.active .ti-icon {
@@ -212,7 +214,8 @@ body[data-theme="light"] .sidebar-nav-item.active .ti-icon { background-color: v
         transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1),
                     width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    .app-sidebar.collapsed ~ .main-content {
+    .app-sidebar.collapsed ~ .main-content,
+    .main-content.expanded {
         margin-left: 64px; width: calc(100% - 64px);
     }
 
@@ -470,6 +473,20 @@ body[data-theme="light"] .sidebar-nav-item.active .ti-icon { background-color: v
     padding: 24px 30px;
 }
 #view-dash.active { display: flex; }
+
+/* dash-toolbar в view-dash */
+#view-dash .dash-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px 16px;
+    background: color-mix(in srgb, var(--bg-panel) 60%, transparent);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+}
 
 /* === ADD TRADE DRAWER (stylePro) === */
 .trade-drawer-backdrop {

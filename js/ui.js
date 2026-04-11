@@ -500,8 +500,18 @@ export function toggleLeftSidebar() {
     const sidebar = document.querySelector('.app-sidebar');
     const main = document.querySelector('.main-content');
     if (!sidebar) return;
-    const isCollapsed = sidebar.classList.toggle('collapsed');
-    main?.classList.toggle('expanded', !isCollapsed);
+    sidebar.classList.toggle('collapsed');
+    // main-content розширюється коли sidebar collapsed
+    if (main) main.classList.toggle('expanded', sidebar.classList.contains('collapsed'));
 }
 
 window.toggleLeftSidebar = toggleLeftSidebar;
+
+// Ініціалізація: застосовуємо expanded одразу бо sidebar collapsed за замовчуванням
+document.addEventListener('DOMContentLoaded', () => {
+    const sidebar = document.querySelector('.app-sidebar');
+    const main = document.querySelector('.main-content');
+    if (sidebar?.classList.contains('collapsed') && main) {
+        main.classList.add('expanded');
+    }
+});
