@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TJ Pro - Trading Journal</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    
+    <!-- Inter Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            200: '#c7d2fe',
+                            300: '#a5b4fc',
+                            400: '#818cf8',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            800: '#3730a3',
+                            900: '#312e81',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        /* Glassmorphism panel */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        
+        /* Smooth transitions */
+        .sidebar-transition {
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+                        min-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .drawer-transition {
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .overlay-transition {
+            transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                        visibility 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        /* Nav item hover effect */
+        .nav-item {
+            position: relative;
+        }
+        .nav-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 3px;
+            height: 0;
+            background: linear-gradient(135deg, #6366f1, #818cf8);
+            border-radius: 0 3px 3px 0;
+            transition: height 0.2s ease;
+        }
+        .nav-item:hover::before,
+        .nav-item.active::before {
+            height: 60%;
+        }
+        
+        /* Stat card glow */
+        .stat-card {
+            position: relative;
+        }
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            inset: -1px;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), transparent, transparent);
+            border-radius: inherit;
+            z-index: -1;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .stat-card:hover::before {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="bg-[#0a0a0f] text-gray-100 font-sans antialiased overflow-hidden">
+    
+    <div class="flex h-screen">
+        
+        <!-- ========== LEFT SIDEBAR ========== -->
+        <aside id="sidebar" class="sidebar-transition flex flex-col w-64 min-w-[256px] h-full bg-[#0d0d14] border-r border-white/[0.06]">
+            
+            <!-- Brand -->
+            <div class="flex items-center justify-between h-16 px-4 border-b border-white/[0.06]">
+                <a href="#" class="flex items-center gap-3 sidebar-brand">
+                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                        <i data-lucide="trending-up" class="w-4 h-4 text-white"></i>
+                    </div>
+                    <span class="brand-text font-semibold text-lg tracking-tight">TJ Pro</span>
+                </a>
+                <button id="sidebar-toggle" class="p-1.5 rounded-md hover:bg-white/[0.06] text-gray-400 hover:text-gray-200 transition-colors" title="Collapse sidebar">
+                    <i data-lucide="panel-left-close" class="w-4 h-4"></i>
+                </button>
+            </div>
+            
+            <!-- Navigation -->
+            <nav class="flex-1 overflow-y-auto py-4 px-3">
+                <ul class="space-y-1">
+                    <li>
+                        <a href="#" class="nav-item active flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.06] text-white font-medium">
+                            <i data-lucide="layout-dashboard" class="w-5 h-5 text-indigo-400"></i>
+                            <span class="nav-text">Dashboard</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/[0.04] transition-colors">
+                            <i data-lucide="bar-chart-3" class="w-5 h-5"></i>
+                            <span class="nav-text">Stats</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/[0.04] transition-colors">
+                            <i data-lucide="candlestick-chart" class="w-5 h-5"></i>
+                            <span class="nav-text">Trades</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/[0.04] transition-colors">
+                            <i data-lucide="image" class="w-5 h-5"></i>
+                            <span class="nav-text">Screenshots</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/[0.04] transition-colors">
+                            <i data-lucide="bot" class="w-5 h-5"></i>
+                            <span class="nav-text">AI Mentor</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/[0.04] transition-colors">
+                            <i data-lucide="book-open" class="w-5 h-5"></i>
+                            <span class="nav-text">Playbook</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/[0.04] transition-colors">
+                            <i data-lucide="graduation-cap" class="w-5 h-5"></i>
+                            <span class="nav-text">Learn</span>
+                        </a>
+                    </li>
+                </ul>
+                
+                <div class="mt-6 pt-6 border-t border-white/[0.06]">
+                    <ul class="space-y-1">
+                        <li>
+                            <a href="#" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/[0.04] transition-colors">
+                                <i data-lucide="settings" class="w-5 h-5"></i>
+                                <span class="nav-text">Settings</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+            
+            <!-- User Profile -->
+            <div class="p-3 border-t border-white/[0.06]">
+                <div class="flex items-center gap-3 p-2 rounded-lg hover:bg-white/[0.04] cursor-pointer transition-colors">
+                    <div class="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-sm font-semibold">
+                        JD
+                    </div>
+                    <div class="flex-1 min-w-0 user-info">
+                        <p class="text-sm font-medium text-white truncate">John Doe</p>
+                        <p class="text-xs text-gray-500 truncate">Pro Trader</p>
+                    </div>
+                    <i data-lucide="chevrons-up-down" class="w-4 h-4 text-gray-500 user-info"></i>
+                </div>
+            </div>
+        </aside>
+        
+        <!-- ========== MAIN AREA ========== -->
+        <div class="flex-1 flex flex-col min-w-0">
+            
+            <!-- Top Header -->
+            <header class="flex items-center justify-between h-16 px-6 bg-[#0d0d14]/80 backdrop-blur-md border-b border-white/[0.06] sticky top-0 z-30">
+                <div class="flex items-center gap-4">
+                    <button id="mobile-sidebar-toggle" class="lg:hidden p-2 rounded-md hover:bg-white/[0.06] text-gray-400">
+                        <i data-lucide="menu" class="w-5 h-5"></i>
+                    </button>
+                    <h1 id="page-title" class="text-xl font-semibold text-white">Dashboard</h1>
+                </div>
+                
+                <div class="flex items-center gap-3">
+                    <button class="flex items-center gap-2 px-4 py-2 rounded-lg border border-white/[0.1] text-gray-300 hover:text-white hover:bg-white/[0.04] hover:border-white/[0.15] transition-all text-sm font-medium">
+                        <i data-lucide="users" class="w-4 h-4"></i>
+                        <span>Team</span>
+                    </button>
+                    <button id="add-trade-btn" class="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors text-sm font-medium shadow-lg shadow-indigo-500/20">
+                        <i data-lucide="plus" class="w-4 h-4"></i>
+                        <span>Add Trade</span>
+                    </button>
+                </div>
+            </header>
+            
+            <!-- Main Content (Scrollable) -->
+            <main class="flex-1 overflow-y-auto p-6 bg-[#0a0a0f]">
+                
+                <!-- Welcome Section -->
+                <div class="mb-8">
+                    <h2 class="text-2xl font-semibold text-white mb-1">Welcome back, John</h2>
+                    <p class="text-gray-500">Here's your trading performance overview.</p>
+                </div>
+                
+                <!-- Stats Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
+                    
+                    <!-- Stat Card 1 - Net P&L -->
+                    <div class="stat-card glass-panel rounded-xl border border-white/[0.06] p-5 hover:border-white/[0.1] transition-colors">
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="text-sm text-gray-500 font-medium">Net P&L</span>
+                            <div class="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                                <i data-lucide="trending-up" class="w-4 h-4 text-emerald-400"></i>
+                            </div>
+                        </div>
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-2xl font-bold text-emerald-400 tabular-nums">+$12,450</span>
+                            <span class="text-xs text-emerald-400/80 font-medium">+8.2%</span>
+                        </div>
+                        <p class="text-xs text-gray-600 mt-2">vs last month</p>
+                    </div>
+                    
+                    <!-- Stat Card 2 - Win Rate -->
+                    <div class="stat-card glass-panel rounded-xl border border-white/[0.06] p-5 hover:border-white/[0.1] transition-colors">
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="text-sm text-gray-500 font-medium">Win Rate</span>
+                            <div class="w-9 h-9 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+                                <i data-lucide="target" class="w-4 h-4 text-indigo-400"></i>
+                            </div>
+                        </div>
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-2xl font-bold text-white tabular-nums">68.4%</span>
+                            <span class="text-xs text-emerald-400/80 font-medium">+2.1%</span>
+                        </div>
+                        <p class="text-xs text-gray-600 mt-2">52 of 76 trades</p>
+                    </div>
+                    
+                    <!-- Stat Card 3 - Avg Trade -->
+                    <div class="stat-card glass-panel rounded-xl border border-white/[0.06] p-5 hover:border-white/[0.1] transition-colors">
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="text-sm text-gray-500 font-medium">Avg Trade</span>
+                            <div class="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                                <i data-lucide="calculator" class="w-4 h-4 text-amber-400"></i>
+                            </div>
+                        </div>
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-2xl font-bold text-white tabular-nums">$163.82</span>
+                        </div>
+                        <p class="text-xs text-gray-600 mt-2">per winning trade</p>
+                    </div>
+                    
+                    <!-- Stat Card 4 - Total Trades -->
+                    <div class="stat-card glass-panel rounded-xl border border-white/[0.06] p-5 hover:border-white/[0.1] transition-colors">
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="text-sm text-gray-500 font-medium">Total Trades</span>
+                            <div class="w-9 h-9 rounded-lg bg-sky-500/10 flex items-center justify-center">
+                                <i data-lucide="activity" class="w-4 h-4 text-sky-400"></i>
+                            </div>
+                        </div>
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-2xl font-bold text-white tabular-nums">76</span>
+                            <span class="text-xs text-gray-500 font-medium">this month</span>
+                        </div>
+                        <p class="text-xs text-gray-600 mt-2">3.8 trades/day avg</p>
+                    </div>
+                </div>
+                
+                <!-- Secondary Content Area -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    
+                    <!-- Chart Placeholder -->
+                    <div class="lg:col-span-2 glass-panel rounded-xl border border-white/[0.06] p-6">
+                        <div class="flex items-center justify-between mb-6">
+                            <h3 class="text-lg font-semibold text-white">P&L Performance</h3>
+                            <div class="flex items-center gap-2">
+                                <button class="px-3 py-1.5 text-xs font-medium rounded-md bg-white/[0.06] text-white">1W</button>
+                                <button class="px-3 py-1.5 text-xs font-medium rounded-md text-gray-500 hover:text-white hover:bg-white/[0.04] transition-colors">1M</button>
+                                <button class="px-3 py-1.5 text-xs font-medium rounded-md text-gray-500 hover:text-white hover:bg-white/[0.04] transition-colors">3M</button>
+                                <button class="px-3 py-1.5 text-xs font-medium rounded-md text-gray-500 hover:text-white hover:bg-white/[0.04] transition-colors">YTD</button>
+                            </div>
+                        </div>
+                        <div class="h-64 flex items-center justify-center border border-dashed border-white/[0.1] rounded-lg">
+                            <div class="text-center">
+                                <i data-lucide="line-chart" class="w-12 h-12 text-gray-600 mx-auto mb-3"></i>
+                                <p class="text-gray-500 text-sm">Chart visualization area</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Recent Trades -->
+                    <div class="glass-panel rounded-xl border border-white/[0.06] p-6">
+                        <div class="flex items-center justify-between mb-6">
+                            <h3 class="text-lg font-semibold text-white">Recent Trades</h3>
+                            <a href="#" class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">View all</a>
+                        </div>
+                        <div class="space-y-4">
+                            <div class="flex items-center justify-between py-2">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-md bg-emerald-500/10 flex items-center justify-center text-xs font-bold text-emerald-400">
+                                        L
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-white">AAPL</p>
+                                        <p class="text-xs text-gray-500">Long • 100 shares</p>
+                                    </div>
+                                </div>
+                                <span class="text-sm font-semibold text-emerald-400 tabular-nums">+$284</span>
+                            </div>
+                            <div class="flex items-center justify-between py-2">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-md bg-rose-500/10 flex items-center justify-center text-xs font-bold text-rose-400">
+                                        S
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-white">NVDA</p>
+                                        <p class="text-xs text-gray-500">Short • 50 shares</p>
+                                    </div>
+                                </div>
+                                <span class="text-sm font-semibold text-rose-400 tabular-nums">-$127</span>
+                            </div>
+                            <div class="flex items-center justify-between py-2">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-md bg-emerald-500/10 flex items-center justify-center text-xs font-bold text-emerald-400">
+                                        L
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-white">TSLA</p>
+                                        <p class="text-xs text-gray-500">Long • 75 shares</p>
+                                    </div>
+                                </div>
+                                <span class="text-sm font-semibold text-emerald-400 tabular-nums">+$512</span>
+                            </div>
+                            <div class="flex items-center justify-between py-2">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-md bg-emerald-500/10 flex items-center justify-center text-xs font-bold text-emerald-400">
+                                        L
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-white">META</p>
+                                        <p class="text-xs text-gray-500">Long • 30 shares</p>
+                                    </div>
+                                </div>
+                                <span class="text-sm font-semibold text-emerald-400 tabular-nums">+$198</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+            </main>
+        </div>
+        
+        <!-- ========== RIGHT DRAWER OVERLAY ========== -->
+        <div id="drawer-overlay" class="overlay-transition fixed inset-0 bg-black/60 backdrop-blur-sm z-40 opacity-0 invisible"></div>
+        
+        <!-- ========== RIGHT SLIDING DRAWER ========== -->
+        <aside id="drawer" class="drawer-transition fixed top-0 right-0 w-full max-w-md h-full bg-[#0d0d14] border-l border-white/[0.06] z-50 translate-x-full shadow-2xl">
+            
+            <!-- Drawer Header -->
+            <div class="flex items-center justify-between h-16 px-6 border-b border-white/[0.06]">
+                <h2 class="text-lg font-semibold text-white">Add New Trade</h2>
+                <button id="drawer-close" class="p-2 rounded-md hover:bg-white/[0.06] text-gray-400 hover:text-white transition-colors">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            
+            <!-- Drawer Content -->
+            <div class="p-6 overflow-y-auto h-[calc(100%-64px)]">
+                <form class="space-y-5">
+                    
+                    <!-- Symbol -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">Symbol</label>
+                        <input type="text" placeholder="AAPL, TSLA, NVDA..." class="w-full px-4 py-3 rounded-lg bg-white/[0.04] border border-white/[0.1] text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-colors">
+                    </div>
+                    
+                    <!-- Direction -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">Direction</label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <button type="button" class="px-4 py-3 rounded-lg border border-white/[0.1] text-gray-400 hover:border-emerald-500/50 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all text-sm font-medium flex items-center justify-center gap-2">
+                                <i data-lucide="trending-up" class="w-4 h-4"></i>
+                                Long
+                            </button>
+                            <button type="button" class="px-4 py-3 rounded-lg border border-white/[0.1] text-gray-400 hover:border-rose-500/50 hover:text-rose-400 hover:bg-rose-500/10 transition-all text-sm font-medium flex items-center justify-center gap-2">
+                                <i data-lucide="trending-down" class="w-4 h-4"></i>
+                                Short
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Entry & Exit -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-300 mb-2">Entry Price</label>
+                            <input type="number" step="0.01" placeholder="0.00" class="w-full px-4 py-3 rounded-lg bg-white/[0.04] border border-white/[0.1] text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-colors tabular-nums">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-300 mb-2">Exit Price</label>
+                            <input type="number" step="0.01" placeholder="0.00" class="w-full px-4 py-3 rounded-lg bg-white/[0.04] border border-white/[0.1] text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-colors tabular-nums">
+                        </div>
+                    </div>
+                    
+                    <!-- Shares -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">Shares / Quantity</label>
+                        <input type="number" placeholder="100" class="w-full px-4 py-3 rounded-lg bg-white/[0.04] border border-white/[0.1] text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-colors tabular-nums">
+                    </div>
+                    
+                    <!-- Date -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">Trade Date</label>
+                        <input type="date" class="w-full px-4 py-3 rounded-lg bg-white/[0.04] border border-white/[0.1] text-white focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-colors">
+                    </div>
+                    
+                    <!-- Notes -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">Notes</label>
+                        <textarea rows="3" placeholder="Trade rationale, setup, lessons learned..." class="w-full px-4 py-3 rounded-lg bg-white/[0.04] border border-white/[0.1] text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-colors resize-none"></textarea>
+                    </div>
+                    
+                    <!-- Submit -->
+                    <div class="pt-4">
+                        <button type="submit" class="w-full py-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition-colors shadow-lg shadow-indigo-500/20">
+                            Save Trade
+                        </button>
+                    </div>
+                    
+                </form>
+            </div>
+        </aside>
+        
+    </div>
+    
+    <!-- ========== VANILLA JS ========== -->
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+        
+        // DOM Elements
+        const sidebar = document.getElementById('sidebar');
+        const sidebarToggle = document.getElementById('sidebar-toggle');
+        const mobileSidebarToggle = document.getElementById('mobile-sidebar-toggle');
+        const drawer = document.getElementById('drawer');
+        const drawerOverlay = document.getElementById('drawer-overlay');
+        const drawerClose = document.getElementById('drawer-close');
+        const addTradeBtn = document.getElementById('add-trade-btn');
+        
+        // Sidebar state
+        let isSidebarCollapsed = false;
+        
+        // Toggle Sidebar
+        function toggleSidebar() {
+            isSidebarCollapsed = !isSidebarCollapsed;
+            
+            if (isSidebarCollapsed) {
+                sidebar.classList.remove('w-64', 'min-w-[256px]');
+                sidebar.classList.add('w-16', 'min-w-[64px]');
+                
+                // Hide text elements
+                document.querySelectorAll('.nav-text, .brand-text, .user-info').forEach(el => {
+                    el.style.opacity = '0';
+                    el.style.visibility = 'hidden';
+                });
+                
+                // Update toggle icon
+                sidebarToggle.innerHTML = '<i data-lucide="panel-left-open" class="w-4 h-4"></i>';
+            } else {
+                sidebar.classList.remove('w-16', 'min-w-[64px]');
+                sidebar.classList.add('w-64', 'min-w-[256px]');
+                
+                // Show text elements
+                setTimeout(() => {
+                    document.querySelectorAll('.nav-text, .brand-text, .user-info').forEach(el => {
+                        el.style.opacity = '1';
+                        el.style.visibility = 'visible';
+                    });
+                }, 150);
+                
+                // Update toggle icon
+                sidebarToggle.innerHTML = '<i data-lucide="panel-left-close" class="w-4 h-4"></i>';
+            }
+            
+            // Reinitialize icons
+            lucide.createIcons();
+        }
+        
+        // Open Drawer
+        function openDrawer() {
+            drawer.classList.remove('translate-x-full');
+            drawer.classList.add('translate-x-0');
+            drawerOverlay.classList.remove('opacity-0', 'invisible');
+            drawerOverlay.classList.add('opacity-100', 'visible');
+            document.body.style.overflow = 'hidden';
+        }
+        
+        // Close Drawer
+        function closeDrawer() {
+            drawer.classList.remove('translate-x-0');
+            drawer.classList.add('translate-x-full');
+            drawerOverlay.classList.remove('opacity-100', 'visible');
+            drawerOverlay.classList.add('opacity-0', 'invisible');
+            document.body.style.overflow = '';
+        }
+        
+        // Event Listeners
+        sidebarToggle.addEventListener('click', toggleSidebar);
+        
+        if (mobileSidebarToggle) {
+            mobileSidebarToggle.addEventListener('click', toggleSidebar);
+        }
+        
+        addTradeBtn.addEventListener('click', openDrawer);
+        drawerClose.addEventListener('click', closeDrawer);
+        drawerOverlay.addEventListener('click', closeDrawer);
+        
+        // Close drawer on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeDrawer();
+            }
+        });
+        
+        // Navigation active state
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                if (e.currentTarget.href === '#' || !e.currentTarget.href) {
+                    e.preventDefault();
+                }
+                
+                document.querySelectorAll('.nav-item').forEach(nav => {
+                    nav.classList.remove('active', 'bg-white/[0.06]', 'text-white', 'font-medium');
+                    nav.classList.add('text-gray-400');
+                    nav.querySelector('i')?.classList.remove('text-indigo-400');
+                });
+                
+                e.currentTarget.classList.add('active', 'bg-white/[0.06]', 'text-white', 'font-medium');
+                e.currentTarget.classList.remove('text-gray-400');
+                e.currentTarget.querySelector('i')?.classList.add('text-indigo-400');
+                
+                // Update page title
+                const navText = e.currentTarget.querySelector('.nav-text')?.textContent;
+                if (navText) {
+                    document.getElementById('page-title').textContent = navText;
+                }
+            });
+        });
+    </script>
+    
+</body>
+</html>
