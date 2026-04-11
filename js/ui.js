@@ -7,64 +7,100 @@ let isThemeUIInitialized = false;
 
 const THEME_PRESETS = {
     dark: {
-        bgColor: '#0b0f19',
-        panelColor: '#111625',
-        primaryColor: '#3b82f6',
-        textPrimary: '#f3f4f6',
-        textSecondary: '#9ca3af',
-        bgHover: '#1b2236',
-        accentHover: '#60a5fa',
-        profit: '#10b981',
-        loss: '#ef4444',
-        border: 'rgba(156, 163, 175, 0.15)',
-        gold: '#f59e0b',
-        aiBg: 'color-mix(in srgb, #3b82f6 5%, transparent)',
-        aiBorder: '#3b82f6',
+        background:        'oklch(0.098 0 0)',
+        card:              'oklch(0.13 0 0)',
+        primary:           'oklch(0.67 0.21 145)',
+        primaryForeground: 'oklch(0.1 0 0)',
+        muted:             'oklch(0.18 0 0)',
+        mutedForeground:   'oklch(0.55 0 0)',
+        border:            'oklch(0.22 0 0)',
+        ring:              'oklch(0.67 0.21 145)',
+        sidebarBg:         'oklch(0.08 0 0)',
+        sidebarAccentBg:   'oklch(0.15 0 0)',
+        bgColor:     'oklch(0.098 0 0)',
+        panelColor:  'oklch(0.13 0 0)',
+        primaryColor:'oklch(0.67 0.21 145)',
+        textPrimary: 'oklch(0.985 0 0)',
+        textSecondary:'oklch(0.55 0 0)',
+        bgHover:     'oklch(0.18 0 0)',
+        accentHover: 'oklch(0.75 0.18 145)',
+        profit:      'oklch(0.67 0.21 145)',
+        loss:        'oklch(0.55 0.2 25)',
+        gold:        'oklch(0.75 0.15 80)',
+        aiBg:        'color-mix(in srgb, oklch(0.67 0.21 145) 5%, transparent)',
+        aiBorder:    'oklch(0.67 0.21 145)',
     },
     light: {
-        bgColor: '#f1f5f9',
-        panelColor: '#ffffff',
-        primaryColor: '#2563eb',
-        textPrimary: '#0f172a',
-        textSecondary: '#64748b',
-        bgHover: '#e2e8f0',
-        accentHover: '#1d4ed8',
-        profit: '#059669',
-        loss: '#dc2626',
-        border: '#cbd5e1',
-        gold: '#d97706',
-        aiBg: '#e0e7ff',
-        aiBorder: '#6366f1',
+        background:        'oklch(0.97 0 0)',
+        card:              'oklch(1 0 0)',
+        primary:           'oklch(0.55 0.2 250)',
+        primaryForeground: 'oklch(0.985 0 0)',
+        muted:             'oklch(0.95 0 0)',
+        mutedForeground:   'oklch(0.5 0 0)',
+        border:            'oklch(0.88 0 0)',
+        ring:              'oklch(0.55 0.2 250)',
+        sidebarBg:         'oklch(0.99 0 0)',
+        sidebarAccentBg:   'oklch(0.93 0 0)',
+        bgColor:     'oklch(0.97 0 0)',
+        panelColor:  'oklch(1 0 0)',
+        primaryColor:'oklch(0.55 0.2 250)',
+        textPrimary: 'oklch(0.15 0 0)',
+        textSecondary:'oklch(0.5 0 0)',
+        bgHover:     'oklch(0.93 0 0)',
+        accentHover: 'oklch(0.45 0.2 250)',
+        profit:      'oklch(0.45 0.18 145)',
+        loss:        'oklch(0.5 0.22 25)',
+        gold:        'oklch(0.6 0.15 70)',
+        aiBg:        'oklch(0.93 0.05 250)',
+        aiBorder:    'oklch(0.55 0.2 250)',
     },
     matrix: {
-        bgColor: '#000000',
-        panelColor: '#0a0a0a',
-        primaryColor: '#00dd00',
-        textPrimary: '#00ff00',
-        textSecondary: '#008800',
-        bgHover: '#111111',
-        accentHover: '#00ff00',
-        profit: '#00ff00',
-        loss: '#ff0000',
-        border: '#003300',
-        gold: '#aaaa00',
-        aiBg: '#001100',
-        aiBorder: '#00ff00',
+        background:        'oklch(0 0 0)',
+        card:              'oklch(0.06 0 0)',
+        primary:           'oklch(0.72 0.28 145)',
+        primaryForeground: 'oklch(0 0 0)',
+        muted:             'oklch(0.08 0 0)',
+        mutedForeground:   'oklch(0.45 0.15 145)',
+        border:            'oklch(0.15 0.08 145)',
+        ring:              'oklch(0.72 0.28 145)',
+        sidebarBg:         'oklch(0.03 0 0)',
+        sidebarAccentBg:   'oklch(0.1 0.03 145)',
+        bgColor:     'oklch(0 0 0)',
+        panelColor:  'oklch(0.06 0 0)',
+        primaryColor:'oklch(0.72 0.28 145)',
+        textPrimary: 'oklch(0.85 0.25 145)',
+        textSecondary:'oklch(0.45 0.15 145)',
+        bgHover:     'oklch(0.1 0.03 145)',
+        accentHover: 'oklch(0.85 0.25 145)',
+        profit:      'oklch(0.72 0.28 145)',
+        loss:        'oklch(0.55 0.22 25)',
+        gold:        'oklch(0.75 0.18 100)',
+        aiBg:        'oklch(0.04 0.05 145)',
+        aiBorder:    'oklch(0.72 0.28 145)',
     },
     dracula: {
-        bgColor: '#282a36',
-        panelColor: '#44475a',
-        primaryColor: '#bd93f9',
-        textPrimary: '#f8f8f2',
-        textSecondary: '#8be9fd',
-        bgHover: '#6272a4',
-        accentHover: '#ff79c6',
-        profit: '#50fa7b',
-        loss: '#ff5555',
-        border: '#6272a4',
-        gold: '#f1fa8c',
-        aiBg: '#282a36',
-        aiBorder: '#bd93f9',
+        background:        'oklch(0.2 0.02 270)',
+        card:              'oklch(0.28 0.03 270)',
+        primary:           'oklch(0.72 0.2 300)',
+        primaryForeground: 'oklch(0.15 0 0)',
+        muted:             'oklch(0.32 0.04 270)',
+        mutedForeground:   'oklch(0.65 0.08 200)',
+        border:            'oklch(0.42 0.06 260)',
+        ring:              'oklch(0.72 0.2 300)',
+        sidebarBg:         'oklch(0.16 0.02 270)',
+        sidebarAccentBg:   'oklch(0.32 0.04 270)',
+        bgColor:     'oklch(0.2 0.02 270)',
+        panelColor:  'oklch(0.28 0.03 270)',
+        primaryColor:'oklch(0.72 0.2 300)',
+        textPrimary: 'oklch(0.97 0.01 80)',
+        textSecondary:'oklch(0.75 0.1 200)',
+        bgHover:     'oklch(0.42 0.06 260)',
+        accentHover: 'oklch(0.78 0.22 340)',
+        profit:      'oklch(0.75 0.22 145)',
+        loss:        'oklch(0.6 0.22 25)',
+        gold:        'oklch(0.95 0.18 100)',
+        aiBg:        'oklch(0.2 0.02 270)',
+        aiBorder:    'oklch(0.72 0.2 300)',
     },
 };
 
@@ -108,26 +144,52 @@ function getFontFromUI() {
 }
 
 function applyResolvedThemeVars(target, vars) {
-    target.style.setProperty('--bg-color', vars.bgColor);
-    target.style.setProperty('--panel-color', vars.panelColor);
-    target.style.setProperty('--primary-color', vars.primaryColor);
-    target.style.setProperty('--text-primary', vars.textPrimary);
-    target.style.setProperty('--text-secondary', vars.textSecondary);
+    const set = (prop, val) => { if (val) target.style.setProperty(prop, val); };
 
-    target.style.setProperty('--bg-main', vars.bgColor);
-    target.style.setProperty('--bg-panel', vars.panelColor);
-    target.style.setProperty('--text-main', vars.textPrimary);
-    target.style.setProperty('--text-muted', vars.textSecondary);
-    target.style.setProperty('--accent', vars.primaryColor);
-    target.style.setProperty('--bg-hover', vars.bgHover);
-    target.style.setProperty('--accent-hover', vars.accentHover);
-    target.style.setProperty('--profit', vars.profit);
-    target.style.setProperty('--loss', vars.loss);
-    target.style.setProperty('--border', vars.border);
-    target.style.setProperty('--gold', vars.gold);
-    target.style.setProperty('--ai-bg', vars.aiBg);
-    target.style.setProperty('--ai-border', vars.aiBorder);
-    target.style.setProperty('--tab-active-text', vars.tabActiveText || getContrastText(vars.primaryColor));
+    // oklch design tokens
+    set('--background',         vars.background);
+    set('--foreground',         vars.textPrimary);
+    set('--card',               vars.card);
+    set('--card-foreground',    vars.textPrimary);
+    set('--primary',            vars.primary);
+    set('--primary-foreground', vars.primaryForeground);
+    set('--muted',              vars.muted);
+    set('--muted-foreground',   vars.mutedForeground);
+    set('--border',             vars.border);
+    set('--input',              vars.border);
+    set('--ring',               vars.ring);
+    set('--sidebar-bg',         vars.sidebarBg);
+    set('--sidebar-accent-bg',  vars.sidebarAccentBg || vars.bgHover);
+    set('--sidebar-border-color', vars.border);
+    set('--sidebar',            vars.sidebarBg);
+    set('--sidebar-foreground', vars.textPrimary);
+    set('--sidebar-primary',    vars.primary);
+    set('--sidebar-primary-foreground', vars.primaryForeground);
+    set('--sidebar-accent',     vars.sidebarAccentBg || vars.bgHover);
+    set('--sidebar-accent-foreground', vars.textPrimary);
+    set('--sidebar-border',     vars.border);
+    set('--sidebar-ring',       vars.ring);
+
+    // mapped legacy tokens
+    set('--bg-color',       vars.bgColor);
+    set('--panel-color',    vars.panelColor);
+    set('--primary-color',  vars.primaryColor);
+    set('--text-primary',   vars.textPrimary);
+    set('--text-secondary', vars.textSecondary);
+    set('--bg-main',        vars.bgColor);
+    set('--bg-panel',       vars.panelColor);
+    set('--text-main',      vars.textPrimary);
+    set('--text-muted',     vars.textSecondary);
+    set('--accent',         vars.primaryColor);
+    set('--bg-hover',       vars.bgHover);
+    set('--accent-hover',   vars.accentHover);
+    set('--profit',         vars.profit);
+    set('--loss',           vars.loss);
+    set('--gold',           vars.gold);
+    set('--ai-bg',          vars.aiBg);
+    set('--ai-border',      vars.aiBorder);
+    const fg = vars.primaryForeground || '#fff';
+    target.style.setProperty('--tab-active-text', fg);
 }
 
 function applyThemeVarsEverywhere(vars) {
@@ -178,6 +240,12 @@ export function applyTheme(forceSync = false) {
         '--ai-bg','--ai-border',
         '--bg-color','--panel-color','--primary-color','--text-primary','--text-secondary',
         '--tab-active-text','--tabs-bg',
+        '--background','--foreground','--card','--card-foreground',
+        '--primary','--primary-foreground','--muted','--muted-foreground',
+        '--border','--input','--ring',
+        '--sidebar-bg','--sidebar-accent-bg','--sidebar-border-color',
+        '--sidebar','--sidebar-foreground','--sidebar-primary','--sidebar-primary-foreground',
+        '--sidebar-accent','--sidebar-accent-foreground','--sidebar-border','--sidebar-ring',
     ];
     // Clear from both root and body to avoid stale overrides
     allVars.forEach(p => {
@@ -185,33 +253,49 @@ export function applyTheme(forceSync = false) {
         document.body.style.removeProperty(p);
     });
     if (theme === 'custom') {
-        const bgMain  = document.getElementById('ct-bg-main')?.value  || '#0b0f19';
-        const bgPanel = document.getElementById('ct-bg-panel')?.value || '#111625';
+        const bgMain   = document.getElementById('ct-bg-main')?.value   || '#0b0f19';
+        const bgPanel  = document.getElementById('ct-bg-panel')?.value  || '#111625';
         const textMain = document.getElementById('ct-text-main')?.value || '#f3f4f6';
-        const accent  = document.getElementById('ct-accent')?.value   || '#3b82f6';
-        const profit  = document.getElementById('ct-profit')?.value   || '#10b981';
-        const loss    = document.getElementById('ct-loss')?.value     || '#ef4444';
+        const accent   = document.getElementById('ct-accent')?.value    || '#3b82f6';
+        const profit   = document.getElementById('ct-profit')?.value    || '#10b981';
+        const loss     = document.getElementById('ct-loss')?.value      || '#ef4444';
+
+        const isLight  = getBrightness(bgMain) > 128;
+        const textMuted    = adjustColor(textMain, isLight ? 60 : -60);
+        const bgHover      = adjustColor(bgMain,   isLight ? -12 : 18);
+        const sidebarBg    = adjustColor(bgMain,   isLight ? -6  : -10);
+        const sidebarAccent = adjustColor(bgMain,  isLight ? -14 : 20);
+        const borderColor  = adjustColor(bgMain,   isLight ? -20 : 30);
+        const accentHover  = adjustColor(accent,   getBrightness(accent) > 128 ? -20 : 20);
+        const aiBg         = adjustColor(bgPanel,  isLight ? -8  : 10);
 
         applyThemeVarsEverywhere({
-            bgColor: bgMain,
-            panelColor: bgPanel,
-            primaryColor: accent,
-            textPrimary: textMain,
-            textSecondary: textMain + 'b0',
-            bgHover: textMain + '18',
-            accentHover: adjustColor(accent, getBrightness(accent) > 128 ? -20 : 20),
+            background:        bgMain,
+            card:              bgPanel,
+            primary:           accent,
+            primaryForeground: getContrastText(accent),
+            muted:             bgHover,
+            mutedForeground:   textMuted,
+            border:            borderColor,
+            ring:              accent,
+            sidebarBg,
+            sidebarAccentBg:   sidebarAccent,
+            bgColor:           bgMain,
+            panelColor:        bgPanel,
+            primaryColor:      accent,
+            textPrimary:       textMain,
+            textSecondary:     textMuted,
+            bgHover,
+            accentHover,
             profit,
             loss,
-            border: textMain + '40',
-            gold: loss === '#ef4444' ? '#f59e0b' : profit,
+            gold:    loss === '#ef4444' ? '#f59e0b' : profit,
             aiBorder: accent,
-            aiBg: accent + '1a',
-            tabActiveText: getContrastText(accent),
+            aiBg,
         });
 
-        const tabsBg = getBrightness(bgMain) > 128 ? adjustColor(bgMain, -15) : adjustColor(bgMain, 15);
-        document.documentElement.style.setProperty('--tabs-bg', tabsBg);
-        document.body.style.setProperty('--tabs-bg', tabsBg);
+        document.documentElement.style.setProperty('--tabs-bg', sidebarAccent);
+        document.body.style.setProperty('--tabs-bg', sidebarAccent);
     } else {
         applyThemeVarsEverywhere(THEME_PRESETS[theme] || THEME_PRESETS.dark);
         document.documentElement.style.removeProperty('--tabs-bg');

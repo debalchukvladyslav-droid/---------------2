@@ -1,5 +1,6 @@
-﻿<!DOCTYPE html>
-<html lang="uk" class="dark">
+﻿<!-- v2 -->
+<!DOCTYPE html>
+<html lang="uk">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -10,194 +11,1181 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
     
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['Inter', 'sans-serif'] },
-                    colors: {
-                        bgMain: '#0b0f19',
-                        bgPanel: '#111625',
-                        accent: '#3b82f6',
-                        accentHover: '#60a5fa',
-                        profit: '#10b981',
-                        loss: '#ef4444',
-                        borderSubtle: 'rgba(255, 255, 255, 0.08)'
-                    }
-                }
-            }
-        }
-    </script>
-    
-    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Montserrat:wght@400;600&family=Playfair+Display:wght@500;700&display=swap" rel="stylesheet">
+    <!-- CSS modules -->
+    <link rel="stylesheet" href="css/1_tokens.css">
+    <link rel="stylesheet" href="css/2_base.css">
+    <link rel="stylesheet" href="css/3_layout.css">
+    <link rel="stylesheet" href="css/4_calendar.css">
+    <link rel="stylesheet" href="css/5_components.css">
+    <link rel="stylesheet" href="css/6_animations.css">
+    <link rel="stylesheet" href="css/7_chat_ai.css">
+    <link rel="stylesheet" href="css/8_auth.css">
+    <link rel="stylesheet" href="css/10_mobile.css">
+    <link rel="stylesheet" href="css/11_misc2.css">
+    <link rel="stylesheet" href="css/12_saas.css">
+
     <link rel="icon" type="image/x-icon" href="favicon.ico">
+
+    <style>
+        /* === ГЛОБАЛЬНІ СТИЛІ (ДЛЯ ПК) === */
+        .mobile-tabs-wrapper { display: block; width: 100%; }
+        .tab-nav-btn { display: none; } /* На ПК стрілочок НЕМАЄ */
+
+        #team-sidebar { 
+            position: fixed; top: 0; left: -360px; 
+            width: 340px; height: 100vh; 
+            background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent), var(--bg-panel); 
+            border-right: 1px solid var(--border); z-index: 100002; 
+            transition: 0.35s cubic-bezier(0.4, 0, 0.2, 1); 
+            padding: 0; box-sizing: border-box; 
+            box-shadow: 8px 0 40px rgba(0,0,0,0.5); overflow-y: auto; 
+        }
+        #team-sidebar.open { left: 0; }
+        .group-title { color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase; margin: 20px 0 10px 0; font-weight: bold; letter-spacing: 1px; }
+        .trader-btn-team { width: 100%; padding: 12px 15px; margin-bottom: 5px; background: var(--bg-main); border: 1px solid var(--border); color: var(--text-main); border-radius: 6px; cursor: pointer; text-align: left; font-size: 1rem; transition: 0.2s; display: flex; align-items: center; gap: 10px; }
+        .trader-btn-team:hover { background: var(--border); }
+        .trader-btn-team.active { background: var(--accent); border-color: var(--accent); color: white; font-weight: bold; }
+        
+       
+        /* === СТИЛІ ЧАТУ (Telegram Style) === */
+        #data-chat-box {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .chat-msg {
+            max-width: 85%;
+            padding: 10px 14px;
+            border-radius: 14px;
+            font-size: 0.95rem;
+            line-height: 1.4;
+            word-wrap: break-word;
+            position: relative;
+        }
+        .user-msg {
+            align-self: flex-end;
+            background: var(--accent);
+            color: white;
+            border-bottom-right-radius: 4px; /* Гострий хвостик справа */
+        }
+        .ai-msg {
+            align-self: flex-start;
+            background: var(--bg-hover);
+            color: var(--text-main);
+            border: 1px solid var(--border);
+            border-bottom-left-radius: 4px; /* Гострий хвостик зліва */
+        }
+        
+        /* Мінімалістична кнопка збереження */
+        .btn-save-chat {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            cursor: pointer;
+            padding: 4px 8px;
+            margin-top: 8px;
+            transition: 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            border-radius: 6px;
+        }
+        .btn-save-chat:hover {
+            color: var(--accent);
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+
+        /* Стиль для іконки-зірочки (поза бульбашкою) */
+        .btn-save-icon {
+            background: transparent;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--text-muted);
+            transition: 0.2s;
+            padding: 5px;
+            opacity: 0.5;
+            display: flex;
+            align-items: center;
+        }
+        .btn-save-icon:hover {
+            opacity: 1;
+            color: #eab308; /* Золотий колір при наведенні */
+            transform: scale(1.15);
+        }
+        
+        /* Анімація плавного згортання панелі */
+        .sidebar {
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.3s, padding 0.3s, opacity 0.2s;
+            overflow-x: hidden;
+        }
+        
+        .sidebar.collapsed {
+            width: 0 !important;
+            min-width: 0 !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+            border: none !important;
+            opacity: 0;
+            margin: 0 !important;
+        }
+
+        #sidebar-toggle-btn:hover {
+            background: var(--bg-hover) !important;
+            border-color: var(--accent) !important;
+        }
+    </style>
 </head>
+<body data-theme="dark" data-font="inter">
 
-<body class="bg-bgMain text-gray-200 font-sans h-screen flex overflow-hidden antialiased selection:bg-accent/30 selection:text-white">
+    <div id="auth-overlay" class="auth-overlay">
+        <div class="auth-card">
+            <h1 class="auth-title">Trading Journal</h1>
+            <p id="auth-subtitle" class="auth-subtitle">Вхід у систему</p>
+            
+            <input type="text" id="auth-nick" class="auth-input" placeholder="Логін (Нікнейм)">
+            <input type="password" id="auth-pass" class="auth-input" placeholder="Пароль (мін. 6 симв.)">
 
-    <aside id="app-sidebar" class="w-64 bg-bgPanel border-r border-borderSubtle flex flex-col transition-all duration-300 z-40 relative">
-        <div class="h-16 flex items-center px-5 border-b border-borderSubtle">
-            <button onclick="window.toggleLeftSidebar?.()" class="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors mr-3">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="18" x2="20" y2="18"></line></svg>
+            <div id="register-fields" class="register-fields">
+                <input type="email" id="auth-email" class="auth-input" placeholder="Реальний Email (для бази)">
+                <input type="text" id="auth-fname" class="auth-input" placeholder="Ім'я">
+                <input type="text" id="auth-lname" class="auth-input" placeholder="Прізвище">
+                <select id="auth-team" class="auth-input">
+                    <option value="" disabled selected>Оберіть свій кущ...</option>
+                </select>
+            </div>
+
+            <div id="auth-error" class="auth-error">Помилка</div>
+            <button class="btn-primary" id="btn-submit" onclick="window.handleAuth?.()">Увійти</button>
+            
+            <div class="auth-links">
+                <span id="auth-switch-text">Ще немає акаунта?</span> 
+                <span class="auth-link" onclick="window.toggleAuthMode?.()">Створити</span>
+            </div>
+            <div id="forgot-link" class="auth-forgot">
+                <span class="auth-link" onclick="window.showResetStep?.(1)">Забули пароль?</span>
+            </div>
+
+            <div id="reset-step-1" class="reset-step">
+                <p class="reset-text">Введіть нікнейм та пошту акаунту — надішлемо посилання для скидання паролю.</p>
+                <input type="text" id="reset-nick" class="auth-input" placeholder="Нікнейм">
+                <input type="email" id="reset-email" class="auth-input" placeholder="Пошта акаунту">
+                <div id="reset-error" class="auth-error"></div>
+                <button class="btn-primary" onclick="window.sendResetCode?.()">📨 Надіслати лист</button>
+                <div class="reset-back"><span class="auth-link" onclick="window.showResetStep?.(0)">← Назад</span></div>
+            </div>
+            <div id="reset-step-2" class="reset-step">
+                <p class="reset-text">Введіть 6-значний код з листа.</p>
+                <input type="text" id="reset-code" class="auth-input reset-code" placeholder="000000" maxlength="6">
+                <div id="reset-error-2" class="auth-error"></div>
+                <button class="btn-primary" onclick="window.verifyResetCode?.()">✅ Підтвердити код</button>
+                <div class="reset-actions">
+                    <span class="auth-link" onclick="window.showResetStep?.(1)">← Назад</span>
+                    <span class="auth-link" onclick="window.sendResetCode?.()">Надіслати ще раз</span>
+                </div>
+            </div>
+            <div id="reset-step-3" style="display:none;"></div>
+        </div>
+    </div>
+
+    <div id="tooltip"></div>
+    
+    <div id="image-preview" class="image-preview" onclick="closeZoom(event)">
+        <img src="" onclick="openOriginal(event)" title="Клікніть, щоб відкрити оригінал">
+    </div>
+
+    <div id="form-sidebar-backdrop" class="form-sidebar-backdrop" onclick="window.toggleRightSidebar?.()"></div>
+    <div class="sidebar" id="form-sidebar" style="border-left:1px solid var(--border);box-shadow:-8px 0 32px rgba(0,0,0,0.4);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border);">
+            <h3 style="margin:0;font-size:1.1rem;font-weight:600;color:var(--text-main);">Форма дня</h3>
+            <button onclick="window.toggleRightSidebar?.()" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;padding:6px;border-radius:8px;display:flex;align-items:center;transition:background 0.2s;" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
-            <span class="font-bold text-lg tracking-tight sidebar-text">TJ Pro</span>
+        </div>
+        
+        <div class="header-actions">
+            <button class="date-nav-btn" onclick="shiftDate(-1)" title="Попередній день">❮</button>
+            <span class="date-display" id="display-date" onclick="var d=document.getElementById('trade-date'); d&&(d.showPicker?d.showPicker():d.focus())" title="Вибрати дату">Сьогодні</span>
+            <input type="date" id="trade-date" class="trade-date" onchange="selectDateFromInput(this.value)">
+            <button class="date-nav-btn" onclick="shiftDate(1)" title="Наступний день">❯</button>
+        </div>
+        
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('tab-profit')">Профіт</button>
+            <button class="tab-btn" onclick="switchTab('tab-mind')">Думка</button>
+            <button class="tab-btn" onclick="switchTab('tab-errors')">Помилки</button>
+            <button class="tab-btn" onclick="switchTab('tab-session')">🎯 Сесія</button>
         </div>
 
-        <nav class="flex-1 py-4 px-3 flex flex-col gap-1 overflow-y-auto">
-            <button id="main-btn-dash" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-gray-100 hover:bg-white/5 transition-all group active-tab-style" onclick="switchMainTab('dash')">
-                <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 transition-opacity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
-                <span class="sidebar-text">Дашборд</span>
-            </button>
+        <div id="tab-profit" class="tab-content active">
+            <div class="sidebar-form-row">
+                <div class="form-group flex-1-2">
+                    <label>Net PnL ($)</label>
+                    <input type="number" id="trade-pnl" step="0.01" placeholder="Чистий">
+                </div>
+                <div class="form-group flex-1">
+                    <label>Gross ($)</label>
+                    <input type="number" id="trade-gross" step="0.01" placeholder="Брудний">
+                </div>
+            </div>
+            <div class="sidebar-form-row">
+                <div class="form-group flex-1">
+                    <label>Комісії ($)</label>
+                    <input type="number" id="trade-comm" step="0.01">
+                </div>
+                <div class="form-group flex-1">
+                    <label>Локейти</label>
+                    <input type="number" id="trade-locates" step="0.01">
+                </div>
+                <div class="form-group flex-1">
+                    <label>КФ</label>
+                    <input type="number" id="trade-kf" step="0.01">
+                </div>
+            </div>
             
-            <button id="main-btn-stats" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-gray-100 hover:bg-white/5 transition-all group" onclick="switchMainTab('stats')">
-                <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 transition-opacity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
-                <span class="sidebar-text">Статистика</span>
+            <div id="trade-types-container" class="trade-types-container"></div>
+            
+            <label class="checklist-label">Відмітки дня (Чекліст):</label>
+            <div id="sidebar-checklist-container" class="sidebar-checklist-container"></div>
+        </div>
+        
+        <div id="tab-mind" class="tab-content">
+            <label class="state-label">Стан перед торгівлею:</label>
+            <div id="sliders-container" class="sliders-container"></div>
+            
+            <div class="form-group">
+                <label>Ваші думки та розбір ситуацій</label>
+                <textarea id="trade-notes" rows="6" placeholder="Опишіть, як пройшов день..."></textarea>
+            </div>
+            
+            <div id="mentor-comment-block" class="mentor-comment-block">
+                <label class="mentor-label">👑 Коментар Наставника:</label>
+                <textarea id="mentor-notes" class="mentor-notes" placeholder="Ментор ще не залишив коментар..." disabled></textarea>
+                <button id="btn-save-mentor" class="btn-primary mentor-save" onclick="saveMentorComment()">✓ Зберегти коментар</button>
+            </div>
+            
+            <div id="private-note-container" class="private-note-container">
+                <label class="private-label">🔒 Моя приватна нотатка (про цього трейдера):</label>
+                <textarea id="private-user-note" class="private-note" rows="3" placeholder="Ваші думки або аналіз чужих помилок (ніхто крім вас цього не побачить)..."></textarea>
+                <button class="btn-primary private-save" onclick="savePrivateNote()">💾 Зберегти для себе</button>
+            </div>
+            
+            <button class="btn-ai" id="ai-btn" onclick="getAIAdvice()">🤖 Отримати пораду від Gemini AI</button>
+            <div id="ai-response" class="ai-response-box"></div>
+        </div>
+        
+        <div id="tab-errors" class="tab-content">
+            <label>Додати нову помилку</label>
+            <div class="error-add-row">
+                <input type="text" id="new-error-input" placeholder="Назва помилки...">
+                <button class="btn-secondary error-add-btn" onclick="addNewErrorType()">+</button>
+            </div>
+            <label>Список помилок (відмітьте, якщо порушили)</label>
+            <div id="errors-list-container" class="errors-list-container"></div>
+        </div>
+
+        <div id="tab-trades" class="tab-content">
+            <div id="trades-list-container" class="trades-list-container"></div>
+            <div id="trades-empty" class="trades-empty">
+                Немає угод за цей день.<br>Імпортуйте Fondexx trades звіт.
+            </div>
+        </div>
+
+        <div id="tab-session" class="tab-content">
+            <div class="form-group">
+                <label>🎯 Ціль на сьогодні</label>
+                <input type="text" id="session-goal" placeholder="Напр. Торгувати тільки за планом, макс 2 угоди">
+            </div>
+            <div class="form-group">
+                <label>📝 План на сесію</label>
+                <textarea id="session-plan" rows="3" placeholder="Які сетапи торгуєш, які умови ринку потрібні..."></textarea>
+            </div>
+            <div class="form-group">
+                <label>📚 Сетапи з плейбуку</label>
+                <div id="session-playbook-checks" class="session-playbook-checks"></div>
+            </div>
+            <div class="form-group">
+                <label>💪 Загальна готовність</label>
+                <div class="readiness-labels">
+                    <span>🔴 Не готовий</span>
+                    <span id="session-readiness-val" class="readiness-val">5/10</span>
+                    <span>🟢 Готовий</span>
+                </div>
+                <input type="range" min="1" max="10" value="5" id="session-readiness" class="discipline-slider session-readiness" oninput="document.getElementById('session-readiness-val').textContent=this.value+'/10'">
+            </div>
+            <button class="btn-ai" onclick="window.checkSessionReadiness?.()">🤖 AI: Чи готовий торгувати?</button>
+            <div id="session-ai-result" class="session-ai-result"></div>
+        </div>
+
+        <button class="btn-primary" onclick="saveEntry()" style="margin-top:auto;flex-shrink:0;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:6px;vertical-align:middle;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            Зберегти день
+        </button>
+        
+        <input type="file" id="file-input" accept=".json" style="display: none;" onchange="importData(event)">
+        <input type="file" id="csv-input" accept=".xlsx, .xls, .csv" style="display: none;" onchange="importFondexxReport(event)">
+        <input type="file" id="trades-input" accept=".xlsx, .xls, .csv" style="display: none;" onchange="importFondexxTrades(event)">
+        <input type="file" id="ppro-input" accept=".xlsx, .xls, .csv" style="display: none;" onchange="importPPROReport(event)">
+    </div>
+
+    <!-- Нове ліве бокове меню -->
+    <aside class="app-sidebar">
+        <!-- Logo -->
+        <div style="height:64px;display:flex;align-items:center;padding:0 20px;border-bottom:1px solid var(--border);gap:10px;flex-shrink:0;">
+            <div style="width:32px;height:32px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <span style="font-size:0.8rem;font-weight:800;color:#000;">TJ</span>
+            </div>
+            <span class="brand-text" style="font-size:1rem;font-weight:700;color:var(--text-main);white-space:nowrap;">TJ Pro</span>
+        </div>
+
+        <nav class="sidebar-nav">
+            <button class="sidebar-nav-item active" data-tab="dash" onclick="switchMainTab('dash')">
+                <span class="ti-icon ti-chart-bar"></span>
+                <span class="nav-label">Дашборд</span>
             </button>
-
-            <button id="main-btn-trades" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-gray-100 hover:bg-white/5 transition-all group" onclick="switchMainTab('trades')">
-                <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 transition-opacity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-                <span class="sidebar-text">Угоди</span>
+            <button class="sidebar-nav-item" data-tab="stats" onclick="switchMainTab('stats')">
+                <span class="ti-icon ti-chart-line"></span>
+                <span class="nav-label">Статистика</span>
             </button>
-
-            <button id="main-btn-screens" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-gray-100 hover:bg-white/5 transition-all group" onclick="switchMainTab('screens')">
-                <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 transition-opacity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                <span class="sidebar-text">Скріншоти</span>
+            <button class="sidebar-nav-item" data-tab="trades" onclick="switchMainTab('trades')">
+                <span class="ti-icon ti-list-check"></span>
+                <span class="nav-label">Угоди</span>
             </button>
-
-            <button id="main-btn-ai" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-gray-100 hover:bg-white/5 transition-all group" onclick="switchMainTab('ai')">
-                <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 transition-opacity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-                <span class="sidebar-text">AI Ментор</span>
+            <button class="sidebar-nav-item" data-tab="screens" onclick="switchMainTab('screens')">
+                <span class="ti-icon ti-image"></span>
+                <span class="nav-label">Скріншоти</span>
             </button>
-
-            <div class="h-px bg-borderSubtle my-2 mx-2"></div>
-
-            <button id="main-btn-playbook" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-gray-100 hover:bg-white/5 transition-all group" onclick="switchMainTab('playbook')">
-                <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 transition-opacity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
-                <span class="sidebar-text">Плейбук</span>
+            <button class="sidebar-nav-item" data-tab="ai" onclick="switchMainTab('ai')">
+                <span class="ti-icon ti-brain"></span>
+                <span class="nav-label">AI Ментор</span>
             </button>
-
-            <button id="main-btn-settings" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-gray-100 hover:bg-white/5 transition-all group" onclick="switchMainTab('settings')">
-                <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 transition-opacity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                <span class="sidebar-text">Налаштування</span>
+            <div class="nav-divider" style="height:1px;background:var(--border);margin:6px 16px;"></div>
+            <button class="sidebar-nav-item" data-tab="playbook" onclick="switchMainTab('playbook')">
+                <span class="ti-icon ti-book"></span>
+                <span class="nav-label">Плейбук</span>
+            </button>
+            <button class="sidebar-nav-item" data-tab="learn" onclick="switchMainTab('learn')">
+                <span class="ti-icon ti-graduation"></span>
+                <span class="nav-label">Навчання</span>
+            </button>
+            <button class="sidebar-nav-item" data-tab="settings" onclick="switchMainTab('settings')">
+                <span class="ti-icon ti-settings"></span>
+                <span class="nav-label">Налаштування</span>
+            </button>
+            <button class="sidebar-nav-item admin-nav-item" data-tab="admin" onclick="switchMainTab('admin')" style="display:none;">
+                <span class="ti-icon ti-shield"></span>
+                <span class="nav-label">Адмін</span>
             </button>
         </nav>
+
+        <!-- Collapse button -->
+        <div style="border-top:1px solid var(--border);padding:10px;margin-top:auto;">
+            <button onclick="window.toggleLeftSidebar?.()" class="sidebar-nav-item" style="width:100%;border-radius:8px;justify-content:flex-start;">
+                <span class="ti-icon" style="margin-right:0;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 19l-7-7 7-7"/><path d="M18 19l-7-7 7-7"/></svg>
+                </span>
+                <span class="nav-label" style="margin-left:10px;">Згорнути</span>
+            </button>
+        </div>
     </aside>
 
-    <main class="flex-1 flex flex-col min-w-0 relative">
-        
-        <header class="h-16 flex items-center justify-between px-8 bg-bgPanel/80 backdrop-blur-md border-b border-borderSubtle z-30 sticky top-0">
-            <h2 id="page-title" class="text-xl font-semibold text-gray-100 tracking-tight">Дашборд</h2>
-            
-            <div class="flex items-center gap-3">
-                <button id="team-toggle-btn" class="px-4 py-2 text-sm font-medium text-gray-300 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 hover:text-white transition-all shadow-sm" onclick="openTeamSidebar()">👥 Команда</button>
-                <button id="sidebar-toggle-btn" class="px-5 py-2 text-sm font-semibold text-white bg-accent border border-accent rounded-lg hover:bg-accentHover hover:-translate-y-0.5 transition-all shadow-[0_0_15px_rgba(59,130,246,0.4)]" onclick="toggleRightSidebar()">+ Додати трейд</button>
+    <div class="main-content">
+        <!-- Новий верхній хедер -->
+        <header class="app-header">
+            <div class="header-left" style="display:flex;align-items:center;gap:12px;">
+                <button onclick="window.toggleLeftSidebar?.()" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;padding:6px;border-radius:8px;display:flex;align-items:center;transition:background 0.2s;" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+                </button>
+                <h2 id="page-title" class="page-title">Дашборд</h2>
+            </div>
+            <div class="header-right">
+                <button id="team-toggle-btn" class="header-btn" onclick="openTeamSidebar()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:middle;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    Команда
+                </button>
+                <button id="sidebar-toggle-btn" class="header-btn primary" onclick="toggleRightSidebar()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:6px;vertical-align:middle;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Додати угоду
+                </button>
             </div>
         </header>
 
-        <div class="flex-1 overflow-y-auto p-8 relative">
-            
-            <div id="view-dash" class="view-content block">
-                <div class="bg-bgPanel border border-borderSubtle rounded-2xl p-6 shadow-xl">
-                    <div class="flex justify-between items-center mb-6">
-                        <div class="flex gap-3">
-                            <select id="month-select" class="bg-bgMain text-gray-200 border border-borderSubtle rounded-lg px-3 py-1.5 text-sm outline-none focus:border-accent" onchange="renderView()"></select>
-                            <select id="year-select" class="bg-bgMain text-gray-200 border border-borderSubtle rounded-lg px-3 py-1.5 text-sm outline-none focus:border-accent" onchange="renderView()"></select>
-                        </div>
-                        <div class="flex gap-6 text-sm">
-                            <div class="text-gray-400">Комісії: <span id="total-comm" class="text-gray-100 font-bold tabular-nums">0$</span></div>
-                            <div class="text-gray-400">Net PnL: <span id="total-pnl" class="text-white font-bold tabular-nums text-base">0$</span></div>
-                        </div>
+        <!-- Старий mobile-tabs-wrapper для мобільних -->
+        <div class="mobile-tabs-wrapper">
+            <button id="mobile-menu-btn" class="mobile-menu-btn" onclick="toggleMobileSidebar()">☰</button>
+            <span id="mobile-section-title" class="mobile-section-title">Дашборд</span>
+        </div>
+
+        <!-- Bottom Navigation (mobile only) -->
+        <nav class="mobile-bottom-nav">
+            <button class="mobile-nav-btn active" data-tab="dash" onclick="switchMainTab('dash')">
+                <span class="nav-icon">📊</span>
+                <span>Дашборд</span>
+            </button>
+            <button class="mobile-nav-btn" data-tab="stats" onclick="switchMainTab('stats')">
+                <span class="nav-icon">📈</span>
+                <span>Статистика</span>
+            </button>
+            <button class="mobile-nav-btn" data-tab="screens" onclick="switchMainTab('screens')">
+                <span class="nav-icon">🖼️</span>
+                <span>Скріни</span>
+            </button>
+            <button class="mobile-nav-btn" data-tab="ai" onclick="switchMainTab('ai')">
+                <span class="nav-icon">🤖</span>
+                <span>AI</span>
+            </button>
+            <button class="mobile-nav-btn mobile-nav-more-btn" onclick="toggleMobileMoreMenu()">
+                <span class="nav-icon">⋯</span>
+                <span>Ще</span>
+            </button>
+        </nav>
+
+        <div id="mobile-more-menu" class="mobile-more-menu">
+            <div class="mobile-more-grid">
+                <button class="mobile-more-item" data-tab="trades" onclick="switchMainTab('trades'); closeMobileMoreMenu()">
+                    <span>📋</span><span>Угоди</span>
+                </button>
+                <button class="mobile-more-item" data-tab="playbook" onclick="switchMainTab('playbook'); closeMobileMoreMenu()">
+                    <span>📖</span><span>Плейбук</span>
+                </button>
+                <button class="mobile-more-item" data-tab="learn" onclick="switchMainTab('learn'); closeMobileMoreMenu()">
+                    <span>🎓</span><span>Навчання</span>
+                </button>
+                <button class="mobile-more-item" data-tab="settings" onclick="switchMainTab('settings'); closeMobileMoreMenu()">
+                    <span>⚙️</span><span>Налашт.</span>
+                </button>
+                <button class="mobile-more-item admin-tab-mobile" data-tab="admin" onclick="switchMainTab('admin'); closeMobileMoreMenu()" style="display: none;">
+                    <span>🛡</span><span>Адмін</span>
+                </button>
+            </div>
+        </div>
+
+        <div id="view-dash" class="view-content active">
+            <!-- Stats Cards (stylePro) -->
+            <div class="stats-grid-pro" id="stats-cards-pro">
+                <div class="stat-card-pro">
+                    <div class="stat-card-pro-top">
+                        <div class="stat-card-pro-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+                        <span class="stat-card-pro-badge" id="badge-pnl"></span>
                     </div>
-                    <div id="calendar-grid" class="grid grid-cols-[45px_repeat(5,1fr)] gap-3"></div>
+                    <p class="stat-card-pro-label">Загальний прибуток</p>
+                    <p class="stat-card-pro-value" id="pro-total-pnl">$0.00</p>
+                </div>
+                <div class="stat-card-pro">
+                    <div class="stat-card-pro-top">
+                        <div class="stat-card-pro-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+                        <span class="stat-card-pro-badge neutral" id="badge-winrate"></span>
+                    </div>
+                    <p class="stat-card-pro-label">Вінрейт</p>
+                    <p class="stat-card-pro-value" id="pro-winrate">0%</p>
+                </div>
+                <div class="stat-card-pro">
+                    <div class="stat-card-pro-top">
+                        <div class="stat-card-pro-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+                        <span class="stat-card-pro-badge neutral" id="badge-trades"></span>
+                    </div>
+                    <p class="stat-card-pro-label">Всього угод</p>
+                    <p class="stat-card-pro-value" id="pro-total-trades">0</p>
+                </div>
+                <div class="stat-card-pro">
+                    <div class="stat-card-pro-top">
+                        <div class="stat-card-pro-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+                        <span class="stat-card-pro-badge neutral" id="badge-pf"></span>
+                    </div>
+                    <p class="stat-card-pro-label">Profit Factor</p>
+                    <p class="stat-card-pro-value" id="pro-pf">0.00</p>
                 </div>
             </div>
 
-            <div id="view-stats" class="view-content hidden">
-                <h3 class="text-gray-400">Тут буде статистика (старий код підхопить)</h3>
+            <div class="dash-main-row">
+                <div class="panel dash-panel">
+                    <div class="dash-toolbar">
+                        <div class="dash-toolbar-controls">
+                            <select id="month-select" class="month-select" onchange="renderView()"></select>
+                            <select id="year-select" class="year-select" onchange="renderView()"></select>
+                            <div id="winstreak-counter" class="winstreak-counter">
+                                🔥 Стрік: <span id="winstreak-val">0</span>
+                            </div>
+                        </div>
+                        <div class="dash-toolbar-totals">
+                            <div class="total-comm">Комісія: <span id="total-comm">0$</span></div>
+                            <div class="total-locates">Локейти: <span id="total-locates">0$</span></div>
+                            <div class="total-pnl">Підсумок місяця: <span id="total-pnl">0$</span></div>
+                        </div>
+                    </div>
+                    <div style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;flex-grow:1;display:flex;flex-direction:column;">
+                        <div class="grid" id="calendar-grid" style="min-width:600px;flex-grow:1;align-content:start;"></div>
+                    </div>
+                </div>
+                <div class="recent-trades-panel" id="recent-trades-panel">
+                    <div class="recent-trades-header">
+                        <h3>Останні угоди</h3>
+                        <button onclick="switchMainTab('trades')" class="recent-trades-link">Переглянути всі</button>
+                    </div>
+                    <div id="recent-trades-list" class="recent-trades-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-stats" class="view-content">
+            <!-- Горизонтальна панель фільтрів -->
+            <div class="stats-filters-bar">
+                <div id="stats-source-dropdown-wrap" class="stats-bar-item">
+                    <button id="stats-source-trigger" class="stats-bar-trigger" onclick="toggleStatsDropdown('source')">
+                        <span class="stats-bar-label">Джерело</span>
+                        <span id="stats-source-trigger-label" class="stats-bar-value">Мій профіль</span>
+                        <span class="stats-dropdown-caret">▼</span>
+                    </button>
+                    <div id="stats-source-panel" class="stats-bar-dropdown" style="display: none;">
+                        <div id="stats-source-container" style="max-height: 360px; overflow-y: auto;"></div>
+                    </div>
+                </div>
+
+                <div class="stats-bar-item">
+                    <button id="stats-tradetype-trigger" class="stats-bar-trigger" onclick="toggleStatsDropdown('tradetype')">
+                        <span class="stats-bar-label">Тип трейду</span>
+                        <span id="stats-tradetype-trigger-label" class="stats-bar-value">Всі типи</span>
+                        <span class="stats-dropdown-caret">▼</span>
+                    </button>
+                    <div id="stats-tradetype-panel" class="stats-bar-dropdown" style="display: none;">
+                        <div id="stats-tradetype-container" style="max-height: 300px; overflow-y: auto;"></div>
+                    </div>
+                </div>
+
+                <div class="stats-bar-item">
+                    <button id="stats-period-trigger" class="stats-bar-trigger" onclick="toggleStatsDropdown('period')">
+                        <span class="stats-bar-label">Період</span>
+                        <span id="stats-period-trigger-label" class="stats-bar-value">За весь час</span>
+                        <span class="stats-dropdown-caret">▼</span>
+                    </button>
+                    <div id="stats-period-panel" class="stats-bar-dropdown" style="display: none;">
+                        <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 10px;">Клікайте для множинного вибору.</div>
+                        <div id="stats-tree-container" style="max-height: 360px; overflow-y: auto;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stats-layout" style="display: flex; gap: 20px; flex: 1; min-height: 0; overflow: hidden;">
+                <div class="stats-main-panel" style="flex-grow: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding-right: 5px;">
+                    <div class="stats-grid">
+                        <div class="stat-card" style="grid-column: 1 / -1;">
+                            <div class="label">Загальний Профіт</div>
+                            <div class="value" id="stat-total-pnl" style="font-size: 2rem;">0$</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Winrate (Вінрейт)</div>
+                            <div class="value" id="stat-winrate" style="color: var(--accent);">0%</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Profit Factor</div>
+                            <div class="value" id="stat-pf" style="color: var(--gold);">0.00</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Середній Плюс</div>
+                            <div class="value" id="stat-avg-win" style="color: var(--profit);">0$</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Середній Мінус</div>
+                            <div class="value" id="stat-avg-loss" style="color: var(--loss);">0$</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Найкращий День</div>
+                            <div class="value" id="stat-best" style="color: var(--profit);">0$</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Найгірший День</div>
+                            <div class="value" id="stat-worst" style="color: var(--loss);">0$</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Загальні Комісії</div>
+                            <div class="value" id="stat-comm" style="color: var(--text-main);">0$</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Загальні Локейти</div>
+                            <div class="value" id="stat-locates" style="color: var(--text-main);">0$</div>
+                        </div>
+                    </div>
+                    
+                    <div class="panel">
+                        <h3 style="margin-bottom: 10px; color: var(--accent); font-size: 1.1rem;">📈 Крива дохідності (<span id="stats-period-label">За весь час</span>)</h3>
+                        <div class="chart-container" style="height: 250px;"><canvas id="pnlChart"></canvas></div>
+                    </div>
+
+                    <div class="stats-charts-row" style="display: flex; gap: 20px; flex-wrap: wrap;">
+                        <div class="panel stats-chart-panel-wide" style="flex: 2; min-width: 400px; padding: 20px;">
+                            <h3 style="color: var(--accent); margin-bottom: 5px;">📊 PnL за днями тижня</h3>
+                            <div class="chart-container" style="height: 250px;"><canvas id="daysChart"></canvas></div>
+                        </div>
+                        <div class="panel stats-chart-panel" style="flex: 1; min-width: 250px; padding: 20px;">
+                            <h3 style="color: var(--accent); margin-bottom: 5px;">🍕 Співвідношення днів</h3>
+                            <div class="chart-container" style="height: 250px; display: flex; justify-content: center;"><canvas id="winLossChart"></canvas></div>
+                        </div>
+                    </div>
+
+                    <div class="panel" id="mistake-chart-panel" style="display:none; padding: 20px;">
+                        <h3 style="color: var(--accent); margin-bottom: 5px;">⚠️ Аналіз помилок — що коштувало найдорожче</h3>
+                        <p style="color: var(--text-muted); font-size: 0.82rem; margin-bottom: 12px;">PnL розподілено рівномірно між усіма помилками дня. Показані лише дні з відміченими помилками.</p>
+                        <div class="chart-container" style="min-height: 180px; overflow: hidden;"><canvas id="mistakeChart"></canvas></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-trades" class="view-content" style="flex-direction: column; gap: 0; padding: 0; overflow: hidden;">
+            <!-- Панель вибору дня -->
+            <div id="trades-selector-panel" style="display:flex; gap:10px; align-items:center; padding:8px 15px; background:var(--bg-panel); border-bottom:1px solid var(--border); flex-shrink:0; flex-wrap:wrap;">
+                <select id="trades-date-select" style="background:var(--bg-main); color:var(--text-main); border:1px solid var(--border); padding:6px 10px; border-radius:6px; font-size:0.9rem;" onchange="window.populateSymbolSelect?.(this.value)">
+                    <option value="">— Оберіть день —</option>
+                </select>
+            </div>
+            <!-- Pill-навігація угод -->
+            <div id="trade-pill-nav" style="flex-shrink:0; display:flex; align-items:center; gap:6px; padding:6px 12px; background:var(--bg-panel); border-bottom:1px solid var(--border); overflow-x:auto; scrollbar-width:none; min-height:44px;"></div>
+            <!-- Інфо-плашка угоди -->
+            <div id="trade-info-bar" style="display:none; flex-shrink:0; padding:8px 15px; background:var(--bg-panel); border-bottom:1px solid var(--border);"></div>
+            <!-- Графік -->
+            <div id="tv-widget-container" style="flex:1; min-height:0; position:relative;">
+                <div id="tv-placeholder" style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:var(--text-muted); gap:10px;">
+                    <span style="font-size:2rem;">📊</span>
+                    <span>Оберіть угоду для перегляду</span>
+                </div>
+                <div id="tradingview-widget" style="width:100%; height:100%; display:none;"></div>
+            </div>
+        </div>
+
+        <div id="view-screens" class="view-content">
+            <div class="panel">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
+                    <h3 style="margin:0; color:var(--accent);" id="unassigned-title">
+                        Нерозподілені скріншоти: 
+                        <span style="font-size:0.85rem; color:var(--text-muted); font-weight:normal; margin-left:10px;">(або вставте картинку через Ctrl+V)</span>
+                    </h3>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <span id="drive-sync-status" style="font-size:0.85rem; color:var(--text-muted);"></span>
+                        <button class="btn-secondary" style="width:auto;" onclick="window.toggleTagSearch?.()">🔍 Пошук по тегах</button>
+                        <button class="btn-secondary" style="width:auto;" onclick="window.viewLeaderScreens?.()">🏆 Лідер дня</button>
+                    </div>
+                </div>
+
+                <!-- Панель пошуку -->
+                <div id="tag-search-panel" style="display:none; margin-bottom:15px; padding:15px; background:var(--bg-main); border-radius:10px; border:1px solid var(--border);">
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+                        <div style="flex:1; min-width:150px; position:relative;">
+                            <label style="font-size:0.8rem; color:var(--text-muted); margin-bottom:4px; display:block;">Тег</label>
+                            <input type="text" id="tag-search-input" placeholder="напр. пробій" style="margin:0;" oninput="window.showTagSearchSuggestions?.(this)" onfocus="window.showTagSearchSuggestions?.(this)" onblur="setTimeout(()=>{const d=document.getElementById('tag-search-suggestions');if(d)d.style.display='none';},150)">
+                            <div id="tag-search-suggestions" class="tag-suggestions"></div>
+                        </div>
+                        <div>
+                            <label style="font-size:0.8rem; color:var(--text-muted); margin-bottom:4px; display:block;">Від</label>
+                            <input type="date" id="tag-search-from" style="margin:0; width:160px; background:var(--bg-main); border:1px solid var(--border); color:var(--text-main); border-radius:8px; padding:10px 12px; font-family:inherit;">
+                        </div>
+                        <div>
+                            <label style="font-size:0.8rem; color:var(--text-muted); margin-bottom:4px; display:block;">До</label>
+                            <input type="date" id="tag-search-to" style="margin:0; width:160px; background:var(--bg-main); border:1px solid var(--border); color:var(--text-main); border-radius:8px; padding:10px 12px; font-family:inherit;">
+                        </div>
+                        <div>
+                            <label style="font-size:0.8rem; color:var(--text-muted); margin-bottom:4px; display:block;">Ліміт</label>
+                            <select id="tag-search-limit" style="margin:0; width:90px; background:var(--bg-main); border:1px solid var(--border); color:var(--text-main); border-radius:8px; padding:10px 12px; font-family:inherit; cursor:pointer;">
+                                <option value="10">10</option>
+                                <option value="20">20</option>
+                                <option value="50" selected>50</option>
+                                <option value="100">100</option>
+                                <option value="200">200</option>
+                            </select>
+                        </div>
+                        <button class="btn-primary" style="width:auto; margin:0;" onclick="window.runTagSearch?.()">🔍 Знайти</button>
+                        <button class="btn-secondary" style="width:auto; margin:0;" onclick="window.clearTagSearch?.()">✕ Скинути</button>
+                    </div>
+                    <div id="tag-search-results" style="margin-top:15px;"></div>
+                </div>
+
+                <div class="unassigned-gallery" id="unassigned-container"></div>
             </div>
             
-            <div id="view-trades" class="view-content hidden"></div>
-            <div id="view-screens" class="view-content hidden"></div>
-            <div id="view-ai" class="view-content hidden"></div>
-            <div id="view-playbook" class="view-content hidden"></div>
-            <div id="view-settings" class="view-content hidden"></div>
-
+            <div class="panel" style="flex-grow: 1;">
+                <h3 style="margin:0 0 15px 0; font-size: 1.4rem;">Детальний розбір сетапів за: <span id="big-screen-date" style="color: var(--accent);"></span></h3>
+                <div id="assigned-container"></div>
+            </div>
         </div>
-    </main>
 
-    <div id="form-sidebar-backdrop" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 hidden opacity-0 transition-opacity duration-300" onclick="window.toggleRightSidebar?.()"></div>
-    
-    <aside id="form-sidebar" class="fixed top-0 right-0 h-full w-[400px] bg-bgPanel border-l border-borderSubtle shadow-2xl z-50 transform translate-x-full transition-transform duration-300 flex flex-col">
-        <div class="flex items-center justify-between p-6 border-b border-borderSubtle">
-            <h3 class="text-lg font-semibold text-accent">📝 Новий запис</h3>
-            <button onclick="window.toggleRightSidebar?.()" class="text-gray-400 hover:text-white text-xl transition-colors">✖</button>
+        <div id="view-ai" class="view-content">
+            <div style="display: flex; flex-direction: column; flex: 1; min-height: 0;">
+                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                    <button class="btn-primary" id="btn-ai-chat" onclick="switchAITab('chat')" style="flex: 1;">💬 Чат з AI</button>
+                    <button class="btn-secondary" id="btn-ai-saved" onclick="switchAITab('saved')" style="flex: 1;">💾 Збережене</button>
+                </div>
+
+                <div id="ai-chat-section" style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">
+                    <div id="data-chat-box" style="flex: 1; overflow-y: auto; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+                        <div class="chat-msg ai-msg" style="border-left-color: var(--accent);">
+                            <strong>📊 AI Аналітик:</strong><br>Привіт! Я проаналізую твої угоди. Що тебе цікавить?
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="data-chat-input" placeholder="Напишіть ваш запит до бази..." style="flex: 1; padding: 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-main); color: var(--text-main);" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendDataChatMessage();}">
+                        <button class="btn-primary" onclick="sendDataChatMessage()" style="width: auto; padding: 0 20px;">Відправити</button>
+                    </div>
+                </div>
+
+                <div id="ai-saved-section" style="display: none; flex-direction: column; flex: 1; overflow-y: auto;">
+                    <h3 style="color: var(--accent); margin-bottom: 15px;">💾 Збережені аналізи</h3>
+                    <div id="ai-saved-list" style="display: flex; flex-direction: column; gap: 15px;"></div>
+                </div>
+            </div>
         </div>
         
-        <div class="flex-1 overflow-y-auto p-6">
-            <div class="text-gray-400 text-sm mb-4">Форма дня (підхопиться старим JS)</div>
-            
-            <div class="mb-4">
-                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Net PnL ($)</label>
-                <input type="number" id="trade-pnl" class="w-full bg-bgMain border border-borderSubtle rounded-lg px-4 py-2.5 text-white focus:border-accent focus:ring-1 focus:ring-accent outline-none transition-all" placeholder="0.00">
+        <div id="view-learn" class="view-content">
+            <div class="panel">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+                    <h3 style="margin:0; color:var(--accent)">🎓 Навчання</h3>
+                    <button class="btn-primary" style="width:auto; margin:0;" id="learn-refresh-btn" onclick="window.loadLearnContent?.()">🔄 Оновити рекомендації</button>
+                </div>
+                <p id="learn-query-label" style="color:var(--text-muted); font-size:0.85rem; margin-bottom:20px;"></p>
+                <div id="learn-results" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:16px;">
+                    <div style="color:var(--text-muted); text-align:center; padding:40px; grid-column:1/-1;">Натисніть “Оновити” щоб AI підібрав відео для вас</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-playbook" class="view-content">
+            <div class="panel">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <h3 style="margin:0; color:var(--accent)">📖 Мій Плейбук</h3>
+                    <button class="btn-primary" style="width:auto; margin:0;" onclick="window.addPlaybookSetup?.()">+ Додати сетап</button>
+                </div>
+                <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:20px;">Опишіть свої ідеальні сетапи. AI буде використовувати це при аналізі скрінів і в чаті.</p>
+                <div id="playbook-list"></div>
+            </div>
+
+        </div>
+
+        <div id="view-settings" class="view-content">
+            <div class="panel theme-settings-panel">
+                <h3 class="panel-title">🎨 Візуал та Теми</h3>
+                
+                <div class="theme-section">
+                    <label class="theme-section-label">Колірна тема</label>
+                    <div class="theme-cards" role="group">
+                        <label class="theme-card" data-theme="dark">
+                            <input type="radio" name="theme" value="dark" id="theme-dark" onchange="applyTheme()">
+                            <span class="theme-card-preview theme-preview-dark"></span>
+                            <span class="theme-card-name">Темна</span>
+                        </label>
+                        <label class="theme-card" data-theme="light">
+                            <input type="radio" name="theme" value="light" id="theme-light" onchange="applyTheme()">
+                            <span class="theme-card-preview theme-preview-light"></span>
+                            <span class="theme-card-name">Світла</span>
+                        </label>
+                        <label class="theme-card" data-theme="matrix">
+                            <input type="radio" name="theme" value="matrix" id="theme-matrix" onchange="applyTheme()">
+                            <span class="theme-card-preview theme-preview-matrix"></span>
+                            <span class="theme-card-name">Термінал</span>
+                        </label>
+                        <label class="theme-card" data-theme="dracula">
+                            <input type="radio" name="theme" value="dracula" id="theme-dracula" onchange="applyTheme()">
+                            <span class="theme-card-preview theme-preview-dracula"></span>
+                            <span class="theme-card-name">Дракула</span>
+                        </label>
+                        <label class="theme-card" data-theme="custom">
+                            <input type="radio" name="theme" value="custom" id="theme-custom" onchange="applyTheme()">
+                            <span class="theme-card-preview theme-preview-custom">🎨</span>
+                            <span class="theme-card-name">Своя</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div id="custom-theme-block" class="custom-theme-block">
+                    <p class="custom-theme-hint">Оберіть кольори для власної теми</p>
+                    <div class="theme-color-grid">
+                        <div class="theme-color-item">
+                            <label>Фон</label>
+                            <div class="color-input-wrapper"><input type="color" id="ct-bg-main" value="#0f172a" oninput="applyTheme()"></div>
+                        </div>
+                        <div class="theme-color-item">
+                            <label>Панелі</label>
+                            <div class="color-input-wrapper"><input type="color" id="ct-bg-panel" value="#1e293b" oninput="applyTheme()"></div>
+                        </div>
+                        <div class="theme-color-item">
+                            <label>Текст</label>
+                            <div class="color-input-wrapper"><input type="color" id="ct-text-main" value="#f8fafc" oninput="applyTheme()"></div>
+                        </div>
+                        <div class="theme-color-item">
+                            <label>Акцент</label>
+                            <div class="color-input-wrapper"><input type="color" id="ct-accent" value="#3b82f6" oninput="applyTheme()"></div>
+                        </div>
+                        <div class="theme-color-item">
+                            <label>Плюс</label>
+                            <div class="color-input-wrapper"><input type="color" id="ct-profit" value="#10b981" oninput="applyTheme()"></div>
+                        </div>
+                        <div class="theme-color-item">
+                            <label>Мінус</label>
+                            <div class="color-input-wrapper"><input type="color" id="ct-loss" value="#ef4444" oninput="applyTheme()"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="theme-section">
+                    <label class="theme-section-label">Шрифт</label>
+                    <div class="font-pills">
+                        <label class="font-pill"><input type="radio" name="font" value="inter" id="font-inter" onchange="applyTheme()"><span>Inter</span></label>
+                        <label class="font-pill"><input type="radio" name="font" value="roboto" id="font-roboto" onchange="applyTheme()"><span>Roboto</span></label>
+                        <label class="font-pill"><input type="radio" name="font" value="montserrat" id="font-montserrat" onchange="applyTheme()"><span>Montserrat</span></label>
+                        <label class="font-pill"><input type="radio" name="font" value="playfair" id="font-playfair" onchange="applyTheme()"><span>Playfair</span></label>
+                        <label class="font-pill"><input type="radio" name="font" value="mono" id="font-mono" onchange="applyTheme()"><span>Mono</span></label>
+                    </div>
+                </div>
+                
+                <button class="btn-primary btn-save-theme" onclick="saveThemeSettings()">Зберегти стиль</button>
+            </div>
+
+            <div class="panel">
+                <h3 style="color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 10px;">☁️ Google Drive</h3>
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 15px;">Підключіть папку з Google Drive для автоматичної синхронізації скріншотів.</p>
+                <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                    <button class="btn-secondary" style="width:auto;" id="drive-connect-btn" onclick="window.connectGoogleDrive?.();">🔗 Підключити Google Drive</button>
+                    <button class="btn-secondary" style="width:auto; display:none; border-color:var(--loss); color:var(--loss);" id="drive-disconnect-btn" onclick="window.disconnectGoogleDrive?.()">🔓 Вийти</button>
+                    <span id="drive-folder-info" style="font-size:0.9rem; color:var(--profit);"></span>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h3 style="color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 10px;">🛑 Налаштування Дейлосу</h3>
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 15px;">Встановіть ліміт втрат. Він буде застосований до місяця, який зараз відкритий у календарі (<span id="settings-current-month-label" style="font-weight:bold; color:var(--text-main);"></span>).</p>
+                <div class="form-group" style="max-width: 250px;">
+                    <label>Ліміт втрат на день ($)</label>
+                    <input type="number" id="setting-dayloss-limit" step="1" placeholder="напр. -100">
+                </div>
+                <button class="btn-primary" style="width: auto;" onclick="saveDaylossSetting()">💾 Зберегти для цього місяця</button>
+            </div>
+
+            <div class="panel">
+                <h3 style="color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 10px;">3. Візуальне налаштування OCR (Авто-тікери)</h3>
+                <p style="color: var(--text-muted); font-size: 0.9rem;">Крутіть коліщатко, щоб наблизити картинку до курсору. Виділіть зону лівою кнопкою. Перетягуйте зображення правою кнопкою миші.</p>
+                <div id="ocr-setup-container">
+                    <div id="ocr-zoom-wrapper">
+                        <img id="ocr-setup-img" src="" alt="Завантаження...">
+                        <div id="ocr-selection-box"></div>
+                    </div>
+                </div>
+                <div id="ocr-setup-status" style="color: var(--text-muted); font-size: 0.85rem; margin-top: 10px; margin-bottom: 15px;"></div>
+                <button class="btn-primary" style="width: auto;" onclick="saveVisualOCRSettings()">💾 Зберегти виділену зону та Оновити скріншоти</button>
+            </div>
+
+            <div class="panel">
+                <h3 style="color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 10px;">4. Щоденний Чекліст (Відмітки)</h3>
+                <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 10px;">Рекорди та Дейлоси тепер визначаються автоматично. Створіть свої унікальні правила.</p>
+                <div id="settings-checklist-list" style="margin-bottom: 15px;"></div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn-secondary" style="width: auto;" onclick="addNewChecklistItem()">+ Додати новий пункт</button>
+                    <button class="btn-primary" style="width: auto; margin: 0;" onclick="saveChecklist()">💾 Зберегти чекліст</button>
+                </div>
             </div>
             
-            <button class="w-full mt-6 bg-accent hover:bg-accentHover text-white font-semibold py-3 rounded-xl shadow-lg shadow-accent/20 transition-all active:scale-[0.98]" onclick="saveEntry()">Зберегти день</button>
-        </div>
-    </aside>
+            <div class="panel">
+                <h3 style="color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 10px;">5. Трекінг Стану (Повзунки 1-10)</h3>
+                <div id="settings-sliders-list" style="margin-bottom: 15px;"></div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn-secondary" style="width: auto;" onclick="addNewSliderItem()">+ Додати шкалу</button>
+                    <button class="btn-primary" style="width: auto; margin: 0;" onclick="saveSlidersSettings()">💾 Зберегти шкали</button>
+                </div>
+            </div>
 
+            <div class="panel">
+                <h3 style="color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 10px;">6. Мої Типи Трейдів</h3>
+                <div id="my-trade-types-list" style="margin-bottom: 15px;"></div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn-secondary" style="width: auto;" onclick="addMyTradeType()">+ Додати тип</button>
+                    <button class="btn-primary" style="width: auto; margin: 0;" onclick="saveMyTradeTypes()">💾 Зберегти типи</button>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h3 style="color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 10px;">7. Конструктор Ситуацій Плейбуку</h3>
+                <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 10px;">Створіть ситуації (напр. "Відкриття ринку", "Пробій рівня") — потім призначайте їх сетапам у Плейбуку. AI враховуватиме це при аналізі.</p>
+                <div id="settings-situations-list" style="margin-bottom: 15px;"></div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn-secondary" style="width: auto;" onclick="addPlaybookSituation()">+ Додати ситуацію</button>
+                    <button class="btn-primary" style="width: auto; margin: 0;" onclick="savePlaybookSituations()">💾 Зберегти ситуації</button>
+                </div>
+            </div>
+
+            <div class="panel" id="mentor-trade-types-panel" style="display: none; border-color: var(--gold);">
+                <h3 style="color: var(--gold); border-bottom: 1px solid var(--border); padding-bottom: 10px;">👑 Типи трейдів (Тільки Ментор)</h3>
+                <div id="settings-trade-types-list" style="margin-bottom: 15px;"></div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn-secondary" style="width: auto;" onclick="addNewTradeType()">+ Додати тип</button>
+                    <button class="btn-primary" style="width: auto; margin: 0; background: var(--gold); color: black;" onclick="saveTradeTypes()">💾 Зберегти типи</button>
+                </div>
+            </div>
+
+            <button id="btn-mentor-on" class="btn-secondary" style="width: 100%; margin-top: 10px; border-style: dashed; opacity: 0.7;" onclick="activateMentorMode()">🔐 Режим Ментора</button>
+            <button id="btn-mentor-off" class="btn-secondary" style="width: 100%; margin-top: 10px; display: none; border-color: rgba(239,68,68,0.35); color: #fecaca; background: rgba(239,68,68,0.08);" onclick="deactivateMentorMode()">↩ Вийти з Ментора</button>
+            <button id="btn-manage-teams" class="btn-primary" style="width: 100%; margin-top: 10px; background: var(--accent); display: none;" onclick="openTeamManager()">🛠 Управління кущами</button>
+            
+            <div class="settings-block" style="margin-top: 30px; border-top: 1px solid var(--border); padding-top: 20px;">
+                <div class="panel" style="margin-bottom: 15px;">
+                    <h3 style="color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 15px;">💾 Імпорт / Експорт</h3>
+                    <div style="display:flex; flex-wrap:wrap; gap:10px;">
+                        <button class="btn-secondary" style="flex:1;" onclick="exportData()">💾 Експорт БД</button>
+                        <button class="btn-secondary" style="flex:1;" onclick="document.getElementById('file-input').click()">📂 Імпорт БД</button>
+                        <button class="btn-secondary" style="flex:1; background:rgba(59,130,246,0.1); color:var(--accent); border-color:var(--accent);" onclick="document.getElementById('csv-input').click()">📊 Fondexx</button>
+                        <button class="btn-secondary" style="flex:1; background:rgba(139,92,246,0.1); color:#a78bfa; border-color:#a78bfa;" onclick="document.getElementById('trades-input').click()">📋 Trades</button>
+                        <button class="btn-secondary" style="flex:1; background:rgba(16,185,129,0.1); color:var(--profit); border-color:var(--profit);" onclick="document.getElementById('ppro-input').click()">📊 PPRO</button>
+                    </div>
+                </div>
+                <button class="btn-primary" style="background: var(--loss); border: none; width: 100%;" onclick="logout()">🚪 Вийти з акаунту</button>
+            </div>
+        </div>
+
+        <div id="view-admin" class="view-content admin-panel" style="display:none;">
+            <div class="panel admin-panel-content">
+                <div class="admin-panel-header">
+                    <h3 class="admin-panel-title">🛡 Адмін-панель</h3>
+                    <button class="btn-secondary admin-refresh-btn" onclick="window.renderAdminPanel?.()">&#x1f504; Оновити</button>
+                </div>
+                <div id="admin-users-list" class="admin-users-list"></div>
+            </div>
+        </div>
+
+    <div id="name-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.7); z-index:99998; justify-content:center; align-items:center;">
+        <div style="background:var(--bg-panel); padding:35px; border-radius:12px; border:1px solid var(--border); width:340px; text-align:center;">
+            <h2 style="color:var(--accent); margin:0 0 8px 0;">👤 Одна хвилинка</h2>
+            <p style="color:var(--text-muted); font-size:0.9rem; margin:0 0 20px 0;">Введіть своє ім'я та прізвище — вони будуть видні ментору та команді.</p>
+            <input type="text" id="modal-fname" placeholder="Ім'я" style="width:100%; padding:12px; margin-bottom:10px; background:var(--bg-main); border:1px solid var(--border); color:var(--text-main); border-radius:6px; box-sizing:border-box;">
+            <input type="text" id="modal-lname" placeholder="Прізвище" style="width:100%; padding:12px; margin-bottom:10px; background:var(--bg-main); border:1px solid var(--border); color:var(--text-main); border-radius:6px; box-sizing:border-box;">
+            <div id="name-modal-error" style="display:none; color:var(--loss); font-size:0.85rem; margin-bottom:10px;"></div>
+            <button class="btn-primary" style="width:100%;" onclick="saveProfileName()">Зберегти</button>
+        </div>
+    </div>
+
+    <!-- SESSION MODAL -->
+    <div id="session-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:99990; justify-content:center; align-items:center; padding:16px; box-sizing:border-box;">
+        <div style="background:var(--bg-panel); border:1px solid var(--border); border-radius:14px; width:100%; max-width:480px; max-height:90vh; overflow-y:auto; padding:28px; box-sizing:border-box; position:relative;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <div>
+                    <h2 style="margin:0; color:var(--accent); font-size:1.3rem;">🎯 Підготовка до сесії</h2>
+                    <div id="session-modal-date" style="color:var(--text-muted); font-size:0.85rem; margin-top:4px;"></div>
+                </div>
+                <button onclick="window.snoozeSessionModal?.()" style="background:transparent; border:none; color:var(--text-muted); font-size:1.4rem; cursor:pointer; padding:4px 8px; border-radius:6px;" title="Нагадати пізніше">✕</button>
+            </div>
+
+            <div class="form-group">
+                <label>🎯 Ціль на сьогодні</label>
+                <input type="text" id="sm-goal" placeholder="Напр. Торгувати тільки за планом, макс 2 угоди">
+            </div>
+            <div class="form-group">
+                <label>📝 План на сесію</label>
+                <textarea id="sm-plan" rows="3" placeholder="Які сетапи торгуєш, які умови ринку потрібні..."></textarea>
+            </div>
+            <div class="form-group">
+                <label>📚 Сетапи з плейбуку</label>
+                <div id="sm-playbook-checks" style="display:flex; flex-direction:column; gap:6px; margin-top:4px;"></div>
+            </div>
+            <div class="form-group">
+                <label>💪 Загальна готовність</label>
+                <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text-muted); margin-bottom:4px;">
+                    <span>🔴 Не готовий</span>
+                    <span id="sm-readiness-val" style="font-weight:bold; color:var(--accent);">5/10</span>
+                    <span>🟢 Готовий</span>
+                </div>
+                <input type="range" min="1" max="10" value="5" id="sm-readiness" class="discipline-slider" style="width:100%; accent-color:var(--accent);" oninput="document.getElementById('sm-readiness-val').textContent=this.value+'/10'">
+            </div>
+
+            <button class="btn-ai" onclick="window.checkSessionModalReadiness?.()" style="margin-bottom:10px;">🤖 AI: Чи готовий торгувати?</button>
+            <div id="sm-ai-result" style="display:none; margin-bottom:14px; padding:12px; border-radius:8px; font-size:0.9rem; line-height:1.5;"></div>
+
+            <div style="display:flex; gap:10px; margin-top:4px;">
+                <button class="btn-primary" style="flex:2;" onclick="window.saveSessionModal?.()">💾 Зберегти і почати</button>
+                <button class="btn-secondary" style="flex:1;" onclick="window.snoozeSessionModal?.()">⏰ Пізніше</button>
+            </div>
+        </div>
+    </div>
+
+    <button id="sos-btn" onclick="openSOSModal()" title="Натисни, якщо криє тільт">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    </button>
+    <div id="sos-modal" class="modal-overlay">
+        <div class="modal-content sos-theme">
+            <div class="modal-header">
+                <h3 style="color: #ef4444; margin: 0; display: flex; align-items: center; gap: 10px;">
+                    <span style="animation: sos-blink 1s infinite;">🚨</span> ЕКСТРЕНА ЗУПИНКА
+                </h3>
+                <button class="close-btn" onclick="closeSOSModal()" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;padding:6px;border-radius:8px;display:flex;align-items:center;" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div id="sos-chat-box" class="chat-history">
+                <div class="chat-msg ai-msg">Ти натиснув кнопку SOS. Я твій психолог трейдера. Опиши ситуацію, можливо я тобі допоможу.</div>
+            </div>
+            <div class="chat-input-area">
+                <input type="text" id="sos-input" placeholder="Що сталось? Напиши сюди..." onkeypress="if(event.key === 'Enter') sendSOSMessage()">
+                <button class="btn-primary" style="width: auto; margin: 0; background: #ef4444;" id="sos-send-btn" onclick="sendSOSMessage()">Відправити</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="team-sidebar-backdrop" class="team-sidebar-backdrop" onclick="window.closeTeamSidebar?.()"></div>
+    <div id="team-sidebar" class="team-sidebar-panel">
+        <div class="team-sidebar-header">
+            <h2 class="team-sidebar-title">👥 Команда</h2>
+            <button class="team-sidebar-close" onclick="window.closeTeamSidebar?.()" aria-label="Закрити" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;padding:6px;border-radius:8px;display:flex;align-items:center;" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div id="team-list-container" class="team-list-container"></div>
+    </div>
+    
+    <div id="team-manager-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); z-index: 100001; justify-content: center; align-items: flex-start; overflow-y: auto; padding: 20px; box-sizing: border-box;" onclick="if(event.target===this)this.style.display='none'">
+        <div class="team-manager-card" style="background: var(--bg-panel); padding: 30px; border-radius: 12px; width: 90%; max-width: 400px; border: 1px solid var(--border); margin: auto;">
+            <h2 style="margin-top: 0; color: var(--accent);">🛠 Управління кущами</h2>
+            <div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--border);">
+                <label style="color: var(--text-muted); font-size: 0.9rem;">➕ Створити новий кущ</label>
+                <input type="text" id="new-team-name" placeholder="Назва куща (н-д: Група Львів)" style="width: 100%; padding: 10px; margin-top: 5px; background: var(--bg-main); border: 1px solid var(--border); color: var(--text-main); border-radius: 6px; box-sizing: border-box;">
+                <button class="btn-primary" style="width: 100%; margin-top: 10px;" onclick="createNewTeam()">Додати кущ</button>
+            </div>
+            <div style="margin-bottom: 20px; padding-top: 15px; border-top: 1px solid var(--border);">
+                <label style="color: #f97316; font-size: 0.9rem; font-weight: bold;">🔥 Видалити весь кущ</label>
+                <select id="delete-team-select" style="width: 100%; padding: 10px; margin-top: 5px; background: var(--bg-main); border: 1px solid var(--border); color: var(--text-main); border-radius: 6px; box-sizing: border-box;"></select>
+                <button class="btn-primary" style="width: 100%; margin-top: 10px; background: #f97316; color: white; border: none;" onclick="deleteTeam()">Видалити кущ</button>
+            </div>
+            <div style="margin-bottom: 20px;">
+                <label style="color: var(--text-muted); font-size: 0.9rem;">🔄 Перемістити трейдера</label>
+                <select id="move-trader-nick" style="width: 100%; padding: 10px; margin-top: 5px; background: var(--bg-main); border: 1px solid var(--border); color: var(--text-main); border-radius: 6px; box-sizing: border-box;"></select>
+                <select id="move-trader-team" style="width: 100%; padding: 10px; margin-top: 5px; background: var(--bg-main); border: 1px solid var(--border); color: var(--text-main); border-radius: 6px; box-sizing: border-box;"></select>
+                <button class="btn-primary" style="width: 100%; margin-top: 10px; background: #eab308; color: black;" onclick="moveTrader()">Перемістити</button>
+            </div>
+            <div style="margin-bottom: 20px; padding-top: 15px; border-top: 1px solid var(--border);">
+                <label style="color: var(--loss); font-size: 0.9rem; font-weight: bold;">🗑️ Видалити профіль трейдера</label>
+                <select id="delete-trader-nick" style="width: 100%; padding: 10px; margin-top: 5px; background: var(--bg-main); border: 1px solid var(--border); color: var(--text-main); border-radius: 6px; box-sizing: border-box;"></select>
+                <button class="btn-primary" style="width: 100%; margin-top: 10px; background: var(--loss); color: white; border: none;" onclick="deleteTraderProfile()">Видалити назавжди</button>
+            </div>
+            <button class="btn-secondary" style="width: 100%;" onclick="document.getElementById('team-manager-modal').style.display='none'">Закрити</button>
+        </div>
+    </div>
+
+    <script>
+    /* =============================================
+       STYLEPRO DASHBOARD WIDGETS
+       ============================================= */
+
+    function updateProStatsCards() {
+        const data = window.journalData || {};
+        const currentNick = window.currentNick || '';
+        const entries = data[currentNick] || {};
+
+        let totalPnl = 0, wins = 0, losses = 0, totalTrades = 0;
+        let totalGross = 0, totalLoss = 0;
+
+        Object.values(entries).forEach(day => {
+            if (!day) return;
+            const pnl = parseFloat(day.pnl) || 0;
+            if (pnl === 0) return;
+            totalPnl += pnl;
+            totalTrades++;
+            if (pnl > 0) { wins++; totalGross += pnl; }
+            else { losses++; totalLoss += Math.abs(pnl); }
+        });
+
+        const winrate = totalTrades > 0 ? (wins / totalTrades * 100) : 0;
+        const pf = totalLoss > 0 ? (totalGross / totalLoss) : (totalGross > 0 ? 99 : 0);
+
+        // Values
+        const pnlEl = document.getElementById('pro-total-pnl');
+        const wrEl  = document.getElementById('pro-winrate');
+        const trEl  = document.getElementById('pro-total-trades');
+        const pfEl  = document.getElementById('pro-pf');
+        if (pnlEl) pnlEl.textContent = (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(2);
+        if (wrEl)  wrEl.textContent  = winrate.toFixed(1) + '%';
+        if (trEl)  trEl.textContent  = totalTrades;
+        if (pfEl)  pfEl.textContent  = pf.toFixed(2);
+
+        // Color pnl value
+        if (pnlEl) pnlEl.style.color = totalPnl >= 0 ? 'var(--profit)' : 'var(--loss)';
+
+        // Badges
+        setBadge('badge-pnl',     totalPnl >= 0 ? '+' + wins + ' прибуткових' : losses + ' збиткових', totalPnl >= 0 ? 'positive' : 'negative');
+        setBadge('badge-winrate', wins + 'W / ' + losses + 'L', winrate >= 50 ? 'positive' : 'negative');
+        setBadge('badge-trades',  'цього місяця', 'neutral');
+        setBadge('badge-pf',      pf >= 1.5 ? '▲ добре' : pf >= 1 ? '▶ норма' : '▼ слабо', pf >= 1.5 ? 'positive' : pf >= 1 ? 'neutral' : 'negative');
+    }
+
+    function setBadge(id, text, type) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = text;
+        el.className = 'stat-card-pro-badge ' + type;
+    }
+
+    function updateRecentTrades() {
+        const list = document.getElementById('recent-trades-list');
+        if (!list) return;
+        const data = window.journalData || {};
+        const currentNick = window.currentNick || '';
+        const entries = data[currentNick] || {};
+
+        // Збираємо всі дні з pnl != 0, сортуємо за датою desc
+        const days = Object.entries(entries)
+            .filter(([, d]) => d && (parseFloat(d.pnl) || 0) !== 0)
+            .sort(([a], [b]) => b.localeCompare(a))
+            .slice(0, 8);
+
+        if (days.length === 0) {
+            list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:0.85rem;">Немає угод</div>';
+            return;
+        }
+
+        list.innerHTML = days.map(([date, day]) => {
+            const pnl = parseFloat(day.pnl) || 0;
+            const gross = parseFloat(day.gross) || 0;
+            const isPos = pnl >= 0;
+            const pct = gross !== 0 ? ((pnl / Math.abs(gross)) * 100).toFixed(1) : '0.0';
+            const dateObj = new Date(date + 'T00:00:00');
+            const dateStr = dateObj.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
+            const arrow = isPos
+                ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>'
+                : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>';
+            const ticker = (day.ticker || day.type || '').toUpperCase() || 'TRADE';
+            return `<div class="recent-trade-item" onclick="selectDate('${date}')">
+                <div class="recent-trade-left">
+                    <div class="recent-trade-dir-icon ${isPos ? 'long' : 'short'}">${arrow}</div>
+                    <div>
+                        <div class="recent-trade-symbol">${ticker || dateStr}</div>
+                        <div class="recent-trade-meta">${ticker ? dateStr : ''} ${isPos ? 'Прибуток' : 'Збиток'}</div>
+                    </div>
+                </div>
+                <div class="recent-trade-right">
+                    <div class="recent-trade-pnl ${isPos ? 'pos' : 'neg'}">${isPos ? '+' : ''}$${pnl.toFixed(2)}</div>
+                    <div class="recent-trade-pct ${isPos ? 'pos' : 'neg'}">${isPos ? '+' : ''}${pct}%</div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    // Хукаємо в renderView
+    const _origRender = window.renderView;
+    window.renderView = function() {
+        if (_origRender) _origRender.apply(this, arguments);
+        setTimeout(() => { updateProStatsCards(); updateRecentTrades(); }, 50);
+    };
+
+    // Хукаємо в saveEntry
+    const _origSave = window.saveEntry;
+    window.saveEntry = function() {
+        if (_origSave) _origSave.apply(this, arguments);
+        setTimeout(() => { updateProStatsCards(); updateRecentTrades(); }, 100);
+    };
+
+    // Ініціалізація після завантаження даних
+    document.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => { updateProStatsCards(); updateRecentTrades(); }, 800);
+    });
+    window.addEventListener('dataLoaded', () => {
+        updateProStatsCards(); updateRecentTrades();
+    });
+    </script>
     <script src="lw-charts.js"></script>
     <script type="module" src="js/main.js"></script>  
-    
-    <script>
-        // Проста логіка для лівого меню
-        window.toggleLeftSidebar = function() {
-            const sidebar = document.getElementById('app-sidebar');
-            const texts = document.querySelectorAll('.sidebar-text');
-            
-            if (sidebar.classList.contains('w-64')) {
-                sidebar.classList.replace('w-64', 'w-20');
-                texts.forEach(t => t.style.display = 'none');
-            } else {
-                sidebar.classList.replace('w-20', 'w-64');
-                setTimeout(() => texts.forEach(t => t.style.display = 'block'), 150);
-            }
-        };
-
-        // Логіка для правої панелі
-        window.toggleRightSidebar = function() {
-            const drawer = document.getElementById('form-sidebar');
-            const backdrop = document.getElementById('form-sidebar-backdrop');
-            
-            if (drawer.classList.contains('translate-x-full')) {
-                drawer.classList.remove('translate-x-full');
-                backdrop.classList.remove('hidden');
-                setTimeout(() => backdrop.classList.replace('opacity-0', 'opacity-100'), 10);
-            } else {
-                drawer.classList.add('translate-x-full');
-                backdrop.classList.replace('opacity-100', 'opacity-0');
-                setTimeout(() => backdrop.classList.add('hidden'), 300);
-            }
-        };
-        
-        // Перемикання вкладок
-        window.switchMainTab = function(tabId) {
-            document.querySelectorAll('.view-content').forEach(el => {
-                el.classList.remove('block');
-                el.classList.add('hidden');
-            });
-            document.getElementById('view-' + tabId).classList.remove('hidden');
-            document.getElementById('view-' + tabId).classList.add('block');
-            
-            // Стиль активної кнопки
-            document.querySelectorAll('nav button').forEach(btn => {
-                btn.classList.remove('bg-blue-500/10', 'text-accent', 'border-r-4', 'border-accent');
-            });
-            document.getElementById('main-btn-' + tabId).classList.add('bg-blue-500/10', 'text-accent', 'border-r-4', 'border-accent');
-        };
-    </script>
 </body>
 </html>

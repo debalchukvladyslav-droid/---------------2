@@ -1,0 +1,119 @@
+.auth-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 99999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+}
+
+.auth-card {
+    background: var(--bg-panel);
+    padding: 40px;
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+    width: 380px;
+    text-align: center;
+}
+
+.auth-title {
+    color: var(--accent);
+    margin-bottom: 5px;
+}
+
+.auth-subtitle {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+}
+
+.auth-input {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 10px;
+    background: var(--bg-main);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    border-radius: 6px;
+    box-sizing: border-box;
+}
+
+.auth-input:last-of-type {
+    margin-bottom: 15px;
+}
+
+.register-fields {
+    display: none;
+}
+
+.auth-error {
+    color: var(--loss);
+    font-size: 0.85rem;
+    margin-bottom: 15px;
+    display: none;
+}
+
+.auth-links {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-bottom: 8px;
+}
+
+.auth-link {
+    color: var(--accent);
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.auth-forgot {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.reset-step {
+    display: none;
+    margin-top: 15px;
+    text-align: left;
+}
+
+.reset-text {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-bottom: 10px;
+}
+
+.reset-code {
+    letter-spacing: 6px;
+    font-size: 1.2rem;
+    text-align: center;
+}
+
+.reset-back {
+    text-align: center;
+}
+
+.reset-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* === РњРћР‘Р†Р›Р¬РќРђ Р’Р•Р РЎР†РЇ (РђР”РђРџРўРР’РќР†РЎРўР¬) === */
+.mobile-only { display: none; }
+.form-sidebar-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100001; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+.form-sidebar-backdrop.visible { display: block; opacity: 1; pointer-events: auto; }
+
+@media (min-width: 1025px) {
+    .form-sidebar-backdrop { display: none !important; pointer-events: none !important; }
+}
+
+/* === BOTTOM NAVIGATION BAR (С‚С–Р»СЊРєРё РјРѕР±С–Р»СЊРЅР°) === */
+.mobile-bottom-nav { display: none; }

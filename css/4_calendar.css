@@ -1,0 +1,58 @@
+.grid { display: grid; grid-template-columns: 45px repeat(5, minmax(0, 1fr)); gap: 12px; }
+.grid.stretch-rows { grid-template-rows: auto; grid-auto-rows: 1fr; }
+.day-header { text-align: right; font-weight: 600; color: var(--text-muted); padding-bottom: 8px; font-size: 0.9rem; }
+
+/* FIX 2: week-label keeps a simple semi-transparent bg вЂ” no backdrop-filter */
+.week-label {
+    display: flex; align-items: center; justify-content: center;
+    background: color-mix(in srgb, var(--bg-panel) 50%, transparent);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    cursor: pointer; font-size: 1.1rem;
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+    color: var(--text-muted);
+    min-height: 75px;
+}
+.week-label:hover {
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    color: var(--text-main);
+    transform: translateY(-1px);
+    background: color-mix(in srgb, var(--bg-panel) 80%, transparent);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.week-label.has-comment { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+
+/* FIX 2: day-cell вЂ” lightweight flat bg, no backdrop-filter, no color-mix */
+.day-cell {
+    background: color-mix(in srgb, var(--bg-panel) 50%, transparent);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    min-height: 75px; padding: 12px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+    position: relative;
+}
+
+.day-cell:hover:not(.empty) {
+    border-color: color-mix(in srgb, var(--primary) 50%, transparent);
+    background: color-mix(in srgb, var(--bg-panel) 80%, transparent);
+    z-index: 10;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+}
+.day-cell.active-day {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 30%, transparent);
+    background: color-mix(in srgb, var(--primary) 6%, transparent);
+}
+
+#image-preview { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(4px); z-index: 99999; display: none; align-items: center; justify-content: center; cursor: zoom-out; }
+#image-preview img { max-height: 90vh; max-width: 90vw; display: block; border-radius: var(--radius-sm); object-fit: contain; cursor: pointer; border: 2px solid var(--accent); box-shadow: 0 20px 60px rgba(0,0,0,0.9); transition: transform 0.2s;}
+#image-preview img:hover { transform: scale(1.02); }
+
+.chart-container { height: 200px; width: 100%; }
+.folder-setup { display: flex; gap: 10px; align-items: flex-end; }
+
+/* === РЎРљР Р†РќРЁРћРўР === */

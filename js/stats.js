@@ -987,15 +987,65 @@ export function renderStatsTab() {
     
     const ctxPeriod = document.getElementById('pnlChart').getContext('2d');
     if (state.pnlChartInstance) state.pnlChartInstance.destroy();
-    state.pnlChartInstance = new Chart(ctxPeriod, { type: 'line', data: { labels: periodLabels, datasets: [{ data: periodCumData, borderColor: cssAccent, backgroundColor: cssAccent + '33', borderWidth: 2, pointBackgroundColor: cssBgPanel, pointBorderColor: cssAccent, pointHoverBackgroundColor: cssAccent, pointRadius: periodCumData.length > 60 ? 0 : 3, fill: true, tension: 0.3 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + fmtMoney(ctx.parsed.y) } } }, scales: { y: { grid: { color: 'rgba(100, 116, 139, 0.2)' }, ticks: { color: cssText, callback: v => fmtMoneyAbs(v) } }, x: { grid: { display: false }, ticks: { color: cssText, maxTicksLimit: 12 } } } } });
+    state.pnlChartInstance = new Chart(ctxPeriod, {
+        type: 'line',
+        data: {
+            labels: periodLabels,
+            datasets: [{
+                data: periodCumData,
+                borderColor: cssAccent,
+                backgroundColor: cssAccent + '33',
+                borderWidth: 2,
+                pointBackgroundColor: cssBgPanel,
+                pointBorderColor: cssAccent,
+                pointHoverBackgroundColor: cssAccent,
+                pointRadius: periodCumData.length > 60 ? 0 : 3,
+                pointHoverRadius: 5,
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            animation: {
+                duration: 800,
+                easing: 'easeInOutQuart',
+                x: { from: 0 }
+            },
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: cssBgPanel,
+                    borderColor: cssAccent + '66',
+                    borderWidth: 1,
+                    titleColor: cssText,
+                    bodyColor: cssAccent,
+                    padding: 10,
+                    callbacks: { label: ctx => ' ' + fmtMoney(ctx.parsed.y) }
+                }
+            },
+            scales: {
+                y: {
+                    grid: { color: 'rgba(100,116,139,0.15)' },
+                    ticks: { color: cssText, callback: v => fmtMoneyAbs(v) }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: { color: cssText, maxTicksLimit: 12 }
+                }
+            }
+        }
+    });
 
     const ctxDays = document.getElementById('daysChart').getContext('2d');
     if (state.daysChartInstance) state.daysChartInstance.destroy();
-    state.daysChartInstance = new Chart(ctxDays, { type: 'bar', data: { labels: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт'], datasets: [{ data: dayTotals.map(v => parseFloat(v.toFixed(2))), backgroundColor: dayTotals.map(v => v >= 0 ? cssGreen : cssRed), borderColor: dayTotals.map(v => v >= 0 ? cssGreen : cssRed), borderWidth: 2, borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + fmtMoney(ctx.parsed.y) } } }, scales: { y: { grid: { color: 'rgba(100, 116, 139, 0.2)' }, ticks: { color: cssText, callback: v => fmtMoneyAbs(v) } }, x: { grid: { display: false }, ticks: { color: cssText } } } } });
+    state.daysChartInstance = new Chart(ctxDays, { type: 'bar', data: { labels: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт'], datasets: [{ data: dayTotals.map(v => parseFloat(v.toFixed(2))), backgroundColor: dayTotals.map(v => v >= 0 ? cssGreen : cssRed), borderColor: dayTotals.map(v => v >= 0 ? cssGreen : cssRed), borderWidth: 2, borderRadius: 4 }] }, options: { animation: false, responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + fmtMoney(ctx.parsed.y) } } }, scales: { y: { grid: { color: 'rgba(100, 116, 139, 0.2)' }, ticks: { color: cssText, callback: v => fmtMoneyAbs(v) } }, x: { grid: { display: false }, ticks: { color: cssText } } } } });
     
     const ctxPie = document.getElementById('winLossChart').getContext('2d');
     if (state.winLossChartInstance) state.winLossChartInstance.destroy();
-    state.winLossChartInstance = new Chart(ctxPie, { type: 'doughnut', data: { labels: ['Плюс', 'Мінус', 'Нуль'], datasets: [{ data: [winDays, lossDays, beDays], backgroundColor: [cssGreen, cssRed, '#94a3b8'], borderColor: ['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.1)', 'rgba(0,0,0,0.1)'], borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: cssText, boxWidth: 12, boxHeight: 12, padding: 10, font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed} дн.` } } } } });
+    state.winLossChartInstance = new Chart(ctxPie, { type: 'doughnut', data: { labels: ['Плюс', 'Мінус', 'Нуль'], datasets: [{ data: [winDays, lossDays, beDays], backgroundColor: [cssGreen, cssRed, '#94a3b8'], borderColor: ['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.1)', 'rgba(0,0,0,0.1)'], borderWidth: 2 }] }, options: { animation: false, responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: cssText, boxWidth: 12, boxHeight: 12, padding: 10, font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed} дн.` } } } } });
 
     renderMistakeChart(filteredEntries, cssRed, cssText, cssBgPanel);
 }
