@@ -1,50 +1,73 @@
-.ai-response-box { display: none; } /* Р’РёРґР°Р»РёР»Рё СЃС‚Р°СЂРµ СЃРїР»РёРІР°СЋС‡Рµ РІС–РєРЅРѕ */
+/* =========================================
+   AI CHAT — Telegram-style, minimal
+   ========================================= */
 
-#data-chat-box { padding: var(--spacing-md); background: color-mix(in srgb, var(--bg-color) 90%, transparent); border-radius: var(--radius-md); }
-.chat-history { padding: 20px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; margin-bottom: 15px;}
-.chat-msg { max-width: 80%; padding: 10px 16px; border-radius: 16px; font-size: 0.95rem; line-height: 1.4; position: relative; word-wrap: break-word;}
-.user-msg { align-self: flex-end; background: var(--accent); color: white; border-bottom-right-radius: 4px; }
-.ai-msg { align-self: flex-start; background: var(--bg-panel); color: var(--text-primary); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
-.btn-save-icon { opacity: 0.4; font-size: 1.2rem; margin-left: 8px; color: var(--text-muted); background: transparent; border: none; cursor: pointer; transition: var(--transition);}
-.btn-save-icon:hover { opacity: 1; color: var(--accent); transform: scale(1.1); }
-
-/* --- РљРќРћРџРљРђ РўРђ Р§РђРў SOS --- */
-#sos-btn {
-    position: fixed; bottom: 30px; right: 30px;
-    background: #ef4444; color: white; border: none; border-radius: 50%;
-    width: 48px; height: 48px;
-    cursor: pointer; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
-    z-index: 1000; transition: background-color 0.2s ease, box-shadow 0.2s ease; font-family: inherit;
-    display: flex; align-items: center; justify-content: center;
-    will-change: transform;
+#data-chat-box {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 }
-#sos-btn:hover { background: #dc2626; }
 
-@keyframes pulse-red {
-    0%, 100% { box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4); }
-    50% { box-shadow: 0 4px 25px rgba(239, 68, 68, 0.7); }
+.chat-msg {
+    max-width: 84%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    word-wrap: break-word;
+    position: relative;
 }
-@keyframes sos-blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
 
-.modal-overlay {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    z-index: 9999; display: none; align-items: center; justify-content: center;
+.user-msg {
+    align-self: flex-end;
+    background: var(--accent);
+    color: var(--primary-foreground);
+    border-bottom-right-radius: 3px;
+    font-weight: 500;
 }
-.modal-content.sos-theme {
-    background: var(--bg-panel);
-    width: 95%; max-width: 600px;
-    border-radius: var(--radius-lg);
+
+.ai-msg {
+    align-self: flex-start;
+    background: var(--card);
+    color: var(--text-main);
     border: 1px solid var(--border);
-    display: flex; flex-direction: column; overflow: hidden;
-    box-shadow: 0 0 40px rgba(239, 68, 68, 0.25);
+    border-bottom-left-radius: 3px;
 }
-.modal-header { padding: 15px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: color-mix(in srgb, var(--loss) 10%, transparent); }
-.close-btn { background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; transition: 0.2s;}
-.close-btn:hover { color: #ef4444; }
 
-.chat-input-area { padding: 15px; border-top: 1px solid var(--border); display: flex; gap: 10px; background: var(--bg-main); }
+.btn-save-chat {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    cursor: pointer;
+    padding: 3px 7px;
+    margin-top: 6px;
+    transition: 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 5px;
+    font-family: inherit;
+}
+.btn-save-chat:hover { color: var(--accent); background: rgba(0,229,160,0.08); }
 
-/* === РђР’РўРћР РР—РђР¦Р†РЇ === */
+/* Typing indicator */
+.chat-typing {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    padding: 10px 14px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    border-bottom-left-radius: 3px;
+    width: fit-content;
+}
+.chat-typing span {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    animation: blink 1.2s infinite;
+}
+.chat-typing span:nth-child(2) { animation-delay: 0.2s; }
+.chat-typing span:nth-child(3) { animation-delay: 0.4s; }

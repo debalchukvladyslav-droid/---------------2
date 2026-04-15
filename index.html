@@ -1,4 +1,4 @@
-﻿<!-- v2 -->
+<!-- v2 -->
 <!DOCTYPE html>
 <html lang="uk">
 <head>
@@ -11,7 +11,9 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
     
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Montserrat:wght@400;600&family=Playfair+Display:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- CSS modules -->
     <link rel="stylesheet" href="css/1_tokens.css">
     <link rel="stylesheet" href="css/2_base.css">
@@ -24,119 +26,19 @@
     <link rel="stylesheet" href="css/10_mobile.css">
     <link rel="stylesheet" href="css/11_misc2.css">
     <link rel="stylesheet" href="css/12_saas.css">
+    <link rel="stylesheet" href="css/13_fixes.css">
 
     <link rel="icon" type="image/x-icon" href="favicon.ico">
 
     <style>
-        /* === ГЛОБАЛЬНІ СТИЛІ (ДЛЯ ПК) === */
-        .mobile-tabs-wrapper { display: block; width: 100%; }
-        .tab-nav-btn { display: none; } /* На ПК стрілочок НЕМАЄ */
-
-        #team-sidebar { 
-            position: fixed; top: 0; left: -360px; 
-            width: 340px; height: 100vh; 
-            background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent), var(--bg-panel); 
-            border-right: 1px solid var(--border); z-index: 100002; 
-            transition: 0.35s cubic-bezier(0.4, 0, 0.2, 1); 
-            padding: 0; box-sizing: border-box; 
-            box-shadow: 8px 0 40px rgba(0,0,0,0.5); overflow-y: auto; 
-        }
-        #team-sidebar.open { left: 0; }
-        .group-title { color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase; margin: 20px 0 10px 0; font-weight: bold; letter-spacing: 1px; }
-        .trader-btn-team { width: 100%; padding: 12px 15px; margin-bottom: 5px; background: var(--bg-main); border: 1px solid var(--border); color: var(--text-main); border-radius: 6px; cursor: pointer; text-align: left; font-size: 1rem; transition: 0.2s; display: flex; align-items: center; gap: 10px; }
-        .trader-btn-team:hover { background: var(--border); }
-        .trader-btn-team.active { background: var(--accent); border-color: var(--accent); color: white; font-weight: bold; }
-        
-       
-        /* === СТИЛІ ЧАТУ (Telegram Style) === */
-        #data-chat-box {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-        .chat-msg {
-            max-width: 85%;
-            padding: 10px 14px;
-            border-radius: 14px;
-            font-size: 0.95rem;
-            line-height: 1.4;
-            word-wrap: break-word;
-            position: relative;
-        }
-        .user-msg {
-            align-self: flex-end;
-            background: var(--accent);
-            color: white;
-            border-bottom-right-radius: 4px; /* Гострий хвостик справа */
-        }
-        .ai-msg {
-            align-self: flex-start;
-            background: var(--bg-hover);
-            color: var(--text-main);
-            border: 1px solid var(--border);
-            border-bottom-left-radius: 4px; /* Гострий хвостик зліва */
-        }
-        
-        /* Мінімалістична кнопка збереження */
-        .btn-save-chat {
-            background: transparent;
-            border: none;
-            color: var(--text-muted);
-            font-size: 0.75rem;
-            cursor: pointer;
-            padding: 4px 8px;
-            margin-top: 8px;
-            transition: 0.2s;
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            border-radius: 6px;
-        }
-        .btn-save-chat:hover {
-            color: var(--accent);
-            background: rgba(59, 130, 246, 0.1);
-        }
-
-
-        /* Стиль для іконки-зірочки (поза бульбашкою) */
+        /* === INLINE OVERRIDES (мінімум — тільки те що не покрито CSS модулями) === */
+        .tab-nav-btn { display: none; }
         .btn-save-icon {
-            background: transparent;
-            border: none;
-            font-size: 1.5rem;
-            cursor: pointer;
-            color: var(--text-muted);
-            transition: 0.2s;
-            padding: 5px;
-            opacity: 0.5;
-            display: flex;
-            align-items: center;
+            background: transparent; border: none; font-size: 1.4rem;
+            cursor: pointer; color: var(--text-muted); transition: 0.2s;
+            padding: 5px; opacity: 0.5; display: flex; align-items: center;
         }
-        .btn-save-icon:hover {
-            opacity: 1;
-            color: #eab308; /* Золотий колір при наведенні */
-            transform: scale(1.15);
-        }
-        
-        /* Анімація плавного згортання панелі */
-        .sidebar {
-            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.3s, padding 0.3s, opacity 0.2s;
-            overflow-x: hidden;
-        }
-        
-        .sidebar.collapsed {
-            width: 0 !important;
-            min-width: 0 !important;
-            padding-left: 0 !important;
-            padding-right: 0 !important;
-            border: none !important;
-            opacity: 0;
-            margin: 0 !important;
-        }
-
-        #sidebar-toggle-btn:hover {
-            background: var(--bg-hover) !important;
-            border-color: var(--accent) !important;
-        }
+        .btn-save-icon:hover { opacity: 1; color: var(--gold); transform: scale(1.15); }
     </style>
 </head>
 <body data-theme="dark" data-font="inter">
@@ -402,6 +304,10 @@
                 <h2 id="page-title" class="page-title">Дашборд</h2>
             </div>
             <div class="header-right">
+                <span class="market-badge closed" id="market-badge">
+                    <span class="market-badge-dot"></span>
+                    <span id="market-badge-text">Ринок закрито</span>
+                </span>
                 <button id="team-toggle-btn" class="header-btn" onclick="openTeamSidebar()">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:middle;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                     Команда
@@ -464,11 +370,27 @@
         </div>
 
         <div id="view-dash" class="view-content active">
-            <!-- Stats Cards (stylePro) -->
+
+            <!-- NEWS TICKER -->
+            <div class="news-ticker-bar">
+                <span class="news-ticker-label">Live</span>
+                <div class="news-ticker-scroll">
+                    <span class="news-ticker-text" id="news-ticker-text">
+                        Підключіть News Feed у налаштуваннях &nbsp;•&nbsp; 
+                        S&amp;P 500 — підключіть API &nbsp;•&nbsp; 
+                        NASDAQ — підключіть API &nbsp;•&nbsp; 
+                        Цей блок буде живий після підключення даних
+                    </span>
+                </div>
+            </div>
+
+            <!-- TOP STATS CARDS -->
             <div class="stats-grid-pro" id="stats-cards-pro">
                 <div class="stat-card-pro">
                     <div class="stat-card-pro-top">
-                        <div class="stat-card-pro-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+                        <div class="stat-card-pro-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                        </div>
                         <span class="stat-card-pro-badge" id="badge-pnl"></span>
                     </div>
                     <p class="stat-card-pro-label">Загальний прибуток</p>
@@ -476,7 +398,9 @@
                 </div>
                 <div class="stat-card-pro">
                     <div class="stat-card-pro-top">
-                        <div class="stat-card-pro-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+                        <div class="stat-card-pro-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        </div>
                         <span class="stat-card-pro-badge neutral" id="badge-winrate"></span>
                     </div>
                     <p class="stat-card-pro-label">Вінрейт</p>
@@ -484,7 +408,9 @@
                 </div>
                 <div class="stat-card-pro">
                     <div class="stat-card-pro-top">
-                        <div class="stat-card-pro-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+                        <div class="stat-card-pro-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                        </div>
                         <span class="stat-card-pro-badge neutral" id="badge-trades"></span>
                     </div>
                     <p class="stat-card-pro-label">Всього угод</p>
@@ -492,7 +418,9 @@
                 </div>
                 <div class="stat-card-pro">
                     <div class="stat-card-pro-top">
-                        <div class="stat-card-pro-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+                        <div class="stat-card-pro-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                        </div>
                         <span class="stat-card-pro-badge neutral" id="badge-pf"></span>
                     </div>
                     <p class="stat-card-pro-label">Profit Factor</p>
@@ -500,35 +428,107 @@
                 </div>
             </div>
 
-            <div class="dash-main-row">
-                <div class="panel dash-panel">
-                    <div class="dash-toolbar">
-                        <div class="dash-toolbar-controls">
-                            <select id="month-select" class="month-select" onchange="renderView()"></select>
-                            <select id="year-select" class="year-select" onchange="renderView()"></select>
-                            <div id="winstreak-counter" class="winstreak-counter">
-                                🔥 Стрік: <span id="winstreak-val">0</span>
+            <!-- 3-COLUMN LAYOUT -->
+            <div class="dash-3col">
+
+                <!-- COL 1: Calendar -->
+                <div class="dash-col dash-col-main">
+                    <div class="panel" style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;">
+                        <div class="dash-toolbar">
+                            <div class="dash-toolbar-controls">
+                                <select id="month-select" class="month-select" onchange="renderView()"></select>
+                                <select id="year-select" class="year-select" onchange="renderView()"></select>
+                                <div id="winstreak-counter" class="winstreak-counter">
+                                    🔥 <span id="winstreak-val">0</span>
+                                </div>
+                            </div>
+                            <div class="dash-toolbar-totals">
+                                <div>Комісія: <span id="total-comm">$0</span></div>
+                                <div>Локейти: <span id="total-locates">$0</span></div>
+                                <div>Місяць: <span id="total-pnl">$0</span></div>
                             </div>
                         </div>
-                        <div class="dash-toolbar-totals">
-                            <div class="total-comm">Комісія: <span id="total-comm">0$</span></div>
-                            <div class="total-locates">Локейти: <span id="total-locates">0$</span></div>
-                            <div class="total-pnl">Підсумок місяця: <span id="total-pnl">0$</span></div>
+                        <div style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;flex:1;display:flex;flex-direction:column;min-height:0;">
+                            <div class="grid" id="calendar-grid" style="min-width:560px;flex:1;align-content:start;"></div>
                         </div>
                     </div>
-                    <div style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;flex-grow:1;display:flex;flex-direction:column;">
-                        <div class="grid" id="calendar-grid" style="min-width:600px;flex-grow:1;align-content:start;"></div>
+                </div>
+
+                <!-- COL 2: Recent trades + Week heatmap -->
+                <div class="dash-col dash-col-recent">
+                    <div class="recent-trades-panel" id="recent-trades-panel" style="flex:1;">
+                        <div class="recent-trades-header">
+                            <h3>Останні угоди</h3>
+                            <button onclick="switchMainTab('trades')" class="recent-trades-link">Всі →</button>
+                        </div>
+                        <div id="recent-trades-list" class="recent-trades-list"></div>
+                    </div>
+
+                    <!-- WEEK HEATMAP placeholder -->
+                    <div class="week-heatmap-panel">
+                        <h4>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                            Тижневий Heatmap
+                        </h4>
+                        <div class="heatmap-grid" id="week-heatmap-grid">
+                            <div class="heatmap-cell flat"><span class="heatmap-day">Пн</span><span class="heatmap-pnl">—</span></div>
+                            <div class="heatmap-cell flat"><span class="heatmap-day">Вт</span><span class="heatmap-pnl">—</span></div>
+                            <div class="heatmap-cell flat"><span class="heatmap-day">Ср</span><span class="heatmap-pnl">—</span></div>
+                            <div class="heatmap-cell flat"><span class="heatmap-day">Чт</span><span class="heatmap-pnl">—</span></div>
+                            <div class="heatmap-cell flat"><span class="heatmap-day">Пт</span><span class="heatmap-pnl">—</span></div>
+                        </div>
+                        <p class="risk-calc-coming-soon">⚡ Підключається автоматично після входу</p>
                     </div>
                 </div>
-                <div class="recent-trades-panel" id="recent-trades-panel">
-                    <div class="recent-trades-header">
-                        <h3>Останні угоди</h3>
-                        <button onclick="switchMainTab('trades')" class="recent-trades-link">Переглянути всі</button>
+
+                <!-- COL 3: Risk Calculator placeholder -->
+                <div class="dash-col dash-col-risk">
+                    <div class="risk-calc-panel">
+                        <h4>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                            Risk Calculator
+                        </h4>
+                        <div class="risk-input-row">
+                            <label>Розмір рахунку ($)</label>
+                            <input type="number" id="risk-account" placeholder="10000" oninput="calcRisk()">
+                        </div>
+                        <div class="risk-input-row">
+                            <label>Ризик на угоду (%)</label>
+                            <input type="number" id="risk-percent" placeholder="1" step="0.1" oninput="calcRisk()">
+                        </div>
+                        <div class="risk-input-row">
+                            <label>Стоп-лосс ($ на акцію)</label>
+                            <input type="number" id="risk-stop" placeholder="0.50" step="0.01" oninput="calcRisk()">
+                        </div>
+                        <div class="risk-divider"></div>
+                        <div class="risk-result">
+                            <span class="risk-result-label">Макс. збиток</span>
+                            <span class="risk-result-value" id="risk-max-loss">—</span>
+                        </div>
+                        <div class="risk-result">
+                            <span class="risk-result-label">Розмір позиції</span>
+                            <span class="risk-result-value" id="risk-position-size">—</span>
+                        </div>
+                        <div class="risk-result">
+                            <span class="risk-result-label">К-ть акцій</span>
+                            <span class="risk-result-value" id="risk-shares">—</span>
+                        </div>
+                        <p class="risk-calc-coming-soon">⚡ Більше функцій в наступному апдейті</p>
                     </div>
-                    <div id="recent-trades-list" class="recent-trades-list"></div>
+
+                    <!-- Quick notes placeholder -->
+                    <div class="risk-calc-panel">
+                        <h4>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            Нотатка дня
+                        </h4>
+                        <textarea id="quick-note" rows="4" placeholder="Швидка нотатка перед сесією..." style="width:100%;background:var(--bg-main);border:1px solid var(--border);color:var(--text-main);border-radius:6px;padding:8px 10px;font-family:inherit;font-size:0.85rem;resize:none;box-sizing:border-box;transition:var(--transition);" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+                        <p class="risk-calc-coming-soon">⚡ Синхронізується з полем "Думки" при збереженні</p>
+                    </div>
                 </div>
-            </div>
-        </div>
+
+            </div><!-- /dash-3col -->
+        </div><!-- /view-dash -->
 
         <div id="view-stats" class="view-content">
             <!-- Горизонтальна панель фільтрів -->
@@ -1186,6 +1186,49 @@
     });
     </script>
     <script src="lw-charts.js"></script>
-    <script type="module" src="js/main.js"></script>  
+    <script type="module" src="js/main.js"></script>
+
+    <!-- FAB -->
+    <button class="quick-trade-fab" onclick="toggleRightSidebar()" title="Додати запис">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+
+    <!-- Risk Calculator JS -->
+    <script>
+    function calcRisk() {
+        const account = parseFloat(document.getElementById('risk-account')?.value) || 0;
+        const percent = parseFloat(document.getElementById('risk-percent')?.value) || 0;
+        const stop    = parseFloat(document.getElementById('risk-stop')?.value)    || 0;
+
+        const maxLoss = account && percent ? account * percent / 100 : null;
+        const shares  = maxLoss && stop ? Math.floor(maxLoss / stop) : null;
+
+        const fmtUSD = v => v != null ? '
+</html>
+ + v.toFixed(2) : '—';
+        const fmtShares = v => v != null ? v.toLocaleString() + ' акц.' : '—';
+
+        const el = id => document.getElementById(id);
+        if (el('risk-max-loss'))    { el('risk-max-loss').textContent    = fmtUSD(maxLoss); el('risk-max-loss').style.color = maxLoss ? 'var(--loss)' : ''; }
+        if (el('risk-shares'))      { el('risk-shares').textContent      = fmtShares(shares); }
+        if (el('risk-position-size')){ el('risk-position-size').textContent = shares != null ? fmtShares(shares) : '—'; }
+    }
+
+    // Market badge status (checks US market hours UTC)
+    (function updateMarketBadge() {
+        const badge = document.getElementById('market-badge');
+        const text  = document.getElementById('market-badge-text');
+        if (!badge || !text) return;
+        const now = new Date();
+        const utcH = now.getUTCHours();
+        const utcM = now.getUTCMinutes();
+        const utcTotal = utcH * 60 + utcM;
+        const day = now.getUTCDay(); // 0=Sun, 6=Sat
+        const isWeekday = day >= 1 && day <= 5;
+        const isOpen = isWeekday && utcTotal >= 870 && utcTotal < 1290; // 14:30–21:00 UTC
+        badge.className = 'market-badge ' + (isOpen ? 'open' : 'closed');
+        text.textContent = isOpen ? 'Ринок відкрито' : 'Ринок закрито';
+    })();
+    </script>
 </body>
 </html>

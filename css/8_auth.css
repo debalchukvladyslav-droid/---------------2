@@ -1,12 +1,14 @@
+/* =========================================
+   AUTH — Login / Register overlay
+   ========================================= */
+
 .auth-overlay {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     z-index: 99999;
     display: flex;
     justify-content: center;
@@ -15,105 +17,103 @@
 }
 
 .auth-card {
-    background: var(--bg-panel);
-    padding: 40px;
+    background: var(--card);
+    padding: 40px 36px;
     border-radius: var(--radius-xl);
     border: 1px solid var(--border);
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.03);
     width: 380px;
     text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Subtle accent glow at top */
+.auth-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
 }
 
 .auth-title {
+    color: var(--foreground);
+    margin-bottom: 4px;
+    font-size: 1.5rem;
+    font-family: var(--font-head);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+}
+
+/* Accent dot in title */
+.auth-title::after {
+    content: '.';
     color: var(--accent);
-    margin-bottom: 5px;
 }
 
 .auth-subtitle {
     color: var(--text-muted);
-    font-size: 0.9rem;
-    margin-bottom: 20px;
+    font-size: 0.82rem;
+    margin-bottom: 24px;
+    font-weight: 500;
 }
 
 .auth-input {
     width: 100%;
-    padding: 12px;
+    padding: 11px 14px;
     margin-bottom: 10px;
     background: var(--bg-main);
     border: 1px solid var(--border);
     color: var(--text-main);
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     box-sizing: border-box;
+    font-family: inherit;
+    font-size: 0.88rem;
+    transition: var(--transition);
 }
+.auth-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,229,160,0.1); outline: none; }
+.auth-input::placeholder { color: var(--text-muted); opacity: 0.5; }
 
-.auth-input:last-of-type {
-    margin-bottom: 15px;
-}
+.auth-input:last-of-type { margin-bottom: 14px; }
 
-.register-fields {
-    display: none;
-}
+.register-fields { display: none; }
 
 .auth-error {
     color: var(--loss);
-    font-size: 0.85rem;
-    margin-bottom: 15px;
+    font-size: 0.8rem;
+    margin-bottom: 12px;
     display: none;
+    background: rgba(229,62,62,0.08);
+    border: 1px solid rgba(229,62,62,0.2);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    text-align: left;
 }
 
 .auth-links {
     color: var(--text-muted);
-    font-size: 0.85rem;
-    margin-bottom: 8px;
+    font-size: 0.8rem;
+    margin-top: 14px;
+    margin-bottom: 6px;
 }
 
 .auth-link {
     color: var(--accent);
     cursor: pointer;
-    font-weight: bold;
+    font-weight: 600;
+    transition: opacity 0.15s;
 }
+.auth-link:hover { opacity: 0.8; }
 
-.auth-forgot {
-    color: var(--text-muted);
-    font-size: 0.85rem;
-}
+.auth-forgot { color: var(--text-muted); font-size: 0.8rem; }
 
-.reset-step {
-    display: none;
-    margin-top: 15px;
-    text-align: left;
-}
+.reset-step { display: none; margin-top: 14px; text-align: left; }
+.reset-text { color: var(--text-muted); font-size: 0.82rem; margin-bottom: 10px; line-height: 1.5; }
+.reset-code { letter-spacing: 8px; font-size: 1.3rem; text-align: center; font-family: var(--font-mono); }
+.reset-back { text-align: center; margin-top: 10px; }
+.reset-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
 
-.reset-text {
-    color: var(--text-muted);
-    font-size: 0.85rem;
-    margin-bottom: 10px;
-}
-
-.reset-code {
-    letter-spacing: 6px;
-    font-size: 1.2rem;
-    text-align: center;
-}
-
-.reset-back {
-    text-align: center;
-}
-
-.reset-actions {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-/* === РњРћР‘Р†Р›Р¬РќРђ Р’Р•Р РЎР†РЇ (РђР”РђРџРўРР’РќР†РЎРўР¬) === */
-.mobile-only { display: none; }
-.form-sidebar-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100001; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
-.form-sidebar-backdrop.visible { display: block; opacity: 1; pointer-events: auto; }
-
-@media (min-width: 1025px) {
-    .form-sidebar-backdrop { display: none !important; pointer-events: none !important; }
-}
-
-/* === BOTTOM NAVIGATION BAR (С‚С–Р»СЊРєРё РјРѕР±С–Р»СЊРЅР°) === */
+/* === MOBILE === */
+.mobile-close-sidebar { display: none; text-align: right; padding: 14px 14px 4px; font-size: 1.4rem; cursor: pointer; color: var(--text-muted); }
 .mobile-bottom-nav { display: none; }

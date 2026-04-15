@@ -1,17 +1,21 @@
+/* =========================================
+   ANIMATIONS
+   ========================================= */
+
 @keyframes fadeIn {
     from { opacity: 0; }
     to   { opacity: 1; }
 }
 @keyframes fadeInUp {
-    from { opacity: 0; transform: translateY(8px); }
+    from { opacity: 0; transform: translateY(10px); }
     to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes fadeInDown {
-    from { opacity: 0; transform: translateY(-8px); }
+    from { opacity: 0; transform: translateY(-10px); }
     to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes fadeInSlide {
-    from { opacity: 0; transform: translateY(6px); }
+    from { opacity: 0; transform: translateY(8px); }
     to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes slideInRight {
@@ -23,7 +27,7 @@
     to   { opacity: 1; transform: translateX(0); }
 }
 @keyframes scaleIn {
-    from { opacity: 0; transform: scale(0.95); }
+    from { opacity: 0; transform: scale(0.96); }
     to   { opacity: 1; transform: scale(1); }
 }
 @keyframes shimmer {
@@ -31,12 +35,26 @@
     100% { background-position:  200% 0; }
 }
 @keyframes pulse-glow {
-    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 40%, transparent); }
-    50%       { box-shadow: 0 0 0 6px color-mix(in srgb, var(--primary) 0%, transparent); }
+    0%, 100% { box-shadow: 0 0 0 0 rgba(0, 229, 160, 0.35); }
+    50%       { box-shadow: 0 0 0 6px rgba(0, 229, 160, 0); }
 }
 @keyframes spin {
     from { transform: rotate(0deg); }
     to   { transform: rotate(360deg); }
 }
 
-/* === AI Р§РђРў (TELEGRAM STYLE + Р¤Р›РђР–РћРљ) === */
+/* Tick / flash animations for live data */
+@keyframes flashGreen {
+    0%   { color: var(--profit); }
+    100% { color: inherit; }
+}
+@keyframes flashRed {
+    0%   { color: var(--loss); }
+    100% { color: inherit; }
+}
+
+/* AI Chat streaming */
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0; }
+}
