@@ -210,8 +210,8 @@
     letter-spacing: 0.02em;
 }
 .header-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(0,229,160,0.05); }
-.header-btn.primary { background: var(--accent); color: var(--primary-foreground); border-color: var(--accent); }
-.header-btn.primary:hover { background: var(--accent-hover); box-shadow: 0 2px 12px rgba(0,229,160,0.25); }
+.header-btn.primary { background: var(--accent); color: var(--primary-foreground); border-color: var(--accent); font-weight: 700; letter-spacing: 0.03em; }
+.header-btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); box-shadow: 0 2px 16px color-mix(in srgb, var(--accent) 35%, transparent); }
 
 /* === BRAND LOGO === */
 .sidebar-brand {
@@ -250,9 +250,9 @@
     padding: 9px 12px; border-radius: 7px; border: none;
     background: transparent; color: var(--text-muted);
     font-size: 0.8rem; font-weight: 500; cursor: pointer;
-    transition: background 0.18s ease, color 0.18s ease; font-family: inherit; white-space: nowrap;
+    transition: color 0.18s ease; font-family: inherit; white-space: nowrap;
 }
-.sidebar-collapse-btn:hover { background: var(--sidebar-accent-bg); color: var(--foreground); }
+.sidebar-collapse-btn:hover { background: transparent; color: var(--foreground); }
 .app-sidebar.collapsed .sidebar-collapse-btn-label { display: none; }
 
 /* Nav scroll area */

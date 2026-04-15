@@ -1045,7 +1045,7 @@ export function renderStatsTab() {
     
     const ctxPie = document.getElementById('winLossChart').getContext('2d');
     if (state.winLossChartInstance) state.winLossChartInstance.destroy();
-    state.winLossChartInstance = new Chart(ctxPie, { type: 'doughnut', data: { labels: ['Плюс', 'Мінус', 'Нуль'], datasets: [{ data: [winDays, lossDays, beDays], backgroundColor: [cssGreen, cssRed, '#94a3b8'], borderColor: ['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.1)', 'rgba(0,0,0,0.1)'], borderWidth: 2 }] }, options: { animation: false, responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: cssText, boxWidth: 12, boxHeight: 12, padding: 10, font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed} дн.` } } } } });
+    state.winLossChartInstance = new Chart(ctxPie, { type: 'doughnut', data: { labels: ['Плюс', 'Мінус', 'Нуль'], datasets: [{ data: [winDays, lossDays, beDays], backgroundColor: [cssGreen, cssRed, '#94a3b8'], borderColor: [cssBgPanel, cssBgPanel, cssBgPanel], borderWidth: 2 }] }, options: { animation: false, responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: cssText, boxWidth: 12, boxHeight: 12, padding: 10, font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed} дн.` } } } } });
 
     renderMistakeChart(filteredEntries, cssRed, cssText, cssBgPanel);
 }

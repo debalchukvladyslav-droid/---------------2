@@ -441,38 +441,38 @@
     align-items: center;
     flex-shrink: 0;
     flex-wrap: wrap;
-    gap: 8px;
-    padding: 10px 14px;
-    background: var(--bg-main);
+    gap: 6px;
+    padding: 5px 10px;
+    background: transparent;
     border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    margin-bottom: 14px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 10px;
 }
 .dash-toolbar-controls {
     display: flex;
     align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
+    gap: 6px;
 }
 .dash-toolbar-totals {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     flex-wrap: wrap;
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     color: var(--text-muted);
 }
 .dash-toolbar-totals span { color: var(--text-main); font-weight: 600; font-family: var(--font-mono); }
 .month-select, .year-select {
-    background: var(--bg-panel);
+    background: transparent;
     border: 1px solid var(--border);
     color: var(--text-main);
-    border-radius: 6px;
-    padding: 5px 8px;
-    font-size: 0.82rem;
+    border-radius: 5px;
+    padding: 3px 6px;
+    font-size: 0.78rem;
     font-family: inherit;
     cursor: pointer;
-    transition: var(--transition);
+    transition: border-color 0.15s;
+    height: 26px;
 }
 .month-select:hover, .year-select:hover { border-color: var(--accent); }
 

@@ -1,3 +1,14 @@
+@media (min-width: 1025px) {
+    /* === КРОК 1: Мобільна навігація повністю прихована на ПК === */
+    .mobile-tabs-wrapper,
+    .mobile-bottom-nav,
+    .mobile-more-menu,
+    #mobile-more-menu {
+        display: none !important;
+        pointer-events: none;
+    }
+}
+
 @media (max-width: 1024px) {
     body { padding: 0; gap: 0; height: auto; min-height: 100dvh; overflow-x: hidden; overflow-y: auto; flex-direction: column; -webkit-overflow-scrolling: touch; }
 
@@ -100,13 +111,22 @@
     .mobile-more-item {
         display: flex; flex-direction: column; align-items: center; justify-content: center;
         gap: 4px; padding: 10px 4px;
-        background: var(--bg-main); border: 1px solid var(--border); border-radius: var(--radius-md);
-        color: var(--text-muted); font-family: inherit; font-size: 0.7rem; font-weight: 600;
+        background: var(--bg-main);
+        color: var(--text-muted);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        font-family: inherit; font-size: 0.7rem; font-weight: 600;
         cursor: pointer; transition: var(--transition);
         -webkit-tap-highlight-color: transparent;
     }
     .mobile-more-item span:first-child { font-size: 1.3rem; line-height: 1; }
-    .mobile-more-item:active, .mobile-more-item.active { background: color-mix(in srgb, var(--accent) 15%, transparent); border-color: var(--accent); color: var(--accent); }
+    .mobile-more-item:hover,
+    .mobile-more-item:active,
+    .mobile-more-item.active {
+        background: color-mix(in srgb, var(--accent) 15%, transparent);
+        color: var(--accent);
+        border-color: var(--accent);
+    }
 
     .admin-tab-mobile {
         color: #f59e0b !important;

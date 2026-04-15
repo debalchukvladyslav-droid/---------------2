@@ -54,6 +54,28 @@
 .trade-pill.loss { border-color: rgba(229,62,62,0.3); }
 .trade-pill.loss.active { background: var(--loss); border-color: var(--loss); box-shadow: 0 2px 8px rgba(229,62,62,0.25); }
 
+/* === MOBILE MORE MENU (базовий стан — завжди схований) === */
+.mobile-more-menu {
+    display: none;
+    position: fixed;
+    bottom: 56px;
+    left: 0;
+    right: 0;
+    z-index: 199;
+    background: var(--bg-panel);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.4);
+    padding: 8px;
+}
+.mobile-more-menu.open {
+    display: block;
+}
+.mobile-more-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+}
+
 /* Image preview zoom */
 .image-preview { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 99999; display: none; align-items: center; justify-content: center; cursor: zoom-out; }
 

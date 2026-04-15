@@ -474,19 +474,7 @@ body[data-theme="light"] .sidebar-nav-item.active .ti-icon { background-color: v
 }
 #view-dash.active { display: flex; }
 
-/* dash-toolbar в view-dash */
-#view-dash .dash-toolbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-shrink: 0;
-    flex-wrap: wrap;
-    gap: 10px;
-    padding: 10px 16px;
-    background: color-mix(in srgb, var(--bg-panel) 60%, transparent);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-}
+/* dash-toolbar handled in 13_fixes.css */
 
 /* === ADD TRADE DRAWER (stylePro) === */
 .trade-drawer-backdrop {
