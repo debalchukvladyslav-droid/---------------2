@@ -4,7 +4,7 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 export const SUPABASE_URL = 'https://gijarvlerztfggxhuvow.supabase.co';
 export const SUPABASE_ANON_KEY = 'sb_publishable_4gU0201mMkinUqwH-4SkWA_eSoNqew6';
 
-/** Ім’я бота без @ (з @BotFather). Потрібно для віджета «Увійти через Telegram». */
+/** Ім’я бота без @ — лише довідково; вхід іде через Edge (getMe), не через віджет. */
 export const TELEGRAM_BOT_USERNAME = 'traderjournalloginbot';
 
 /** Edge Function: після `supabase functions deploy telegram-auth` */

@@ -1,5 +1,5 @@
 // === js/auth.js ===
-import { supabase, TELEGRAM_BOT_USERNAME, TELEGRAM_AUTH_FN, SUPABASE_ANON_KEY } from './supabase.js';
+import { supabase, TELEGRAM_AUTH_FN, SUPABASE_ANON_KEY } from './supabase.js';
 import { state } from './state.js';
 import { normalizeDayEntry } from './data_utils.js';
 
@@ -210,41 +210,41 @@ export async function maybeFinishTelegramRedirect() {
 }
 
 /**
- * Режим «Redirect to URL» (див. Telegram Login Widget): перехід у тій самій вкладці
- * на авторизацію Telegram, потім повернення на сайт з GET-параметрами — без окремого вікна з колбеком.
- * Відкриття саме додатку Telegram на ПК/телефоні контролює ОС/браузер (tg:// / Universal Links); ми лише прибираємо popup-флоу.
+ * Без iframe-віджета Telegram (він завжди відкриває oauth у popup). Отримуємо з Edge той самий
+ * URL, що й у popup (`oauth.telegram.org/auth?...`), і переходимо у поточній вкладці — частіше
+ * ОС пропонує відкрити Telegram Desktop / застосунок. Потрібен оновлений деплой `telegram-auth` з GET action=oauth.
  */
 export async function signInWithTelegram() {
     try {
-        const bot = String(TELEGRAM_BOT_USERNAME || '').trim().replace(/^@/, '');
-        if (!bot) {
-            showError(
-                'Telegram: у js/supabase.js задайте TELEGRAM_BOT_USERNAME (ім’я бота без @) і задеплойте Edge Function telegram-auth + secret TELEGRAM_BOT_TOKEN.',
-            );
-            return;
-        }
-        const mount = document.getElementById('telegram-widget-mount');
-        if (!mount) {
-            showError('Немає контейнера #telegram-widget-mount у index.html');
-            return;
-        }
         showError('');
-        mount.innerHTML = '';
-        mount.style.display = 'block';
-
         const returnUrl = new URL(window.location.href);
         returnUrl.search = '';
         returnUrl.hash = '';
-        const authUrl = returnUrl.href;
+        const returnHref = returnUrl.href;
 
-        const scr = document.createElement('script');
-        scr.src = 'https://telegram.org/js/telegram-widget.js?22';
-        scr.async = true;
-        scr.setAttribute('data-telegram-login', bot);
-        scr.setAttribute('data-size', 'large');
-        scr.setAttribute('data-auth-url', authUrl);
-        scr.setAttribute('data-request-access', 'write');
-        mount.appendChild(scr);
+        const fn = new URL(TELEGRAM_AUTH_FN);
+        fn.searchParams.set('action', 'oauth');
+        fn.searchParams.set('return_to', returnHref);
+
+        const r = await fetch(fn.toString(), {
+            method: 'GET',
+            headers: {
+                Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+                apikey: SUPABASE_ANON_KEY,
+            },
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) {
+            throw new Error(
+                j.error ||
+                    j.message ||
+                    `HTTP ${r.status} (оновіть Edge Function telegram-auth і secret TELEGRAM_BOT_TOKEN)`,
+            );
+        }
+        if (!j.url || typeof j.url !== 'string') {
+            throw new Error('Некоректна відповідь: немає url. Задеплойте останню версію telegram-auth.');
+        }
+        window.location.assign(j.url);
     } catch (e) {
         showError(mapAuthError(e, 'Telegram'));
     }
@@ -343,11 +343,6 @@ export function toggleAuthMode() {
     document.getElementById('register-fields').style.display = state.isRegisterMode ? 'block' : 'none';
     const tgBtn = document.getElementById('btn-auth-telegram');
     if (tgBtn) tgBtn.style.display = state.isRegisterMode ? 'none' : '';
-    const tgMount = document.getElementById('telegram-widget-mount');
-    if (tgMount) {
-        tgMount.innerHTML = '';
-        tgMount.style.display = 'none';
-    }
 
     if (state.isRegisterMode) {
         submitBtn.innerText = 'Зареєструватись';
@@ -549,11 +544,6 @@ export function showResetStep(step) {
     document.getElementById('auth-pass').style.display = step === 0 ? 'block' : 'none';
     const tgBtn = document.getElementById('btn-auth-telegram');
     if (tgBtn) tgBtn.style.display = step === 0 && !state.isRegisterMode ? '' : 'none';
-    const tgMount = document.getElementById('telegram-widget-mount');
-    if (tgMount && (step !== 0 || state.isRegisterMode)) {
-        tgMount.innerHTML = '';
-        tgMount.style.display = 'none';
-    }
     if (step === 1) {
         const nickInput = document.getElementById('reset-nick');
         if (nickInput) nickInput.focus();

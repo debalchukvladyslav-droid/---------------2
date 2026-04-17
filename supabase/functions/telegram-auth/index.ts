@@ -1,5 +1,7 @@
 /**
- * Telegram Login Widget → перевірка hash → Supabase Auth (email+password, сесія для клієнта).
+ * Telegram Login:
+ *  - GET ?action=oauth&return_to=… — повертає URL на oauth.telegram.org/auth (повноекранний вхід, без iframe/popup віджета).
+ *  - POST JSON — перевірка hash → Supabase Auth (email+password, сесія для клієнта).
  *
  * Секрети (Dashboard → Edge Functions → Secrets або `supabase secrets set`):
  *   TELEGRAM_BOT_TOKEN — токен бота з @BotFather
@@ -15,8 +17,20 @@ function cors(origin: string | null) {
     return {
         'Access-Control-Allow-Origin': allow,
         'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     };
+}
+
+function callerPageOrigin(req: Request): string | null {
+    const o = req.headers.get('Origin')?.trim();
+    if (o && o !== 'null') return o;
+    const ref = req.headers.get('Referer')?.trim();
+    if (!ref) return null;
+    try {
+        return new URL(ref).origin;
+    } catch {
+        return null;
+    }
 }
 
 function strRecord(raw: Record<string, unknown>): Record<string, string> {
@@ -70,14 +84,87 @@ Deno.serve(async (req) => {
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: c });
     }
+
+    const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN')?.trim();
+
+    if (req.method === 'GET') {
+        const u = new URL(req.url);
+        if (u.searchParams.get('action') !== 'oauth') {
+            return new Response(JSON.stringify({ error: 'Use GET ?action=oauth&return_to=… or POST for token exchange' }), {
+                status: 404,
+                headers: { ...c, 'Content-Type': 'application/json' },
+            });
+        }
+        if (!botToken) {
+            return new Response(JSON.stringify({ error: 'TELEGRAM_BOT_TOKEN missing' }), {
+                status: 500,
+                headers: { ...c, 'Content-Type': 'application/json' },
+            });
+        }
+        const returnTo = u.searchParams.get('return_to');
+        if (!returnTo) {
+            return new Response(JSON.stringify({ error: 'return_to required' }), {
+                status: 400,
+                headers: { ...c, 'Content-Type': 'application/json' },
+            });
+        }
+        let returnUrl: URL;
+        try {
+            returnUrl = new URL(returnTo);
+        } catch {
+            return new Response(JSON.stringify({ error: 'Invalid return_to' }), {
+                status: 400,
+                headers: { ...c, 'Content-Type': 'application/json' },
+            });
+        }
+        if (returnUrl.protocol !== 'https:' && returnUrl.protocol !== 'http:') {
+            return new Response(JSON.stringify({ error: 'Invalid return_to scheme' }), {
+                status: 400,
+                headers: { ...c, 'Content-Type': 'application/json' },
+            });
+        }
+        const pageOrigin = callerPageOrigin(req);
+        if (!pageOrigin) {
+            return new Response(JSON.stringify({ error: 'Origin/Referer required' }), {
+                status: 403,
+                headers: { ...c, 'Content-Type': 'application/json' },
+            });
+        }
+        if (returnUrl.origin !== pageOrigin) {
+            return new Response(JSON.stringify({ error: 'return_to must match site origin' }), {
+                status: 403,
+                headers: { ...c, 'Content-Type': 'application/json' },
+            });
+        }
+
+        const meRes = await fetch(`https://api.telegram.org/bot${botToken}/getMe`);
+        const meJson = await meRes.json();
+        if (!meJson?.ok || !meJson?.result?.id) {
+            return new Response(JSON.stringify({ error: 'Telegram getMe failed' }), {
+                status: 502,
+                headers: { ...c, 'Content-Type': 'application/json' },
+            });
+        }
+        const botId = meJson.result.id as number;
+        const oauthBase = 'https://oauth.telegram.org';
+        const authUrl =
+            `${oauthBase}/auth?bot_id=${encodeURIComponent(String(botId))}` +
+            `&origin=${encodeURIComponent(returnUrl.origin)}` +
+            `&request_access=write` +
+            `&return_to=${encodeURIComponent(returnTo)}`;
+
+        return new Response(JSON.stringify({ url: authUrl }), {
+            status: 200,
+            headers: { ...c, 'Content-Type': 'application/json' },
+        });
+    }
+
     if (req.method !== 'POST') {
         return new Response(JSON.stringify({ error: 'Method not allowed' }), {
             status: 405,
             headers: { ...c, 'Content-Type': 'application/json' },
         });
     }
-
-    const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN')?.trim();
     const supabaseUrl = Deno.env.get('SUPABASE_URL')?.trim();
     const serviceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')?.trim();
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')?.trim();
