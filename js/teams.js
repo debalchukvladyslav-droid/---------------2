@@ -33,10 +33,72 @@ function profileDisplayName(profile) {
     return profile?.nick || '';
 }
 
+function profileInitials(profile, fallbackNick) {
+    if (profile?.first_name && profile?.last_name) {
+        return (profile.first_name[0] + profile.last_name[0]).toUpperCase();
+    }
+    const n = profile?.nick || fallbackNick || '?';
+    return n.slice(0, 2).toUpperCase();
+}
+
+function profileSettings(profile) {
+    return profile?.settings && typeof profile.settings === 'object' ? profile.settings : {};
+}
+
+/** Аватар у списку команди: URL, емодзі або ініціали. */
+function appendTeamAvatar(parent, profile, fallbackNick, { loading = false, mentor = false } = {}) {
+    const baseClass = 'team-member-avatar' + (mentor ? ' is-mentor' : '');
+    if (loading) {
+        const sp = document.createElement('span');
+        sp.className = baseClass;
+        sp.textContent = '…';
+        parent.appendChild(sp);
+        return;
+    }
+    const st = profileSettings(profile);
+    const url = (st.avatar_url || '').trim();
+    const emoji = (st.avatar_emoji || '').trim().slice(0, 8);
+    if (/^https?:\/\//i.test(url)) {
+        const img = document.createElement('img');
+        img.className = baseClass + ' team-member-avatar-img';
+        img.src = url;
+        img.alt = '';
+        img.referrerPolicy = 'no-referrer';
+        img.loading = 'lazy';
+        img.addEventListener('error', () => {
+            img.replaceWith(makeTeamAvatarFallback(profile, fallbackNick, baseClass));
+        });
+        parent.appendChild(img);
+        return;
+    }
+    if (emoji) {
+        const sp = document.createElement('span');
+        sp.className = baseClass + ' team-member-avatar-emoji';
+        sp.textContent = emoji;
+        parent.appendChild(sp);
+        return;
+    }
+    const sp = document.createElement('span');
+    sp.className = baseClass;
+    sp.textContent = profileInitials(profile, fallbackNick);
+    parent.appendChild(sp);
+}
+
+function makeTeamAvatarFallback(profile, fallbackNick, baseClass) {
+    const sp = document.createElement('span');
+    sp.className = baseClass;
+    sp.textContent = profileInitials(profile, fallbackNick);
+    return sp;
+}
+
+function isProfileMentor(profile) {
+    return !!(profile?.mentor_enabled || profile?.role === 'mentor');
+}
+
 async function fetchProfiles() {
     const { data, error } = await supabase
         .from('profiles')
-        .select('id, nick, first_name, last_name, team, mentor_enabled, email')
+        .select('id, nick, first_name, last_name, team, mentor_enabled, email, role, settings')
         .order('team', { ascending: true })
         .order('nick', { ascending: true });
 
@@ -272,7 +334,6 @@ function _renderTeamSidebarDOM(container) {
     const myNick = state.USER_DOC_NAME ? state.USER_DOC_NAME.replace('_stats', '') : '';
     const isMeActive = state.CURRENT_VIEWED_USER === state.USER_DOC_NAME;
     const myProfile = state._teamProfiles?.[myNick];
-    const myIcon = myProfile?.mentor_enabled ? '👑' : '👤';
     const myDisplayName = myProfile ? profileDisplayName(myProfile) : myNick;
     const loadingNick = _isSwitching ? state.CURRENT_VIEWED_USER.replace('_stats', '') : null;
 
@@ -291,34 +352,63 @@ function _renderTeamSidebarDOM(container) {
         } else {
             myBtn.onclick = () => switchUser(myNick);
         }
-        const myIconSpan = document.createElement('span');
-        myIconSpan.className = 'team-member-icon';
-        myIconSpan.textContent = isLoading ? '⏳' : myIcon;
-        const myNameSpan = document.createElement('span');
-        myNameSpan.textContent = `🏠 ${myDisplayName}`;
-        myBtn.appendChild(myIconSpan);
-        myBtn.appendChild(myNameSpan);
+        if (isLoading) {
+            appendTeamAvatar(myBtn, myProfile, myNick, { loading: true, mentor: isProfileMentor(myProfile) });
+        } else {
+            appendTeamAvatar(myBtn, myProfile, myNick, { mentor: isProfileMentor(myProfile) });
+        }
+        const myText = document.createElement('div');
+        myText.className = 'team-member-text';
+        const myTitle = document.createElement('span');
+        myTitle.className = 'team-member-title';
+        myTitle.textContent = myDisplayName;
+        const myBadges = document.createElement('div');
+        myBadges.className = 'team-member-badges';
+        const bHome = document.createElement('span');
+        bHome.className = 'team-badge team-badge-home';
+        bHome.textContent = 'Я';
+        myBadges.appendChild(bHome);
+        if (isProfileMentor(myProfile)) {
+            const bM = document.createElement('span');
+            bM.className = 'team-badge team-badge-mentor';
+            bM.textContent = 'Ментор';
+            myBadges.appendChild(bM);
+        }
+        myText.appendChild(myTitle);
+        myText.appendChild(myBadges);
+        myBtn.appendChild(myText);
         mySection.appendChild(myBtn);
         container.appendChild(mySection);
     }
 
     const seenInRender = new Set([myNick]);
-    Object.keys(state.TEAM_GROUPS).forEach(group => {
+    Object.keys(state.TEAM_GROUPS).sort((a, b) => a.localeCompare(b, 'uk')).forEach((group) => {
         const groupTitle = document.createElement('div');
         groupTitle.className = 'team-group-title';
-        groupTitle.textContent = `📦 ${group}`;
+        groupTitle.textContent = group;
         container.appendChild(groupTitle);
 
-        (state.TEAM_GROUPS[group] || []).forEach(trader => {
+        const members = [...(state.TEAM_GROUPS[group] || [])];
+        members.sort((a, b) => {
+            const na = extractNick(a);
+            const nb = extractNick(b);
+            const pa = state._teamProfiles?.[na];
+            const pb = state._teamProfiles?.[nb];
+            const ma = isProfileMentor(pa);
+            const mb = isProfileMentor(pb);
+            if (ma !== mb) return ma ? -1 : 1;
+            return String(a).localeCompare(String(b), 'uk');
+        });
+
+        members.forEach((trader) => {
             const cleanNick = extractNick(trader);
             if (seenInRender.has(cleanNick)) return;
             seenInRender.add(cleanNick);
 
             const profile = state._teamProfiles?.[cleanNick];
-            const isMentor = profile?.mentor_enabled === true;
+            const isMentor = isProfileMentor(profile);
             const isActive = state.CURRENT_VIEWED_USER === `${cleanNick}_stats`;
             const isLoading = _isSwitching && loadingNick === cleanNick;
-            const icon = isLoading ? '⏳' : (isMentor ? '👑' : '👤');
             const displayName = profile ? profileDisplayName(profile) : trader;
 
             const memberDiv = document.createElement('div');
@@ -331,16 +421,29 @@ function _renderTeamSidebarDOM(container) {
                 memberDiv.onclick = () => switchUser(cleanNick);
             }
 
-            const iconSpan = document.createElement('span');
-            iconSpan.className = 'team-member-icon';
-            iconSpan.textContent = icon;
+            if (isLoading) {
+                appendTeamAvatar(memberDiv, profile, cleanNick, { loading: true, mentor: isMentor });
+            } else {
+                appendTeamAvatar(memberDiv, profile, cleanNick, { mentor: isMentor });
+            }
 
-            const nameSpan = document.createElement('span');
-            nameSpan.className = 'team-member-name';
-            nameSpan.textContent = displayName;
+            const textWrap = document.createElement('div');
+            textWrap.className = 'team-member-text';
+            const title = document.createElement('span');
+            title.className = 'team-member-title';
+            title.textContent = displayName;
+            textWrap.appendChild(title);
+            if (isMentor) {
+                const badges = document.createElement('div');
+                badges.className = 'team-member-badges';
+                const bm = document.createElement('span');
+                bm.className = 'team-badge team-badge-mentor';
+                bm.textContent = 'Ментор';
+                badges.appendChild(bm);
+                textWrap.appendChild(badges);
+            }
 
-            memberDiv.appendChild(iconSpan);
-            memberDiv.appendChild(nameSpan);
+            memberDiv.appendChild(textWrap);
             container.appendChild(memberDiv);
         });
     });

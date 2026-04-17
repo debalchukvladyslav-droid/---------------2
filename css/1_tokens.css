@@ -80,7 +80,7 @@
     --shadow-sm:   0 1px 3px rgba(0,0,0,0.5);
     --shadow-md:   0 4px 16px rgba(0,0,0,0.5);
     --shadow-lg:   0 12px 40px rgba(0,0,0,0.6);
-    --shadow-glow: 0 0 24px rgba(0, 229, 160, 0.15);
+    --shadow-glow: 0 0 24px color-mix(in srgb, var(--primary) 22%, transparent);
 
     /* === RADIUS === */
     --radius-sm: 6px;
@@ -97,35 +97,35 @@
     --transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease;
 
     /* AI */
-    --ai-bg:     rgba(0, 229, 160, 0.05);
-    --ai-border: rgba(0, 229, 160, 0.3);
+    --ai-bg:     color-mix(in srgb, var(--primary) 5%, transparent);
+    --ai-border: color-mix(in srgb, var(--primary) 30%, transparent);
 }
 
 /* ===== LIGHT THEME ===== */
 body[data-theme="light"] {
-    --background:           #f8fafc;
+    --background:           #f3f5f9;
     --foreground:           #0f172a;
     --card:                 #ffffff;
     --card-foreground:      #0f172a;
     --primary:              #00966a;
     --primary-foreground:   #ffffff;
-    --secondary:            #f1f5f9;
+    --secondary:            #eef2f7;
     --secondary-foreground: #475569;
-    --muted:                #f1f5f9;
+    --muted:                #eef2f7;
     --muted-foreground:     #64748b;
     --popover:              #ffffff;
     --popover-foreground:   #0f172a;
-    --input:                #f1f5f9;
+    --input:                #eef2f7;
     --ring:                 #00966a;
     --sidebar:              #ffffff;
     --sidebar-bg:           #ffffff;
     --sidebar-border-color: #e2e8f0;
     --sidebar-accent-bg:    #f0fdf9;
-    --border:               #e2e8f0;
-    --bg-color:             #f8fafc;
-    --bg-main:              #f8fafc;
+    --border:               #d1d9e6;
+    --bg-color:             #f3f5f9;
+    --bg-main:              #f3f5f9;
     --bg-panel:             #ffffff;
-    --bg-hover:             #f1f5f9;
+    --bg-hover:             #e8ecf3;
     --text-primary:         #0f172a;
     --text-secondary:       #64748b;
     --text-main:            #0f172a;
@@ -225,6 +225,20 @@ body[data-theme="dracula"] {
     --shadow-glow:          0 0 24px rgba(189,147,249,0.15);
     --ai-bg:                rgba(189,147,249,0.06);
     --ai-border:            rgba(189,147,249,0.25);
+}
+
+/* Акцентні тіні та заливки — слідують за --accent (у т.ч. власна тема) */
+body[data-theme] {
+    --accent-glow-05: color-mix(in srgb, var(--accent) 5%, transparent);
+    --accent-glow-08: color-mix(in srgb, var(--accent) 8%, transparent);
+    --accent-glow-12: color-mix(in srgb, var(--accent) 12%, transparent);
+    --accent-glow-18: color-mix(in srgb, var(--accent) 18%, transparent);
+    --accent-glow-25: color-mix(in srgb, var(--accent) 25%, transparent);
+    --accent-glow-30: color-mix(in srgb, var(--accent) 30%, transparent);
+    --shadow-accent-sm: 0 2px 10px color-mix(in srgb, var(--accent) 22%, transparent);
+    --shadow-accent-md: 0 4px 18px color-mix(in srgb, var(--accent) 28%, transparent);
+    --shadow-accent-lg: 0 8px 28px color-mix(in srgb, var(--accent) 34%, transparent);
+    --shadow-glow: 0 0 24px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 /* Scrollbars */

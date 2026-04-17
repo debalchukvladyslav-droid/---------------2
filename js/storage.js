@@ -4,7 +4,7 @@ import { state } from './state.js';
 import { normalizeAppData, normalizeDayEntry, getDefaultAppData } from './data_utils.js';
 import { loadPlaybook } from './playbook.js';
 import { clearStatsCache } from './stats.js';
-import { uploadToSupabaseStorage, deleteFromSupabaseStorage } from './supabase_storage.js';
+import { uploadToSupabaseStorage, deleteFromSupabaseStorage, getSupabaseStorageUrl } from './supabase_storage.js';
 
 function monthKey(dateStr) {
     return dateStr.slice(0, 7);
@@ -539,18 +539,18 @@ export async function initializeApp() {
 export async function uploadBackground(file, userId) {
     const safeName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
     const storagePath = `backgrounds/${userId}/${safeName}`;
-    const downloadURL = await uploadToSupabaseStorage(storagePath, file);
+    await uploadToSupabaseStorage(storagePath, file);
 
     if (!Array.isArray(state.appData.backgrounds)) state.appData.backgrounds = [];
-    if (!state.appData.backgrounds.includes(downloadURL)) {
-        state.appData.backgrounds.push(downloadURL);
+    if (!state.appData.backgrounds.includes(storagePath)) {
+        state.appData.backgrounds.push(storagePath);
     }
-    state.appData.activeBackground = downloadURL;
+    state.appData.activeBackground = storagePath;
 
     localStorage.setItem(getUserScopedStorageKey('backgrounds', userId), JSON.stringify(state.appData.backgrounds));
-    localStorage.setItem(getUserScopedStorageKey('activeBackground', userId), downloadURL);
+    localStorage.setItem(getUserScopedStorageKey('activeBackground', userId), storagePath);
 
-    return downloadURL;
+    return storagePath;
 }
 
 export async function setActiveBackground(url, userId) {
@@ -596,7 +596,7 @@ export function loadBackgroundGallery() {
         wrap.style.cssText = 'position:relative;flex-shrink:0;';
 
         const img = document.createElement('img');
-        img.src = url;
+        img.src = '';
         img.title = 'Натисніть, щоб встановити';
         img.style.cssText = [
             'width:72px;height:48px;object-fit:cover;border-radius:6px;cursor:pointer;',
@@ -604,6 +604,11 @@ export function loadBackgroundGallery() {
             'transition:border-color 0.2s;',
         ].join('');
         img.onclick = () => window._setActiveBackground?.(url);
+        getSupabaseStorageUrl(url).then(src => {
+            img.src = src;
+        }).catch(() => {
+            img.src = url;
+        });
 
         const del = document.createElement('button');
         del.textContent = '✕';

@@ -19,6 +19,7 @@ import { importFondexxReport, importPPROReport, importFondexxTrades } from './pa
 import { renderPlaybook, addPlaybookSetup, editPlaybookSetup, savePlaybookSetup, deletePlaybookSetup, getPlaybookContext, getPlaybookForSituation, loadPlaybook } from './playbook.js';
 import { loadLearnContent, renderLearnCache } from './learn.js';
 import { renderAdminPanel } from './admin.js';
+import { initSidebarAccount, refreshSidebarAccount } from './sidebar_account.js';
 
 import { initTradesView, populateDateSelect, populateSymbolSelect, loadTradeChart } from './trades_view2.js';
 import { connectGoogleDrive, syncDriveScreenshots, updateDriveUI, disconnectGoogleDrive, startDriveAutoSync } from './drive.js';
@@ -59,6 +60,7 @@ window.toggleRightSidebar = function() {
 };
 window.getDefaultDayEntry = getDefaultDayEntry;
 window.state = state;
+window.refreshSidebarAccount = refreshSidebarAccount;
 window.toggleAuthMode = toggleAuthMode;
 window.handleAuth = handleAuth;
 window.logout = logout;
@@ -422,8 +424,15 @@ window.saveDaylossSetting = function() {
 
 // ─── Background helpers ───────────────────────────────────────────────────────
 
-function _applyBackgroundUrl(url) {
-    document.body.style.backgroundImage     = `url('${url}')`;
+async function _applyBackgroundUrl(url) {
+    let resolvedUrl = url;
+    try {
+        const { getSupabaseStorageUrl } = await import('./supabase_storage.js');
+        resolvedUrl = await getSupabaseStorageUrl(url);
+    } catch (e) {
+        console.warn('[BgPersist] Could not resolve storage URL:', e);
+    }
+    document.body.style.backgroundImage     = `url('${resolvedUrl}')`;
     document.body.style.backgroundSize      = 'cover';
     document.body.style.backgroundPosition  = 'center';
     document.body.style.backgroundAttachment = 'fixed';
@@ -452,12 +461,12 @@ window._handleBgImageUpload = async function(event) {
     };
     reader.readAsDataURL(file);
 
-    // Upload to Storage and persist URL to Firestore.
+    // Upload to Supabase Storage and persist the storage path.
     try {
         const downloadURL = await uploadBackground(file, state.USER_DOC_NAME);
         console.info('[BgUpload] Persisted:', downloadURL);
-        // Swap data-URL for the stable CDN URL.
-        document.body.style.backgroundImage = `url('${downloadURL}')`;
+        // Swap data-URL for a fresh signed Supabase URL.
+        _applyBackgroundUrl(downloadURL);
         loadBackgroundGallery();
     } catch (err) {
         console.error('[BgUpload] Storage upload failed:', err);
@@ -565,6 +574,7 @@ window.saveProfileName = async function() {
         }
         document.getElementById('name-modal').style.display = 'none';
         if (window.renderTeamSidebar) window.renderTeamSidebar();
+        if (window.refreshSidebarAccount) await window.refreshSidebarAccount();
     } catch(e) {
         if (errEl) { errEl.textContent = 'Помилка збереження: ' + e.message; errEl.style.display = 'block'; }
     }
@@ -616,7 +626,14 @@ async function bootApp(user) {
     if (_appInitialized) return;
     _appInitialized = true;
 
-    const nick = user.user_metadata?.nick || user.user_metadata?.display_name || user.email.split('@')[0];
+    const { data: bootProfile, error: bootProfileError } = await supabase
+        .from('profiles')
+        .select('nick')
+        .eq('id', user.id)
+        .maybeSingle();
+    if (bootProfileError) console.warn('[AUTH] Could not load profile nick:', bootProfileError);
+
+    const nick = bootProfile?.nick || user.user_metadata?.nick || user.user_metadata?.display_name || user.email.split('@')[0];
     state.USER_DOC_NAME = `${nick}_stats`;
     state.CURRENT_VIEWED_USER = state.USER_DOC_NAME;
     state.myUserId = user.id || null;
@@ -634,6 +651,8 @@ async function bootApp(user) {
         await initializeApp();
 
         if (window.renderTeamSidebar) window.renderTeamSidebar();
+        initSidebarAccount();
+        if (window.refreshSidebarAccount) await window.refreshSidebarAccount();
         if (window.renderStatsSourceSelector) window.renderStatsSourceSelector();
         if (window.renderSettingsTradeTypes) window.renderSettingsTradeTypes();
         if (window.renderSettingsSituations) window.renderSettingsSituations();

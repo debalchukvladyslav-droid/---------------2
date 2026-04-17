@@ -72,7 +72,7 @@
     font-size: 0.88rem;
     transition: var(--transition);
 }
-.auth-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,229,160,0.1); outline: none; }
+.auth-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent); outline: none; }
 .auth-input::placeholder { color: var(--text-muted); opacity: 0.5; }
 
 .auth-input:last-of-type { margin-bottom: 14px; }

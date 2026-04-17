@@ -1,4 +1,4 @@
-<!-- v2 -->
+﻿<!-- v2 -->
 <!DOCTYPE html>
 <html lang="uk">
 <head>
@@ -283,10 +283,55 @@
             </button>
         </nav>
 
+        <div class="sidebar-account-wrap" id="sidebar-account">
+            <button type="button" class="sidebar-account-trigger" id="sidebar-account-trigger" aria-expanded="false" aria-controls="sidebar-account-dropdown">
+                <span class="sidebar-account-avatar" id="sidebar-account-avatar">?</span>
+                <span class="sidebar-account-meta">
+                    <span class="sidebar-account-name" id="sidebar-account-name">Профіль</span>
+                    <span class="sidebar-account-team" id="sidebar-account-team"></span>
+                    <span class="sidebar-account-sub" id="sidebar-account-sub"></span>
+                </span>
+                <span class="sidebar-account-chevron" aria-hidden="true">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                </span>
+            </button>
+            <div class="sidebar-account-dropdown" id="sidebar-account-dropdown" hidden>
+                <div>
+                    <div class="sidebar-pf-label">Ім'я</div>
+                    <input type="text" id="sidebar-pf-fname" autocomplete="given-name" placeholder="Ім'я">
+                </div>
+                <div>
+                    <div class="sidebar-pf-label">Прізвище</div>
+                    <input type="text" id="sidebar-pf-lname" autocomplete="family-name" placeholder="Прізвище">
+                </div>
+                <div>
+                    <div class="sidebar-pf-label">Іконка профілю</div>
+                    <p class="sidebar-pf-hint">Оберіть емодзі або вставте пряме посилання на зображення (https…). У панелі «Команда» це видно всім.</p>
+                    <input type="hidden" id="sidebar-pf-emoji" value="">
+                    <div class="sidebar-pf-emoji-grid" id="sidebar-pf-emoji-grid">
+                        <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F600;" title="Смайл">&#x1F600;</button>
+                        <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F98A;" title="Лис">&#x1F98A;</button>
+                        <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F43B;" title="Ведмідь">&#x1F43B;</button>
+                        <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F981;" title="Лев">&#x1F981;</button>
+                        <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F43C;" title="Панда">&#x1F43C;</button>
+                        <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F3AF;" title="Ціль">&#x1F3AF;</button>
+                        <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F4C8;" title="Графік">&#x1F4C8;</button>
+                        <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x26A1;" title="Блискавка">&#x26A1;</button>
+                        <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F525;" title="Вогонь">&#x1F525;</button>
+                        <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F48E;" title="Діамант">&#x1F48E;</button>
+                        <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F680;" title="Ракета">&#x1F680;</button>
+                    </div>
+                    <input type="url" id="sidebar-pf-avatar-url" class="sidebar-pf-url" placeholder="https://… зображення аватара" autocomplete="off">
+                    <button type="button" class="btn-secondary sidebar-pf-clear-avatar" id="sidebar-pf-avatar-clear">Скинути іконку (ініціали)</button>
+                </div>
+                <button type="button" class="btn-primary sidebar-pf-save" id="sidebar-pf-save">Зберегти профіль</button>
+            </div>
+        </div>
+
         <!-- Collapse button -->
-        <div style="border-top:1px solid var(--border);padding:10px;margin-top:auto;">
-            <button onclick="window.toggleLeftSidebar?.()" class="sidebar-nav-item" style="width:100%;border-radius:8px;justify-content:flex-start;">
-                <span class="ti-icon" style="margin-right:0;">
+        <div class="sidebar-footer-collapse">
+            <button type="button" onclick="window.toggleLeftSidebar?.()" class="sidebar-nav-item sidebar-nav-item-collapse" style="width:100%;border-radius:8px;justify-content:flex-start;">
+                <span class="sidebar-collapse-icon" aria-hidden="true">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 19l-7-7 7-7"/><path d="M18 19l-7-7 7-7"/></svg>
                 </span>
                 <span class="nav-label" style="margin-left:10px;">Згорнути</span>
@@ -304,17 +349,9 @@
                 <h2 id="page-title" class="page-title">Дашборд</h2>
             </div>
             <div class="header-right">
-                <span class="market-badge closed" id="market-badge">
-                    <span class="market-badge-dot"></span>
-                    <span id="market-badge-text">Ринок закрито</span>
-                </span>
                 <button id="team-toggle-btn" class="header-btn" onclick="openTeamSidebar()">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:middle;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                     Команда
-                </button>
-                <button id="sidebar-toggle-btn" class="header-btn primary" onclick="toggleRightSidebar()">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:6px;vertical-align:middle;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    Додати угоду
                 </button>
             </div>
         </header>
@@ -328,23 +365,18 @@
         <!-- Bottom Navigation (mobile only) -->
         <nav class="mobile-bottom-nav">
             <button class="mobile-nav-btn active" data-tab="dash" onclick="switchMainTab('dash')">
-                <span class="nav-icon">📊</span>
                 <span>Дашборд</span>
             </button>
             <button class="mobile-nav-btn" data-tab="stats" onclick="switchMainTab('stats')">
-                <span class="nav-icon">📈</span>
                 <span>Статистика</span>
             </button>
             <button class="mobile-nav-btn" data-tab="screens" onclick="switchMainTab('screens')">
-                <span class="nav-icon">🖼️</span>
                 <span>Скріни</span>
             </button>
             <button class="mobile-nav-btn" data-tab="ai" onclick="switchMainTab('ai')">
-                <span class="nav-icon">🤖</span>
                 <span>AI</span>
             </button>
             <button class="mobile-nav-btn mobile-nav-more-btn" onclick="toggleMobileMoreMenu()">
-                <span class="nav-icon">⋯</span>
                 <span>Ще</span>
             </button>
         </nav>
@@ -352,24 +384,37 @@
         <div id="mobile-more-menu" class="mobile-more-menu">
             <div class="mobile-more-grid">
                 <button class="mobile-more-item" data-tab="trades" onclick="switchMainTab('trades'); closeMobileMoreMenu()">
-                    <span>📋</span><span>Угоди</span>
+                    <span>Угоди</span>
                 </button>
                 <button class="mobile-more-item" data-tab="playbook" onclick="switchMainTab('playbook'); closeMobileMoreMenu()">
-                    <span>📖</span><span>Плейбук</span>
+                    <span>Плейбук</span>
                 </button>
                 <button class="mobile-more-item" data-tab="learn" onclick="switchMainTab('learn'); closeMobileMoreMenu()">
-                    <span>🎓</span><span>Навчання</span>
+                    <span>Навчання</span>
                 </button>
                 <button class="mobile-more-item" data-tab="settings" onclick="switchMainTab('settings'); closeMobileMoreMenu()">
-                    <span>⚙️</span><span>Налашт.</span>
+                    <span>Налашт.</span>
                 </button>
                 <button class="mobile-more-item admin-tab-mobile" data-tab="admin" onclick="switchMainTab('admin'); closeMobileMoreMenu()" style="display: none;">
-                    <span>🛡</span><span>Адмін</span>
+                    <span>Адмін</span>
                 </button>
             </div>
         </div>
 
         <div id="view-dash" class="view-content active">
+
+            <div class="dash-calendar-strip" aria-label="Період і серія перемог">
+                <div class="dash-calendar-strip-inner">
+                    <div class="dash-strip-period">
+                        <select id="month-select" class="month-select strip-select" onchange="renderView()"></select>
+                        <select id="year-select" class="year-select strip-select" onchange="renderView()"></select>
+                    </div>
+                    <div id="winstreak-counter" class="winstreak-counter" style="display:none">
+                        <span class="winstreak-lbl">Стрік</span>
+                        <span id="winstreak-val" class="winstreak-val">0</span>
+                    </div>
+                </div>
+            </div>
 
             <!-- NEWS TICKER -->
             <div class="news-ticker-bar">
@@ -393,7 +438,7 @@
                         </div>
                         <span class="stat-card-pro-badge" id="badge-pnl"></span>
                     </div>
-                    <p class="stat-card-pro-label">Загальний прибуток</p>
+                    <p class="stat-card-pro-label">P&amp;L за місяць</p>
                     <p class="stat-card-pro-value" id="pro-total-pnl">$0.00</p>
                 </div>
                 <div class="stat-card-pro">
@@ -403,7 +448,7 @@
                         </div>
                         <span class="stat-card-pro-badge neutral" id="badge-winrate"></span>
                     </div>
-                    <p class="stat-card-pro-label">Вінрейт</p>
+                    <p class="stat-card-pro-label">Вінрейт (місяць)</p>
                     <p class="stat-card-pro-value" id="pro-winrate">0%</p>
                 </div>
                 <div class="stat-card-pro">
@@ -413,7 +458,7 @@
                         </div>
                         <span class="stat-card-pro-badge neutral" id="badge-trades"></span>
                     </div>
-                    <p class="stat-card-pro-label">Всього угод</p>
+                    <p class="stat-card-pro-label">Угод у місяці</p>
                     <p class="stat-card-pro-value" id="pro-total-trades">0</p>
                 </div>
                 <div class="stat-card-pro">
@@ -423,25 +468,18 @@
                         </div>
                         <span class="stat-card-pro-badge neutral" id="badge-pf"></span>
                     </div>
-                    <p class="stat-card-pro-label">Profit Factor</p>
+                    <p class="stat-card-pro-label">Profit Factor (місяць)</p>
                     <p class="stat-card-pro-value" id="pro-pf">0.00</p>
                 </div>
             </div>
 
-            <!-- 3-COLUMN LAYOUT -->
+            <!-- 2-COLUMN LAYOUT -->
             <div class="dash-3col">
 
                 <!-- COL 1: Calendar -->
                 <div class="dash-col dash-col-main">
                     <div class="panel" style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;">
-                        <div class="dash-toolbar">
-                            <div class="dash-toolbar-controls">
-                                <select id="month-select" class="month-select" onchange="renderView()"></select>
-                                <select id="year-select" class="year-select" onchange="renderView()"></select>
-                                <div id="winstreak-counter" class="winstreak-counter">
-                                    🔥 <span id="winstreak-val">0</span>
-                                </div>
-                            </div>
+                        <div class="dash-toolbar dash-toolbar-totals-only">
                             <div class="dash-toolbar-totals">
                                 <div>Комісія: <span id="total-comm">$0</span></div>
                                 <div>Локейти: <span id="total-locates">$0</span></div>
@@ -449,12 +487,12 @@
                             </div>
                         </div>
                         <div style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;flex:1;display:flex;flex-direction:column;min-height:0;">
-                            <div class="grid" id="calendar-grid" style="min-width:560px;flex:1;align-content:start;"></div>
+                            <div class="grid" id="calendar-grid" style="min-width:480px;flex:1;align-content:start;"></div>
                         </div>
                     </div>
                 </div>
 
-                <!-- COL 2: Recent trades + Week heatmap -->
+                <!-- COL 2: Recent trades -->
                 <div class="dash-col dash-col-recent">
                     <div class="recent-trades-panel" id="recent-trades-panel" style="flex:1;">
                         <div class="recent-trades-header">
@@ -463,70 +501,7 @@
                         </div>
                         <div id="recent-trades-list" class="recent-trades-list"></div>
                     </div>
-
-                    <!-- WEEK HEATMAP placeholder -->
-                    <div class="week-heatmap-panel">
-                        <h4>
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-                            Тижневий Heatmap
-                        </h4>
-                        <div class="heatmap-grid" id="week-heatmap-grid">
-                            <div class="heatmap-cell flat"><span class="heatmap-day">Пн</span><span class="heatmap-pnl">—</span></div>
-                            <div class="heatmap-cell flat"><span class="heatmap-day">Вт</span><span class="heatmap-pnl">—</span></div>
-                            <div class="heatmap-cell flat"><span class="heatmap-day">Ср</span><span class="heatmap-pnl">—</span></div>
-                            <div class="heatmap-cell flat"><span class="heatmap-day">Чт</span><span class="heatmap-pnl">—</span></div>
-                            <div class="heatmap-cell flat"><span class="heatmap-day">Пт</span><span class="heatmap-pnl">—</span></div>
-                        </div>
-                        <p class="risk-calc-coming-soon">⚡ Підключається автоматично після входу</p>
-                    </div>
                 </div>
-
-                <!-- COL 3: Risk Calculator placeholder -->
-                <div class="dash-col dash-col-risk">
-                    <div class="risk-calc-panel">
-                        <h4>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                            Risk Calculator
-                        </h4>
-                        <div class="risk-input-row">
-                            <label>Розмір рахунку ($)</label>
-                            <input type="number" id="risk-account" placeholder="10000" oninput="calcRisk()">
-                        </div>
-                        <div class="risk-input-row">
-                            <label>Ризик на угоду (%)</label>
-                            <input type="number" id="risk-percent" placeholder="1" step="0.1" oninput="calcRisk()">
-                        </div>
-                        <div class="risk-input-row">
-                            <label>Стоп-лосс ($ на акцію)</label>
-                            <input type="number" id="risk-stop" placeholder="0.50" step="0.01" oninput="calcRisk()">
-                        </div>
-                        <div class="risk-divider"></div>
-                        <div class="risk-result">
-                            <span class="risk-result-label">Макс. збиток</span>
-                            <span class="risk-result-value" id="risk-max-loss">—</span>
-                        </div>
-                        <div class="risk-result">
-                            <span class="risk-result-label">Розмір позиції</span>
-                            <span class="risk-result-value" id="risk-position-size">—</span>
-                        </div>
-                        <div class="risk-result">
-                            <span class="risk-result-label">К-ть акцій</span>
-                            <span class="risk-result-value" id="risk-shares">—</span>
-                        </div>
-                        <p class="risk-calc-coming-soon">⚡ Більше функцій в наступному апдейті</p>
-                    </div>
-
-                    <!-- Quick notes placeholder -->
-                    <div class="risk-calc-panel">
-                        <h4>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                            Нотатка дня
-                        </h4>
-                        <textarea id="quick-note" rows="4" placeholder="Швидка нотатка перед сесією..." style="width:100%;background:var(--bg-main);border:1px solid var(--border);color:var(--text-main);border-radius:6px;padding:8px 10px;font-family:inherit;font-size:0.85rem;resize:none;box-sizing:border-box;transition:var(--transition);" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"></textarea>
-                        <p class="risk-calc-coming-soon">⚡ Синхронізується з полем "Думки" при збереженні</p>
-                    </div>
-                </div>
-
             </div><!-- /dash-3col -->
         </div><!-- /view-dash -->
 
@@ -739,8 +714,8 @@
         <div id="view-learn" class="view-content">
             <div class="panel">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
-                    <h3 style="margin:0; color:var(--accent)">🎓 Навчання</h3>
-                    <button class="btn-primary" style="width:auto; margin:0;" id="learn-refresh-btn" onclick="window.loadLearnContent?.()">🔄 Оновити рекомендації</button>
+                    <h3 style="margin:0; color:var(--accent)">Навчання</h3>
+                    <button class="btn-primary" style="width:auto; margin:0;" id="learn-refresh-btn" onclick="window.loadLearnContent?.()">Оновити рекомендації</button>
                 </div>
                 <p id="learn-query-label" style="color:var(--text-muted); font-size:0.85rem; margin-bottom:20px;"></p>
                 <div id="learn-results" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:16px;">
@@ -797,7 +772,7 @@
                 </div>
                 
                 <div id="custom-theme-block" class="custom-theme-block">
-                    <p class="custom-theme-hint">Оберіть кольори для власної теми</p>
+                    <p class="custom-theme-hint">Палітра своєї теми — оберіть кольори нижче; зміни застосовуються одразу, натисніть «Зберегти стиль», щоб зберегти.</p>
                     <div class="theme-color-grid">
                         <div class="theme-color-item">
                             <label>Фон</label>
@@ -920,10 +895,9 @@
                 </div>
             </div>
 
-            <button id="btn-mentor-on" class="btn-secondary" style="width: 100%; margin-top: 10px; border-style: dashed; opacity: 0.7;" onclick="activateMentorMode()">🔐 Режим Ментора</button>
-            <button id="btn-mentor-off" class="btn-secondary" style="width: 100%; margin-top: 10px; display: none; border-color: rgba(239,68,68,0.35); color: #fecaca; background: rgba(239,68,68,0.08);" onclick="deactivateMentorMode()">↩ Вийти з Ментора</button>
-            <button id="btn-manage-teams" class="btn-primary" style="width: 100%; margin-top: 10px; background: var(--accent); display: none;" onclick="openTeamManager()">🛠 Управління кущами</button>
-            
+            <p style="color: var(--text-muted); font-size: 0.82rem; margin-top: 12px; line-height: 1.45;">Режим ментора вмикається адміністратором у розділі «Адмін».</p>
+            <button id="btn-manage-teams" class="btn-primary" style="width: 100%; margin-top: 10px; background: var(--accent); display: none;" onclick="openTeamManager()">Управління кущами</button>
+
             <div class="settings-block" style="margin-top: 30px; border-top: 1px solid var(--border); padding-top: 20px;">
                 <div class="panel" style="margin-bottom: 15px;">
                     <h3 style="color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 15px;">💾 Імпорт / Експорт</h3>
@@ -942,12 +916,15 @@
         <div id="view-admin" class="view-content admin-panel" style="display:none;">
             <div class="panel admin-panel-content">
                 <div class="admin-panel-header">
-                    <h3 class="admin-panel-title">🛡 Адмін-панель</h3>
-                    <button class="btn-secondary admin-refresh-btn" onclick="window.renderAdminPanel?.()">&#x1f504; Оновити</button>
+                    <h3 class="admin-panel-title">Адмін-панель</h3>
+                    <button type="button" class="btn-secondary admin-refresh-btn" onclick="window.renderAdminPanel?.()">Оновити список</button>
                 </div>
+                <p style="color:var(--text-muted);font-size:0.85rem;margin:0 0 16px;line-height:1.45;">Керування ролями, менторством у кущі, перейменування ніка та переведення між кущами. Ментори в панелі «Команда» відображаються першими в кожній групі.</p>
                 <div id="admin-users-list" class="admin-users-list"></div>
             </div>
         </div>
+
+    </div><!-- /main-content -->
 
     <div id="name-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.7); z-index:99998; justify-content:center; align-items:center;">
         <div style="background:var(--bg-panel); padding:35px; border-radius:12px; border:1px solid var(--border); width:340px; text-align:center;">
@@ -1029,8 +1006,11 @@
     <div id="team-sidebar-backdrop" class="team-sidebar-backdrop" onclick="window.closeTeamSidebar?.()"></div>
     <div id="team-sidebar" class="team-sidebar-panel">
         <div class="team-sidebar-header">
-            <h2 class="team-sidebar-title">👥 Команда</h2>
-            <button class="team-sidebar-close" onclick="window.closeTeamSidebar?.()" aria-label="Закрити" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;padding:6px;border-radius:8px;display:flex;align-items:center;" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
+            <div class="team-sidebar-head-text">
+                <h2 class="team-sidebar-title">Команда</h2>
+                <p class="team-sidebar-sub">Кущі та учасники. Ментори — зверху в кожній групі. Натисніть рядок, щоб відкрити журнал трейдера.</p>
+            </div>
+            <button type="button" class="team-sidebar-close" onclick="window.closeTeamSidebar?.()" aria-label="Закрити" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;padding:6px;border-radius:8px;display:flex;align-items:center;flex-shrink:0;" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
         </div>
@@ -1066,123 +1046,8 @@
     </div>
 
     <script>
-    /* =============================================
-       STYLEPRO DASHBOARD WIDGETS
-       ============================================= */
-
-    function updateProStatsCards() {
-        const data = window.journalData || {};
-        const currentNick = window.currentNick || '';
-        const entries = data[currentNick] || {};
-
-        let totalPnl = 0, wins = 0, losses = 0, totalTrades = 0;
-        let totalGross = 0, totalLoss = 0;
-
-        Object.values(entries).forEach(day => {
-            if (!day) return;
-            const pnl = parseFloat(day.pnl) || 0;
-            if (pnl === 0) return;
-            totalPnl += pnl;
-            totalTrades++;
-            if (pnl > 0) { wins++; totalGross += pnl; }
-            else { losses++; totalLoss += Math.abs(pnl); }
-        });
-
-        const winrate = totalTrades > 0 ? (wins / totalTrades * 100) : 0;
-        const pf = totalLoss > 0 ? (totalGross / totalLoss) : (totalGross > 0 ? 99 : 0);
-
-        // Values
-        const pnlEl = document.getElementById('pro-total-pnl');
-        const wrEl  = document.getElementById('pro-winrate');
-        const trEl  = document.getElementById('pro-total-trades');
-        const pfEl  = document.getElementById('pro-pf');
-        if (pnlEl) pnlEl.textContent = (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(2);
-        if (wrEl)  wrEl.textContent  = winrate.toFixed(1) + '%';
-        if (trEl)  trEl.textContent  = totalTrades;
-        if (pfEl)  pfEl.textContent  = pf.toFixed(2);
-
-        // Color pnl value
-        if (pnlEl) pnlEl.style.color = totalPnl >= 0 ? 'var(--profit)' : 'var(--loss)';
-
-        // Badges
-        setBadge('badge-pnl',     totalPnl >= 0 ? '+' + wins + ' прибуткових' : losses + ' збиткових', totalPnl >= 0 ? 'positive' : 'negative');
-        setBadge('badge-winrate', wins + 'W / ' + losses + 'L', winrate >= 50 ? 'positive' : 'negative');
-        setBadge('badge-trades',  'цього місяця', 'neutral');
-        setBadge('badge-pf',      pf >= 1.5 ? '▲ добре' : pf >= 1 ? '▶ норма' : '▼ слабо', pf >= 1.5 ? 'positive' : pf >= 1 ? 'neutral' : 'negative');
-    }
-
-    function setBadge(id, text, type) {
-        const el = document.getElementById(id);
-        if (!el) return;
-        el.textContent = text;
-        el.className = 'stat-card-pro-badge ' + type;
-    }
-
-    function updateRecentTrades() {
-        const list = document.getElementById('recent-trades-list');
-        if (!list) return;
-        const data = window.journalData || {};
-        const currentNick = window.currentNick || '';
-        const entries = data[currentNick] || {};
-
-        // Збираємо всі дні з pnl != 0, сортуємо за датою desc
-        const days = Object.entries(entries)
-            .filter(([, d]) => d && (parseFloat(d.pnl) || 0) !== 0)
-            .sort(([a], [b]) => b.localeCompare(a))
-            .slice(0, 8);
-
-        if (days.length === 0) {
-            list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:0.85rem;">Немає угод</div>';
-            return;
-        }
-
-        list.innerHTML = days.map(([date, day]) => {
-            const pnl = parseFloat(day.pnl) || 0;
-            const gross = parseFloat(day.gross) || 0;
-            const isPos = pnl >= 0;
-            const pct = gross !== 0 ? ((pnl / Math.abs(gross)) * 100).toFixed(1) : '0.0';
-            const dateObj = new Date(date + 'T00:00:00');
-            const dateStr = dateObj.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
-            const arrow = isPos
-                ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>'
-                : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>';
-            const ticker = (day.ticker || day.type || '').toUpperCase() || 'TRADE';
-            return `<div class="recent-trade-item" onclick="selectDate('${date}')">
-                <div class="recent-trade-left">
-                    <div class="recent-trade-dir-icon ${isPos ? 'long' : 'short'}">${arrow}</div>
-                    <div>
-                        <div class="recent-trade-symbol">${ticker || dateStr}</div>
-                        <div class="recent-trade-meta">${ticker ? dateStr : ''} ${isPos ? 'Прибуток' : 'Збиток'}</div>
-                    </div>
-                </div>
-                <div class="recent-trade-right">
-                    <div class="recent-trade-pnl ${isPos ? 'pos' : 'neg'}">${isPos ? '+' : ''}$${pnl.toFixed(2)}</div>
-                    <div class="recent-trade-pct ${isPos ? 'pos' : 'neg'}">${isPos ? '+' : ''}${pct}%</div>
-                </div>
-            </div>`;
-        }).join('');
-    }
-
-    // Хукаємо в renderView
-    const _origRender = window.renderView;
-    window.renderView = function() {
-        if (_origRender) _origRender.apply(this, arguments);
-        setTimeout(() => { updateProStatsCards(); updateRecentTrades(); }, 50);
-    };
-
-    // Хукаємо в saveEntry
-    const _origSave = window.saveEntry;
-    window.saveEntry = function() {
-        if (_origSave) _origSave.apply(this, arguments);
-        setTimeout(() => { updateProStatsCards(); updateRecentTrades(); }, 100);
-    };
-
-    // Ініціалізація після завантаження даних
     document.addEventListener('DOMContentLoaded', () => {
-        setTimeout(() => { updateProStatsCards(); updateRecentTrades(); }, 800);
-    });
-    window.addEventListener('dataLoaded', () => {
-        updateProStatsCards(); updateRecentTrades();
+        setTimeout(() => { if (window.renderView) window.renderView(); }, 600);
     });
     </script>
     <script src="lw-charts.js"></script>
@@ -1193,42 +1058,5 @@
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
     </button>
 
-    <!-- Risk Calculator JS -->
-    <script>
-    function calcRisk() {
-        const account = parseFloat(document.getElementById('risk-account')?.value) || 0;
-        const percent = parseFloat(document.getElementById('risk-percent')?.value) || 0;
-        const stop    = parseFloat(document.getElementById('risk-stop')?.value)    || 0;
-
-        const maxLoss = account && percent ? account * percent / 100 : null;
-        const shares  = maxLoss && stop ? Math.floor(maxLoss / stop) : null;
-
-        const fmtUSD = v => v != null ? '
-</html>
- + v.toFixed(2) : '—';
-        const fmtShares = v => v != null ? v.toLocaleString() + ' акц.' : '—';
-
-        const el = id => document.getElementById(id);
-        if (el('risk-max-loss'))    { el('risk-max-loss').textContent    = fmtUSD(maxLoss); el('risk-max-loss').style.color = maxLoss ? 'var(--loss)' : ''; }
-        if (el('risk-shares'))      { el('risk-shares').textContent      = fmtShares(shares); }
-        if (el('risk-position-size')){ el('risk-position-size').textContent = shares != null ? fmtShares(shares) : '—'; }
-    }
-
-    // Market badge status (checks US market hours UTC)
-    (function updateMarketBadge() {
-        const badge = document.getElementById('market-badge');
-        const text  = document.getElementById('market-badge-text');
-        if (!badge || !text) return;
-        const now = new Date();
-        const utcH = now.getUTCHours();
-        const utcM = now.getUTCMinutes();
-        const utcTotal = utcH * 60 + utcM;
-        const day = now.getUTCDay(); // 0=Sun, 6=Sat
-        const isWeekday = day >= 1 && day <= 5;
-        const isOpen = isWeekday && utcTotal >= 870 && utcTotal < 1290; // 14:30–21:00 UTC
-        badge.className = 'market-badge ' + (isOpen ? 'open' : 'closed');
-        text.textContent = isOpen ? 'Ринок відкрито' : 'Ринок закрито';
-    })();
-    </script>
 </body>
 </html>

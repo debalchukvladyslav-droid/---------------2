@@ -23,7 +23,7 @@ function _cacheSet(key, journal) {
     _statsCache.set(key, { journal, ts: Date.now() });
 }
 
-// Wipes all entries for a given docName. Call after any write to Firestore
+// Wipes all entries for a given docName. Call after any write to Supabase
 // so the next stats open re-fetches fresh data for that user only.
 export function clearStatsCache(docName) {
     for (const key of _statsCache.keys()) {
@@ -232,7 +232,7 @@ function _monthKeysForFilters(filters) {
 
 // Fetches only the month sub-documents that are required by the current
 // filters for a given trader doc. Returns a merged flat journal object.
-// Uses { source: 'server' } on every read — no cache, no WebChannel.
+// Uses a Supabase-backed Firestore-compatible shim for older stats code.
 async function fetchMonthsForPeriod(docName, filters, userId = null) {
     const monthKeys = _monthKeysForFilters(filters);
     if (!monthKeys) return fetchJournalRowsForDoc(docName, null, userId);
@@ -246,7 +246,7 @@ async function fetchMonthsForPeriod(docName, filters, userId = null) {
     return journal;
 }
 
-// Reads the aggregation document for a trader (journal/{docName}_stats fields:
+// Reads aggregate data for a trader (formerly journal/{docName}_stats fields:
 // allTimePnl, allTimeWinDays, allTimeLossDays written by saveToLocal).
 // Returns null when the document doesn't exist yet — callers show a TODO note.
 async function fetchAggregation(docName) {
@@ -600,7 +600,7 @@ export async function refreshStatsView() {
                     }
                     journal = journalFiltered;
                 } else {
-                    console.log(`[STATS] Запит до Firestore: не вистачає місяців: ${missing.join(', ')}`);
+                    console.log(`[STATS] Запит до Supabase: не вистачає місяців: ${missing.join(', ')}`);
                     if (loadingText) loadingText.textContent = 'Завантаження даних...';
                     const data = await getStatsDocData(nick, filters, currentUserId);
                     journal = data.journal || {};
@@ -629,7 +629,7 @@ export async function refreshStatsView() {
                             if (c) return { journal: c };
                             const j = {};
                             const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
-                            snap.forEach(d => { Object.assign(j, d.data()); });
+                            (snap.docs || []).forEach(d => { Object.assign(j, d.data()); });
                             _cacheSet(k, j);
                             return { journal: j };
                         })
@@ -661,7 +661,7 @@ export async function refreshStatsView() {
                             if (c) return { journal: c };
                             const j = {};
                             const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
-                            snap.forEach(d => { Object.assign(j, d.data()); });
+                            (snap.docs || []).forEach(d => { Object.assign(j, d.data()); });
                             _cacheSet(k, j);
                             return { journal: j };
                         })
@@ -689,7 +689,7 @@ export async function refreshStatsView() {
                     journal = cached;
                 } else {
                     const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
-                    snap.forEach(d => { Object.assign(journal, d.data()); });
+                    (snap.docs || []).forEach(d => { Object.assign(journal, d.data()); });
                     _cacheSet(k, journal);
                 }
             } else {

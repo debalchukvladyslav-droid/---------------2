@@ -49,7 +49,7 @@
     border-radius: 5px;
     font-family: inherit;
 }
-.btn-save-chat:hover { color: var(--accent); background: rgba(0,229,160,0.08); }
+.btn-save-chat:hover { color: var(--accent); background: var(--accent-glow-08); }
 
 /* Typing indicator */
 .chat-typing {

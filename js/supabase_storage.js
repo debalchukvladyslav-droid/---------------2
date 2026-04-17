@@ -6,8 +6,28 @@ function normalizePath(input = '') {
     return decodeURIComponent(String(input || '').trim());
 }
 
+function getSupabaseUrlCandidate(value) {
+    if (!/^https?:\/\//i.test(value)) return null;
+    try {
+        const url = new URL(value);
+        if (!url.hostname.includes('.supabase.co')) return null;
+        const match = url.pathname.match(/\/storage\/v1\/object\/(?:sign|public|authenticated)\/([^/]+)\/(.+)$/);
+        if (!match) return null;
+        return {
+            bucket: decodeURIComponent(match[1]),
+            objectPath: decodeURIComponent(match[2])
+        };
+    } catch (_) {
+        return null;
+    }
+}
+
 function getPathCandidates(storagePath) {
-    const path = normalizePath(storagePath).replace(/^\/+/, '');
+    const value = normalizePath(storagePath);
+    const urlCandidate = getSupabaseUrlCandidate(value);
+    if (urlCandidate) return [urlCandidate];
+
+    const path = value.replace(/^\/+/, '');
     if (!path) return [];
 
     if (path.startsWith('screenshots/')) {
@@ -49,7 +69,7 @@ async function createFirstSignedUrl(candidates, ttl = DEFAULT_SIGNED_URL_TTL) {
 export async function getSupabaseStorageUrl(pathOrUrl, ttl = DEFAULT_SIGNED_URL_TTL) {
     const value = normalizePath(pathOrUrl);
     if (!value) return '';
-    if (/^https?:\/\//i.test(value) && !value.includes('firebasestorage')) return value;
+    if (/^https?:\/\//i.test(value) && !value.includes('firebasestorage') && !getSupabaseUrlCandidate(value)) return value;
 
     const signed = await createFirstSignedUrl(getPathCandidates(value), ttl);
     return signed?.url || value;

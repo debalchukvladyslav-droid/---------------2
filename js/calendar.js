@@ -11,6 +11,12 @@ function sanitizeHTML(str) {
     return div.innerHTML;
 }
 
+function excerptTooltip(text, maxLen) {
+    const t = String(text ?? '').trim().replace(/\s+/g, ' ');
+    if (!t) return '';
+    return t.length <= maxLen ? t : t.slice(0, maxLen) + '…';
+}
+
 export function getDaylossForMonth(year, monthIndex) {
     let key = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
     const monthly = state.appData?.settings?.monthlyDayloss ?? {};
@@ -58,6 +64,118 @@ export function getWinstreak() {
         else if (pnl > 0) streak++; 
     }
     return streak;
+}
+
+/** Серія зелених днів лише в межах обраного місяця (торгові дні по порядку). */
+export function getWinstreakForMonth(year, monthIndex) {
+    const prefix = `${year}-${String(monthIndex + 1).padStart(2, '0')}-`;
+    let sortedDates = Object.keys(state.appData.journal)
+        .filter(d =>
+            d.startsWith(prefix) &&
+            d.match(/^\d{4}-\d{2}-\d{2}$/) &&
+            state.appData.journal[d].pnl !== null &&
+            state.appData.journal[d].pnl !== ''
+        )
+        .sort((a, b) => new Date(a) - new Date(b));
+
+    let streak = 0;
+    for (let d of sortedDates) {
+        let pnl = parseFloat(state.appData.journal[d].pnl);
+        let [y, m] = d.split('-');
+        let dl = getDaylossForMonth(y, parseInt(m, 10) - 1);
+        let halfDl = dl / 2;
+        if (pnl <= halfDl) streak = 0;
+        else if (pnl > 0) streak++;
+    }
+    return streak;
+}
+
+function _dashSetBadge(id, text, type) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = text;
+    el.className = 'stat-card-pro-badge ' + type;
+}
+
+/** Картки «Про» та останні угоди на дашборді — тільки для обраного в календарі місяця. */
+export function updateDashboardWidgets(year, month) {
+    const mk = `${year}-${String(month + 1).padStart(2, '0')}`;
+    const prefix = `${mk}-`;
+    const journal = state.appData?.journal || {};
+
+    let totalPnl = 0, wins = 0, losses = 0, totalTrades = 0;
+    let totalGross = 0, totalLoss = 0;
+
+    for (const [dateKey, day] of Object.entries(journal)) {
+        if (!day || !dateKey.startsWith(prefix) || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) continue;
+        const pnl = parseFloat(day.pnl);
+        if (!Number.isFinite(pnl) || pnl === 0) continue;
+        totalPnl += pnl;
+        totalTrades++;
+        if (pnl > 0) {
+            wins++;
+            totalGross += pnl;
+        } else {
+            losses++;
+            totalLoss += Math.abs(pnl);
+        }
+    }
+
+    const winrate = totalTrades > 0 ? (wins / totalTrades) * 100 : 0;
+    const pf = totalLoss > 0 ? totalGross / totalLoss : (totalGross > 0 ? 99 : 0);
+
+    const pnlEl = document.getElementById('pro-total-pnl');
+    const wrEl = document.getElementById('pro-winrate');
+    const trEl = document.getElementById('pro-total-trades');
+    const pfEl = document.getElementById('pro-pf');
+    if (pnlEl) pnlEl.textContent = (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(2);
+    if (wrEl) wrEl.textContent = winrate.toFixed(1) + '%';
+    if (trEl) trEl.textContent = String(totalTrades);
+    if (pfEl) pfEl.textContent = pf.toFixed(2);
+    if (pnlEl) pnlEl.style.color = totalPnl >= 0 ? 'var(--profit)' : 'var(--loss)';
+
+    _dashSetBadge('badge-pnl', totalPnl >= 0 ? '+' + wins + ' прибуткових' : losses + ' збиткових', totalPnl >= 0 ? 'positive' : 'negative');
+    _dashSetBadge('badge-winrate', wins + 'W / ' + losses + 'L', winrate >= 50 ? 'positive' : 'negative');
+    _dashSetBadge('badge-trades', 'за ' + mk, 'neutral');
+    _dashSetBadge('badge-pf', pf >= 1.5 ? '\u25B2 добре' : pf >= 1 ? '\u25B6 норма' : '\u25BC слабо', pf >= 1.5 ? 'positive' : pf >= 1 ? 'neutral' : 'negative');
+
+    const list = document.getElementById('recent-trades-list');
+    if (list) {
+        const days = Object.entries(journal)
+            .filter(([d, dd]) => dd && d.startsWith(prefix) && (parseFloat(dd.pnl) || 0) !== 0)
+            .sort(([a], [b]) => b.localeCompare(a))
+            .slice(0, 8);
+
+        if (days.length === 0) {
+            list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:0.85rem;">Немає угод у цьому місяці</div>';
+        } else {
+            list.innerHTML = days.map(([date, day]) => {
+                const pnl = parseFloat(day.pnl) || 0;
+                const gross = parseFloat(day.gross_pnl ?? day.gross) || 0;
+                const isPos = pnl >= 0;
+                const pct = gross !== 0 ? ((pnl / Math.abs(gross)) * 100).toFixed(1) : '0.0';
+                const dateObj = new Date(date + 'T00:00:00');
+                const dateStr = dateObj.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
+                const arrow = isPos
+                    ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>'
+                    : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>';
+                const ticker = (day.ticker || day.type || '').toUpperCase() || 'TRADE';
+                return `<div class="recent-trade-item" onclick="selectDate('${date}')">
+                <div class="recent-trade-left">
+                    <div class="recent-trade-dir-icon ${isPos ? 'long' : 'short'}">${arrow}</div>
+                    <div>
+                        <div class="recent-trade-symbol">${ticker || dateStr}</div>
+                        <div class="recent-trade-meta">${ticker ? dateStr : ''} ${isPos ? 'Прибуток' : 'Збиток'}</div>
+                    </div>
+                </div>
+                <div class="recent-trade-right">
+                    <div class="recent-trade-pnl ${isPos ? 'pos' : 'neg'}">${isPos ? '+' : ''}$${pnl.toFixed(2)}</div>
+                    <div class="recent-trade-pct ${isPos ? 'pos' : 'neg'}">${isPos ? '+' : ''}${pct}%</div>
+                </div>
+            </div>`;
+            }).join('');
+        }
+    }
 }
 
 export function shiftDate(offset) {
@@ -307,15 +425,119 @@ export function getMonday(d) {
     return new Date(d.setDate(diff)).toISOString().split('T')[0]; 
 }
 
+function getMondayKeyFromDateKey(dateKey) {
+    const [y, m, d] = dateKey.split('-').map(Number);
+    return getMonday(new Date(y, m - 1, d));
+}
+
+function sumWeekTradingStats(mondayIso) {
+    const [y, m, d] = mondayIso.split('-').map(Number);
+    const start = new Date(y, m - 1, d);
+    let sumPnl = 0, sumComm = 0, sumLoc = 0, nPnl = 0;
+    for (let i = 0; i < 5; i++) {
+        const dt = new Date(start);
+        dt.setDate(start.getDate() + i);
+        const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+        const j = state.appData.journal[key];
+        if (!j) continue;
+        if (j.pnl !== null && j.pnl !== '' && !isNaN(parseFloat(j.pnl))) {
+            sumPnl += parseFloat(j.pnl);
+            sumComm += parseFloat(j.commissions) || 0;
+            sumLoc += parseFloat(j.locates) || 0;
+            nPnl++;
+        }
+    }
+    return { sumPnl, sumComm, sumLoc, nPnl };
+}
+
+function formatLongDateUk(dateKey) {
+    const [y, m, d] = dateKey.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    return dt.toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function appendWeekSummaryForDate(dateKey) {
+    const mon = getMondayKeyFromDateKey(dateKey);
+    const wNote = (state.appData.weeklyComments[mon] || '').trim();
+    const { sumPnl, nPnl } = sumWeekTradingStats(mon);
+    let b = `\n\n— Тиждень з ${mon}`;
+    b += wNote ? `\n${excerptTooltip(wNote, 200)}` : `\nБез підсумку тижня (клік по мітці «W»).`;
+    b += `\nΣ PnL: ${sumPnl >= 0 ? '+' : ''}${sumPnl.toFixed(2)}$ · ${nPnl} дн. з PnL`;
+    return b;
+}
+
+function buildWeekHoverText(wkKey) {
+    const wNote = (state.appData.weeklyComments[wkKey] || '').trim();
+    const { sumPnl, nPnl } = sumWeekTradingStats(wkKey);
+    let s = `Тиждень ${wkKey}\n`;
+    s += wNote ? `${excerptTooltip(wNote, 320)}\n` : `Клік — додати короткий підсумок тижня.\n`;
+    s += `Σ PnL: ${sumPnl >= 0 ? '+' : ''}${sumPnl.toFixed(2)}$ (${nPnl} дн.)`;
+    return s.trim();
+}
+
+function buildDayDetailBody(dateKey, data, currentMonthDayloss) {
+    const lines = [];
+    if (data.pnl !== null && data.pnl !== undefined && data.pnl !== '') {
+        const rp = parseFloat(data.pnl);
+        lines.push(`PnL: ${rp >= 0 ? '+' : ''}${rp.toFixed(2)}$`);
+    }
+    if (data.pnl !== null && data.pnl !== '' && !isNaN(parseFloat(data.pnl)) && parseFloat(data.pnl) <= currentMonthDayloss) {
+        lines.push('Увага: день на рівні денного ліміту.');
+    }
+
+    const note = data.notes && String(data.notes).trim();
+    if (note) lines.push(`Думка: ${excerptTooltip(note, 240)}`);
+
+    const hasErrors = data.errors && data.errors.length > 0;
+    if (hasErrors) {
+        const list = data.errors.length <= 4
+            ? data.errors.join(', ')
+            : `${data.errors.slice(0, 3).join(', ')} +${data.errors.length - 3}`;
+        lines.push(`Помилки: ${list}`);
+    }
+
+    if (hasErrors && note) {
+        lines.push(`Що змінити: зв'яжіть помилку з правилом з плейбуку й однією конкретною дією на наступну сесію.`);
+    } else if (hasErrors) {
+        lines.push(`Що змінити: коротко опишіть думку дня — так легше не повторити ті самі помилки.`);
+    } else if (note) {
+        lines.push(`Що покращити: додайте умову входу/виходу або тригер, де стиль просідає.`);
+    } else if (!hasErrors && (!data.pnl || data.pnl === '')) {
+        lines.push('Заповніть думку або PnL у формі дня — тултіп стане кориснішим.');
+    }
+
+    return lines.join('\n').trim();
+}
+
+function positionCalendarTooltip(e, el) {
+    if (!el || !e) return;
+    const pad = 14;
+    const estW = 360;
+    let x = e.clientX + pad;
+    let y = e.clientY + pad;
+    const maxX = window.innerWidth - Math.min(estW, window.innerWidth - 16) - 8;
+    const maxY = window.innerHeight - 80;
+    x = Math.max(8, Math.min(x, maxX));
+    y = Math.max(8, Math.min(y, maxY));
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+}
+
 export function createWeekLabel(wkKey) {
     let w = document.createElement('div'); 
     let hasComment = state.appData.weeklyComments[wkKey] && state.appData.weeklyComments[wkKey].trim() !== '';
     let tooltip = document.getElementById('tooltip');
     
-    w.className = 'week-label' + (hasComment ? ' has-comment' : ''); w.innerHTML = '📝'; 
-    w.onmouseenter = (e) => { tooltip.innerText = hasComment ? `Підсумок тижня:\n${state.appData.weeklyComments[wkKey]}` : "Клікніть, щоб додати підсумок."; tooltip.style.display = 'block'; };
-    w.onmousemove = (e) => { tooltip.style.left = e.pageX + 15 + 'px'; tooltip.style.top = e.pageY + 15 + 'px'; };
-    w.onmouseleave = () => { tooltip.style.display = 'none'; };
+    w.className = 'week-label' + (hasComment ? ' has-comment' : '');
+    w.innerHTML = '<span class="week-label-glyph" aria-hidden="true">W</span>';
+    w.onmouseenter = (e) => {
+        if (!tooltip) return;
+        tooltip.innerText = buildWeekHoverText(wkKey);
+        tooltip.style.display = 'block';
+        positionCalendarTooltip(e, tooltip);
+    };
+    w.onmousemove = (e) => { if (tooltip) positionCalendarTooltip(e, tooltip); };
+    w.onmouseleave = () => { if (tooltip) tooltip.style.display = 'none'; };
     w.onclick = () => { showPrompt(`Підсумок за тиждень (${wkKey}):`, state.appData.weeklyComments[wkKey] || "").then(c => { if (c !== null && /^\d{4}-\d{2}-\d{2}$/.test(wkKey) && !Object.prototype.hasOwnProperty.call(Object.prototype, wkKey)) { state.appData.weeklyComments[wkKey] = c; saveToLocal(); renderView(); } }); };
     return w;
 }
@@ -366,15 +588,16 @@ export async function renderView() {
         settingsLabel.innerText = `${monthsNames[month]} ${year}`;
     }
 
-    let currentStreak = getWinstreak();
+    let currentStreak = getWinstreakForMonth(year, month);
     let streakEl = document.getElementById('winstreak-counter');
     if (streakEl) {
         if (currentStreak > 0) {
             streakEl.style.display = 'flex';
             document.getElementById('winstreak-val').innerText = currentStreak;
-            streakEl.style.textShadow = currentStreak >= 5 ? '0 0 12px rgba(249, 115, 22, 0.6)' : 'none';
+            streakEl.classList.toggle('hot-glow', currentStreak >= 5);
         } else {
             streakEl.style.display = 'none';
+            streakEl.classList.remove('hot-glow');
         }
     }
     
@@ -416,38 +639,27 @@ export async function renderView() {
                 dayNum.appendChild(errBadge);
             }
             
-            let scrCount = 0; 
-            if(data.screenshots) scrCount = (data.screenshots.good?.length||0) + (data.screenshots.normal?.length||0) + (data.screenshots.bad?.length||0) + (data.screenshots.error?.length||0);
-            
-            let tContent = "";
             if (data.mentor_comment && data.mentor_comment.trim() !== '') {
-                tContent += `👑 Наставник:\n${data.mentor_comment}\n\n`;
                 cell.style.boxShadow = "inset 0 0 0 2px #eab308";
             }
-            if (state.autoFlagsCache.absoluteRecord === dateKey) tContent += `🏆 Абсолютний Рекорд!\n\n`;
-            else if (state.autoFlagsCache.records.has(dateKey)) tContent += `⭐ Старий Рекорд\n\n`;
-            if (data.pnl !== null && data.pnl !== "" && parseFloat(data.pnl) <= currentMonthDayloss) tContent += `🛑 Дейлос!\n\n`;
+        }
 
-            if (data.notes) tContent += `📝 ${data.notes}\n`;
-            if (data.kf !== undefined && data.kf !== null) tContent += `🎯 КФ: ${parseFloat(data.kf).toFixed(2)}\n`;
-            
-            let checkedNames = [];
-            if (data.checkedParams && data.checkedParams.length > 0) {
-                data.checkedParams.forEach(pid => { 
-                    let found = state.appData?.settings?.checklist?.find(p => p.id === pid); 
-                    if(found) checkedNames.push(found.name); 
-                });
-            }
-            if (checkedNames.length > 0) tContent += `✅ Відмічено: ${checkedNames.join(', ')}\n`;
-            if (scrCount > 0) tContent += `🖼️ Скріншотів: ${scrCount}\n`;
-            if (hasErrors) tContent += `⚠️ Помилки:\n- ${data.errors.join('\n- ')}`;
-            
-            if (tContent !== "" && tooltip) {
-                cell.onmouseenter = () => { tooltip.innerText = tContent.trim(); tooltip.style.display = 'block'; };
-                cell.onmousemove = (e) => { tooltip.style.left = e.pageX + 15 + 'px'; tooltip.style.top = e.pageY + 15 + 'px'; };
-                cell.onmouseleave = () => { tooltip.style.display = 'none'; };
-            }
-        } 
+        let dayHoverText = '';
+        if (data) {
+            const body = buildDayDetailBody(dateKey, data, currentMonthDayloss);
+            dayHoverText = formatLongDateUk(dateKey) + (body ? `\n\n${body}` : '\n\nЗапис є — додайте PnL чи думки в формі дня.') + appendWeekSummaryForDate(dateKey);
+        } else {
+            dayHoverText = formatLongDateUk(dateKey) + '\n\nНемає збереженого дня.' + appendWeekSummaryForDate(dateKey);
+        }
+        if (tooltip) {
+            cell.onmouseenter = (e) => {
+                tooltip.innerText = dayHoverText.trim();
+                tooltip.style.display = 'block';
+                positionCalendarTooltip(e, tooltip);
+            };
+            cell.onmousemove = (e) => positionCalendarTooltip(e, tooltip);
+            cell.onmouseleave = () => { tooltip.style.display = 'none'; };
+        }
         dayPnl.className = 'day-pnl' + ((data && data.pnl !== null && data.pnl !== '') ? (data.pnl >= 0 ? ' text-green' : ' text-red') : '');
         dayPnl.textContent = pnlDisplay;
         cell.appendChild(dayNum);
@@ -465,6 +677,8 @@ export async function renderView() {
     }
     let commEl = document.getElementById('total-comm'); if(commEl) commEl.innerText = `${parseFloat(totalComm).toFixed(2)}$`;
     let locEl = document.getElementById('total-locates'); if(locEl) locEl.innerText = `${parseFloat(totalLocates).toFixed(2)}$`;
+
+    updateDashboardWidgets(year, month);
 }
 
 export function initSelectors() {

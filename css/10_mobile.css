@@ -103,9 +103,8 @@
         -webkit-tap-highlight-color: transparent;
         white-space: nowrap;
     }
-    .mobile-nav-btn .nav-icon { font-size: 1.3rem; line-height: 1; }
+    .mobile-nav-btn { font-size: 0.68rem; padding: 12px 6px; gap: 0; }
     .mobile-nav-btn.active { color: var(--accent); }
-    .mobile-nav-btn.active .nav-icon { filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 60%, transparent)); }
     .mobile-nav-more-btn.more-open { color: var(--accent); }
 
     .mobile-more-item {
@@ -119,7 +118,6 @@
         cursor: pointer; transition: var(--transition);
         -webkit-tap-highlight-color: transparent;
     }
-    .mobile-more-item span:first-child { font-size: 1.3rem; line-height: 1; }
     .mobile-more-item:hover,
     .mobile-more-item:active,
     .mobile-more-item.active {
@@ -147,16 +145,31 @@
 
 
     /* Р”Р°С€Р±РѕСЂРґ С‚СѓР»Р±Р°СЂ вЂ” РєРѕРјРїР°РєС‚РЅРёР№ РЅР° РјРѕР±С–Р»СЊРЅРѕРјСѓ */
-    .dash-toolbar {
-        flex-direction: column !important;
-        gap: 10px !important;
+    .dash-calendar-strip {
+        margin-bottom: 10px;
+        padding: 8px 10px;
     }
-    .dash-toolbar-controls {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: wrap;
-        gap: 8px !important;
-        align-items: center;
+    .dash-calendar-strip-inner {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .dash-strip-period {
+        width: 100%;
+        justify-content: flex-start;
+    }
+    .dash-calendar-strip .strip-select,
+    .dash-calendar-strip .month-select,
+    .dash-calendar-strip .year-select {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+    .dash-calendar-strip .winstreak-counter {
+        margin-left: 0;
+        width: 100%;
+        justify-content: center;
+    }
+    .dash-toolbar-totals-only {
+        justify-content: center !important;
     }
     .dash-toolbar-totals {
         display: flex !important;
@@ -164,9 +177,9 @@
         flex-wrap: wrap;
         gap: 8px !important;
         align-items: center;
+        justify-content: center;
         font-size: 0.85rem;
     }
-    #winstreak-counter { margin-left: 0 !important; font-size: 0.95rem !important; }
 
     /* РЎС‚Р°С‚РёСЃС‚РёРєР° вЂ” РІРµСЂС‚РёРєР°Р»СЊРЅРѕ */
     .stats-layout { flex-direction: column !important; gap: 14px !important; overflow: visible !important; height: auto !important; }
@@ -213,7 +226,7 @@
     .stat-card .value { font-size: 1.35rem; }
     .theme-color-grid { grid-template-columns: 1fr; }
     .grid { gap: 6px; }
-    .day-cell, .week-label { min-height: 58px; padding: 7px; }
+    .day-cell, .week-label { min-height: 64px; padding: 8px; }
     .day-number { font-size: 0.82rem; }
     .day-pnl { font-size: 0.88rem; }
     .slider-row { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "label value" "slider slider"; gap: 8px; align-items: center; }

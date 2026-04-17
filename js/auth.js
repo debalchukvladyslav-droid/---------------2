@@ -1,6 +1,7 @@
 // === js/auth.js ===
 import { supabase } from './supabase.js';
 import { state } from './state.js';
+import { normalizeDayEntry } from './data_utils.js';
 
 const PROFILE_SUFFIX = '_stats';
 
@@ -69,19 +70,53 @@ async function saveProfilePatchByDocName(docName, patch) {
     if (error) throw error;
 }
 
-async function saveJournalMonth(docName, monthKey, monthData) {
-    const nick = getNickFromDocName(docName);
+function dayEntryToJournalRow(userId, tradeDate, entry) {
+    const day = normalizeDayEntry(entry);
+    return {
+        user_id: userId,
+        trade_date: tradeDate,
+        pnl: day.pnl,
+        gross_pnl: day.gross_pnl,
+        commissions: day.commissions,
+        locates: day.locates,
+        kf: day.kf,
+        notes: day.notes || '',
+        mentor_comment: typeof day.mentor_comment === 'string' ? day.mentor_comment : '',
+        ai_advice: typeof day.ai_advice === 'string' ? day.ai_advice : '',
+        daily_metrics: {
+            errors: Array.isArray(day.errors) ? day.errors : [],
+            checkedParams: Array.isArray(day.checkedParams) ? day.checkedParams : [],
+            sliders: day.sliders && typeof day.sliders === 'object' ? day.sliders : {},
+            tradeTypesData: day.tradeTypesData && typeof day.tradeTypesData === 'object' ? day.tradeTypesData : {},
+            screenshots: day.screenshots && typeof day.screenshots === 'object'
+                ? day.screenshots
+                : { good: [], normal: [], bad: [], error: [] },
+            tickers: day.tickers && typeof day.tickers === 'object' ? day.tickers : {},
+            traded_tickers: Array.isArray(day.traded_tickers) ? day.traded_tickers : [],
+            fondexx: day.fondexx && typeof day.fondexx === 'object'
+                ? day.fondexx
+                : { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
+            ppro: day.ppro && typeof day.ppro === 'object'
+                ? day.ppro
+                : { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
+            sessionGoal: day.sessionGoal ?? '',
+            sessionPlan: day.sessionPlan ?? '',
+            sessionReadiness: day.sessionReadiness ?? null,
+            sessionSetups: Array.isArray(day.sessionSetups) ? day.sessionSetups : [],
+            sessionAiResult: day.sessionAiResult ?? '',
+            sessionDone: day.sessionDone ?? false,
+            trades: Array.isArray(day.trades) ? day.trades : []
+        }
+    };
+}
+
+async function saveJournalDay(docName, tradeDate, entry) {
+    const profile = await getProfileByNick(getNickFromDocName(docName), 'id');
+    if (!profile?.id) throw new Error('Target Supabase profile not found');
+
     const { error } = await supabase
-        .from('journal_months')
-        .upsert(
-            [{
-                user_doc_name: docName,
-                nick,
-                month_key: monthKey,
-                data: monthData
-            }],
-            { onConflict: 'user_doc_name,month_key' }
-        );
+        .from('journal_days')
+        .upsert(dayEntryToJournalRow(profile.id, tradeDate, entry), { onConflict: 'user_id,trade_date' });
 
     if (error) throw error;
 }
@@ -414,7 +449,10 @@ export function applyAccessRights() {
     }
 
     document.querySelectorAll('input, textarea, select').forEach(el => {
-        const safeIds = ['month-select', 'year-select', 'trade-date', 'stats-filter-year', 'stats-filter-month', 'stats-filter-user'];
+        const safeIds = [
+            'month-select', 'year-select', 'trade-date', 'stats-filter-year', 'stats-filter-month', 'stats-filter-user',
+            'sidebar-pf-fname', 'sidebar-pf-lname', 'sidebar-pf-avatar-url',
+        ];
         if (!safeIds.includes(el.id) && !el.id.includes('theme-') && !el.id.includes('font-')) {
             el.disabled = !hasAccess;
         }
@@ -569,20 +607,18 @@ export async function saveMentorComment() {
     btn.innerText = '⏳ Збереження...';
 
     try {
-        const mk = state.selectedDateStr.slice(0, 7);
-        const monthData = {};
-        for (const d in state.appData.journal) {
-            if (d.slice(0, 7) === mk) monthData[d] = state.appData.journal[d];
-        }
-
-        await saveJournalMonth(state.CURRENT_VIEWED_USER, mk, monthData);
+        await saveJournalDay(
+            state.CURRENT_VIEWED_USER,
+            state.selectedDateStr,
+            state.appData.journal[state.selectedDateStr]
+        );
         btn.innerText = '✓ Збережено!';
         btn.style.background = 'var(--profit)';
         setTimeout(() => { btn.innerText = '✓ Зберегти коментар'; btn.style.background = '#eab308'; }, 2000);
         if (window.renderView) window.renderView();
     } catch (e) {
         if (isMissingRelationError(e)) {
-            showToast('Таблиця journal_months ще не створена в Supabase');
+            showToast('Таблиця journal_days ще не створена в Supabase');
         } else {
             showToast('Помилка збереження: ' + e.message);
         }
