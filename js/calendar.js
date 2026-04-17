@@ -1,7 +1,11 @@
 // === js/calendar.js ===
 import { state } from './state.js';
-import { saveToLocal, loadMonth, loadDayDetails } from './storage.js';
-import { showPrompt } from './utils.js';
+import { saveToLocal, loadMonth, loadDayDetails, markJournalDayDirty } from './storage.js';
+import { showPrompt, showToast } from './utils.js';
+import { isMentorViewingOtherJournal, canAccessMentorReviewQueue } from './auth.js';
+import { reviewReasonsForDay } from './review_signals.js';
+import { updateDashMiniEquityChart } from './dash_mini_chart.js';
+import { hideGlobalLoader, setElementLoading, showGlobalLoader } from './loading.js';
 
 let _selectDateRequestId = 0;
 
@@ -134,6 +138,8 @@ export function updateDashboardWidgets(year, month) {
     if (pfEl) pfEl.textContent = pf.toFixed(2);
     if (pnlEl) pnlEl.style.color = totalPnl >= 0 ? 'var(--profit)' : 'var(--loss)';
 
+    updateDashMiniEquityChart(year, month);
+
     _dashSetBadge('badge-pnl', totalPnl >= 0 ? '+' + wins + ' прибуткових' : losses + ' збиткових', totalPnl >= 0 ? 'positive' : 'negative');
     _dashSetBadge('badge-winrate', wins + 'W / ' + losses + 'L', winrate >= 50 ? 'positive' : 'negative');
     _dashSetBadge('badge-trades', 'за ' + mk, 'neutral');
@@ -141,39 +147,60 @@ export function updateDashboardWidgets(year, month) {
 
     const list = document.getElementById('recent-trades-list');
     if (list) {
-        const days = Object.entries(journal)
-            .filter(([d, dd]) => dd && d.startsWith(prefix) && (parseFloat(dd.pnl) || 0) !== 0)
-            .sort(([a], [b]) => b.localeCompare(a))
-            .slice(0, 8);
+        const rows = [];
+        for (const [date, day] of Object.entries(journal)) {
+            if (!day || !date.startsWith(prefix) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+            const trades = Array.isArray(day.trades) ? day.trades : [];
+            trades.forEach((t, idx) => {
+                const net = parseFloat(t.net);
+                if (!Number.isFinite(net)) return;
+                rows.push({ date, idx, sym: String(t.symbol || '?').toUpperCase(), net, type: String(t.type || '') });
+            });
+        }
+        rows.sort((a, b) => {
+            const c = b.date.localeCompare(a.date);
+            if (c !== 0) return c;
+            return Math.abs(b.net) - Math.abs(a.net);
+        });
+        const top = rows.slice(0, 12);
 
-        if (days.length === 0) {
-            list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:0.85rem;">Немає угод у цьому місяці</div>';
+        if (top.length === 0) {
+            list.innerHTML =
+                '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:0.85rem;">Немає імпортованих угод у цьому місяці (Fondexx trades).</div>';
         } else {
-            list.innerHTML = days.map(([date, day]) => {
-                const pnl = parseFloat(day.pnl) || 0;
-                const gross = parseFloat(day.gross_pnl ?? day.gross) || 0;
-                const isPos = pnl >= 0;
-                const pct = gross !== 0 ? ((pnl / Math.abs(gross)) * 100).toFixed(1) : '0.0';
-                const dateObj = new Date(date + 'T00:00:00');
-                const dateStr = dateObj.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
-                const arrow = isPos
-                    ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>'
-                    : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>';
-                const ticker = (day.ticker || day.type || '').toUpperCase() || 'TRADE';
-                return `<div class="recent-trade-item" onclick="selectDate('${date}')">
+            list.innerHTML = top
+                .map((r) => {
+                    const isPos = r.net >= 0;
+                    const dateObj = new Date(r.date + 'T00:00:00');
+                    const dateStr = dateObj.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
+                    const arrow = isPos
+                        ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>'
+                        : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>';
+                    const safeDate = sanitizeHTML(r.date);
+                    const safeSym = sanitizeHTML(r.sym);
+                    return `<div class="recent-trade-item" role="button" tabindex="0" data-recent-date="${safeDate}" data-recent-idx="${r.idx}">
                 <div class="recent-trade-left">
                     <div class="recent-trade-dir-icon ${isPos ? 'long' : 'short'}">${arrow}</div>
                     <div>
-                        <div class="recent-trade-symbol">${ticker || dateStr}</div>
-                        <div class="recent-trade-meta">${ticker ? dateStr : ''} ${isPos ? 'Прибуток' : 'Збиток'}</div>
+                        <div class="recent-trade-symbol">${safeSym}</div>
+                        <div class="recent-trade-meta">${dateStr}${r.type ? ' · ' + sanitizeHTML(r.type) : ''}</div>
                     </div>
                 </div>
                 <div class="recent-trade-right">
-                    <div class="recent-trade-pnl ${isPos ? 'pos' : 'neg'}">${isPos ? '+' : ''}$${pnl.toFixed(2)}</div>
-                    <div class="recent-trade-pct ${isPos ? 'pos' : 'neg'}">${isPos ? '+' : ''}${pct}%</div>
+                    <div class="recent-trade-pnl ${isPos ? 'pos' : 'neg'}">${isPos ? '+' : ''}$${r.net.toFixed(2)}</div>
                 </div>
             </div>`;
-            }).join('');
+                })
+                .join('');
+
+            list.querySelectorAll('.recent-trade-item').forEach((el) => {
+                el.addEventListener('click', () => {
+                    const ds = el.getAttribute('data-recent-date');
+                    const ix = parseInt(el.getAttribute('data-recent-idx') || '0', 10);
+                    if (ds && window.selectDate) void window.selectDate(ds);
+                    if (window.openTradesAtDayIndex) window.openTradesAtDayIndex(ds, ix);
+                });
+            });
         }
     }
 }
@@ -189,12 +216,11 @@ export function shiftDate(offset) {
     let newMonth = String(d.getMonth() + 1).padStart(2, '0');
     let newDay = String(d.getDate()).padStart(2, '0');
     let newDateStr = `${newYear}-${newMonth}-${newDay}`;
-    
-    document.getElementById('month-select').value = d.getMonth();
-    document.getElementById('year-select').value = d.getFullYear();
-    
+
+    applyDateStrToCalendarSelectors(newDateStr);
+
     selectDate(newDateStr);
-    renderView(); 
+    renderView();
 }
 
 export function updateDisplayDate(dateStr) {
@@ -205,15 +231,15 @@ export function updateDisplayDate(dateStr) {
 }
 
 export function selectDateFromInput(dateStr) {
-    let parts = dateStr.split('-');
-    document.getElementById('month-select').value = parseInt(parts[1]) - 1; 
-    document.getElementById('year-select').value = parseInt(parts[0]);
-    selectDate(dateStr); 
+    applyDateStrToCalendarSelectors(dateStr);
+    selectDate(dateStr);
     renderView();
 }
 
 function setDayDetailsLoading(isLoading) {
     state.dayDetailsLoading = isLoading;
+    if (isLoading) showGlobalLoader('day-details', 'Завантаження дня...');
+    else hideGlobalLoader('day-details');
     ['trade-pnl', 'trade-gross', 'trade-comm', 'trade-locates', 'trade-kf', 'trade-notes', 'session-goal', 'session-plan', 'session-readiness']
         .forEach(id => {
             const el = document.getElementById(id);
@@ -221,13 +247,76 @@ function setDayDetailsLoading(isLoading) {
         });
 }
 
+export function getCalendarYearMonth() {
+    const onCal = document.getElementById('view-calendar')?.classList.contains('active');
+    const cy = document.getElementById('cal-view-year');
+    const cm = document.getElementById('cal-view-month');
+    if (onCal && cy && cm) {
+        let year = parseInt(cy.value, 10);
+        let month = parseInt(cm.value, 10);
+        if (isNaN(year)) year = state.todayObj.getFullYear();
+        if (isNaN(month)) month = state.todayObj.getMonth();
+        return { year, month };
+    }
+    return { year: state.todayObj.getFullYear(), month: state.todayObj.getMonth() };
+}
+
+function applyDateStrToCalendarSelectors(dateStr) {
+    const m = /^(\d{4})-(\d{2})-\d{2}$/.exec(dateStr);
+    if (!m) return;
+    const y = parseInt(m[1], 10);
+    const mo = parseInt(m[2], 10) - 1;
+    const cy = document.getElementById('cal-view-year');
+    const cmon = document.getElementById('cal-view-month');
+    if (cy && !isNaN(y)) cy.value = String(y);
+    if (cmon && !isNaN(mo)) cmon.value = String(mo);
+}
+
+/** Список угод дня у бічній вкладці «Угоди» (тикер + net з імпорту). */
+export function renderSidebarTradesList(dateStr) {
+    const wrap = document.getElementById('trades-list-container');
+    const empty = document.getElementById('trades-empty');
+    if (!wrap) return;
+    const day = state.appData.journal[dateStr];
+    const trades = Array.isArray(day?.trades) ? day.trades : [];
+    if (trades.length === 0) {
+        wrap.innerHTML = '';
+        if (empty) empty.style.display = 'block';
+        return;
+    }
+    if (empty) empty.style.display = 'none';
+    wrap.innerHTML = trades
+        .map((t, i) => {
+            const sym = sanitizeHTML(String(t.symbol || '?').toUpperCase());
+            const net = parseFloat(t.net);
+            const ok = Number.isFinite(net);
+            const cls = ok && net >= 0 ? 'pos' : 'neg';
+            const sign = ok && net >= 0 ? '+' : '';
+            const netStr = ok ? `${sign}$${net.toFixed(2)}` : '—';
+            const typ = sanitizeHTML(String(t.type || ''));
+            return `<button type="button" class="sidebar-trade-row" data-sb-trade-idx="${i}">
+                <span class="sidebar-trade-sym">${sym}${typ ? `<span class="sidebar-trade-type">${typ}</span>` : ''}</span>
+                <span class="sidebar-trade-net ${cls}">${netStr}</span>
+            </button>`;
+        })
+        .join('');
+    wrap.querySelectorAll('.sidebar-trade-row').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const ix = parseInt(btn.getAttribute('data-sb-trade-idx') || '0', 10);
+            if (window.openTradesAtDayIndex) window.openTradesAtDayIndex(dateStr, ix);
+        });
+    });
+}
+
 function fillSelectedDateUI(dateStr) {
     document.getElementById('trade-date').value = dateStr; 
     updateDisplayDate(dateStr);
 
-    document.querySelectorAll('.day-cell').forEach(c => c.classList.remove('active-day'));
-    const cell = document.getElementById(`cell-${dateStr}`); 
+    document.querySelectorAll('.day-cell').forEach((c) => c.classList.remove('active-day'));
+    const cell = document.getElementById(`cell-${dateStr}`);
     if (cell) cell.classList.add('active-day');
+
+    renderSidebarTradesList(dateStr);
 
     const dayData = state.appData.journal[dateStr] || {};
     document.getElementById('trade-pnl').value = dayData.pnl !== undefined && dayData.pnl !== null ? parseFloat(dayData.pnl).toFixed(2) : '';
@@ -309,16 +398,20 @@ function fillSelectedDateUI(dateStr) {
         });
         ttContainer.innerHTML = ttHtml;
     }
+
+    if (window.refreshReviewRequestButtons) window.refreshReviewRequestButtons();
 }
 
 export async function selectDate(dateStr) {
     const requestId = ++_selectDateRequestId;
     state.selectedDateStr = dateStr;
+    applyDateStrToCalendarSelectors(dateStr);
     fillSelectedDateUI(dateStr);
 
     const dayData = state.appData.journal[dateStr];
     if (dayData?.__detailsLoaded) return;
 
+    showGlobalLoader('day-details', `Завантаження дня ${dateStr}...`);
     setDayDetailsLoading(true);
     try {
         await loadDayDetails(dateStr);
@@ -334,6 +427,10 @@ export async function selectDate(dateStr) {
 export function saveEntry() {
     if (!state.selectedDateStr) return; // Ніяких алертів, просто тихий вихід, якщо день не обрано
     if (state.dayDetailsLoading) return;
+    if (isMentorViewingOtherJournal()) {
+        showToast('Ментор не може зберігати день трейдера — лише коментар наставника або приватна нотатка.');
+        return;
+    }
     
     // Збираємо типи трейдів
     let ttData = Object.create(null);
@@ -399,22 +496,36 @@ export function saveEntry() {
     if (oldData.sessionAiResult !== undefined) dayData.sessionAiResult = oldData.sessionAiResult;
     if (oldData.trades !== undefined) dayData.trades = oldData.trades;
     if (oldData.sessionDone !== undefined) dayData.sessionDone = oldData.sessionDone;
+    if (oldData.review_requests !== undefined) dayData.review_requests = oldData.review_requests;
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(state.selectedDateStr) || Object.prototype.hasOwnProperty.call(Object.prototype, state.selectedDateStr)) return;
     dayData.__detailsLoaded = true;
     state.appData.journal[state.selectedDateStr] = dayData;
+    markJournalDayDirty(state.selectedDateStr);
+    const saveBtn = document.getElementById('btn-save-day');
+    setElementLoading(saveBtn, true, 'Збереження...');
     
     // Тихе збереження
     import('./storage.js').then(module => {
-        module.saveToLocal().then(() => {
+        module.saveJournalData().then(() => {
+            showGlobalLoader('save-day', 'День збережено', { type: 'success' });
+            hideGlobalLoader('save-day', 900);
             if (window.updateAutoFlags) {
-                window.updateAutoFlags().then(() => { if (window.renderView) window.renderView(); });
+                window.updateAutoFlags().then(() => {
+                    if (window.renderView) window.renderView();
+                    if (window.scanJournalForNotifications) window.scanJournalForNotifications();
+                });
             } else if (window.renderView) {
                 window.renderView();
+                if (window.scanJournalForNotifications) window.scanJournalForNotifications();
             }
             if (window.refreshStatsView) window.refreshStatsView();
             if (window.innerWidth <= 1024 && window.toggleMobileSidebar) window.toggleMobileSidebar(false);
-        }).catch(err => console.error("Помилка фонового збереження:", err));
+        }).catch(err => {
+            showGlobalLoader('save-day', 'Помилка збереження', { type: 'error' });
+            hideGlobalLoader('save-day', 2400);
+            console.error("Помилка фонового збереження:", err);
+        }).finally(() => setElementLoading(saveBtn, false));
     });
 }
 
@@ -543,19 +654,18 @@ export function createWeekLabel(wkKey) {
 }
 
 export async function renderView() {
-    let yearInput = document.getElementById('year-select');
-    let monthInput = document.getElementById('month-select');
-    
-    // БРОНЕБІЙНИЙ ЗАХИСТ: Якщо інпутів немає або вони порожні - беремо поточний рік і місяць
-    let year = yearInput && yearInput.value ? parseInt(yearInput.value) : state.todayObj.getFullYear(); 
-    let month = monthInput && monthInput.value ? parseInt(monthInput.value) : state.todayObj.getMonth();
-    
-    if (isNaN(year)) year = state.todayObj.getFullYear();
-    if (isNaN(month)) month = state.todayObj.getMonth();
+    const { year, month } = getCalendarYearMonth();
 
     // Підвантажуємо місяць якщо ще не завантажений
     const mk = `${year}-${String(month + 1).padStart(2, '0')}`;
-    if (state.CURRENT_VIEWED_USER) await loadMonth(state.CURRENT_VIEWED_USER, mk);
+    if (state.CURRENT_VIEWED_USER) {
+        showGlobalLoader('month-load', `Завантаження ${mk}...`);
+        try {
+            await loadMonth(state.CURRENT_VIEWED_USER, mk);
+        } finally {
+            hideGlobalLoader('month-load');
+        }
+    }
 
     const grid = document.getElementById('calendar-grid');
     if (!grid) return; // Якщо таблиці взагалі немає в HTML - виходимо
@@ -647,7 +757,23 @@ export async function renderView() {
         let dayHoverText = '';
         if (data) {
             const body = buildDayDetailBody(dateKey, data, currentMonthDayloss);
-            dayHoverText = formatLongDateUk(dateKey) + (body ? `\n\n${body}` : '\n\nЗапис є — додайте PnL чи думки в формі дня.') + appendWeekSummaryForDate(dateKey);
+            let reviewLine = '';
+            if (canAccessMentorReviewQueue() && state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) {
+                const revReasons = reviewReasonsForDay(data, currentMonthDayloss);
+                if (revReasons.length) {
+                    cell.classList.add('day-needs-review');
+                    const dot = document.createElement('span');
+                    dot.className = 'day-review-dot';
+                    dot.title = revReasons.map((r) => r.label).join(' · ');
+                    cell.appendChild(dot);
+                    reviewLine = `\n\nРев'ю: ${revReasons.map((r) => r.label).join(', ')}`;
+                }
+            }
+            dayHoverText =
+                formatLongDateUk(dateKey) +
+                (body ? `\n\n${body}` : '\n\nЗапис є — додайте PnL чи думки в формі дня.') +
+                reviewLine +
+                appendWeekSummaryForDate(dateKey);
         } else {
             dayHoverText = formatLongDateUk(dateKey) + '\n\nНемає збереженого дня.' + appendWeekSummaryForDate(dateKey);
         }
@@ -678,33 +804,41 @@ export async function renderView() {
     let commEl = document.getElementById('total-comm'); if(commEl) commEl.innerText = `${parseFloat(totalComm).toFixed(2)}$`;
     let locEl = document.getElementById('total-locates'); if(locEl) locEl.innerText = `${parseFloat(totalLocates).toFixed(2)}$`;
 
-    updateDashboardWidgets(year, month);
+    const dashY = state.todayObj.getFullYear();
+    const dashM = state.todayObj.getMonth();
+    updateDashboardWidgets(dashY, dashM);
 }
 
 export function initSelectors() {
-    let ySel = document.getElementById('year-select');
-    let mSel = document.getElementById('month-select');
-    
-    if (ySel) {
-        ySel.innerHTML = '';
+    const cyCal = document.getElementById('cal-view-year');
+    const cmCal = document.getElementById('cal-view-month');
+
+    if (cyCal) {
+        cyCal.innerHTML = '';
         for (let y = 2024; y <= 2030; y++) {
             const opt = document.createElement('option');
             opt.value = y;
-            opt.textContent = y;
-            ySel.appendChild(opt);
+            opt.textContent = String(y);
+            cyCal.appendChild(opt);
         }
-        ySel.value = state.todayObj.getFullYear();
+        cyCal.value = state.todayObj.getFullYear();
     }
 
-    if (mSel) {
-        mSel.innerHTML = '';
-        const months = ["Січень", "Лютий", "Березень", "Квітень", "Травень", "Червень", "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень"];
+    if (cmCal) {
+        cmCal.innerHTML = '';
+        const months = ['Січ', 'Лют', 'Бер', 'Кві', 'Тра', 'Чер', 'Лип', 'Сер', 'Вер', 'Жов', 'Лис', 'Гру'];
         months.forEach((m, i) => {
             const opt = document.createElement('option');
             opt.value = i;
             opt.textContent = m;
-            mSel.appendChild(opt);
+            cmCal.appendChild(opt);
         });
-        mSel.value = state.todayObj.getMonth();
+        cmCal.value = state.todayObj.getMonth();
+    }
+
+    if (cmCal && cyCal && !cmCal.dataset.calSyncWired) {
+        cmCal.dataset.calSyncWired = '1';
+        cmCal.addEventListener('change', () => void renderView());
+        cyCal.addEventListener('change', () => void renderView());
     }
 }

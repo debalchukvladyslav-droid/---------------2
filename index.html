@@ -48,7 +48,7 @@
             <h1 class="auth-title">Trading Journal</h1>
             <p id="auth-subtitle" class="auth-subtitle">Вхід у систему</p>
             
-            <input type="text" id="auth-nick" class="auth-input" placeholder="Логін (Нікнейм)">
+            <input type="text" id="auth-nick" class="auth-input" placeholder="Нікнейм або email">
             <input type="password" id="auth-pass" class="auth-input" placeholder="Пароль (мін. 6 симв.)">
 
             <div id="register-fields" class="register-fields">
@@ -62,6 +62,8 @@
 
             <div id="auth-error" class="auth-error">Помилка</div>
             <button class="btn-primary" id="btn-submit" onclick="window.handleAuth?.()">Увійти</button>
+            <button type="button" class="auth-input" id="btn-auth-telegram" style="margin-top:10px;cursor:pointer;background:linear-gradient(135deg,#2aabee,#229ed9);color:#fff;border:none;font-weight:600;" onclick="window.signInWithTelegram?.()">📱 Увійти через Telegram</button>
+            <div id="telegram-widget-mount" style="display:none;margin-top:12px;min-height:44px;"></div>
             
             <div class="auth-links">
                 <span id="auth-switch-text">Ще немає акаунта?</span> 
@@ -100,7 +102,7 @@
     </div>
 
     <div id="form-sidebar-backdrop" class="form-sidebar-backdrop" onclick="window.toggleRightSidebar?.()"></div>
-    <div class="sidebar" id="form-sidebar" style="border-left:1px solid var(--border);box-shadow:-8px 0 32px rgba(0,0,0,0.4);">
+    <div class="sidebar collapsed" id="form-sidebar" style="border-left:1px solid var(--border);box-shadow:-8px 0 32px rgba(0,0,0,0.4);">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border);">
             <h3 style="margin:0;font-size:1.1rem;font-weight:600;color:var(--text-main);">Форма дня</h3>
             <button onclick="window.toggleRightSidebar?.()" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;padding:6px;border-radius:8px;display:flex;align-items:center;transition:background 0.2s;" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
@@ -116,10 +118,11 @@
         </div>
         
         <div class="tabs">
-            <button class="tab-btn active" onclick="switchTab('tab-profit')">Профіт</button>
-            <button class="tab-btn" onclick="switchTab('tab-mind')">Думка</button>
-            <button class="tab-btn" onclick="switchTab('tab-errors')">Помилки</button>
-            <button class="tab-btn" onclick="switchTab('tab-session')">🎯 Сесія</button>
+            <button type="button" class="tab-btn active" data-tab="tab-profit" onclick="switchTab('tab-profit')">Профіт</button>
+            <button type="button" class="tab-btn" data-tab="tab-mind" onclick="switchTab('tab-mind')">Думка</button>
+            <button type="button" class="tab-btn" data-tab="tab-errors" onclick="switchTab('tab-errors')">Помилки</button>
+            <button type="button" class="tab-btn" data-tab="tab-trades" onclick="switchTab('tab-trades')">Угоди</button>
+            <button type="button" class="tab-btn" data-tab="tab-session" onclick="switchTab('tab-session')">🎯 Сесія</button>
         </div>
 
         <div id="tab-profit" class="tab-content active">
@@ -222,7 +225,7 @@
             <div id="session-ai-result" class="session-ai-result"></div>
         </div>
 
-        <button class="btn-primary" onclick="saveEntry()" style="margin-top:auto;flex-shrink:0;">
+        <button type="button" id="btn-save-day" class="btn-primary" onclick="saveEntry()" style="margin-top:auto;flex-shrink:0;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:6px;vertical-align:middle;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             Зберегти день
         </button>
@@ -248,6 +251,10 @@
                 <span class="ti-icon ti-chart-bar"></span>
                 <span class="nav-label">Дашборд</span>
             </button>
+            <button class="sidebar-nav-item" data-tab="calendar" onclick="switchMainTab('calendar')">
+                <span class="ti-icon ti-calendar"></span>
+                <span class="nav-label">Календар</span>
+            </button>
             <button class="sidebar-nav-item" data-tab="stats" onclick="switchMainTab('stats')">
                 <span class="ti-icon ti-chart-line"></span>
                 <span class="nav-label">Статистика</span>
@@ -263,6 +270,11 @@
             <button class="sidebar-nav-item" data-tab="ai" onclick="switchMainTab('ai')">
                 <span class="ti-icon ti-brain"></span>
                 <span class="nav-label">AI Ментор</span>
+            </button>
+            <button type="button" class="sidebar-nav-item mentor-review-nav-item" data-tab="mentor-review" onclick="switchMainTab('mentor-review')" style="display:none;" title="Черга днів для рев'ю">
+                <span class="ti-icon ti-inbox"></span>
+                <span class="nav-label">Черга рев'ю</span>
+                <span class="mentor-review-nav-badge" hidden aria-label="Кількість у черзі">0</span>
             </button>
             <div class="nav-divider" style="height:1px;background:var(--border);margin:6px 16px;"></div>
             <button class="sidebar-nav-item" data-tab="playbook" onclick="switchMainTab('playbook')">
@@ -296,17 +308,24 @@
                 </span>
             </button>
             <div class="sidebar-account-dropdown" id="sidebar-account-dropdown" hidden>
-                <div>
+                <div class="sidebar-pf-section">
+                    <div class="sidebar-pf-section-title">Акаунт</div>
+                    <div class="sidebar-pf-label">Логін (нік)</div>
+                    <div class="sidebar-pf-readonly" id="sidebar-pf-nick">—</div>
+                    <div class="sidebar-pf-label">Кущ</div>
+                    <div class="sidebar-pf-readonly" id="sidebar-pf-team-display">—</div>
+                    <p class="sidebar-pf-mini-hint">Зміну куща та ролі виконує адміністратор у вкладці «Адмін».</p>
+                </div>
+                <div class="sidebar-pf-section">
+                    <div class="sidebar-pf-section-title">Ім’я для команди</div>
                     <div class="sidebar-pf-label">Ім'я</div>
-                    <input type="text" id="sidebar-pf-fname" autocomplete="given-name" placeholder="Ім'я">
-                </div>
-                <div>
+                    <input type="text" id="sidebar-pf-fname" class="sidebar-pf-input" autocomplete="given-name" placeholder="Ім'я">
                     <div class="sidebar-pf-label">Прізвище</div>
-                    <input type="text" id="sidebar-pf-lname" autocomplete="family-name" placeholder="Прізвище">
+                    <input type="text" id="sidebar-pf-lname" class="sidebar-pf-input" autocomplete="family-name" placeholder="Прізвище">
                 </div>
-                <div>
-                    <div class="sidebar-pf-label">Іконка профілю</div>
-                    <p class="sidebar-pf-hint">Оберіть емодзі або вставте пряме посилання на зображення (https…). У панелі «Команда» це видно всім.</p>
+                <div class="sidebar-pf-section">
+                    <div class="sidebar-pf-section-title">Аватар</div>
+                    <p class="sidebar-pf-hint">Емодзі або посилання на зображення (https…). Бачать у панелі «Команда».</p>
                     <input type="hidden" id="sidebar-pf-emoji" value="">
                     <div class="sidebar-pf-emoji-grid" id="sidebar-pf-emoji-grid">
                         <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F600;" title="Смайл">&#x1F600;</button>
@@ -321,10 +340,10 @@
                         <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F48E;" title="Діамант">&#x1F48E;</button>
                         <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F680;" title="Ракета">&#x1F680;</button>
                     </div>
-                    <input type="url" id="sidebar-pf-avatar-url" class="sidebar-pf-url" placeholder="https://… зображення аватара" autocomplete="off">
+                    <input type="url" id="sidebar-pf-avatar-url" class="sidebar-pf-url sidebar-pf-input" placeholder="https://… зображення аватара" autocomplete="off">
                     <button type="button" class="btn-secondary sidebar-pf-clear-avatar" id="sidebar-pf-avatar-clear">Скинути іконку (ініціали)</button>
                 </div>
-                <button type="button" class="btn-primary sidebar-pf-save" id="sidebar-pf-save">Зберегти профіль</button>
+                <button type="button" class="btn-primary sidebar-pf-save" id="sidebar-pf-save">Зберегти зміни</button>
             </div>
         </div>
 
@@ -348,7 +367,11 @@
                 </button>
                 <h2 id="page-title" class="page-title">Дашборд</h2>
             </div>
-            <div class="header-right">
+            <div class="header-right" style="display:flex;align-items:center;gap:8px;">
+                <button type="button" id="notif-bell-btn" class="header-btn notif-bell-btn" aria-label="Сповіщення" title="Сповіщення">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="notif-bell-svg"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                    <span class="notif-bell-badge" hidden aria-live="polite">0</span>
+                </button>
                 <button id="team-toggle-btn" class="header-btn" onclick="openTeamSidebar()">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:middle;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                     Команда
@@ -386,11 +409,18 @@
                 <button class="mobile-more-item" data-tab="trades" onclick="switchMainTab('trades'); closeMobileMoreMenu()">
                     <span>Угоди</span>
                 </button>
+                <button class="mobile-more-item" data-tab="calendar" onclick="switchMainTab('calendar'); closeMobileMoreMenu()">
+                    <span>Календар</span>
+                </button>
                 <button class="mobile-more-item" data-tab="playbook" onclick="switchMainTab('playbook'); closeMobileMoreMenu()">
                     <span>Плейбук</span>
                 </button>
                 <button class="mobile-more-item" data-tab="learn" onclick="switchMainTab('learn'); closeMobileMoreMenu()">
                     <span>Навчання</span>
+                </button>
+                <button class="mobile-more-item mentor-review-nav-item" data-tab="mentor-review" onclick="switchMainTab('mentor-review'); closeMobileMoreMenu()" style="display: none;">
+                    <span>Черга рев'ю</span>
+                    <span class="mentor-review-nav-badge mentor-review-nav-badge--inline" hidden aria-label="Кількість у черзі">0</span>
                 </button>
                 <button class="mobile-more-item" data-tab="settings" onclick="switchMainTab('settings'); closeMobileMoreMenu()">
                     <span>Налашт.</span>
@@ -403,12 +433,8 @@
 
         <div id="view-dash" class="view-content active">
 
-            <div class="dash-calendar-strip" aria-label="Період і серія перемог">
-                <div class="dash-calendar-strip-inner">
-                    <div class="dash-strip-period">
-                        <select id="month-select" class="month-select strip-select" onchange="renderView()"></select>
-                        <select id="year-select" class="year-select strip-select" onchange="renderView()"></select>
-                    </div>
+            <div class="dash-calendar-strip" aria-label="Серія перемог">
+                <div class="dash-calendar-strip-inner dash-calendar-strip-inner--end">
                     <div id="winstreak-counter" class="winstreak-counter" style="display:none">
                         <span class="winstreak-lbl">Стрік</span>
                         <span id="winstreak-val" class="winstreak-val">0</span>
@@ -476,18 +502,16 @@
             <!-- 2-COLUMN LAYOUT -->
             <div class="dash-3col">
 
-                <!-- COL 1: Calendar -->
+                <!-- COL 1: міні-крива кумулятивного PnL за поточний місяць -->
                 <div class="dash-col dash-col-main">
-                    <div class="panel" style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;">
-                        <div class="dash-toolbar dash-toolbar-totals-only">
-                            <div class="dash-toolbar-totals">
-                                <div>Комісія: <span id="total-comm">$0</span></div>
-                                <div>Локейти: <span id="total-locates">$0</span></div>
-                                <div>Місяць: <span id="total-pnl">$0</span></div>
-                            </div>
+                    <div class="panel dash-mini-equity-panel">
+                        <div class="dash-mini-equity-head">
+                            <h3 class="dash-mini-equity-title">Дохідність місяця</h3>
+                            <button type="button" class="btn-secondary dash-open-calendar-tab-btn rr-exempt-access" onclick="switchMainTab('calendar')" title="Повний календар">Календар</button>
                         </div>
-                        <div style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;flex:1;display:flex;flex-direction:column;min-height:0;">
-                            <div class="grid" id="calendar-grid" style="min-width:480px;flex:1;align-content:start;"></div>
+                        <p class="dash-mini-equity-sub">Кумулятивний PnL по торгових днях поточного місяця</p>
+                        <div class="dash-mini-equity-chart-wrap">
+                            <canvas id="dash-mini-equity-chart" aria-label="Графік PnL за місяць"></canvas>
                         </div>
                     </div>
                 </div>
@@ -504,6 +528,39 @@
                 </div>
             </div><!-- /dash-3col -->
         </div><!-- /view-dash -->
+
+        <div id="view-calendar" class="view-content calendar-view-page">
+            <div class="calendar-view-toolbar">
+                <div class="calendar-view-period">
+                    <label class="mr-field cal-period-field"><span class="cal-period-label">Місяць</span><select id="cal-view-month" class="month-select strip-select cal-period-select"></select></label>
+                    <label class="mr-field cal-period-field"><span class="cal-period-label">Рік</span><select id="cal-view-year" class="year-select strip-select cal-period-select"></select></label>
+                </div>
+            </div>
+            <div class="panel calendar-rr-row">
+                <p class="calendar-rr-lead">Загальний розбір дня (усі скріни) — запит до ментора вашого куща.</p>
+                <button type="button" id="rr-btn-screens-general" class="btn-secondary rr-toggle-btn rr-exempt-access" onclick="window.submitReviewRequest?.('screens_general')">Запит: загальний розбір</button>
+                <div id="mentor-rr-panel" class="mentor-rr-panel--calendar" style="display:none;">
+                    <h4 class="mentor-rr-calendar-title">Запити на вас за цей день</h4>
+                    <div id="mentor-rr-list"></div>
+                </div>
+            </div>
+            <div id="calendar-tab-slot" class="calendar-tab-slot calendar-tab-slot--full">
+                    <div id="calendar-bundle">
+                    <div class="panel" style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;">
+                        <div class="dash-toolbar dash-toolbar-totals-only">
+                            <div class="dash-toolbar-totals">
+                                <div>Комісія: <span id="total-comm">$0</span></div>
+                                <div>Локейти: <span id="total-locates">$0</span></div>
+                                <div>Місяць: <span id="total-pnl">$0</span></div>
+                            </div>
+                        </div>
+                        <div style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;flex:1;display:flex;flex-direction:column;min-height:0;">
+                            <div class="grid" id="calendar-grid" style="min-width:480px;flex:1;align-content:start;"></div>
+                        </div>
+                    </div>
+                    </div>
+            </div>
+        </div>
 
         <div id="view-stats" class="view-content">
             <!-- Горизонтальна панель фільтрів -->
@@ -678,6 +735,14 @@
 
                 <div class="unassigned-gallery" id="unassigned-container"></div>
             </div>
+
+            <div class="panel rr-screens-panel" id="screens-review-requests">
+                <h3 style="margin:0 0 8px 0; font-size:1.05rem; color:var(--accent);">Запит розбору до ментора куща</h3>
+                <p style="margin:0 0 14px 0; font-size:0.82rem; color:var(--text-muted); line-height:1.45;">Після натискання кнопка стає активною, поки ментор не прийме запит. Загальний розбір дня — у вкладці «Календар». Тут — прибутковість і окремі скріни.</p>
+                <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+                    <button type="button" id="rr-btn-calendar-profit" class="btn-secondary rr-toggle-btn rr-exempt-access" onclick="window.submitReviewRequest?.('calendar_profit')">Розбір прибутковості / календар</button>
+                </div>
+            </div>
             
             <div class="panel" style="flex-grow: 1;">
                 <h3 style="margin:0 0 15px 0; font-size: 1.4rem;">Детальний розбір сетапів за: <span id="big-screen-date" style="color: var(--accent);"></span></h3>
@@ -707,6 +772,85 @@
                 <div id="ai-saved-section" style="display: none; flex-direction: column; flex: 1; overflow-y: auto;">
                     <h3 style="color: var(--accent); margin-bottom: 15px;">💾 Збережені аналізи</h3>
                     <div id="ai-saved-list" style="display: flex; flex-direction: column; gap: 15px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-mentor-review" class="view-content mentor-review-view">
+            <div class="panel mentor-review-panel" id="mentor-review-root">
+                <div class="mentor-review-head">
+                    <div>
+                        <h2 class="mentor-review-title">Черга рев'ю ментора</h2>
+                        <p class="mentor-review-sub">Дні вашого куща (або вся команда для адміна), які варто переглянути: мінус без коментаря, великі збитки, помилки, без скрінів, без плану сесії, запит у нотатках (#розбір / #review), підказки AI, неповне заповнення журналу (PnL / нотатки).</p>
+                    </div>
+                    <button type="button" class="btn-primary" id="mr-refresh-btn">Оновити</button>
+                </div>
+                <div class="mentor-review-toolbar">
+                    <div class="mr-field mr-field-period">
+                        <span>Період</span>
+                        <input type="hidden" id="mr-days" value="1" autocomplete="off">
+                        <div class="mr-period" role="group" aria-label="Період перегляду">
+                            <button type="button" class="mr-period-btn active" data-mr-days="1">Сьогодні</button>
+                            <button type="button" class="mr-period-btn" data-mr-days="3">3 дні</button>
+                            <button type="button" class="mr-period-btn" data-mr-days="7">7 днів</button>
+                        </div>
+                    </div>
+                    <label class="mr-field">
+                        <span>Поріг «великий мінус» ($)</span>
+                        <input type="number" id="mr-loss-threshold" value="-200" step="50">
+                    </label>
+                </div>
+                <div class="mentor-review-filters">
+                    <span class="mr-filters-label">Показати рядок, якщо є хоча б одна з відмічених причин (якщо нічого не відмічено — усі причини):</span>
+                    <div class="mr-filter-pills">
+                        <label class="mr-pill" for="mr-f-need-mentor">
+                            <input type="checkbox" id="mr-f-need-mentor" class="mr-pill-input">
+                            <span class="mr-pill-text">Мінус без коментаря ментора</span>
+                        </label>
+                        <label class="mr-pill" for="mr-f-big-loss">
+                            <input type="checkbox" id="mr-f-big-loss" class="mr-pill-input">
+                            <span class="mr-pill-text">Великий мінус (≤ порогу)</span>
+                        </label>
+                        <label class="mr-pill" for="mr-f-errors">
+                            <input type="checkbox" id="mr-f-errors" class="mr-pill-input">
+                            <span class="mr-pill-text">Є теги помилок</span>
+                        </label>
+                        <label class="mr-pill" for="mr-f-no-screens">
+                            <input type="checkbox" id="mr-f-no-screens" class="mr-pill-input">
+                            <span class="mr-pill-text">Немає скрінів у дні</span>
+                        </label>
+                        <label class="mr-pill" for="mr-f-no-session">
+                            <input type="checkbox" id="mr-f-no-session" class="mr-pill-input">
+                            <span class="mr-pill-text">Немає плану/цілі сесії</span>
+                        </label>
+                        <label class="mr-pill" for="mr-f-notes-request">
+                            <input type="checkbox" id="mr-f-notes-request" class="mr-pill-input">
+                            <span class="mr-pill-text">Запит у нотатках (#розбір / #review)</span>
+                        </label>
+                        <label class="mr-pill" for="mr-f-ai-hint">
+                            <input type="checkbox" id="mr-f-ai-hint" class="mr-pill-input">
+                            <span class="mr-pill-text">AI про тільт / revenge</span>
+                        </label>
+                        <label class="mr-pill" for="mr-f-incomplete">
+                            <input type="checkbox" id="mr-f-incomplete" class="mr-pill-input">
+                            <span class="mr-pill-text">Не заповнені дані</span>
+                        </label>
+                    </div>
+                </div>
+                <p id="mentor-review-meta" class="mentor-review-meta"></p>
+                <div class="mentor-review-table-wrap">
+                    <table class="mentor-review-table">
+                        <thead>
+                            <tr>
+                                <th>Дата</th>
+                                <th>Трейдер</th>
+                                <th>PnL</th>
+                                <th>Причини</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="mentor-review-tbody"></tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -895,8 +1039,7 @@
                 </div>
             </div>
 
-            <p style="color: var(--text-muted); font-size: 0.82rem; margin-top: 12px; line-height: 1.45;">Режим ментора вмикається адміністратором у розділі «Адмін».</p>
-            <button id="btn-manage-teams" class="btn-primary" style="width: 100%; margin-top: 10px; background: var(--accent); display: none;" onclick="openTeamManager()">Управління кущами</button>
+            <p style="color: var(--text-muted); font-size: 0.82rem; margin-top: 12px; line-height: 1.45;">Режим ментора та структура кущів — у вкладці «Адмін-панель» (для адміністратора та менторів з доступом).</p>
 
             <div class="settings-block" style="margin-top: 30px; border-top: 1px solid var(--border); padding-top: 20px;">
                 <div class="panel" style="margin-bottom: 15px;">
@@ -917,9 +1060,14 @@
             <div class="panel admin-panel-content">
                 <div class="admin-panel-header">
                     <h3 class="admin-panel-title">Адмін-панель</h3>
-                    <button type="button" class="btn-secondary admin-refresh-btn" onclick="window.renderAdminPanel?.()">Оновити список</button>
+                    <button type="button" id="admin-refresh-users-btn" class="btn-secondary admin-refresh-btn" onclick="window.renderAdminPanel?.()">Оновити список</button>
                 </div>
-                <p style="color:var(--text-muted);font-size:0.85rem;margin:0 0 16px;line-height:1.45;">Керування ролями, менторством у кущі, перейменування ніка та переведення між кущами. Ментори в панелі «Команда» відображаються першими в кожній групі.</p>
+                <p style="color:var(--text-muted);font-size:0.85rem;margin:0 0 16px;line-height:1.45;">Керування ролями, менторством у кущі, ніком і кущами. Ментори в «Команді» відображаються першими в групі.</p>
+                <div id="admin-team-structure" class="panel admin-team-structure" style="display:none;">
+                    <h4 class="admin-team-structure-title">Структура кущів</h4>
+                    <p class="admin-team-structure-lead">Створення кущів, переміщення трейдерів і небезпечні операції — тут же, без окремого блоку в налаштуваннях.</p>
+                    <button type="button" id="btn-admin-team-manager" class="btn-primary admin-team-manager-btn rr-exempt-access" onclick="window.openTeamManager?.()">Управління кущами</button>
+                </div>
                 <div id="admin-users-list" class="admin-users-list"></div>
             </div>
         </div>
@@ -1010,39 +1158,64 @@
                 <h2 class="team-sidebar-title">Команда</h2>
                 <p class="team-sidebar-sub">Кущі та учасники. Ментори — зверху в кожній групі. Натисніть рядок, щоб відкрити журнал трейдера.</p>
             </div>
-            <button type="button" class="team-sidebar-close" onclick="window.closeTeamSidebar?.()" aria-label="Закрити" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;padding:6px;border-radius:8px;display:flex;align-items:center;flex-shrink:0;" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
+            <button type="button" class="team-sidebar-close" onclick="window.closeTeamSidebar?.()" aria-label="Закрити">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
         </div>
         <div id="team-list-container" class="team-list-container"></div>
     </div>
     
-    <div id="team-manager-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); z-index: 100001; justify-content: center; align-items: flex-start; overflow-y: auto; padding: 20px; box-sizing: border-box;" onclick="if(event.target===this)this.style.display='none'">
-        <div class="team-manager-card" style="background: var(--bg-panel); padding: 30px; border-radius: 12px; width: 90%; max-width: 400px; border: 1px solid var(--border); margin: auto;">
-            <h2 style="margin-top: 0; color: var(--accent);">🛠 Управління кущами</h2>
-            <div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--border);">
-                <label style="color: var(--text-muted); font-size: 0.9rem;">➕ Створити новий кущ</label>
-                <input type="text" id="new-team-name" placeholder="Назва куща (н-д: Група Львів)" style="width: 100%; padding: 10px; margin-top: 5px; background: var(--bg-main); border: 1px solid var(--border); color: var(--text-main); border-radius: 6px; box-sizing: border-box;">
-                <button class="btn-primary" style="width: 100%; margin-top: 10px;" onclick="createNewTeam()">Додати кущ</button>
+    <div id="team-manager-modal" class="team-manager-overlay" style="display: none;" onclick="if(event.target===this)this.style.display='none'">
+        <div class="team-manager-card" role="dialog" aria-labelledby="team-manager-title" onclick="event.stopPropagation()">
+            <div class="team-manager-head">
+                <h2 id="team-manager-title" class="team-manager-title">Управління кущами</h2>
+                <p class="team-manager-lead">Створення груп, переміщення трейдерів між кущами та небезпечні операції — лише для менторів з доступом.</p>
             </div>
-            <div style="margin-bottom: 20px; padding-top: 15px; border-top: 1px solid var(--border);">
-                <label style="color: #f97316; font-size: 0.9rem; font-weight: bold;">🔥 Видалити весь кущ</label>
-                <select id="delete-team-select" style="width: 100%; padding: 10px; margin-top: 5px; background: var(--bg-main); border: 1px solid var(--border); color: var(--text-main); border-radius: 6px; box-sizing: border-box;"></select>
-                <button class="btn-primary" style="width: 100%; margin-top: 10px; background: #f97316; color: white; border: none;" onclick="deleteTeam()">Видалити кущ</button>
+
+            <section class="tm-section">
+                <label class="tm-label" for="new-team-name">Новий кущ</label>
+                <input type="text" id="new-team-name" class="tm-input" placeholder="Наприклад: Група Львів" autocomplete="off">
+                <button type="button" class="btn-primary tm-btn-full" onclick="createNewTeam()">Додати кущ</button>
+            </section>
+
+            <section class="tm-section">
+                <label class="tm-label tm-warn" for="delete-team-select">Видалити кущ</label>
+                <p class="team-manager-lead" style="margin:0 0 8px;">Учасники повернуться в «Без куща».</p>
+                <select id="delete-team-select" class="tm-select"></select>
+                <button type="button" class="btn-primary tm-btn-full tm-delete-team-btn" onclick="deleteTeam()">Видалити кущ</button>
+            </section>
+
+            <section class="tm-section">
+                <label class="tm-label" for="move-trader-nick">Перемістити трейдера</label>
+                <select id="move-trader-nick" class="tm-select" aria-label="Трейдер"></select>
+                <select id="move-trader-team" class="tm-select" aria-label="Цільовий кущ"></select>
+                <button type="button" class="btn-primary tm-btn-full tm-move-btn" onclick="moveTrader()">Перемістити</button>
+            </section>
+
+            <section class="tm-section">
+                <label class="tm-label tm-danger" for="delete-trader-nick">Видалити профіль трейдера</label>
+                <p class="team-manager-lead" style="margin:0 0 8px;">Без відновлення: журнал і дані профілю.</p>
+                <select id="delete-trader-nick" class="tm-select"></select>
+                <button type="button" class="btn-primary tm-btn-full tm-delete-user-btn" onclick="deleteTraderProfile()">Видалити назавжди</button>
+            </section>
+
+            <div class="tm-footer">
+                <button type="button" class="btn-secondary tm-btn-full" onclick="document.getElementById('team-manager-modal').style.display='none'">Закрити</button>
             </div>
-            <div style="margin-bottom: 20px;">
-                <label style="color: var(--text-muted); font-size: 0.9rem;">🔄 Перемістити трейдера</label>
-                <select id="move-trader-nick" style="width: 100%; padding: 10px; margin-top: 5px; background: var(--bg-main); border: 1px solid var(--border); color: var(--text-main); border-radius: 6px; box-sizing: border-box;"></select>
-                <select id="move-trader-team" style="width: 100%; padding: 10px; margin-top: 5px; background: var(--bg-main); border: 1px solid var(--border); color: var(--text-main); border-radius: 6px; box-sizing: border-box;"></select>
-                <button class="btn-primary" style="width: 100%; margin-top: 10px; background: #eab308; color: black;" onclick="moveTrader()">Перемістити</button>
-            </div>
-            <div style="margin-bottom: 20px; padding-top: 15px; border-top: 1px solid var(--border);">
-                <label style="color: var(--loss); font-size: 0.9rem; font-weight: bold;">🗑️ Видалити профіль трейдера</label>
-                <select id="delete-trader-nick" style="width: 100%; padding: 10px; margin-top: 5px; background: var(--bg-main); border: 1px solid var(--border); color: var(--text-main); border-radius: 6px; box-sizing: border-box;"></select>
-                <button class="btn-primary" style="width: 100%; margin-top: 10px; background: var(--loss); color: white; border: none;" onclick="deleteTraderProfile()">Видалити назавжди</button>
-            </div>
-            <button class="btn-secondary" style="width: 100%;" onclick="document.getElementById('team-manager-modal').style.display='none'">Закрити</button>
         </div>
+    </div>
+
+    <div id="notif-dropdown-backdrop" class="notif-dropdown-backdrop" aria-hidden="true"></div>
+    <div id="notif-dropdown" class="notif-dropdown" role="dialog" aria-label="Сповіщення">
+        <div class="notif-dropdown-head">
+            <h3 class="notif-dropdown-title">Сповіщення</h3>
+            <button type="button" id="notif-close-btn" class="notif-close-btn" aria-label="Закрити">✕</button>
+        </div>
+        <div class="notif-dropdown-actions">
+            <button type="button" id="notif-enable-push" class="btn-secondary notif-action-btn">Сповіщення на ПК</button>
+            <button type="button" id="notif-mark-all" class="btn-secondary notif-action-btn">Усі прочитані</button>
+        </div>
+        <div id="notif-dropdown-list" class="notif-dropdown-list"></div>
     </div>
 
     <script>

@@ -339,13 +339,16 @@ export function saveThemeSettings() {
 }
 
 export function switchTab(tabId) {
-    document.querySelectorAll('.sidebar .tab-btn').forEach(btn => btn.classList.remove('active'));
-    document.querySelectorAll('.sidebar .tab-content').forEach(content => content.classList.remove('active'));
-    document.getElementById(tabId).classList.add('active');
-    const idx = ['tab-profit','tab-mind','tab-errors','tab-session'].indexOf(tabId);
-    const btn = document.querySelector(`.sidebar .tab-btn:nth-child(${idx + 1})`);
-    if (btn) btn.classList.add('active');
+    document.querySelectorAll('.sidebar .tab-btn').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.tab === tabId);
+    });
+    document.querySelectorAll('.sidebar .tab-content').forEach((content) => {
+        content.classList.toggle('active', content.id === tabId);
+    });
     if (tabId === 'tab-session' && window.renderSessionPlaybook) window.renderSessionPlaybook();
+    if (tabId === 'tab-trades' && window.state?.selectedDateStr && window.renderSidebarTradesList) {
+        window.renderSidebarTradesList(window.state.selectedDateStr);
+    }
 }
 
 export function toggleMobileSidebar(forceState) {
@@ -367,10 +370,12 @@ export function toggleMobileSidebar(forceState) {
 
 const TAB_TITLES = {
     dash: 'Дашборд',
+    calendar: 'Календар',
     stats: 'Статистика',
     trades: 'Угоди',
     screens: 'Скріншоти',
     ai: 'AI Аналітик',
+    'mentor-review': 'Черга рев’ю',
     playbook: 'Плейбук',
     learn: 'Навчання',
     settings: 'Налаштування',
@@ -408,7 +413,7 @@ export function switchMainTab(tab) {
         b.classList.toggle('active', b.dataset.tab === tab);
     });
     // Якщо активна вкладка в more menu — підсвічуємо кнопку Ще
-    const moreTabIds = ['trades', 'playbook', 'learn', 'settings'];
+    const moreTabIds = ['trades', 'calendar', 'playbook', 'learn', 'settings', 'mentor-review'];
     const moreBtn = document.querySelector('.mobile-nav-more-btn');
     if (moreBtn) moreBtn.classList.toggle('more-open', moreTabIds.includes(tab));
 
@@ -437,11 +442,14 @@ export function switchMainTab(tab) {
     if (tab === 'screens') {
         if (window.updateDriveUI) window.updateDriveUI();
         if (window.syncDriveScreenshots) window.syncDriveScreenshots(true);
+        if (window.refreshReviewRequestButtons) window.refreshReviewRequestButtons();
     }
+    if (tab === 'calendar' && window.refreshReviewRequestButtons) window.refreshReviewRequestButtons();
     if (tab === 'playbook' && window.renderPlaybook) window.renderPlaybook();
     if (tab === 'learn' && window.renderLearnCache) window.renderLearnCache();
 
     if (tab === 'admin' && window.renderAdminPanel) window.renderAdminPanel();
+    if (tab === 'mentor-review' && window.refreshMentorReviewQueue) void window.refreshMentorReviewQueue();
     let sosBtn = document.getElementById('sos-btn');
     if (sosBtn) sosBtn.style.display = tab === 'dash' ? 'flex' : 'none';
 }

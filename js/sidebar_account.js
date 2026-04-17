@@ -99,6 +99,11 @@ function bindOnce() {
                 trigger.setAttribute('aria-expanded', 'false');
             }
         });
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape' || !dropdown || dropdown.hidden) return;
+            dropdown.hidden = true;
+            trigger.setAttribute('aria-expanded', 'false');
+        });
     }
     saveBtn?.addEventListener('click', () => saveSidebarProfile());
 }
@@ -114,6 +119,9 @@ export async function refreshSidebarAccount() {
     const nameEl = document.getElementById('sidebar-account-name');
     const teamEl = document.getElementById('sidebar-account-team');
     const subEl = document.getElementById('sidebar-account-sub');
+    const nickRO = document.getElementById('sidebar-pf-nick');
+    const teamRO = document.getElementById('sidebar-pf-team-display');
+
     if (!nick) {
         if (nameEl) nameEl.textContent = '—';
         if (teamEl) teamEl.textContent = '';
@@ -122,6 +130,8 @@ export async function refreshSidebarAccount() {
             avatar.innerHTML = '';
             avatar.textContent = '?';
         }
+        if (nickRO) nickRO.textContent = '—';
+        if (teamRO) teamRO.textContent = '—';
         return;
     }
 
@@ -139,9 +149,14 @@ export async function refreshSidebarAccount() {
     if (nameEl) nameEl.textContent = disp;
     const teamLabel = p.team || DEFAULT_TEAM_LABEL;
     if (teamEl) teamEl.textContent = teamLabel;
+    if (nickRO) nickRO.textContent = p.nick || nick;
+    if (teamRO) teamRO.textContent = teamLabel;
 
+    const st = p.settings && typeof p.settings === 'object' ? p.settings : {};
     const subParts = [];
     if (p.email) subParts.push(p.email);
+    const authProv = (st.auth_provider || state.authProvider || '').toLowerCase();
+    if (authProv === 'telegram') subParts.push('Telegram');
     if (p.mentor_enabled || p.role === 'mentor') subParts.push('Ментор');
     if (p.role === 'admin') subParts.push('Адмін');
     if (subEl) subEl.textContent = subParts.join(' · ');
@@ -152,7 +167,6 @@ export async function refreshSidebarAccount() {
     const hiddenEmoji = document.getElementById('sidebar-pf-emoji');
     if (fn) fn.value = p.first_name || '';
     if (ln) ln.value = p.last_name || '';
-    const st = p.settings && typeof p.settings === 'object' ? p.settings : {};
     if (urlInp) urlInp.value = st.avatar_url || '';
     const em = st.avatar_emoji || '';
     if (hiddenEmoji) hiddenEmoji.value = em;

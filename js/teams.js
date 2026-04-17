@@ -96,6 +96,9 @@ function isProfileMentor(profile) {
 }
 
 async function fetchProfiles() {
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData?.session) return [];
+
     const { data, error } = await supabase
         .from('profiles')
         .select('id, nick, first_name, last_name, team, mentor_enabled, email, role, settings')
@@ -104,6 +107,17 @@ async function fetchProfiles() {
 
     if (error) throw error;
     return data || [];
+}
+
+async function fetchPublicTeamNames() {
+    try {
+        const { data, error } = await supabase.rpc('public_team_names');
+        if (error) throw error;
+        return (data || []).map(row => row.name).filter(Boolean);
+    } catch (error) {
+        console.warn('[teams] public_team_names unavailable:', error);
+        return [];
+    }
 }
 
 function buildTeamGroups(profiles) {
@@ -123,6 +137,17 @@ function buildTeamGroups(profiles) {
         groups[team] = [...new Set(groups[team])].sort((a, b) => a.localeCompare(b, 'uk'));
     });
 
+    return groups;
+}
+
+function buildPublicTeamGroups(teamNames) {
+    const groups = { [DEFAULT_TEAM]: [] };
+    readExtraTeams().forEach(team => {
+        if (team) groups[team] = [];
+    });
+    (teamNames || []).forEach(team => {
+        if (team) groups[team] = [];
+    });
     return groups;
 }
 
@@ -148,6 +173,14 @@ function fillAuthTeamSelect() {
 
 export async function loadTeams() {
     try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData?.session) {
+            state._teamProfiles = {};
+            state.TEAM_GROUPS = buildPublicTeamGroups(await fetchPublicTeamNames());
+            fillAuthTeamSelect();
+            return;
+        }
+
         const profiles = await fetchProfiles();
         state._teamProfiles = Object.fromEntries(profiles.map(profile => [profile.nick, profile]));
         state.TEAM_GROUPS = buildTeamGroups(profiles);
@@ -341,7 +374,7 @@ function _renderTeamSidebarDOM(container) {
 
     if (myNick) {
         const mySection = document.createElement('div');
-        mySection.className = 'team-my-profile';
+        mySection.className = 'team-my-profile team-me-card';
         const myBtn = document.createElement('button');
         const isLoading = _isSwitching && loadingNick === myNick;
         myBtn.className = `team-member-btn${isMeActive ? ' active' : ''}`;
@@ -383,10 +416,13 @@ function _renderTeamSidebarDOM(container) {
 
     const seenInRender = new Set([myNick]);
     Object.keys(state.TEAM_GROUPS).sort((a, b) => a.localeCompare(b, 'uk')).forEach((group) => {
+        const groupCard = document.createElement('div');
+        groupCard.className = 'team-group-card';
+
         const groupTitle = document.createElement('div');
         groupTitle.className = 'team-group-title';
         groupTitle.textContent = group;
-        container.appendChild(groupTitle);
+        groupCard.appendChild(groupTitle);
 
         const members = [...(state.TEAM_GROUPS[group] || [])];
         members.sort((a, b) => {
@@ -444,8 +480,10 @@ function _renderTeamSidebarDOM(container) {
             }
 
             memberDiv.appendChild(textWrap);
-            container.appendChild(memberDiv);
+            groupCard.appendChild(memberDiv);
         });
+
+        container.appendChild(groupCard);
     });
 }
 

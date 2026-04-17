@@ -109,6 +109,24 @@
     background: color-mix(in srgb, var(--primary) 6%, transparent);
 }
 
+/* Маркер «потрібне рев’ю» (ментор / адмін, чужий журнал) — узгоджено з чергою рев’ю */
+.day-cell.day-needs-review:not(.active-day) {
+    outline: 1px dashed color-mix(in srgb, var(--gold) 55%, transparent);
+    outline-offset: -3px;
+}
+.day-review-dot {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--gold);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--bg-panel) 85%, transparent);
+    pointer-events: none;
+    z-index: 1;
+}
+
 #image-preview { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(4px); z-index: 99999; display: none; align-items: center; justify-content: center; cursor: zoom-out; }
 #image-preview img { max-height: 90vh; max-width: 90vw; display: block; border-radius: var(--radius-sm); object-fit: contain; cursor: pointer; border: 2px solid var(--accent); box-shadow: 0 20px 60px rgba(0,0,0,0.9); transition: transform 0.2s;}
 #image-preview img:hover { transform: scale(1.02); }

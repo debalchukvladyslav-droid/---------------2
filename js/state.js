@@ -10,6 +10,10 @@ export const state = {
     myUserId: null,             // UUID авторизованого юзера (незмінний)
     isRegisterMode: false,
     IS_MENTOR_MODE: false,
+    /** Роль з profiles: trader | mentor | admin */
+    myRole: 'trader',
+    /** email | telegram — джерело основного входу (див. profiles.settings.auth_provider). */
+    authProvider: 'email',
     
     // Команди (Кущі)
     TEAM_GROUPS: {}, 

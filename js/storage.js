@@ -5,6 +5,7 @@ import { normalizeAppData, normalizeDayEntry, getDefaultAppData } from './data_u
 import { loadPlaybook } from './playbook.js';
 import { clearStatsCache } from './stats.js';
 import { uploadToSupabaseStorage, deleteFromSupabaseStorage, getSupabaseStorageUrl } from './supabase_storage.js';
+import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 
 function monthKey(dateStr) {
     return dateStr.slice(0, 7);
@@ -127,7 +128,8 @@ function dayEntryToJournalRow(userId, tradeDate, entry) {
             sessionSetups: Array.isArray(day.sessionSetups) ? day.sessionSetups : [],
             sessionAiResult: day.sessionAiResult ?? '',
             sessionDone: day.sessionDone ?? false,
-            trades: Array.isArray(day.trades) ? day.trades : []
+            trades: Array.isArray(day.trades) ? day.trades : [],
+            review_requests: day.review_requests && typeof day.review_requests === 'object' ? day.review_requests : {},
         }
     };
 }
@@ -159,7 +161,8 @@ function journalRowToDayEntry(row) {
         sessionSetups: metrics.sessionSetups || [],
         sessionAiResult: metrics.sessionAiResult,
         sessionDone: metrics.sessionDone,
-        trades: metrics.trades || []
+        trades: metrics.trades || [],
+        review_requests: metrics.review_requests && typeof metrics.review_requests === 'object' ? metrics.review_requests : {},
     });
 }
 
@@ -183,21 +186,63 @@ function markDayEntryDetailsLoaded(entry, loaded) {
     };
 }
 
-let _saveQueue = Promise.resolve();
+let _journalSaveQueue = Promise.resolve();
+let _settingsSaveQueue = Promise.resolve();
+const _dirtyJournalDates = new Set();
 const _dayDetailsPromises = new Map();
 
 export function saveToLocal() {
-    _saveQueue = _saveQueue.then(() => Promise.all([_doSave(), saveSettings()])).catch(e => console.error('saveToLocal queue error:', e));
-    return _saveQueue;
+    return Promise.all([saveJournalData(), saveSettingsQueued()])
+        .catch(e => console.error('saveToLocal queue error:', e));
+}
+
+export function saveJournalData(opts = {}) {
+    _journalSaveQueue = _journalSaveQueue
+        .then(() => _doSave(opts))
+        .catch(e => console.error('saveJournalData queue error:', e));
+    return _journalSaveQueue;
+}
+
+export function markJournalDayDirty(dateStr) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || ''))) {
+        _dirtyJournalDates.add(dateStr);
+    }
+}
+
+export function markJournalDaysDirty(dateStrs = []) {
+    dateStrs.forEach(markJournalDayDirty);
+}
+
+export function markAllJournalDirty() {
+    const journal = state.appData?.journal || {};
+    Object.keys(journal).forEach(markJournalDayDirty);
+}
+
+function saveSettingsQueued() {
+    _settingsSaveQueue = _settingsSaveQueue
+        .then(() => saveSettings())
+        .catch(e => console.error('saveSettings queue error:', e));
+    return _settingsSaveQueue;
 }
 
 export async function saveSettings() {
     try {
         const { user } = await getCurrentUserContext();
         if (!user) return;
+        const settingsPayload = {
+            ...state.appData.settings,
+            unassignedImages: Array.isArray(state.appData.unassignedImages) ? state.appData.unassignedImages : [],
+            screenTags: state.appData.screenTags && typeof state.appData.screenTags === 'object' ? state.appData.screenTags : {},
+            screenDiscipline:
+                state.appData.screenDiscipline && typeof state.appData.screenDiscipline === 'object'
+                    ? state.appData.screenDiscipline
+                    : {},
+            weeklyComments:
+                state.appData.weeklyComments && typeof state.appData.weeklyComments === 'object' ? state.appData.weeklyComments : {},
+        };
         const { error } = await supabase
             .from('profiles')
-            .update({ settings: state.appData.settings })
+            .update({ settings: settingsPayload })
             .eq('id', user.id);
         if (error) throw error;
         console.log('✅ Settings збережено в Supabase');
@@ -217,7 +262,24 @@ export async function loadSettings() {
             .single();
         if (error) throw error;
         if (data?.settings && typeof data.settings === 'object') {
-            state.appData.settings = { ...state.appData.settings, ...data.settings };
+            const incoming = { ...data.settings };
+            if (Array.isArray(incoming.unassignedImages)) {
+                state.appData.unassignedImages = incoming.unassignedImages;
+                delete incoming.unassignedImages;
+            }
+            if (incoming.screenTags && typeof incoming.screenTags === 'object') {
+                state.appData.screenTags = incoming.screenTags;
+                delete incoming.screenTags;
+            }
+            if (incoming.screenDiscipline && typeof incoming.screenDiscipline === 'object') {
+                state.appData.screenDiscipline = incoming.screenDiscipline;
+                delete incoming.screenDiscipline;
+            }
+            if (incoming.weeklyComments && typeof incoming.weeklyComments === 'object') {
+                state.appData.weeklyComments = incoming.weeklyComments;
+                delete incoming.weeklyComments;
+            }
+            state.appData.settings = { ...state.appData.settings, ...incoming };
             console.log('✅ Settings завантажено з Supabase');
         }
     } catch (e) {
@@ -226,10 +288,12 @@ export async function loadSettings() {
 }
 
 export async function saveMonth() {
-    return _doSave();
+    markAllJournalDirty();
+    return saveJournalData();
 }
 
-async function _doSave() {
+async function _doSave(opts = {}) {
+    const forceFull = !!opts.forceFull;
     if (state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) {
         console.log('Режим глядача: базове збереження заблоковано.');
         return;
@@ -240,21 +304,37 @@ async function _doSave() {
         if (!user || !userId) throw new Error('Немає авторизованого користувача Supabase');
 
         const journal = state.appData.journal || {};
-        const entries = Object.entries(journal)
-            .filter(([dateStr]) => /^\d{4}-\d{2}-\d{2}$/.test(dateStr));
+        const dirtyDates = [..._dirtyJournalDates].filter(dateStr => journal[dateStr]?.__detailsLoaded !== false);
 
-        for (const [dateStr, entry] of entries) {
+        if (!forceFull && dirtyDates.length === 0) {
+            console.log('[journal] немає «брудних» днів — upsert у journal_days пропущено');
+            return;
+        }
+
+        const sourceEntries = forceFull
+            ? Object.entries(journal)
+            : dirtyDates.map((dateStr) => [dateStr, journal[dateStr]]);
+
+        const entries = sourceEntries
+            .filter(([dateStr, entry]) => /^\d{4}-\d{2}-\d{2}$/.test(dateStr) && entry?.__detailsLoaded !== false);
+
+        const rows = entries.map(([dateStr, entry]) => {
             const row = dayEntryToJournalRow(userId, dateStr, entry);
             row.daily_metrics.user_email = email;
+            return row;
+        });
 
+        for (let i = 0; i < rows.length; i += 200) {
             const { error } = await supabase
                 .from('journal_days')
-                .upsert(row, { onConflict: 'user_id,trade_date' });
+                .upsert(rows.slice(i, i + 200), { onConflict: 'user_id,trade_date' });
 
             if (error) throw error;
         }
 
         clearStatsCache(state.USER_DOC_NAME);
+        entries.forEach(([dateStr]) => _dirtyJournalDates.delete(dateStr));
+        if (forceFull) _dirtyJournalDates.clear();
         state._availableMonthKeys = getMonthsInJournal(journal);
         state._monthListLoaded = true;
         console.log('✅ Дані днів успішно збережено в Supabase!');
@@ -408,7 +488,7 @@ export async function loadAllMonths(nick, userId = null) {
             const dateStr = row.trade_date;
             if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
 
-            state.appData.journal[dateStr] = journalRowToDayEntry(row);
+            state.appData.journal[dateStr] = markDayEntryDetailsLoaded(journalRowToDayEntry(row), true);
             const mk = monthKey(dateStr);
             state.loadedMonths[nick].add(mk);
             state._availableMonthKeys.add(mk);
@@ -456,6 +536,7 @@ function hideLoadingToast() {
 
 export async function initializeApp() {
     console.log('⏳ Завантаження бази даних для:', state.CURRENT_VIEWED_USER);
+    showGlobalLoader('app-init', 'Завантаження журналу...');
 
     try {
         const nick = state.CURRENT_VIEWED_USER;
@@ -532,6 +613,7 @@ export async function initializeApp() {
         state.appData = normalizeAppData(getDefaultAppData());
         showLoadingToast('❌ Не вдалося завантажити дані.', true, true);
     } finally {
+        hideGlobalLoader('app-init');
         hideLoadingToast();
     }
 }
@@ -632,6 +714,7 @@ export async function exportData() {
     const nick = targetDocName.replace(/_stats$/, '');
 
     showLoadingToast('⏳ Підготовка експорту...', true);
+    showGlobalLoader('export-data', 'Підготовка експорту...');
 
     try {
         // Отримуємо user_id для поточного профілю що переглядається
@@ -674,11 +757,15 @@ export async function exportData() {
         dl.remove();
     } catch (e) {
         console.error('❌ Помилка експорту:', e);
+        showGlobalLoader('export-data', 'Помилка експорту', { type: 'error' });
+        hideGlobalLoader('export-data', 2600);
         showLoadingToast('❌ Помилка експорту: ' + (e?.message || 'Невідома помилка'));
         setTimeout(hideLoadingToast, 3000);
         return;
     }
 
+    showGlobalLoader('export-data', 'Експорт готовий', { type: 'success' });
+    hideGlobalLoader('export-data', 1400);
     hideLoadingToast();
 }
 
@@ -691,21 +778,32 @@ export function importData(event) {
 
     const file = event.target.files[0];
     if (!file) return;
+    showGlobalLoader('import-data', 'Читання файлу імпорту...');
 
     const reader = new FileReader();
     reader.onload = async function(e) {
         try {
+            showGlobalLoader('import-data', 'Імпорт даних у Supabase...');
             const imported = JSON.parse(e.target.result);
             state.appData = normalizeAppData(imported);
             state.loadedMonths = {};
+            markAllJournalDirty();
             await saveToLocal();
             await initializeApp();
+            showGlobalLoader('import-data', 'Дані імпортовано', { type: 'success' });
+            hideGlobalLoader('import-data', 1600);
             setTimeout(() => showLoadingToast('✅ Дані успішно імпортовано!'), 300);
             setTimeout(hideLoadingToast, 3300);
         } catch (err) {
+            showGlobalLoader('import-data', 'Помилка імпорту', { type: 'error' });
+            hideGlobalLoader('import-data', 2600);
             showLoadingToast('❌ Помилка файлу.');
             setTimeout(hideLoadingToast, 2500);
         }
+    };
+    reader.onerror = function() {
+        showGlobalLoader('import-data', 'Не вдалося прочитати файл', { type: 'error' });
+        hideGlobalLoader('import-data', 2600);
     };
 
     reader.readAsText(file);

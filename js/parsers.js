@@ -1,6 +1,6 @@
 // === js/parsers.js ===
 import { state } from './state.js';
-import { saveToLocal } from './storage.js';
+import { saveJournalData, markJournalDayDirty } from './storage.js';
 
 function showToast(text) {
     const t = document.createElement('div');
@@ -136,9 +136,10 @@ export function importFondexxReport(event) {
                 state.appData.journal[d].fondexx = { gross: dailyData[d].gross, net: dailyData[d].net, comm: dailyData[d].comm, locates: dailyData[d].locates, tickers: Array.from(dailyData[d].tickers) };
                 if (dailyData[d].trades.length > 0) state.appData.journal[d].trades = dailyData[d].trades;
                 recalculateDailyTotals(d);
+                markJournalDayDirty(d);
                 daysUpdated++;
             }
-            saveToLocal().then(() => {
+            saveJournalData().then(() => {
                 showToast(`Звіт Fondexx імпортовано! Оновлено днів: ${daysUpdated}`); 
                 if(window.updateAutoFlags) window.updateAutoFlags(); 
                 if(window.renderView) window.renderView();
@@ -205,9 +206,10 @@ export function importFondexxTrades(event) {
             for (let d in dailyTrades) {
                 if (!state.appData.journal[d]) state.appData.journal[d] = window.getDefaultDayEntry ? window.getDefaultDayEntry() : {};
                 state.appData.journal[d].trades = dailyTrades[d];
+                markJournalDayDirty(d);
                 daysUpdated++;
             }
-            saveToLocal().then(() => {
+            saveJournalData().then(() => {
                 showToast(`Trades імпортовано! Днів: ${daysUpdated}`);
                 if (window.selectDate) window.selectDate(state.selectedDateStr);
             });
@@ -264,9 +266,10 @@ export function importPPROReport(event) {
                 if (!state.appData.journal[d]) state.appData.journal[d] = window.getDefaultDayEntry ? window.getDefaultDayEntry() : {};
                 state.appData.journal[d].ppro = { gross: dailyData[d].profit, net: dailyData[d].profit, comm: 0, locates: 0, tickers: [] };
                 recalculateDailyTotals(d);
+                markJournalDayDirty(d);
                 daysUpdated++;
             }
-            saveToLocal().then(() => {
+            saveJournalData().then(() => {
                 showToast(`Звіт PPRO успішно імпортовано! Оновлено днів: ${daysUpdated}`); 
                 if(window.updateAutoFlags) window.updateAutoFlags(); 
                 if(window.renderView) window.renderView();

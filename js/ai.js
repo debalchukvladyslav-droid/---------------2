@@ -1,7 +1,10 @@
 // === js/ai.js ===
 import { state } from './state.js';
-import { saveToLocal } from './storage.js';
+import { saveJournalData, saveToLocal, markJournalDayDirty } from './storage.js';
 import { getImgUrl, getStorageUrl } from './gallery.js';
+import { getGeminiKeys, callGemini, callGeminiViaProxy, callGeminiJSON, sleep } from './ai/client.js';
+
+export { getGeminiKeys, callGemini, callGeminiViaProxy, callGeminiJSON, sleep };
 
 function sanitizeHTML(str) {
     const div = document.createElement('div');
@@ -24,17 +27,8 @@ function sanitizeAIHtml(html) {
     return allowed.innerHTML;
 }
 
-export function getGeminiKeys() {
-    // Виклики йдуть через проксі — ключ не потрібен на фронтенді.
-    // Повертаємо ['proxy'] щоб перевірки !keys.length не блокували AI.
-    return ['proxy'];
-}
-
 let sosChatHistory = []; 
 let dataChatHistory = [];
-
-/** Throttle utility — використовується в sequential loops */
-export const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 export function extractGeminiText(respData) {
     if (respData && respData.error && respData.error.message) throw new Error(respData.error.message);
@@ -70,52 +64,6 @@ function showGeminiWaiting(show, secs = 60) {
     }
 }
 
-export async function callGemini(key, payload) {
-    return callGeminiViaProxy(payload);
-}
-
-/**
- * Проксі через Firebase Cloud Function.
- * Ключ Gemini ніколи не потрапляє в фронтенд.
- * Автоматично додає Firebase ID Token до Authorization header.
- * Повертає чистий рядок JSON без HTML-encoding.
- */
-export async function callGeminiViaProxy(payload, model = 'gemini-2.5-flash') {
-    const PROXY_URL = '/api/gemini';
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20000);
-    let res;
-    try {
-        res = await fetch(PROXY_URL, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ payload, model }),
-            signal:  controller.signal,
-        });
-    } finally {
-        clearTimeout(timeout);
-    }
-
-    // Use res.text() + manual JSON.parse so the browser decodes raw UTF-8 bytes
-    // directly — avoids any double-encoding of Cyrillic that res.json() can introduce
-    const raw = await res.text();
-    let data;
-    try { data = JSON.parse(raw); } catch { throw new Error('Invalid JSON from proxy'); }
-    if (!res.ok) throw new Error(data.message || `Proxy error ${res.status}`);
-    if (!data.text) throw new Error('Empty response from proxy');
-    // Ensure the returned string is a proper JS string (not a JSON-escaped string)
-    return typeof data.text === 'string' ? data.text : JSON.stringify(data.text);
-}
-
-/**
- * JSON-відповідь через проксі. Просто делегує callGeminiViaProxy.
- * Вся логіка ключів і retry — на бекенді.
- */
-export async function callGeminiJSON(key, payload) {
-    return await callGeminiViaProxy(payload, 'gemini-2.5-flash');
-}
-
 export function renderAIAdviceUI() {
     let aiBox = document.getElementById('ai-response');
     let data = state.appData.journal[state.selectedDateStr] || {};
@@ -147,8 +95,9 @@ export async function getAIAdvice() {
     try {
         let advice = await callGemini(key, { systemInstruction: { parts: [{ text: "Ти мій напарник по пропу і строгий ризик-менеджер. Спілкуйся українською, коротко (3-4 речення), прямо і по суті, без офіціозу. Використовуй звичайний трейдерський сленг (тільт, фомо, дейлос, профіт). Якщо я порушив систему або поплив емоційно — спокійно, але жорстко ткни в це носом, спираючись на звіт, щоб я зробив висновки. Якщо день ідеально зелений і без косяків — не розводь дифірамби, просто скажи щось типу: 'Нормально відпрацював, систему дотримав. Завтра головне не зловити корону і не лудоманіти, тримай ризики'." }] }, contents: [{ parts: [{ text: promptText }] }] });
         if (!state.appData.journal[state.selectedDateStr] && window.saveEntry) window.saveEntry(); 
-        state.appData.journal[state.selectedDateStr].ai_advice = advice; 
-        saveToLocal(); 
+        state.appData.journal[state.selectedDateStr].ai_advice = advice;
+        markJournalDayDirty(state.selectedDateStr);
+        saveJournalData();
         renderAIAdviceUI();
     } catch(e) {
         const aiBox = document.getElementById('ai-response');

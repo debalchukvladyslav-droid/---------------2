@@ -1,9 +1,11 @@
 // === js/drive.js ===
 import { state } from './state.js';
-import { saveToLocal } from './storage.js';
+import { saveSettings } from './storage.js';
 import { loadImages } from './gallery.js';
 import { showToast } from './utils.js';
 import { uploadToSupabaseStorage } from './supabase_storage.js';
+import { buildScreenshotPath, buildScreenshotPathVariants } from './storage_paths.js';
+import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 
 const CLIENT_ID = '860755721651-eorsocc3iod2qnimc0qejch046vkeji6.apps.googleusercontent.com';
 const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
@@ -17,6 +19,49 @@ let _gapiInited = false;
 let _gsiIniting = null;
 let _syncInProgress = false;
 let _driveFilesCache = null;
+
+function driveAccessTokenStorageKey() {
+    return state.myUserId ? `pj:driveAT:${state.myUserId}` : null;
+}
+
+function persistDriveAccessToken(token, expiresInSec) {
+    const k = driveAccessTokenStorageKey();
+    if (!k || !token) return;
+    const sec = Math.max(120, Number(expiresInSec) || 3600);
+    const expiresAt = Date.now() + sec * 1000 - 90_000;
+    try {
+        localStorage.setItem(k, JSON.stringify({ token, expiresAt }));
+    } catch (_) {}
+}
+
+function clearDriveAccessTokenStorage() {
+    const k = driveAccessTokenStorageKey();
+    if (k) {
+        try {
+            localStorage.removeItem(k);
+        } catch (_) {}
+    }
+}
+
+/** Відновлює OAuth access token після перезавантаження (поки не прострочений). */
+export async function tryRestoreDriveToken() {
+    if (_accessToken) return true;
+    const k = driveAccessTokenStorageKey();
+    if (!k) return false;
+    try {
+        const raw = localStorage.getItem(k);
+        if (!raw) return false;
+        const { token, expiresAt } = JSON.parse(raw);
+        if (!token || !expiresAt || Date.now() >= expiresAt) {
+            localStorage.removeItem(k);
+            return false;
+        }
+        _accessToken = token;
+        return true;
+    } catch {
+        return false;
+    }
+}
 
 function loadScript(src) {
     return new Promise((resolve, reject) => {
@@ -60,6 +105,7 @@ function requestNewToken(onSuccess, onError) {
     _tokenClient.callback = (resp) => {
         if (resp.error) { onError(new Error(resp.error)); return; }
         _accessToken = resp.access_token;
+        persistDriveAccessToken(resp.access_token, resp.expires_in);
         onSuccess(_accessToken);
     };
     _tokenClient.requestAccessToken({ prompt: '' });
@@ -72,6 +118,7 @@ export async function connectGoogleDrive() {
         showToast('❌ Помилка ініціалізації: ' + (e.message || e));
         return;
     }
+    await tryRestoreDriveToken();
     if (_accessToken) { openFolderPicker(_accessToken); return; }
     requestNewToken(
         (token) => openFolderPicker(token),
@@ -91,7 +138,7 @@ function openFolderPicker(token) {
                 const folder = data.docs[0];
                 state.appData.settings.driveFolderId = folder.id;
                 state.appData.settings.driveFolderName = folder.name;
-                await saveToLocal();
+                await saveSettings();
                 updateDriveUI();
                 showToast(`✅ Папка "${folder.name}" підключена!`);
                 await syncDriveScreenshots();
@@ -114,15 +161,18 @@ export async function syncDriveScreenshots(silent = false) {
     if (!folderId) return;
 
     _syncInProgress = true;
+    showGlobalLoader('drive-sync', 'Синхронізація Google Drive...');
     const statusEl = document.getElementById('drive-sync-status');
     if (statusEl) statusEl.textContent = '⏳ Синхронізація...';
 
     try {
         await Promise.all([initGapi(), initGsi()]);
+        await tryRestoreDriveToken();
 
         const token = await getTokenSilently();
         if (!token) {
             if (statusEl) statusEl.textContent = '⚠️ Потрібна авторизація';
+            hideGlobalLoader('drive-sync');
             return;
         }
         _accessToken = token;
@@ -138,7 +188,12 @@ export async function syncDriveScreenshots(silent = false) {
             listUrl.searchParams.set('pageSize', '20');
             const resp = await fetch(listUrl.toString(), { headers: { Authorization: `Bearer ${token}` } });
             const data = await resp.json();
-            if (!data.files) { if (statusEl) statusEl.textContent = '⚠️ Помилка отримання файлів'; return; }
+            if (!data.files) {
+                if (statusEl) statusEl.textContent = '⚠️ Помилка отримання файлів';
+                showGlobalLoader('drive-sync', 'Помилка отримання файлів', { type: 'error' });
+                hideGlobalLoader('drive-sync', 2600);
+                return;
+            }
             files = data.files;
             _driveFilesCache = { files, ts: Date.now() };
         }
@@ -151,11 +206,10 @@ export async function syncDriveScreenshots(silent = false) {
             }
         }
 
-        const nick = state.USER_DOC_NAME.replace('_stats', '');
         const newFiles = files.filter(file => {
             if (!/^[a-zA-Z0-9_-]+$/.test(file.id)) return false;
-            const storagePath = `screenshots/${nick}/${file.id}_${file.name}`;
-            return !existingPaths.has(storagePath) && !ignored.has(storagePath);
+            const variants = buildScreenshotPathVariants(`${file.id}_${file.name}`);
+            return variants.every(path => !existingPaths.has(path) && !ignored.has(path));
         });
 
         let newCount = 0;
@@ -164,7 +218,7 @@ export async function syncDriveScreenshots(silent = false) {
                 console.warn(`Drive: пропускаємо ${file.name} — розмір перевищує ліміт`);
                 return;
             }
-            const storagePath = `screenshots/${nick}/${file.id}_${file.name}`;
+            const storagePath = buildScreenshotPath(`${file.id}_${file.name}`);
             const fileUrl = new URL(`https://www.googleapis.com/drive/v3/files/${file.id}`);
             fileUrl.searchParams.set('alt', 'media');
             const fileResp = await fetch(fileUrl.toString(), { headers: { Authorization: `Bearer ${token}` } });
@@ -178,20 +232,29 @@ export async function syncDriveScreenshots(silent = false) {
             state.appData.unassignedImages.push(storagePath);
             newCount++;
             if (statusEl) statusEl.textContent = `⏳ Завантажено ${newCount}...`;
+            showGlobalLoader('drive-sync', `Завантажено ${newCount}...`);
         }));
 
         if (newCount > 0) {
             _driveFilesCache = null;
-            await saveToLocal();
+            await saveSettings();
             loadImages();
+            showGlobalLoader('drive-sync', `Синхронізовано ${newCount} скрінів`, { type: 'success' });
+            hideGlobalLoader('drive-sync', 1400);
             showToast(`✅ Синхронізовано ${newCount} нових скрінів!`);
         } else if (!silent) {
+            showGlobalLoader('drive-sync', 'Нових скрінів немає', { type: 'success' });
+            hideGlobalLoader('drive-sync', 1200);
             showToast('✅ Нових скрінів немає');
+        } else {
+            hideGlobalLoader('drive-sync');
         }
 
         if (statusEl) statusEl.textContent = newCount > 0 ? `✅ +${newCount} нових` : '✅ Актуально';
     } catch (e) {
         console.error('Drive sync error:', e);
+        showGlobalLoader('drive-sync', 'Помилка синхронізації', { type: 'error' });
+        hideGlobalLoader('drive-sync', 2600);
         if (statusEl) statusEl.textContent = '❌ Помилка синхронізації';
         showToast('❌ Помилка: ' + e.message);
     } finally {
@@ -242,10 +305,11 @@ export async function disconnectGoogleDrive() {
         google.accounts.oauth2.revoke(_accessToken);
     }
     _accessToken = null;
+    clearDriveAccessTokenStorage();
     _driveFilesCache = null;
     state.appData.settings.driveFolderId = null;
     state.appData.settings.driveFolderName = null;
-    await saveToLocal();
+    await saveSettings();
     updateDriveUI();
     loadImages();
     showToast('✅ Google Drive відключено');

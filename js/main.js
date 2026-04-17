@@ -4,25 +4,30 @@
 import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { getDefaultDayEntry } from './data_utils.js';
-import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm } from './auth.js';
+import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm, canAccessMentorReviewQueue, mentorAcceptReviewRequest, ensureAuthUserProfile, signInWithTelegram } from './auth.js';
 import { loadTeams, openTeamManager, createNewTeam, moveTrader, deleteTeam, deleteTraderProfile, renderTeamSidebar, switchUser } from './teams.js';
 import { saveToLocal, initializeApp, exportData, importData, loadMonth, resolveViewedUserId, setCurrentViewedUserId,
          uploadBackground, setActiveBackground, deleteBackground, loadBackgroundGallery } from './storage.js';
 import { applyTheme, saveThemeSettings, switchTab, toggleMobileSidebar, switchMainTab, scrollMainTabs, toggleMoreTabs, toggleMobileMoreMenu, closeMobileMoreMenu } from './ui.js';
-import { shiftDate, selectDateFromInput, saveEntry, renderView, selectDate, updateAutoFlags, initSelectors } from './calendar.js';
+import { shiftDate, selectDateFromInput, saveEntry, renderView, selectDate, updateAutoFlags, initSelectors, renderSidebarTradesList } from './calendar.js';
 import { toggleStatsDropdown, toggleTree, toggleStatsFilter, refreshStatsView, closeStatsDropdown, renderStatsSourceSelector, selectStatsSource, renderTradeTypeSelector, selectTradeTypeFilter } from './stats.js';
 import { renderErrorsList, addNewErrorType, deleteErrorType, renderChecklistDisplay, renderSettingsChecklist, addNewChecklistItem, deleteChecklistItem, saveChecklist, renderSidebarSliders, renderSettingsSliders, addNewSliderItem, deleteSliderItem, saveSlidersSettings, renderSettingsTradeTypes, addNewTradeType, deleteTradeType, saveTradeTypes, renderMyTradeTypes, addMyTradeType, deleteMyTradeType, saveMyTradeTypes, renderSettingsSituations, addPlaybookSituation, deletePlaybookSituation, savePlaybookSituations } from './settings.js';
 import { openZoom, closeZoom, openOriginal, loadMoreUnassigned, assignImage, removeAssignedImage, deleteFileFromPC, loadImages, renderAssignedScreens } from './gallery.js';
 import { getAIAdvice, analyzeChart, analyzeTagPatterns, openSOSModal, closeSOSModal, sendSOSMessage, sendDataChatMessage, renderAIAdviceUI, loadAIChatHistory, switchAITab, bookmarkAIChat, renderSavedAIChats, deleteSavedAI } from './ai.js';
+import { cleanupUnusedAIRequests } from './ai/client.js';
 import { setupOCRDrawing, loadLatestImageForOCR, saveVisualOCRSettings, editTicker, forceScan, updateBadgeUI, runOCR } from './ocr.js';
 import { importFondexxReport, importPPROReport, importFondexxTrades } from './parsers.js';
 import { renderPlaybook, addPlaybookSetup, editPlaybookSetup, savePlaybookSetup, deletePlaybookSetup, getPlaybookContext, getPlaybookForSituation, loadPlaybook } from './playbook.js';
 import { loadLearnContent, renderLearnCache } from './learn.js';
 import { renderAdminPanel } from './admin.js';
 import { initSidebarAccount, refreshSidebarAccount } from './sidebar_account.js';
+import { initMentorReviewUI, refreshMentorReviewQueue, setMentorReviewNavBadges } from './mentor_review.js';
 
-import { initTradesView, populateDateSelect, populateSymbolSelect, loadTradeChart } from './trades_view2.js';
-import { connectGoogleDrive, syncDriveScreenshots, updateDriveUI, disconnectGoogleDrive, startDriveAutoSync } from './drive.js';
+import { initTradesView, populateDateSelect, populateSymbolSelect, loadTradeChart, openTradesAtDayIndex } from './trades_view2.js';
+import { initNotifications } from './notifications.js';
+import { submitReviewRequest, refreshReviewRequestButtons } from './review_requests.js';
+import { showToast } from './utils.js';
+import { connectGoogleDrive, syncDriveScreenshots, updateDriveUI, disconnectGoogleDrive, startDriveAutoSync, tryRestoreDriveToken } from './drive.js';
 import { initPlaybookChart } from './playbook_chart.js';
 
 
@@ -61,8 +66,11 @@ window.toggleRightSidebar = function() {
 window.getDefaultDayEntry = getDefaultDayEntry;
 window.state = state;
 window.refreshSidebarAccount = refreshSidebarAccount;
+window.refreshMentorReviewQueue = refreshMentorReviewQueue;
+window.setMentorReviewNavBadges = setMentorReviewNavBadges;
 window.toggleAuthMode = toggleAuthMode;
 window.handleAuth = handleAuth;
+window.signInWithTelegram = signInWithTelegram;
 window.logout = logout;
 window.activateMentorMode = activateMentorMode;
 window.openTeamManager = openTeamManager;
@@ -126,6 +134,9 @@ window.removeAssignedImage = removeAssignedImage;
 window.deleteFileFromPC = deleteFileFromPC;
 window.loadImages = loadImages;
 window.renderAssignedScreens = renderAssignedScreens;
+window.submitReviewRequest = submitReviewRequest;
+window.refreshReviewRequestButtons = refreshReviewRequestButtons;
+window.mentorAcceptReviewRequest = mentorAcceptReviewRequest;
 window.getAIAdvice = getAIAdvice;
 window.analyzeChart = analyzeChart;
 window.analyzeTagPatterns = analyzeTagPatterns;
@@ -368,6 +379,8 @@ window.importFondexxTrades = importFondexxTrades;
 window.loadTradeChart = loadTradeChart;
 window.populateDateSelect = populateDateSelect;
 window.populateSymbolSelect = populateSymbolSelect;
+window.openTradesAtDayIndex = openTradesAtDayIndex;
+window.renderSidebarTradesList = renderSidebarTradesList;
 window.renderTeamSidebar = renderTeamSidebar;
 window.switchUser = switchUser;
 window.openTeamSidebar = function() { document.getElementById('team-sidebar').classList.add('open'); document.getElementById('team-sidebar-backdrop').classList.add('visible'); };
@@ -410,8 +423,8 @@ window.saveDaylossSetting = function() {
     if (!input) return;
     const val = parseFloat(input.value);
     if (isNaN(val)) return;
-    const yearEl = document.getElementById('year-select');
-    const monthEl = document.getElementById('month-select');
+    const yearEl = document.getElementById('cal-view-year');
+    const monthEl = document.getElementById('cal-view-month');
     if (!yearEl || !monthEl) return;
     const mk = `${yearEl.value}-${String(parseInt(monthEl.value) + 1).padStart(2, '0')}`;
     if (!state.appData.settings.monthlyDayloss) state.appData.settings.monthlyDayloss = {};
@@ -626,14 +639,39 @@ async function bootApp(user) {
     if (_appInitialized) return;
     _appInitialized = true;
 
-    const { data: bootProfile, error: bootProfileError } = await supabase
+    let { data: bootProfile, error: bootProfileError } = await supabase
         .from('profiles')
-        .select('nick')
+        .select('nick, role, mentor_enabled, settings')
         .eq('id', user.id)
         .maybeSingle();
     if (bootProfileError) console.warn('[AUTH] Could not load profile nick:', bootProfileError);
 
-    const nick = bootProfile?.nick || user.user_metadata?.nick || user.user_metadata?.display_name || user.email.split('@')[0];
+    if (!bootProfile?.nick) {
+        try {
+            await ensureAuthUserProfile(user);
+            const refetched = await supabase
+                .from('profiles')
+                .select('nick, role, mentor_enabled, settings')
+                .eq('id', user.id)
+                .maybeSingle();
+            bootProfile = refetched.data;
+        } catch (e) {
+            console.error('[AUTH] ensureAuthUserProfile:', e);
+        }
+    }
+
+    const nick =
+        bootProfile?.nick ||
+        user.user_metadata?.nick ||
+        user.user_metadata?.display_name ||
+        (user.email ? user.email.split('@')[0] : '') ||
+        'user';
+    state.myRole = bootProfile?.role || 'trader';
+    state.IS_MENTOR_MODE = !!(bootProfile?.mentor_enabled || bootProfile?.role === 'mentor');
+    state.authProvider =
+        (bootProfile?.settings && typeof bootProfile.settings === 'object' && bootProfile.settings.auth_provider) ||
+        user.app_metadata?.provider ||
+        'email';
     state.USER_DOC_NAME = `${nick}_stats`;
     state.CURRENT_VIEWED_USER = state.USER_DOC_NAME;
     state.myUserId = user.id || null;
@@ -650,6 +688,16 @@ async function bootApp(user) {
         await loadMentorStatusForAccount();
         await initializeApp();
 
+        if (canAccessMentorReviewQueue()) {
+            document.querySelectorAll('.mentor-review-nav-item').forEach((el) => {
+                el.style.display = '';
+            });
+            initMentorReviewUI();
+            setTimeout(() => {
+                void refreshMentorReviewQueue();
+            }, 2800);
+        }
+
         if (window.renderTeamSidebar) window.renderTeamSidebar();
         initSidebarAccount();
         if (window.refreshSidebarAccount) await window.refreshSidebarAccount();
@@ -658,22 +706,7 @@ async function bootApp(user) {
         if (window.renderSettingsSituations) window.renderSettingsSituations();
         if (window.applyAccessRights) window.applyAccessRights();
         if (window.loadAIChatHistory) window.loadAIChatHistory();
-
-        // Перевіряємо роль адміна
-        const { data: profileData } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .maybeSingle();
-        if (profileData?.role === 'admin') {
-            const adminBtn = document.getElementById('main-btn-admin');
-            if (adminBtn) adminBtn.style.display = '';
-            const adminMobileBtn = document.querySelector('.admin-tab-mobile');
-            if (adminMobileBtn) adminMobileBtn.style.display = '';
-            const adminSidebarBtn = document.querySelector('.admin-nav-item');
-            if (adminSidebarBtn) adminSidebarBtn.style.display = '';
-            window.renderAdminPanel = renderAdminPanel;
-        }
+        cleanupUnusedAIRequests();
 
         _applyPersistedBackground();
         loadBackgroundGallery();
@@ -686,6 +719,8 @@ async function bootApp(user) {
 
     setupOCRDrawing();
     startLiveSync();
+    await tryRestoreDriveToken();
+    if (window.updateDriveUI) window.updateDriveUI();
     startDriveAutoSync();
     syncDriveScreenshots(true);
     setTimeout(() => window._checkSessionModal?.(), 1500);
@@ -696,9 +731,19 @@ function showLoginScreen() {
     state.USER_DOC_NAME = '';
     state.CURRENT_VIEWED_USER = '';
     state.myUserId = null;
+    state.myRole = 'trader';
+    state.IS_MENTOR_MODE = false;
+    state.authProvider = 'email';
     setCurrentViewedUserId(null);
     const overlay = document.getElementById('auth-overlay');
     if (overlay) overlay.style.display = 'flex';
+    document.querySelectorAll('.mentor-review-nav-item').forEach((el) => {
+        el.style.display = 'none';
+    });
+    document.querySelectorAll('.admin-nav-item, .admin-tab-mobile').forEach((el) => {
+        el.style.display = 'none';
+    });
+    setMentorReviewNavBadges(0);
     loadTeams();
 }
 
@@ -748,3 +793,28 @@ supabase.auth.onAuthStateChange((event, session) => {
         showLoginScreen();
     }
 });
+
+window.appendReviewTag = function (chunk) {
+    const ta = document.getElementById('trade-notes');
+    const t = String(chunk || '').trim();
+    if (!ta) {
+        showToast('Відкрийте панель дня (кнопка +)');
+        return;
+    }
+    if (!t) return;
+    const needle = t.toLowerCase();
+    const cur = String(ta.value || '');
+    if (cur.toLowerCase().includes(needle)) {
+        showToast('Такий тег уже є в нотатках');
+        return;
+    }
+    ta.value = cur ? `${cur.trimEnd()} ${t}` : t;
+    if (window.switchTab) window.switchTab('tab-mind');
+    const sb = document.getElementById('form-sidebar');
+    if (sb?.classList.contains('collapsed') && window.toggleRightSidebar) window.toggleRightSidebar();
+    ta.focus();
+    showToast('Додано. Натисніть «Зберегти день».');
+};
+
+initTradesView();
+initNotifications();

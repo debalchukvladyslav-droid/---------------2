@@ -1,5 +1,5 @@
 // === js/auth.js ===
-import { supabase } from './supabase.js';
+import { supabase, TELEGRAM_BOT_USERNAME, TELEGRAM_AUTH_FN, SUPABASE_ANON_KEY } from './supabase.js';
 import { state } from './state.js';
 import { normalizeDayEntry } from './data_utils.js';
 
@@ -12,6 +12,15 @@ function getNickFromDocName(docName = '') {
 function isMissingRelationError(error) {
     const message = String(error?.message || '').toLowerCase();
     return message.includes('relation') && message.includes('does not exist');
+}
+
+function isIgnorableProfileInsertError(error) {
+    const message = String(error?.message || '').toLowerCase();
+    const details = String(error?.details || '').toLowerCase();
+    const code = String(error?.code || '').toLowerCase();
+
+    if (code === '42501' || message.includes('row-level security')) return true;
+    return code === '23505' && (details.includes('profiles_pkey') || message.includes('profiles_pkey'));
 }
 
 function mapAuthError(error, fallback = 'Помилка') {
@@ -56,6 +65,164 @@ async function getProfileByNick(nick, columns = 'id, nick, email, first_name, la
 
     if (error) throw error;
     return data;
+}
+
+function looksLikeEmail(value) {
+    const v = String(value || '').trim();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+}
+
+function isTelegramAuthUser(user) {
+    if (!user || typeof user !== 'object') return false;
+    if (user.app_metadata?.provider === 'telegram') return true;
+    if (user.user_metadata?.telegram_id) return true;
+    const ids = user.identities;
+    return Array.isArray(ids) && ids.some((i) => i?.provider === 'telegram');
+}
+
+/** Унікальний нік для Telegram (цифровий id), щоб не перетинатись із звичайними логінами. */
+export function makeTelegramNick(user) {
+    const ident = user.identities?.find((i) => i.provider === 'telegram');
+    const metaId = user.user_metadata?.telegram_id ?? user.user_metadata?.telegram_user_id;
+    const sub =
+        metaId ??
+        ident?.identity_data?.sub ??
+        ident?.identity_data?.provider_id ??
+        user.id;
+    const digits = String(sub).replace(/\D/g, '').slice(0, 18);
+    const nick = `tg${digits || String(Date.now()).slice(-12)}`;
+    return nick.slice(0, 32);
+}
+
+/** Якщо профілю ще немає (наприклад перший вхід через Telegram) — створюємо рядок profiles. */
+export async function ensureAuthUserProfile(user) {
+    if (!user?.id) return null;
+    const { data: row, error: selErr } = await supabase.from('profiles').select('id,nick').eq('id', user.id).maybeSingle();
+    if (selErr) throw selErr;
+    if (row?.nick) return row;
+
+    const tg = isTelegramAuthUser(user);
+    const nick = tg
+        ? makeTelegramNick(user)
+        : String(user.user_metadata?.nick || user.email?.split('@')[0] || `u_${String(user.id).replace(/-/g, '').slice(0, 12)}`)
+              .toLowerCase()
+              .replace(/[^a-z0-9_]/g, '')
+              .slice(0, 32) || `u_${String(user.id).replace(/-/g, '').slice(0, 12)}`;
+
+    let first_name = '';
+    let last_name = '';
+    if (tg) {
+        first_name = String(user.user_metadata?.first_name || '').trim() || 'Telegram';
+        last_name = String(user.user_metadata?.last_name || '').trim();
+    } else {
+        const uname = user.user_metadata?.name || user.user_metadata?.full_name || '';
+        const parts = String(uname).trim().split(/\s+/);
+        first_name = parts[0] || '';
+        last_name = parts.slice(1).join(' ') || '';
+    }
+
+    const baseSettings = typeof user.user_metadata === 'object' && user.user_metadata ? { ...user.user_metadata } : {};
+    const settings = { ...baseSettings, auth_provider: tg ? 'telegram' : 'email' };
+
+    const insertPayload = {
+        id: user.id,
+        nick,
+        email: user.email || null,
+        first_name,
+        last_name,
+        team: 'Без куща',
+        settings,
+    };
+
+    const { error: insErr } = await supabase.from('profiles').insert(insertPayload);
+    if (insErr && isIgnorableProfileInsertError(insErr)) {
+        const { data: again } = await supabase.from('profiles').select('id,nick').eq('id', user.id).maybeSingle();
+        if (again?.nick) return again;
+    }
+    if (insErr && !isIgnorableProfileInsertError(insErr)) {
+        if (String(insErr.code) === '23505' && String(insErr.message || '').toLowerCase().includes('nick')) {
+            const alt = `${nick.slice(0, 24)}_${String(user.id).replace(/-/g, '').slice(0, 6)}`.slice(0, 32);
+            const { error: e2 } = await supabase.from('profiles').insert({ ...insertPayload, nick: alt });
+            if (e2 && !isIgnorableProfileInsertError(e2)) throw e2;
+            return { id: user.id, nick: alt };
+        }
+        throw insErr;
+    }
+    return { id: user.id, nick };
+}
+
+/**
+ * У дашборді Supabase немає провайдера «Telegram» як у Google — використовуємо Telegram Login Widget
+ * + Edge Function `telegram-auth` (див. supabase/functions/telegram-auth).
+ */
+export async function signInWithTelegram() {
+    try {
+        const bot = String(TELEGRAM_BOT_USERNAME || '').trim().replace(/^@/, '');
+        if (!bot) {
+            showError(
+                'Telegram: у js/supabase.js задайте TELEGRAM_BOT_USERNAME (ім’я бота без @) і задеплойте Edge Function telegram-auth + secret TELEGRAM_BOT_TOKEN.',
+            );
+            return;
+        }
+        const mount = document.getElementById('telegram-widget-mount');
+        if (!mount) {
+            showError('Немає контейнера #telegram-widget-mount у index.html');
+            return;
+        }
+        showError('');
+        mount.innerHTML = '';
+        mount.style.display = 'block';
+
+        window.__pjTelegramAuthCb = async (user) => {
+            try {
+                const r = await fetch(TELEGRAM_AUTH_FN, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+                        apikey: SUPABASE_ANON_KEY,
+                    },
+                    body: JSON.stringify(user),
+                });
+                const j = await r.json().catch(() => ({}));
+                if (!r.ok) throw new Error(j.error || j.message || `HTTP ${r.status}`);
+                const { access_token: accessToken, refresh_token: refreshToken } = j;
+                if (!accessToken || !refreshToken) throw new Error('Немає токенів сесії');
+                const { error: sessErr } = await supabase.auth.setSession({
+                    access_token: accessToken,
+                    refresh_token: refreshToken,
+                });
+                if (sessErr) throw sessErr;
+                mount.innerHTML = '';
+                mount.style.display = 'none';
+            } catch (e) {
+                showError(mapAuthError(e, 'Telegram'));
+            }
+        };
+
+        const scr = document.createElement('script');
+        scr.src = 'https://telegram.org/js/telegram-widget.js?22';
+        scr.async = true;
+        scr.setAttribute('data-telegram-login', bot);
+        scr.setAttribute('data-size', 'large');
+        scr.setAttribute('data-onauth', '__pjTelegramAuthCb(user)');
+        scr.setAttribute('data-request-access', 'write');
+        mount.appendChild(scr);
+    } catch (e) {
+        showError(mapAuthError(e, 'Telegram'));
+    }
+}
+
+async function getLoginEmailByNick(nick) {
+    try {
+        const { data, error } = await supabase.rpc('login_email_for_nick', { target_nick: nick });
+        if (error) throw error;
+        return data || null;
+    } catch (error) {
+        console.warn('[auth] login_email_for_nick unavailable, falling back to profiles:', error);
+        const profile = await getProfileByNick(nick, 'email');
+        return profile?.email || null;
+    }
 }
 
 async function saveProfilePatchByDocName(docName, patch) {
@@ -105,7 +272,8 @@ function dayEntryToJournalRow(userId, tradeDate, entry) {
             sessionSetups: Array.isArray(day.sessionSetups) ? day.sessionSetups : [],
             sessionAiResult: day.sessionAiResult ?? '',
             sessionDone: day.sessionDone ?? false,
-            trades: Array.isArray(day.trades) ? day.trades : []
+            trades: Array.isArray(day.trades) ? day.trades : [],
+            review_requests: day.review_requests && typeof day.review_requests === 'object' ? day.review_requests : {},
         }
     };
 }
@@ -136,6 +304,13 @@ export function toggleAuthMode() {
     const toggleBtn = document.querySelector('[onclick="window.toggleAuthMode?.()"]');
 
     document.getElementById('register-fields').style.display = state.isRegisterMode ? 'block' : 'none';
+    const tgBtn = document.getElementById('btn-auth-telegram');
+    if (tgBtn) tgBtn.style.display = state.isRegisterMode ? 'none' : '';
+    const tgMount = document.getElementById('telegram-widget-mount');
+    if (tgMount) {
+        tgMount.innerHTML = '';
+        tgMount.style.display = 'none';
+    }
 
     if (state.isRegisterMode) {
         submitBtn.innerText = 'Зареєструватись';
@@ -152,16 +327,26 @@ export function toggleAuthMode() {
 }
 
 export async function handleAuth() {
-    const nick = document.getElementById('auth-nick').value.trim().toLowerCase();
+    const rawLogin = document.getElementById('auth-nick').value.trim();
+    const loginValue = rawLogin.toLowerCase();
     const pass = document.getElementById('auth-pass').value;
+    const isEmailLogin = looksLikeEmail(rawLogin);
 
-    if (!nick || nick.length < 3) { showError('Введіть коректний логін (мін 3 символи)'); return; }
+    if (!rawLogin) {
+        showError('Введіть нікнейм або пошту');
+        return;
+    }
+    if (!isEmailLogin && loginValue.length < 3) {
+        showError('Введіть коректний логін або пошту');
+        return;
+    }
     if (!pass || pass.length < 6) { showError('Пароль має бути мін. 6 символів'); return; }
 
     showError('');
 
     try {
         if (state.isRegisterMode) {
+            const nick = loginValue;
             const realEmail = document.getElementById('auth-email').value.trim().toLowerCase();
             const fname = document.getElementById('auth-fname').value.trim();
             const lname = document.getElementById('auth-lname').value.trim();
@@ -201,7 +386,11 @@ export async function handleAuth() {
                 team: selectedTeam
             }]);
 
-            if (profileInsertError) throw profileInsertError;
+            if (profileInsertError && isIgnorableProfileInsertError(profileInsertError)) {
+                console.warn('[auth] profile insert skipped; database trigger may have created it:', profileInsertError);
+            } else if (profileInsertError) {
+                throw profileInsertError;
+            }
 
             syncTeamGroupState(selectedTeam, `${lname} ${fname} (${nick})`);
 
@@ -216,8 +405,7 @@ export async function handleAuth() {
             return;
         }
 
-        const profile = await getProfileByNick(nick, 'email');
-        const foundEmail = profile?.email;
+        const foundEmail = isEmailLogin ? rawLogin.trim().toLowerCase() : await getLoginEmailByNick(loginValue);
 
         if (!foundEmail) {
             showError('Невірний логін або пароль!');
@@ -322,6 +510,13 @@ export function showResetStep(step) {
     document.getElementById('auth-switch-text').parentElement.style.display = step === 0 ? 'block' : 'none';
     document.getElementById('auth-nick').style.display = step === 0 ? 'block' : 'none';
     document.getElementById('auth-pass').style.display = step === 0 ? 'block' : 'none';
+    const tgBtn = document.getElementById('btn-auth-telegram');
+    if (tgBtn) tgBtn.style.display = step === 0 && !state.isRegisterMode ? '' : 'none';
+    const tgMount = document.getElementById('telegram-widget-mount');
+    if (tgMount && (step !== 0 || state.isRegisterMode)) {
+        tgMount.innerHTML = '';
+        tgMount.style.display = 'none';
+    }
     if (step === 1) {
         const nickInput = document.getElementById('reset-nick');
         if (nickInput) nickInput.focus();
@@ -338,8 +533,7 @@ export async function sendResetCode() {
     if (btn) { btn.disabled = true; btn.textContent = 'Надсилаємо...'; }
 
     try {
-        const profile = await getProfileByNick(nick, 'email');
-        const authEmail = profile?.email || null;
+        const authEmail = await getLoginEmailByNick(nick);
 
         if (!authEmail) { showResetError(1, 'Нікнейм не знайдено'); return; }
         if (authEmail.toLowerCase() !== emailInput) { showResetError(1, 'Пошта не збігається з акаунтом'); return; }
@@ -387,17 +581,29 @@ export async function logout() {
 export async function loadMentorStatusForAccount() {
     if (!state.USER_DOC_NAME) {
         state.IS_MENTOR_MODE = false;
+        state.myRole = 'trader';
         return false;
     }
 
     try {
-        const profile = await getProfileByNick(getNickFromDocName(state.USER_DOC_NAME), 'mentor_enabled');
-        state.IS_MENTOR_MODE = profile?.mentor_enabled === true;
+        const profile = await getProfileByNick(getNickFromDocName(state.USER_DOC_NAME), 'mentor_enabled, role');
+        state.myRole = profile?.role || 'trader';
+        state.IS_MENTOR_MODE = !!(profile?.mentor_enabled || profile?.role === 'mentor');
     } catch (e) {
         console.error('Помилка статусу ментора:', e);
         state.IS_MENTOR_MODE = false;
+        state.myRole = 'trader';
     }
     return state.IS_MENTOR_MODE;
+}
+
+/** Ментор, адмін або mentor_enabled — доступ до черги рев’ю та перегляду команди. */
+export function canAccessMentorReviewQueue() {
+    return (
+        state.myRole === 'admin' ||
+        state.myRole === 'mentor' ||
+        state.IS_MENTOR_MODE === true
+    );
 }
 
 export async function saveMentorStatusForAccount(enabled) {
@@ -420,9 +626,21 @@ export function updateMentorButtons() {
     mentorOffBtn.style.display = state.IS_MENTOR_MODE ? 'block' : 'none';
 }
 
+/** Ментор переглядає журнал іншого трейдера — лише коментар ментора / приватні нотатки, без редагування дня. */
+export function isMentorViewingOtherJournal() {
+    return !!(
+        state.IS_MENTOR_MODE &&
+        state.USER_DOC_NAME &&
+        state.CURRENT_VIEWED_USER &&
+        state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME
+    );
+}
+
 export function applyAccessRights() {
-    let hasAccess = (state.CURRENT_VIEWED_USER === state.USER_DOC_NAME) || state.IS_MENTOR_MODE;
-    let isLookingAtSomeoneElse = (state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME);
+    const isSelf = state.CURRENT_VIEWED_USER === state.USER_DOC_NAME;
+    const isLookingAtSomeoneElse = !isSelf;
+    const mentorViewOnly = isMentorViewingOtherJournal();
+    const hasAccess = isSelf || state.IS_MENTOR_MODE;
 
     let statusBanner = document.getElementById('status-banner');
     if (!statusBanner) {
@@ -448,34 +666,59 @@ export function applyAccessRights() {
         statusBanner.style.display = 'none';
     }
 
-    document.querySelectorAll('input, textarea, select').forEach(el => {
+    document.querySelectorAll('input, textarea, select').forEach((el) => {
         const safeIds = [
-            'month-select', 'year-select', 'trade-date', 'stats-filter-year', 'stats-filter-month', 'stats-filter-user',
+            'trade-date', 'stats-filter-year', 'stats-filter-month', 'stats-filter-user',
             'sidebar-pf-fname', 'sidebar-pf-lname', 'sidebar-pf-avatar-url',
+            'mr-days', 'mr-loss-threshold', 'cal-view-month', 'cal-view-year',
+            'mr-f-need-mentor', 'mr-f-big-loss', 'mr-f-errors', 'mr-f-no-screens', 'mr-f-no-session', 'mr-f-notes-request', 'mr-f-ai-hint', 'mr-f-incomplete',
+            'rr-btn-screens-general', 'rr-btn-calendar-profit',
         ];
-        if (!safeIds.includes(el.id) && !el.id.includes('theme-') && !el.id.includes('font-')) {
-            el.disabled = !hasAccess;
+        if (safeIds.includes(el.id) || el.id.includes('theme-') || el.id.includes('font-')) return;
+        if (mentorViewOnly && el.closest('#form-sidebar')) {
+            const mentorEditable = ['trade-date', 'mentor-notes', 'private-user-note'];
+            el.disabled = !mentorEditable.includes(el.id);
+            return;
         }
+        el.disabled = !hasAccess;
     });
 
-    let saveBtn = document.querySelector('.sidebar .btn-primary');
-    if (saveBtn) saveBtn.style.display = hasAccess ? 'block' : 'none';
+    const saveDayBtn = document.getElementById('btn-save-day');
+    if (saveDayBtn) saveDayBtn.style.display = !hasAccess || mentorViewOnly ? 'none' : 'flex';
 
-    document.querySelectorAll('.delete, .btn-secondary, .btn-ai').forEach(btn => {
-        if (!btn.innerText.includes('Вийти') && !btn.innerText.includes('Додати тип')) {
-            btn.style.display = hasAccess ? 'inline-block' : 'none';
+    const mentorSaveBtn = document.getElementById('btn-save-mentor');
+    if (mentorSaveBtn) mentorSaveBtn.style.display = mentorViewOnly ? 'inline-flex' : 'none';
+
+    document.querySelectorAll('.delete, .btn-secondary, .btn-ai').forEach((btn) => {
+        if (btn.classList.contains('rr-exempt-access')) return;
+        const t = btn.innerText || '';
+        if (t.includes('Вийти') || t.includes('Додати тип')) return;
+        if (mentorViewOnly && btn.closest('#form-sidebar')) {
+            btn.style.display = 'none';
+            return;
         }
+        btn.style.display = hasAccess ? 'inline-block' : 'none';
     });
 
     let mentorPanel = document.getElementById('mentor-trade-types-panel');
     if (mentorPanel) mentorPanel.style.display = (state.IS_MENTOR_MODE && isLookingAtSomeoneElse) ? 'block' : 'none';
-    let btnManage = document.getElementById('btn-manage-teams');
-    if (btnManage) btnManage.style.display = state.IS_MENTOR_MODE ? 'block' : 'none';
+    const adminTeamWrap = document.getElementById('admin-team-structure');
+    const btnAdminTeam = document.getElementById('btn-admin-team-manager');
+    const showTeamAdmin = state.myRole === 'admin' || state.IS_MENTOR_MODE;
+    if (adminTeamWrap) adminTeamWrap.style.display = showTeamAdmin ? 'block' : 'none';
+    if (btnAdminTeam) btnAdminTeam.style.display = showTeamAdmin ? 'inline-flex' : 'none';
 
     if (state.USER_DOC_NAME) {
         if (window.renderTeamSidebar) window.renderTeamSidebar();
         if (window.renderStatsSourceSelector) window.renderStatsSourceSelector();
     }
+
+    const adminNav = document.querySelector('.admin-nav-item');
+    const adminMobile = document.querySelector('.admin-tab-mobile');
+    const showAdminTab = state.myRole === 'admin' || state.IS_MENTOR_MODE;
+    if (adminNav) adminNav.style.display = showAdminTab ? '' : 'none';
+    if (adminMobile) adminMobile.style.display = showAdminTab ? '' : 'none';
+
     updateMentorButtons();
 }
 
@@ -563,34 +806,63 @@ function showConfirmModal(message, onConfirm) {
 
 export function activateMentorMode() {
     if (state.IS_MENTOR_MODE) { showToast('Режим Ментора вже активовано!'); return; }
-
-    showPromptModal('🔑 Введіть секретний ключ доступу:', async (pass) => {
-        if (pass === 'mentor2026' || pass === 'prop2026') {
-            try {
-                await saveMentorStatusForAccount(true);
-                showToast('✅ Режим Ментора активовано!');
-                applyAccessRights();
-                if (window.refreshStatsView) window.refreshStatsView();
-            } catch (e) {
-                showToast('Помилка збереження статусу: ' + e.message);
-            }
-        } else if (pass !== '') {
-            showToast('❌ Невірний ключ!');
-        }
-    });
+    showToast('Доступ ментора видає адмін у профілі. Паролі на фронті вимкнено для безпеки.');
 }
 
 export function deactivateMentorMode() {
     if (!state.IS_MENTOR_MODE) return;
 
     showConfirmModal('Вийти з режиму Ментора для цього акаунта?', async () => {
-        await saveMentorStatusForAccount(false);
+        showToast('Статус ментора змінює тільки адмін.');
         state.statsSourceSelection = { type: 'current', key: state.CURRENT_VIEWED_USER || state.USER_DOC_NAME || '' };
         state.activeFilters = [];
-        showToast('Режим Ментора вимкнено.');
         applyAccessRights();
         if (window.refreshStatsView) window.refreshStatsView();
     });
+}
+
+export async function mentorAcceptReviewRequest(dateStr, kind, screenPath) {
+    if (!isMentorViewingOtherJournal()) {
+        showToast('Прийняття запиту доступне лише ментору в журналі трейдера');
+        return;
+    }
+    if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
+    const raw = state.appData.journal[dateStr] || {};
+    const day = normalizeDayEntry(raw);
+    if (!day.review_requests || typeof day.review_requests !== 'object') day.review_requests = {};
+    const rr = day.review_requests;
+    const myId = state.myUserId;
+
+    const acceptSlot = (slot) => {
+        if (!slot || slot.status !== 'pending' || slot.mentor_user_id !== myId) return false;
+        slot.status = 'accepted';
+        slot.accepted_at = new Date().toISOString();
+        slot.accepted_by = getNickFromDocName(state.USER_DOC_NAME);
+        return true;
+    };
+
+    let ok = false;
+    if (kind === 'screen_item' && screenPath) {
+        rr.by_screen = rr.by_screen || {};
+        ok = acceptSlot(rr.by_screen[screenPath]);
+    } else {
+        ok = acceptSlot(rr[kind]);
+    }
+    if (!ok) {
+        showToast('Немає активного запиту на вас за цей пункт');
+        return;
+    }
+    state.appData.journal[dateStr] = day;
+    try {
+        await saveJournalDay(state.CURRENT_VIEWED_USER, dateStr, day);
+        showToast('Запит прийнято');
+        if (window.refreshReviewRequestButtons) window.refreshReviewRequestButtons();
+        if (window.renderAssignedScreens) void window.renderAssignedScreens();
+        if (window.renderView) window.renderView();
+    } catch (e) {
+        console.error(e);
+        showToast('Помилка збереження: ' + (e?.message || e));
+    }
 }
 
 export async function saveMentorComment() {
@@ -647,24 +919,34 @@ export async function savePrivateNote() {
 }
 
 export async function loadPrivateNote() {
-    let container = document.getElementById('private-note-container');
-    let textarea = document.getElementById('private-user-note');
+    const container = document.getElementById('private-note-container');
+    const textarea = document.getElementById('private-user-note');
     if (!container || !textarea) return;
     if (!state.USER_DOC_NAME) return;
 
-    if (state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME && !state.IS_MENTOR_MODE) {
-        container.style.display = 'block';
-        let targetUser = state.CURRENT_VIEWED_USER.replace('_stats', '');
-        let date = state.selectedDateStr;
+    const viewingOther = state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME;
+    const plainViewOnly = viewingOther && !state.IS_MENTOR_MODE;
+
+    async function fillFromMyPrivateNotes() {
+        const targetUser = state.CURRENT_VIEWED_USER.replace('_stats', '');
+        const date = state.selectedDateStr;
         try {
-            let profile = await getProfileByNick(getNickFromDocName(state.USER_DOC_NAME), 'private_notes');
+            const profile = await getProfileByNick(getNickFromDocName(state.USER_DOC_NAME), 'private_notes');
             textarea.value = profile?.private_notes?.[targetUser]?.[date] || '';
         } catch (e) {
             console.error('loadPrivateNote error:', e);
-        } finally {
-            container.style.display = 'block';
         }
-    } else {
-        container.style.display = 'none';
     }
+
+    if (plainViewOnly) {
+        container.style.display = 'block';
+        await fillFromMyPrivateNotes();
+        return;
+    }
+    if (isMentorViewingOtherJournal()) {
+        container.style.display = 'block';
+        await fillFromMyPrivateNotes();
+        return;
+    }
+    container.style.display = 'none';
 }

@@ -1,9 +1,11 @@
 // === js/gallery.js ===
 import { state, SCREEN_CATS } from './state.js';
-import { saveToLocal } from './storage.js';
+import { saveJournalData, markJournalDayDirty, saveSettings } from './storage.js';
 import { showToast } from './utils.js';
 import { getDefaultDayEntry } from './data_utils.js';
 import { deleteFromSupabaseStorage, getSupabaseStorageUrl, uploadToSupabaseStorage } from './supabase_storage.js';
+import { buildScreenshotPath } from './storage_paths.js';
+import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 
 export function openZoom(src) {
     state.currentZoomedSrc = src;
@@ -226,16 +228,22 @@ export async function renderAssignedScreens() {
 
             // Action buttons
             const actRow = document.createElement('div');
-            actRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-top:15px;';
+            actRow.style.cssText = 'display:flex;flex-wrap:wrap;justify-content:flex-start;align-items:center;gap:10px;margin-top:15px;';
             const aiBtn = document.createElement('button');
             aiBtn.className = 'btn-ai'; aiBtn.style.cssText = 'width:auto;margin:0;padding:8px 15px;';
             aiBtn.textContent = '👁️ AI Аналіз графіку';
             aiBtn.addEventListener('click', () => window.analyzeChart?.(encodedPath, cleanId));
+            const rrBtn = document.createElement('button');
+            rrBtn.type = 'button';
+            rrBtn.className = 'btn-secondary rr-screen-btn rr-toggle-btn rr-exempt-access';
+            rrBtn.setAttribute('data-screen-path', encodedPath);
+            rrBtn.textContent = '📩 Запит розбору';
+            rrBtn.addEventListener('click', () => window.submitReviewRequest?.('screen_item', encodedPath));
             const retBtn = document.createElement('button');
-            retBtn.className = 'btn-secondary'; retBtn.style.width = 'auto';
+            retBtn.className = 'btn-secondary rr-exempt-access'; retBtn.style.width = 'auto';
             retBtn.textContent = '↩️ Повернути наверх';
             retBtn.addEventListener('click', () => removeAssignedImage(encodedPath, cat.id));
-            actRow.appendChild(aiBtn); actRow.appendChild(retBtn);
+            actRow.appendChild(aiBtn); actRow.appendChild(rrBtn); actRow.appendChild(retBtn);
 
             // Discipline slider
             const discWrap = document.createElement('div');
@@ -306,14 +314,21 @@ export async function renderAssignedScreens() {
     const infoEl = document.getElementById('sidebar-screen-info'); if (infoEl) infoEl.innerText = `Скріншотів додано: ${count}`;
     
     currentDayImages.forEach(encodedPath => { if(window.updateBadgeUI) window.updateBadgeUI(encodedPath) });
+
+    if (window.refreshReviewRequestButtons) window.refreshReviewRequestButtons();
 }
 
 export async function loadImages() {
+    showGlobalLoader('screens-load', 'Завантаження скріншотів...');
     if (!state.appData.unassignedImages) state.appData.unassignedImages = [];
     state.currentUnassignedImages = [...state.appData.unassignedImages].reverse();
     state.unassignedVisibleCount = 5; 
-    renderUnassignedUI(); 
-    await renderAssignedScreens();
+    try {
+        renderUnassignedUI();
+        await renderAssignedScreens();
+    } finally {
+        hideGlobalLoader('screens-load');
+    }
 }
 
 function showConfirmModal(message, onConfirm) {
@@ -361,7 +376,7 @@ export function deleteFileFromPC(encodedPath) {
         if (idx > -1) state.appData.unassignedImages.splice(idx, 1);
         addToBlacklist(url);
         await deleteFromStorage(url);
-        saveToLocal().then(() => loadImages());
+        saveSettings().then(() => loadImages());
     });
 }
 
@@ -372,7 +387,10 @@ export function deleteAssignedImage(encodedPath, category) {
         if (arr) { const i = arr.indexOf(url); if (i > -1) arr.splice(i, 1); }
         addToBlacklist(url);
         await deleteFromStorage(url);
-        saveToLocal().then(() => { loadImages(); if(window.renderView) window.renderView(); });
+        markJournalDayDirty(state.selectedDateStr);
+        saveJournalData()
+            .then(() => saveSettings())
+            .then(() => { loadImages(); if(window.renderView) window.renderView(); });
     });
 }
 
@@ -388,7 +406,10 @@ export function assignImage(encodedPath, category) {
     let unassignedIdx = state.appData.unassignedImages.indexOf(url);
     if(unassignedIdx > -1) state.appData.unassignedImages.splice(unassignedIdx, 1);
     
-    saveToLocal().then(() => { 
+    markJournalDayDirty(state.selectedDateStr);
+    saveJournalData()
+        .then(() => saveSettings())
+        .then(() => { 
         loadImages(); 
         if(window.renderView) window.renderView(); 
         let viewStats = document.getElementById('view-stats');
@@ -407,7 +428,10 @@ export function removeAssignedImage(encodedPath, category) {
         if (!state.appData.unassignedImages) state.appData.unassignedImages = [];
         if (!state.appData.unassignedImages.includes(url)) state.appData.unassignedImages.push(url);
         
-        saveToLocal().then(() => { 
+        markJournalDayDirty(state.selectedDateStr);
+        saveJournalData()
+            .then(() => saveSettings())
+            .then(() => { 
             loadImages(); 
             if(window.renderView) window.renderView(); 
             let viewStats = document.getElementById('view-stats');
@@ -434,7 +458,7 @@ window.saveDiscipline = function(encodedPath, value, slider) {
     state.appData.screenDiscipline[filename] = parseInt(value) || 5;
     window.updateDisciplineUI(encodedPath, value, slider);
     clearTimeout(_disciplineSaveTimer);
-    _disciplineSaveTimer = setTimeout(() => saveToLocal(), 500);
+    _disciplineSaveTimer = setTimeout(() => void saveSettings(), 500);
 };
 
 window.addScreenTag = function(encodedPath, input) {
@@ -445,7 +469,7 @@ window.addScreenTag = function(encodedPath, input) {
     if (!state.appData.screenTags[filename]) state.appData.screenTags[filename] = [];
     if (!state.appData.screenTags[filename].includes(tag)) {
         state.appData.screenTags[filename].push(tag);
-        saveToLocal().then(() => renderAssignedScreens());
+        saveSettings().then(() => renderAssignedScreens());
     }
     input.value = '';
     const dl = input.nextElementSibling?.id === input.id + '-dl' ? input.nextElementSibling : document.getElementById(input.id + '-dl');
@@ -487,7 +511,7 @@ window.removeScreenTag = function(encodedPath, tag) {
     const filename = decodeURIComponent(encodedPath);
     if (!state.appData.screenTags?.[filename]) return;
     state.appData.screenTags[filename] = state.appData.screenTags[filename].filter(t => t !== tag);
-    saveToLocal().then(() => renderAssignedScreens());
+    saveSettings().then(() => renderAssignedScreens());
 };
 
 window.toggleTagSearch = function() {
@@ -755,18 +779,22 @@ window.addEventListener('paste', async function(e) {
     titleEl.innerHTML = '⏳ Завантаження картинки в хмару...';
 
     try {
-        const nick = state.USER_DOC_NAME.replace('_stats', '');
+        showGlobalLoader('upload-screen', 'Завантаження картинки в хмару...');
         const ext = file.type.includes('png') ? 'png' : 'jpg';
-        const filename = `screenshots/${nick}/${Date.now()}.${ext}`;
+        const filename = buildScreenshotPath(`${Date.now()}.${ext}`);
         await uploadToSupabaseStorage(filename, file);
         // Зберігаємо шлях файлу (не URL) — URL генеруємо динамічно через SDK
 
         if (!state.appData.unassignedImages) state.appData.unassignedImages = [];
         state.appData.unassignedImages.push(filename);
-        await saveToLocal();
+        await saveSettings();
         loadImages();
+        showGlobalLoader('upload-screen', 'Скріншот завантажено', { type: 'success' });
+        hideGlobalLoader('upload-screen', 1200);
     } catch(err) {
         console.error('Помилка завантаження:', err);
+        showGlobalLoader('upload-screen', 'Помилка завантаження', { type: 'error' });
+        hideGlobalLoader('upload-screen', 2600);
         showToast('❌ Помилка завантаження: ' + err.message);
     } finally {
         titleEl.innerHTML = originalText;

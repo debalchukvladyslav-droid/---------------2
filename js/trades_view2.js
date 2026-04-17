@@ -2,7 +2,7 @@
 import { state } from './state.js';
 import { buildTradeContext, analyzeTradeStory, renderStoryOverlay } from './trade_story.js';
 import { sleep } from './ai.js';
-import { saveToLocal } from './storage.js';
+import { saveJournalData, markJournalDayDirty } from './storage.js';
 
 function sanitizeHTML(str) {
     const div = document.createElement('div');
@@ -201,6 +201,21 @@ export function loadTradeChart(symbol, dateStr) {
     const idx = allTrades.findIndex(t => t.symbol === symbol);
     if (idx === -1) return;
 
+    _selectTrade(dateStr, idx);
+}
+
+/** Відкрити вкладку «Угоди» і конкретну угоду дня (після імпорту Fondexx). */
+export function openTradesAtDayIndex(dateStr, tradeIndex) {
+    if (!dateStr || !state.appData?.journal?.[dateStr]?.trades?.length) return;
+    const idx = Math.max(0, Math.min(parseInt(tradeIndex, 10) || 0, state.appData.journal[dateStr].trades.length - 1));
+    if (window.switchMainTab) window.switchMainTab('trades');
+    populateDateSelect();
+    const sel = document.getElementById('trades-date-select');
+    if (sel) {
+        if (!sel.querySelector(`option[value="${dateStr}"]`)) populateDateSelect();
+        sel.value = dateStr;
+    }
+    renderPillNav(dateStr);
     _selectTrade(dateStr, idx);
 }
 
@@ -661,7 +676,8 @@ async function saveAnalysisToJournal(dateStr, tradeIndex, result) {
         trades[tradeIndex] = { ...trades[tradeIndex], analysisResult: safeResult };
 
         state.appData.journal[dateStr] = { ...dayData, trades };
-        await saveToLocal();
+        markJournalDayDirty(dateStr);
+        await saveJournalData();
 
         // Оновлюємо локальний state
         

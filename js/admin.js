@@ -11,6 +11,15 @@ export async function renderAdminPanel() {
     const container = document.getElementById('admin-users-list');
     if (!container) return;
 
+    const refreshUsersBtn = document.getElementById('admin-refresh-users-btn');
+    if (state.myRole !== 'admin') {
+        if (refreshUsersBtn) refreshUsersBtn.style.display = 'none';
+        container.innerHTML =
+            '<p class="admin-empty">Повний список профілів і зміна ролей доступні лише адміністратору. Для кущів використайте блок вище або «Команда» в шапці.</p>';
+        return;
+    }
+    if (refreshUsersBtn) refreshUsersBtn.style.display = '';
+
     container.innerHTML = '<p class="admin-loading">Завантаження…</p>';
 
     const { data: profiles, error } = await supabase
