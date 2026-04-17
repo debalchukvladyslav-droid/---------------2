@@ -151,9 +151,68 @@ export async function ensureAuthUserProfile(user) {
     return { id: user.id, nick };
 }
 
+function telegramRedirectParamsPresent() {
+    const sp = new URLSearchParams(window.location.search);
+    const h = String(sp.get('hash') || '');
+    if (!sp.get('id') || !sp.get('auth_date') || !h) return false;
+    return /^[a-f0-9]{64}$/i.test(h);
+}
+
+function searchParamsToTelegramPayload(sp) {
+    const o = {};
+    sp.forEach((v, k) => {
+        o[k] = v;
+    });
+    return o;
+}
+
+/** Обмін даних віджета / редіректу Telegram на сесію Supabase (Edge Function). */
+export async function exchangeTelegramAuthForSession(userPayload) {
+    const r = await fetch(TELEGRAM_AUTH_FN, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            apikey: SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify(userPayload),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || j.message || `HTTP ${r.status}`);
+    const { access_token: accessToken, refresh_token: refreshToken } = j;
+    if (!accessToken || !refreshToken) throw new Error('Немає токенів сесії');
+    const { error: sessErr } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+    });
+    if (sessErr) throw sessErr;
+}
+
 /**
- * У дашборді Supabase немає провайдера «Telegram» як у Google — використовуємо Telegram Login Widget
- * + Edge Function `telegram-auth` (див. supabase/functions/telegram-auth).
+ * Після редіректу з Telegram (data-auth-url) у URL з’являються id, hash, auth_date…
+ * Викликати один раз перед getSession().
+ */
+export async function maybeFinishTelegramRedirect() {
+    if (!telegramRedirectParamsPresent()) return false;
+    const sp = new URLSearchParams(window.location.search);
+    const payload = searchParamsToTelegramPayload(sp);
+    const cleanPath = `${window.location.pathname}${window.location.hash || ''}`;
+    try {
+        await exchangeTelegramAuthForSession(payload);
+        window.history.replaceState({}, '', cleanPath || '/');
+        return true;
+    } catch (e) {
+        console.error('[Telegram redirect]', e);
+        window.history.replaceState({}, '', cleanPath || '/');
+        showError(mapAuthError(e, 'Telegram'));
+        return true;
+    }
+}
+
+/**
+ * Режим «Redirect to URL» (див. Telegram Login Widget): перехід у тій самій вкладці
+ * на авторизацію Telegram, потім повернення на сайт з GET-параметрами — без окремого вікна з колбеком.
+ * Відкриття саме додатку Telegram на ПК/телефоні контролює ОС/браузер (tg:// / Universal Links); ми лише прибираємо popup-флоу.
  */
 export async function signInWithTelegram() {
     try {
@@ -173,39 +232,17 @@ export async function signInWithTelegram() {
         mount.innerHTML = '';
         mount.style.display = 'block';
 
-        window.__pjTelegramAuthCb = async (user) => {
-            try {
-                const r = await fetch(TELEGRAM_AUTH_FN, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-                        apikey: SUPABASE_ANON_KEY,
-                    },
-                    body: JSON.stringify(user),
-                });
-                const j = await r.json().catch(() => ({}));
-                if (!r.ok) throw new Error(j.error || j.message || `HTTP ${r.status}`);
-                const { access_token: accessToken, refresh_token: refreshToken } = j;
-                if (!accessToken || !refreshToken) throw new Error('Немає токенів сесії');
-                const { error: sessErr } = await supabase.auth.setSession({
-                    access_token: accessToken,
-                    refresh_token: refreshToken,
-                });
-                if (sessErr) throw sessErr;
-                mount.innerHTML = '';
-                mount.style.display = 'none';
-            } catch (e) {
-                showError(mapAuthError(e, 'Telegram'));
-            }
-        };
+        const returnUrl = new URL(window.location.href);
+        returnUrl.search = '';
+        returnUrl.hash = '';
+        const authUrl = returnUrl.href;
 
         const scr = document.createElement('script');
         scr.src = 'https://telegram.org/js/telegram-widget.js?22';
         scr.async = true;
         scr.setAttribute('data-telegram-login', bot);
         scr.setAttribute('data-size', 'large');
-        scr.setAttribute('data-onauth', '__pjTelegramAuthCb(user)');
+        scr.setAttribute('data-auth-url', authUrl);
         scr.setAttribute('data-request-access', 'write');
         mount.appendChild(scr);
     } catch (e) {

@@ -4,7 +4,7 @@
 import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { getDefaultDayEntry } from './data_utils.js';
-import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm, canAccessMentorReviewQueue, mentorAcceptReviewRequest, ensureAuthUserProfile, signInWithTelegram } from './auth.js';
+import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm, canAccessMentorReviewQueue, mentorAcceptReviewRequest, ensureAuthUserProfile, signInWithTelegram, maybeFinishTelegramRedirect } from './auth.js';
 import { loadTeams, openTeamManager, createNewTeam, moveTrader, deleteTeam, deleteTraderProfile, renderTeamSidebar, switchUser } from './teams.js';
 import { saveToLocal, initializeApp, exportData, importData, loadMonth, resolveViewedUserId, setCurrentViewedUserId,
          uploadBackground, setActiveBackground, deleteBackground, loadBackgroundGallery } from './storage.js';
@@ -762,6 +762,7 @@ showAuthSpinner();
 
 (async () => {
     try {
+        await maybeFinishTelegramRedirect();
         const { data: { session }, error } = await supabase.auth.getSession();
         if (error) throw error;
 
