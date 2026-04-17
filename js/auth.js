@@ -1,5 +1,5 @@
 // === js/auth.js ===
-import { supabase, TELEGRAM_AUTH_FN, SUPABASE_ANON_KEY } from './supabase.js';
+import { supabase, TELEGRAM_AUTH_FN, SUPABASE_ANON_KEY, TELEGRAM_BOT_ID } from './supabase.js';
 import { state } from './state.js';
 import { normalizeDayEntry } from './data_utils.js';
 
@@ -209,10 +209,16 @@ export async function maybeFinishTelegramRedirect() {
     }
 }
 
+function buildTelegramOAuthUrl(botId, returnHref) {
+    const origin = encodeURIComponent(window.location.origin);
+    const rt = encodeURIComponent(returnHref);
+    const bid = encodeURIComponent(String(botId));
+    return `https://oauth.telegram.org/auth?bot_id=${bid}&origin=${origin}&request_access=write&return_to=${rt}`;
+}
+
 /**
- * Без iframe-віджета Telegram (він завжди відкриває oauth у popup). Отримуємо з Edge той самий
- * URL, що й у popup (`oauth.telegram.org/auth?...`), і переходимо у поточній вкладці — частіше
- * ОС пропонує відкрити Telegram Desktop / застосунок. Потрібен оновлений деплой `telegram-auth` з GET action=oauth.
+ * 1) Якщо задано TELEGRAM_BOT_ID у supabase.js — перехід на oauth **без** запиту до Supabase (немає CORS).
+ * 2) Інакше GET до Edge (після деплою з CORS `*` і verify_jwt=false); спочатку лише `apikey` у query (без preflight).
  */
 export async function signInWithTelegram() {
     try {
@@ -222,27 +228,41 @@ export async function signInWithTelegram() {
         returnUrl.hash = '';
         const returnHref = returnUrl.href;
 
-        const fn = new URL(TELEGRAM_AUTH_FN);
-        fn.searchParams.set('action', 'oauth');
-        fn.searchParams.set('return_to', returnHref);
+        const bid = String(TELEGRAM_BOT_ID || '').trim();
+        if (/^\d{5,20}$/.test(bid)) {
+            window.location.assign(buildTelegramOAuthUrl(bid, returnHref));
+            return;
+        }
 
-        const r = await fetch(fn.toString(), {
-            method: 'GET',
-            headers: {
-                Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-                apikey: SUPABASE_ANON_KEY,
-            },
-        });
-        const j = await r.json().catch(() => ({}));
+        const fnPlain = new URL(TELEGRAM_AUTH_FN);
+        fnPlain.searchParams.set('apikey', SUPABASE_ANON_KEY);
+        fnPlain.searchParams.set('action', 'oauth');
+        fnPlain.searchParams.set('return_to', returnHref);
+
+        let r = await fetch(fnPlain.toString(), { method: 'GET' });
+        let j = await r.json().catch(() => ({}));
+        if (!r.ok) {
+            const fnHdr = new URL(TELEGRAM_AUTH_FN);
+            fnHdr.searchParams.set('action', 'oauth');
+            fnHdr.searchParams.set('return_to', returnHref);
+            r = await fetch(fnHdr.toString(), {
+                method: 'GET',
+                headers: {
+                    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+                    apikey: SUPABASE_ANON_KEY,
+                },
+            });
+            j = await r.json().catch(() => ({}));
+        }
         if (!r.ok) {
             throw new Error(
                 j.error ||
                     j.message ||
-                    `HTTP ${r.status} (оновіть Edge Function telegram-auth і secret TELEGRAM_BOT_TOKEN)`,
+                    `HTTP ${r.status}. У js/supabase.js задайте TELEGRAM_BOT_ID (getMe → id) або задеплойте telegram-auth з CORS і вимкніть JWT для функції в Dashboard.`,
             );
         }
         if (!j.url || typeof j.url !== 'string') {
-            throw new Error('Некоректна відповідь: немає url. Задеплойте останню версію telegram-auth.');
+            throw new Error('Некоректна відповідь: немає url.');
         }
         window.location.assign(j.url);
     } catch (e) {
@@ -343,6 +363,8 @@ export function toggleAuthMode() {
     document.getElementById('register-fields').style.display = state.isRegisterMode ? 'block' : 'none';
     const tgBtn = document.getElementById('btn-auth-telegram');
     if (tgBtn) tgBtn.style.display = state.isRegisterMode ? 'none' : '';
+    const tgDeep = document.getElementById('link-tg-deep');
+    if (tgDeep) tgDeep.style.display = state.isRegisterMode ? 'none' : '';
 
     if (state.isRegisterMode) {
         submitBtn.innerText = 'Зареєструватись';
@@ -544,6 +566,8 @@ export function showResetStep(step) {
     document.getElementById('auth-pass').style.display = step === 0 ? 'block' : 'none';
     const tgBtn = document.getElementById('btn-auth-telegram');
     if (tgBtn) tgBtn.style.display = step === 0 && !state.isRegisterMode ? '' : 'none';
+    const tgDeep = document.getElementById('link-tg-deep');
+    if (tgDeep) tgDeep.style.display = step === 0 && !state.isRegisterMode ? '' : 'none';
     if (step === 1) {
         const nickInput = document.getElementById('reset-nick');
         if (nickInput) nickInput.focus();

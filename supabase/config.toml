@@ -1,5 +1,6 @@
 # Мінімальний конфіг для Edge Functions. Проєкт уже може бути злінкований через supabase link.
 # Деплой: supabase functions deploy telegram-auth
 
+# Якщо preflight далі падає: Dashboard → Edge Functions → telegram-auth → вимкнути «Verify JWT».
 [functions.telegram-auth]
 verify_jwt = false

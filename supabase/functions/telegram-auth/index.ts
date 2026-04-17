@@ -12,13 +12,21 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-function cors(origin: string | null) {
-    const allow = origin || '*';
+/** Див. https://supabase.com/docs/guides/functions/cors — тільки `*` стабільно проходить preflight з браузера. */
+function corsHeaders(): Record<string, string> {
     return {
-        'Access-Control-Allow-Origin': allow,
+        'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Max-Age': '86400',
     };
+}
+
+function json(body: unknown, status = 200, extra: Record<string, string> = {}) {
+    return new Response(JSON.stringify(body), {
+        status,
+        headers: { ...corsHeaders(), 'Content-Type': 'application/json', ...extra },
+    });
 }
 
 function callerPageOrigin(req: Request): string | null {
@@ -79,10 +87,9 @@ async function loginPasswordHex(botToken: string, telegramId: string): Promise<s
 }
 
 Deno.serve(async (req) => {
-    const origin = req.headers.get('Origin');
-    const c = cors(origin);
+    const h = corsHeaders();
     if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: c });
+        return new Response(null, { status: 204, headers: h });
     }
 
     const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN')?.trim();
@@ -90,60 +97,36 @@ Deno.serve(async (req) => {
     if (req.method === 'GET') {
         const u = new URL(req.url);
         if (u.searchParams.get('action') !== 'oauth') {
-            return new Response(JSON.stringify({ error: 'Use GET ?action=oauth&return_to=… or POST for token exchange' }), {
-                status: 404,
-                headers: { ...c, 'Content-Type': 'application/json' },
-            });
+            return json({ error: 'Use GET ?action=oauth&return_to=… or POST for token exchange' }, 404);
         }
         if (!botToken) {
-            return new Response(JSON.stringify({ error: 'TELEGRAM_BOT_TOKEN missing' }), {
-                status: 500,
-                headers: { ...c, 'Content-Type': 'application/json' },
-            });
+            return json({ error: 'TELEGRAM_BOT_TOKEN missing' }, 500);
         }
         const returnTo = u.searchParams.get('return_to');
         if (!returnTo) {
-            return new Response(JSON.stringify({ error: 'return_to required' }), {
-                status: 400,
-                headers: { ...c, 'Content-Type': 'application/json' },
-            });
+            return json({ error: 'return_to required' }, 400);
         }
         let returnUrl: URL;
         try {
             returnUrl = new URL(returnTo);
         } catch {
-            return new Response(JSON.stringify({ error: 'Invalid return_to' }), {
-                status: 400,
-                headers: { ...c, 'Content-Type': 'application/json' },
-            });
+            return json({ error: 'Invalid return_to' }, 400);
         }
         if (returnUrl.protocol !== 'https:' && returnUrl.protocol !== 'http:') {
-            return new Response(JSON.stringify({ error: 'Invalid return_to scheme' }), {
-                status: 400,
-                headers: { ...c, 'Content-Type': 'application/json' },
-            });
+            return json({ error: 'Invalid return_to scheme' }, 400);
         }
         const pageOrigin = callerPageOrigin(req);
         if (!pageOrigin) {
-            return new Response(JSON.stringify({ error: 'Origin/Referer required' }), {
-                status: 403,
-                headers: { ...c, 'Content-Type': 'application/json' },
-            });
+            return json({ error: 'Origin/Referer required' }, 403);
         }
         if (returnUrl.origin !== pageOrigin) {
-            return new Response(JSON.stringify({ error: 'return_to must match site origin' }), {
-                status: 403,
-                headers: { ...c, 'Content-Type': 'application/json' },
-            });
+            return json({ error: 'return_to must match site origin' }, 403);
         }
 
         const meRes = await fetch(`https://api.telegram.org/bot${botToken}/getMe`);
         const meJson = await meRes.json();
         if (!meJson?.ok || !meJson?.result?.id) {
-            return new Response(JSON.stringify({ error: 'Telegram getMe failed' }), {
-                status: 502,
-                headers: { ...c, 'Content-Type': 'application/json' },
-            });
+            return json({ error: 'Telegram getMe failed' }, 502);
         }
         const botId = meJson.result.id as number;
         const oauthBase = 'https://oauth.telegram.org';
@@ -153,17 +136,11 @@ Deno.serve(async (req) => {
             `&request_access=write` +
             `&return_to=${encodeURIComponent(returnTo)}`;
 
-        return new Response(JSON.stringify({ url: authUrl }), {
-            status: 200,
-            headers: { ...c, 'Content-Type': 'application/json' },
-        });
+        return json({ url: authUrl });
     }
 
     if (req.method !== 'POST') {
-        return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-            status: 405,
-            headers: { ...c, 'Content-Type': 'application/json' },
-        });
+        return json({ error: 'Method not allowed' }, 405);
     }
     const supabaseUrl = Deno.env.get('SUPABASE_URL')?.trim();
     const serviceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')?.trim();
@@ -172,7 +149,7 @@ Deno.serve(async (req) => {
     if (!botToken || !supabaseUrl || !serviceRole) {
         return new Response(JSON.stringify({ error: 'Server misconfigured (TELEGRAM_BOT_TOKEN / Supabase URL / service role)' }), {
             status: 500,
-            headers: { ...c, 'Content-Type': 'application/json' },
+            headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
         });
     }
     if (!anonKey) {
@@ -180,7 +157,7 @@ Deno.serve(async (req) => {
             JSON.stringify({
                 error: 'Missing SUPABASE_ANON_KEY in Edge environment (додайте secret або оновіть runtime)',
             }),
-            { status: 500, headers: { ...c, 'Content-Type': 'application/json' } },
+            { status: 500, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } },
         );
     }
 
@@ -190,7 +167,7 @@ Deno.serve(async (req) => {
     } catch {
         return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
             status: 400,
-            headers: { ...c, 'Content-Type': 'application/json' },
+            headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
         });
     }
 
@@ -198,7 +175,7 @@ Deno.serve(async (req) => {
     if (!(await verifyTelegramWidget(auth, botToken))) {
         return new Response(JSON.stringify({ error: 'Invalid Telegram signature' }), {
             status: 401,
-            headers: { ...c, 'Content-Type': 'application/json' },
+            headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
         });
     }
 
@@ -206,7 +183,7 @@ Deno.serve(async (req) => {
     if (!authDate || Math.abs(Date.now() / 1000 - authDate) > 86400) {
         return new Response(JSON.stringify({ error: 'auth_date expired' }), {
             status: 401,
-            headers: { ...c, 'Content-Type': 'application/json' },
+            headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
         });
     }
 
@@ -214,7 +191,7 @@ Deno.serve(async (req) => {
     if (!telegramId) {
         return new Response(JSON.stringify({ error: 'Missing telegram id' }), {
             status: 400,
-            headers: { ...c, 'Content-Type': 'application/json' },
+            headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
         });
     }
 
@@ -257,7 +234,7 @@ Deno.serve(async (req) => {
         if (!dup) {
             return new Response(JSON.stringify({ error: createErr.message || 'createUser failed' }), {
                 status: 400,
-                headers: { ...c, 'Content-Type': 'application/json' },
+                headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
             });
         }
         const filter = encodeURIComponent(`email.eq.${email}`);
@@ -282,7 +259,7 @@ Deno.serve(async (req) => {
         if (!uid) {
             return new Response(JSON.stringify({ error: 'User exists but lookup failed' }), {
                 status: 500,
-                headers: { ...c, 'Content-Type': 'application/json' },
+                headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
             });
         }
         const { error: upErr } = await admin.auth.admin.updateUserById(uid, {
@@ -294,7 +271,7 @@ Deno.serve(async (req) => {
         if (upErr) {
             return new Response(JSON.stringify({ error: upErr.message || 'updateUser failed' }), {
                 status: 400,
-                headers: { ...c, 'Content-Type': 'application/json' },
+                headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
             });
         }
     }
@@ -303,7 +280,7 @@ Deno.serve(async (req) => {
     if (signErr || !signData?.session) {
         return new Response(JSON.stringify({ error: signErr?.message || 'signIn failed' }), {
             status: 401,
-            headers: { ...c, 'Content-Type': 'application/json' },
+            headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
         });
     }
 
@@ -313,6 +290,6 @@ Deno.serve(async (req) => {
             refresh_token: signData.session.refresh_token,
             expires_in: signData.session.expires_in,
         }),
-        { status: 200, headers: { ...c, 'Content-Type': 'application/json' } },
+        { status: 200, headers: { ...corsHeaders(), 'Content-Type': 'application/json' } },
     );
 });
