@@ -11,7 +11,7 @@ export const TELEGRAM_BOT_USERNAME = 'traderjournalloginbot';
  * Числовий id бота (поле `id` у відповіді https://api.telegram.org/bot<TOKEN>/getMe).
  * Якщо вказати — кнопка «Telegram» одразу веде на oauth.telegram.org **без** fetch до Edge → немає CORS.
  */
-export const TELEGRAM_BOT_ID = '';
+export const TELEGRAM_BOT_ID = '8734573226:AAH485FLxkTe4eI14gbqYvR4QRAT-bqsuqw';
 
 /** Edge Function: після `supabase functions deploy telegram-auth` */
 export const TELEGRAM_AUTH_FN = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/telegram-auth`;
