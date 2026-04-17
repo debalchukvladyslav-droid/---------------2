@@ -51,14 +51,17 @@ BEGIN
         NEW.email,
         COALESCE(NEW.raw_user_meta_data->>'first_name', ''),
         COALESCE(NEW.raw_user_meta_data->>'last_name', ''),
-        NULLIF(NEW.raw_user_meta_data->>'team', '')
+        COALESCE(
+            NULLIF(BTRIM(COALESCE(NEW.raw_user_meta_data->>'team', '')), ''),
+            'Без куща'
+        )
     )
     ON CONFLICT (id) DO UPDATE
     SET
         email = EXCLUDED.email,
         first_name = COALESCE(NULLIF(public.profiles.first_name, ''), EXCLUDED.first_name),
         last_name = COALESCE(NULLIF(public.profiles.last_name, ''), EXCLUDED.last_name),
-        team = COALESCE(public.profiles.team, EXCLUDED.team),
+        team = COALESCE(NULLIF(BTRIM(public.profiles.team), ''), EXCLUDED.team),
         updated_at = NOW();
 
     RETURN NEW;

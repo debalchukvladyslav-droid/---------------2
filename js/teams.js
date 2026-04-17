@@ -436,6 +436,7 @@ function _renderTeamSidebarDOM(container) {
             return String(a).localeCompare(String(b), 'uk');
         });
 
+        let memberItemsAdded = 0;
         members.forEach((trader) => {
             const cleanNick = extractNick(trader);
             if (seenInRender.has(cleanNick)) return;
@@ -481,7 +482,20 @@ function _renderTeamSidebarDOM(container) {
 
             memberDiv.appendChild(textWrap);
             groupCard.appendChild(memberDiv);
+            memberItemsAdded++;
         });
+
+        if (
+            memberItemsAdded === 0 &&
+            myNick &&
+            members.some((t) => extractNick(t) === myNick)
+        ) {
+            const hint = document.createElement('div');
+            hint.className = 'team-solo-hint';
+            hint.textContent =
+                'Лише ви в цьому кущі (профіль зверху з міткою «Я»). Інших трейдерів буде видно після того, як ментор або адмін додасть вас до спільного куща — меню «Команда».';
+            groupCard.appendChild(hint);
+        }
 
         container.appendChild(groupCard);
     });
