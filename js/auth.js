@@ -1,5 +1,5 @@
 // === js/auth.js ===
-import { supabase, TELEGRAM_AUTH_FN, SUPABASE_ANON_KEY, TELEGRAM_BOT_ID } from './supabase.js';
+import { supabase, TELEGRAM_AUTH_FN, SUPABASE_ANON_KEY } from './supabase.js';
 import { state } from './state.js';
 import { normalizeDayEntry } from './data_utils.js';
 
@@ -151,76 +151,49 @@ export async function ensureAuthUserProfile(user) {
     return { id: user.id, nick };
 }
 
-function telegramRedirectParamsPresent() {
-    const sp = new URLSearchParams(window.location.search);
-    const h = String(sp.get('hash') || '');
-    if (!sp.get('id') || !sp.get('auth_date') || !h) return false;
-    return /^[a-f0-9]{64}$/i.test(h);
-}
-
-function searchParamsToTelegramPayload(sp) {
-    const o = {};
-    sp.forEach((v, k) => {
-        o[k] = v;
-    });
-    return o;
-}
-
-/** Обмін даних віджета / редіректу Telegram на сесію Supabase (Edge Function). */
-export async function exchangeTelegramAuthForSession(userPayload) {
-    const r = await fetch(TELEGRAM_AUTH_FN, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-            apikey: SUPABASE_ANON_KEY,
-        },
-        body: JSON.stringify(userPayload),
-    });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(j.error || j.message || `HTTP ${r.status}`);
-    const { access_token: accessToken, refresh_token: refreshToken } = j;
-    if (!accessToken || !refreshToken) throw new Error('Немає токенів сесії');
-    const { error: sessErr } = await supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken,
-    });
-    if (sessErr) throw sessErr;
-}
-
 /**
- * Після редіректу з Telegram (data-auth-url) у URL з’являються id, hash, auth_date…
+ * Після кнопки в Telegram «Відкрити журнал» у URL є ?tg_claim=<uuid>.
  * Викликати один раз перед getSession().
  */
-export async function maybeFinishTelegramRedirect() {
-    if (!telegramRedirectParamsPresent()) return false;
+export async function maybeFinishTelegramClaim() {
     const sp = new URLSearchParams(window.location.search);
-    const payload = searchParamsToTelegramPayload(sp);
+    const claim = (sp.get('tg_claim') || '').trim();
+    if (!claim || claim.length < 8) return false;
+
     const cleanPath = `${window.location.pathname}${window.location.hash || ''}`;
     try {
-        await exchangeTelegramAuthForSession(payload);
+        const r = await fetch(TELEGRAM_AUTH_FN, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+                apikey: SUPABASE_ANON_KEY,
+            },
+            body: JSON.stringify({ claim }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error || j.message || `HTTP ${r.status}`);
+        const { access_token: accessToken, refresh_token: refreshToken } = j;
+        if (!accessToken || !refreshToken) throw new Error('Немає токенів сесії');
+        const { error: sessErr } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+        });
+        if (sessErr) throw sessErr;
         window.history.replaceState({}, '', cleanPath || '/');
         return true;
     } catch (e) {
-        console.error('[Telegram redirect]', e);
+        console.error('[Telegram claim]', e);
         window.history.replaceState({}, '', cleanPath || '/');
         showError(mapAuthError(e, 'Telegram'));
         return true;
     }
 }
 
-function buildTelegramOAuthUrl(botId, returnHref) {
-    const origin = encodeURIComponent(window.location.origin);
-    const rt = encodeURIComponent(returnHref);
-    const bid = encodeURIComponent(String(botId));
-    return `https://oauth.telegram.org/auth?bot_id=${bid}&origin=${origin}&request_access=write&return_to=${rt}`;
-}
-
 /**
- * 1) Якщо задано TELEGRAM_BOT_ID у supabase.js — перехід на oauth **без** запиту до Supabase (немає CORS).
- * 2) Інакше GET до Edge (після деплою з CORS `*` і verify_jwt=false); спочатку лише `apikey` у query (без preflight).
+ * Перехід на Edge → 302 на t.me/bot?start=… (натисніть Start у Telegram), потім у боті — «Відкрити журнал».
  */
-export async function signInWithTelegram() {
+export function signInWithTelegram() {
     try {
         showError('');
         const returnUrl = new URL(window.location.href);
@@ -228,43 +201,11 @@ export async function signInWithTelegram() {
         returnUrl.hash = '';
         const returnHref = returnUrl.href;
 
-        const bid = String(TELEGRAM_BOT_ID || '').trim();
-        if (/^\d{5,20}$/.test(bid)) {
-            window.location.assign(buildTelegramOAuthUrl(bid, returnHref));
-            return;
-        }
-
-        const fnPlain = new URL(TELEGRAM_AUTH_FN);
-        fnPlain.searchParams.set('apikey', SUPABASE_ANON_KEY);
-        fnPlain.searchParams.set('action', 'oauth');
-        fnPlain.searchParams.set('return_to', returnHref);
-
-        let r = await fetch(fnPlain.toString(), { method: 'GET' });
-        let j = await r.json().catch(() => ({}));
-        if (!r.ok) {
-            const fnHdr = new URL(TELEGRAM_AUTH_FN);
-            fnHdr.searchParams.set('action', 'oauth');
-            fnHdr.searchParams.set('return_to', returnHref);
-            r = await fetch(fnHdr.toString(), {
-                method: 'GET',
-                headers: {
-                    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-                    apikey: SUPABASE_ANON_KEY,
-                },
-            });
-            j = await r.json().catch(() => ({}));
-        }
-        if (!r.ok) {
-            throw new Error(
-                j.error ||
-                    j.message ||
-                    `HTTP ${r.status}. У js/supabase.js задайте TELEGRAM_BOT_ID (getMe → id) або задеплойте telegram-auth з CORS і вимкніть JWT для функції в Dashboard.`,
-            );
-        }
-        if (!j.url || typeof j.url !== 'string') {
-            throw new Error('Некоректна відповідь: немає url.');
-        }
-        window.location.assign(j.url);
+        const u = new URL(TELEGRAM_AUTH_FN);
+        u.searchParams.set('action', 'start_login');
+        u.searchParams.set('return_to', returnHref);
+        u.searchParams.set('apikey', SUPABASE_ANON_KEY);
+        window.location.assign(u.toString());
     } catch (e) {
         showError(mapAuthError(e, 'Telegram'));
     }
@@ -363,8 +304,6 @@ export function toggleAuthMode() {
     document.getElementById('register-fields').style.display = state.isRegisterMode ? 'block' : 'none';
     const tgBtn = document.getElementById('btn-auth-telegram');
     if (tgBtn) tgBtn.style.display = state.isRegisterMode ? 'none' : '';
-    const tgDeep = document.getElementById('link-tg-deep');
-    if (tgDeep) tgDeep.style.display = state.isRegisterMode ? 'none' : '';
 
     if (state.isRegisterMode) {
         submitBtn.innerText = 'Зареєструватись';
@@ -566,8 +505,6 @@ export function showResetStep(step) {
     document.getElementById('auth-pass').style.display = step === 0 ? 'block' : 'none';
     const tgBtn = document.getElementById('btn-auth-telegram');
     if (tgBtn) tgBtn.style.display = step === 0 && !state.isRegisterMode ? '' : 'none';
-    const tgDeep = document.getElementById('link-tg-deep');
-    if (tgDeep) tgDeep.style.display = step === 0 && !state.isRegisterMode ? '' : 'none';
     if (step === 1) {
         const nickInput = document.getElementById('reset-nick');
         if (nickInput) nickInput.focus();
