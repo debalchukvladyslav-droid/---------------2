@@ -191,9 +191,10 @@ export async function maybeFinishTelegramClaim() {
 }
 
 /**
- * Перехід на Edge → 302 на t.me/bot?start=… (натисніть Start у Telegram), потім у боті — «Відкрити журнал».
+ * Edge повертає JSON { tme_url } → перехід у Telegram (Start), далі кнопка в боті → ?tg_claim=… на сайті.
+ * Якщо Edge не задеплоєна — 404 від шлюзу; залишаємось на сторінці й показуємо підказку.
  */
-export function signInWithTelegram() {
+export async function signInWithTelegram() {
     try {
         showError('');
         const returnUrl = new URL(window.location.href);
@@ -205,7 +206,35 @@ export function signInWithTelegram() {
         u.searchParams.set('action', 'start_login');
         u.searchParams.set('return_to', returnHref);
         u.searchParams.set('apikey', SUPABASE_ANON_KEY);
-        window.location.assign(u.toString());
+
+        const r = await fetch(u.toString(), { method: 'GET' });
+        const raw = await r.text();
+        let j = {};
+        try {
+            j = raw ? JSON.parse(raw) : {};
+        } catch {
+            j = {};
+        }
+
+        if (r.status === 404) {
+            const looksLikeGateway =
+                !j || typeof j !== 'object' || (Object.keys(j).length === 0 && !raw.trim().startsWith('{'));
+            showError(
+                looksLikeGateway
+                    ? 'Edge Function «telegram-auth» не знайдена (404). Задеплойте: у папці проєкту виконайте `supabase link` і `supabase functions deploy telegram-auth`. У Dashboard → Edge Functions має з’явитися функція з такою назвою.'
+                    : String(j.error || 'Не знайдено'),
+            );
+            return;
+        }
+        if (!r.ok) {
+            showError(String(j.error || j.message || `Помилка ${r.status}`));
+            return;
+        }
+        if (!j.tme_url || typeof j.tme_url !== 'string') {
+            showError('Сервер не повернув посилання на Telegram. Перевірте деплой і secret TELEGRAM_BOT_TOKEN.');
+            return;
+        }
+        window.location.assign(j.tme_url);
     } catch (e) {
         showError(mapAuthError(e, 'Telegram'));
     }

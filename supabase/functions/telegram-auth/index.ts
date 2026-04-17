@@ -1,6 +1,6 @@
 /**
  * Telegram через бота (t.me/...?start=TOKEN):
- *  - GET ?action=start_login&return_to=…&apikey=… → 302 на t.me/bot?start=TOKEN (користувач натискає Start у Telegram).
+ *  - GET ?action=start_login&return_to=…&apikey=… → JSON { tme_url } (клієнт відкриває t.me; натискає Start у Telegram).
  *  - POST від Telegram (webhook) з /start TOKEN → створення сесії Supabase + посилання з ?tg_claim=… у чат.
  *  - POST JSON { claim: "uuid" } → видача токенів сесії браузеру (одноразово).
  *
@@ -171,7 +171,7 @@ Deno.serve(async (req) => {
         const u = new URL(req.url);
         const action = u.searchParams.get('action');
         if (action !== 'start_login') {
-            return json({ error: 'Use GET ?action=start_login&return_to=…&apikey=…' }, 404);
+            return json({ error: 'Use GET ?action=start_login&return_to=…&apikey=…' }, 400);
         }
         if (!botToken || !supabaseUrl || !serviceRole) {
             return json({ error: 'Server misconfigured' }, 500);
@@ -216,7 +216,7 @@ Deno.serve(async (req) => {
         }
 
         const tme = `https://t.me/${encodeURIComponent(botUsername)}?start=${startToken}`;
-        return Response.redirect(tme, 302);
+        return json({ tme_url: tme });
     }
 
     if (req.method !== 'POST') {
