@@ -1,5 +1,5 @@
 // === js/auth.js ===
-import { supabase, TELEGRAM_AUTH_FN, SUPABASE_ANON_KEY } from './supabase.js';
+import { supabase, TELEGRAM_AUTH_FN, SUPABASE_ANON_KEY, TELEGRAM_LOGIN_RETURN_BASE } from './supabase.js';
 import { state } from './state.js';
 import { normalizeDayEntry } from './data_utils.js';
 
@@ -80,8 +80,24 @@ function isTelegramAuthUser(user) {
     return Array.isArray(ids) && ids.some((i) => i?.provider === 'telegram');
 }
 
-/** Унікальний нік для Telegram (цифровий id), щоб не перетинатись із звичайними логінами. */
+/** Нік з акаунта Telegram: @username, інакше латиниця з імені, інакше tg<id>. */
 export function makeTelegramNick(user) {
+    const rawUn = String(user.user_metadata?.telegram_username || '').trim().replace(/^@/, '');
+    if (rawUn) {
+        const slug = rawUn.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 32);
+        if (slug.length >= 1) return slug;
+    }
+    const fn = String(user.user_metadata?.first_name || '').trim();
+    if (fn) {
+        const slug = fn
+            .toLowerCase()
+            .normalize('NFKD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9_]+/g, '_')
+            .replace(/^_+|_+$/g, '')
+            .slice(0, 32);
+        if (slug.length >= 2) return slug;
+    }
     const ident = user.identities?.find((i) => i.provider === 'telegram');
     const metaId = user.user_metadata?.telegram_id ?? user.user_metadata?.telegram_user_id;
     const sub =
@@ -194,13 +210,33 @@ export async function maybeFinishTelegramClaim() {
  * Edge повертає JSON { tme_url } → перехід у Telegram (Start), далі кнопка в боті → ?tg_claim=… на сайті.
  * Якщо Edge не задеплоєна — 404 від шлюзу; залишаємось на сторінці й показуємо підказку.
  */
-export async function signInWithTelegram() {
-    try {
-        showError('');
+function telegramLoginReturnHref() {
+    const raw = typeof TELEGRAM_LOGIN_RETURN_BASE === 'string' ? TELEGRAM_LOGIN_RETURN_BASE.trim() : '';
+    if (!raw) {
         const returnUrl = new URL(window.location.href);
         returnUrl.search = '';
         returnUrl.hash = '';
-        const returnHref = returnUrl.href;
+        return returnUrl.href;
+    }
+    try {
+        const base = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+        const path = window.location.pathname || '/';
+        const out = new URL(path, `${base.origin}/`);
+        out.hash = '';
+        out.search = '';
+        return out.href;
+    } catch {
+        const returnUrl = new URL(window.location.href);
+        returnUrl.search = '';
+        returnUrl.hash = '';
+        return returnUrl.href;
+    }
+}
+
+export async function signInWithTelegram() {
+    try {
+        showError('');
+        const returnHref = telegramLoginReturnHref();
 
         const u = new URL(TELEGRAM_AUTH_FN);
         u.searchParams.set('action', 'start_login');

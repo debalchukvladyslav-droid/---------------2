@@ -10,5 +10,12 @@ export const TELEGRAM_BOT_USERNAME = 'traderjournalloginbot';
 /** Edge Function: після `supabase functions deploy telegram-auth` */
 export const TELEGRAM_AUTH_FN = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/telegram-auth`;
 
+/**
+ * Базовий URL для кнопки «Відкрити журнал» після Telegram.
+ * Якщо порожньо — використовується поточний origin (локально буде 127.0.0.1).
+ * Для тесту з Live Server задайте бойовий URL і на Edge secret TELEGRAM_ALLOWED_RETURN_ORIGINS з тим самим origin.
+ */
+export const TELEGRAM_LOGIN_RETURN_BASE = 'https://traderjournal-six.vercel.app';
+
 // Ініціалізуємо єдину точку доступу до бази, авторизації та сховища
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);

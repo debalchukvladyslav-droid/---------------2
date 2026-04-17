@@ -11,6 +11,8 @@
  *     setWebhook?url=https://<ref>.supabase.co/functions/v1/telegram-auth%3Fapikey%3D<ANON_KEY>
  *     Опційно secret_token = TELEGRAM_WEBHOOK_SECRET у BotFather і той самий secret у Edge.
  *  4) deploy: supabase functions deploy telegram-auth
+ *  5) Якщо кнопка в боті має вести на бойовий URL, а вхід з іншого origin (Live Server):
+ *     secret TELEGRAM_ALLOWED_RETURN_ORIGINS — через кому origins, напр. https://traderjournal-six.vercel.app
  */
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -41,6 +43,24 @@ function callerPageOrigin(req: Request): string | null {
     } catch {
         return null;
     }
+}
+
+/** return_to origin збігається з Origin запиту або з allowlist (для dev + бойовий return_to). */
+function isReturnToOriginAllowed(returnOrigin: string, pageOrigin: string | null, allowListRaw: string | undefined): boolean {
+    if (pageOrigin && returnOrigin === pageOrigin) return true;
+    const raw = allowListRaw?.trim();
+    if (!raw) return false;
+    for (const part of raw.split(',')) {
+        const p = part.trim();
+        if (!p) continue;
+        try {
+            const o = new URL(p.includes('://') ? p : `https://${p}`).origin;
+            if (o === returnOrigin) return true;
+        } catch {
+            /* skip invalid entry */
+        }
+    }
+    return false;
 }
 
 function randomStartToken(): string {
@@ -188,8 +208,15 @@ Deno.serve(async (req) => {
             return json({ error: 'Invalid return_to scheme' }, 400);
         }
         const pageOrigin = callerPageOrigin(req);
-        if (!pageOrigin || returnUrl.origin !== pageOrigin) {
-            return json({ error: 'return_to must match site origin' }, 403);
+        const allowedExtra = Deno.env.get('TELEGRAM_ALLOWED_RETURN_ORIGINS')?.trim();
+        if (!isReturnToOriginAllowed(returnUrl.origin, pageOrigin, allowedExtra)) {
+            return json(
+                {
+                    error:
+                        'return_to must match site Origin, або додайте secret TELEGRAM_ALLOWED_RETURN_ORIGINS (origin бойового сайту через кому).',
+                },
+                403,
+            );
         }
 
         const meRes = await fetch(`https://api.telegram.org/bot${botToken}/getMe`);
