@@ -185,6 +185,11 @@
     overflow: hidden;
     flex: 1;
     min-width: 0;
+    /* 12_saas задає width:340px — колонка dash-3col вужча, overflow:hidden обрізає праву рамку */
+    width: 100%;
+    max-width: 100%;
+    flex-shrink: 1;
+    box-sizing: border-box;
 }
 .recent-trades-header {
     display: flex;
@@ -973,9 +978,6 @@
 .dash-3col {
     grid-template-columns: minmax(0, 1fr) minmax(0, min(240px, 32vw));
     gap: 12px;
-}
-.recent-trades-panel {
-    border-radius: var(--radius-md) 0 0 var(--radius-md);
 }
 .dash-calendar-strip {
     padding: 6px 10px;

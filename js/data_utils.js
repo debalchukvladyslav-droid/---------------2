@@ -5,6 +5,10 @@ export function getDefaultSettings() {
         screenshot_folder: "",
         gemini_key: "",
         gemini_keys: [],
+        /** Ключ Polygon.io — хвилинні свічки у вкладці «Угоди» (клієнтський запит до api.polygon.io). */
+        polygon_key: "",
+        /** Опційно для learn / YouTube Data API v3. */
+        youtube_api_key: "",
         theme: "dark",
         font: "inter",
         customTheme: {

@@ -231,6 +231,12 @@ export async function saveSettings() {
         if (!user) return;
         const settingsPayload = {
             ...state.appData.settings,
+            aiChatHistory: Array.isArray(state.appData.aiChatHistory) ? state.appData.aiChatHistory : [],
+            aiSavedChats: Array.isArray(state.appData.aiSavedChats) ? state.appData.aiSavedChats : [],
+            errorTypes: Array.isArray(state.appData.errorTypes) ? state.appData.errorTypes : [],
+            learnCache: state.appData.learnCache && typeof state.appData.learnCache === 'object' ? state.appData.learnCache : null,
+            tickers: state.appData.tickers && typeof state.appData.tickers === 'object' ? state.appData.tickers : {},
+            tradeTypes: Array.isArray(state.appData.tradeTypes) ? state.appData.tradeTypes : [],
             unassignedImages: Array.isArray(state.appData.unassignedImages) ? state.appData.unassignedImages : [],
             screenTags: state.appData.screenTags && typeof state.appData.screenTags === 'object' ? state.appData.screenTags : {},
             screenDiscipline:
@@ -266,6 +272,30 @@ export async function loadSettings() {
             if (Array.isArray(incoming.unassignedImages)) {
                 state.appData.unassignedImages = incoming.unassignedImages;
                 delete incoming.unassignedImages;
+            }
+            if (Array.isArray(incoming.aiChatHistory)) {
+                state.appData.aiChatHistory = incoming.aiChatHistory;
+                delete incoming.aiChatHistory;
+            }
+            if (Array.isArray(incoming.aiSavedChats)) {
+                state.appData.aiSavedChats = incoming.aiSavedChats;
+                delete incoming.aiSavedChats;
+            }
+            if (Array.isArray(incoming.errorTypes)) {
+                state.appData.errorTypes = incoming.errorTypes;
+                delete incoming.errorTypes;
+            }
+            if (incoming.learnCache && typeof incoming.learnCache === 'object') {
+                state.appData.learnCache = incoming.learnCache;
+                delete incoming.learnCache;
+            }
+            if (incoming.tickers && typeof incoming.tickers === 'object') {
+                state.appData.tickers = incoming.tickers;
+                delete incoming.tickers;
+            }
+            if (Array.isArray(incoming.tradeTypes)) {
+                state.appData.tradeTypes = incoming.tradeTypes;
+                delete incoming.tradeTypes;
             }
             if (incoming.screenTags && typeof incoming.screenTags === 'object') {
                 state.appData.screenTags = incoming.screenTags;
@@ -598,7 +628,10 @@ export async function initializeApp() {
         state.statsSourceSelection = { type: 'current', key: state.CURRENT_VIEWED_USER };
         if (window.applyTheme) window.applyTheme();
         if (window.updateAutoFlags) window.updateAutoFlags().then(() => { if (window.renderView) window.renderView(); });
-        if (window.renderGeminiKeys) window.renderGeminiKeys();
+        const polyIn = document.getElementById('setting-polygon-key');
+        const ytIn = document.getElementById('setting-youtube-api-key');
+        if (polyIn) polyIn.value = typeof s.polygon_key === 'string' ? s.polygon_key : '';
+        if (ytIn) ytIn.value = typeof s.youtube_api_key === 'string' ? s.youtube_api_key : '';
         if (window.renderErrorsList) window.renderErrorsList();
         if (window.renderSettingsChecklist) window.renderSettingsChecklist();
         if (window.renderSettingsSliders) window.renderSettingsSliders();

@@ -10,6 +10,56 @@ function showToast(text) {
     setTimeout(() => t.remove(), 3000);
 }
 
+/** Як importData: не змінюємо журнал у режимі перегляду іншого трейдера. */
+function canMutateJournalImports(event) {
+    if (state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) {
+        showToast('Імпорт заборонено: переглядається чужий профіль.');
+        if (event?.target) event.target.value = '';
+        return false;
+    }
+    return true;
+}
+
+function ecnFeeColumnIndex(headers) {
+    const keys = ['Ecn Fee', 'ECN Fee', 'ECN', 'Ecn'];
+    for (const k of keys) {
+        if (headers[k] !== undefined) return headers[k];
+    }
+    return undefined;
+}
+
+/** Після імпорту лише списку угод — узгоджуємо fondexx і day.pnl з тими ж правилами, що й після Fondexx summary. */
+function syncFondexxFromTradesForDay(dateStr) {
+    if (!state.appData.journal[dateStr]) return;
+    const entry = state.appData.journal[dateStr];
+    const trades = Array.isArray(entry.trades) ? entry.trades : [];
+    const prevFx = entry.fondexx && typeof entry.fondexx === 'object' ? entry.fondexx : {};
+    const locates = Number(prevFx.locates) || 0;
+
+    if (trades.length === 0) {
+        entry.fondexx = { gross: 0, net: 0, comm: 0, locates, tickers: [] };
+    } else {
+        let gross = 0;
+        let net = 0;
+        let comm = 0;
+        const tickers = new Set();
+        for (const t of trades) {
+            gross += parseFloat(t.gross) || 0;
+            net += parseFloat(t.net) || 0;
+            comm += parseFloat(t.comm) || 0;
+            if (t.symbol) tickers.add(String(t.symbol).trim());
+        }
+        entry.fondexx = {
+            gross: parseFloat(gross.toFixed(2)),
+            net: parseFloat(net.toFixed(2)),
+            comm: parseFloat(comm.toFixed(2)),
+            locates,
+            tickers: Array.from(tickers),
+        };
+    }
+    recalculateDailyTotals(dateStr);
+}
+
 function recalculateDailyTotals(d) {
     if (!state.appData.journal[d]) return;
     let entry = state.appData.journal[d];
@@ -34,6 +84,7 @@ function recalculateDailyTotals(d) {
 export function importFondexxReport(event) {
     const file = event.target.files[0];
     if (!file) return;
+    if (!canMutateJournalImports(event)) return;
     const reader = new FileReader();
     reader.onload = function(e) {
         try {
@@ -84,7 +135,8 @@ export function importFondexxReport(event) {
 
                     const gross = parseFloat(row[headers['Gross']]) || 0;
                     const comm = parseFloat(row[headers['Comm']]) || 0;
-                    const ecn = parseFloat(row[headers['Ecn Fee']]) || 0;
+                    const ecnIdx = ecnFeeColumnIndex(headers);
+                    const ecn = ecnIdx !== undefined ? parseFloat(row[ecnIdx]) || 0 : 0;
                     const net = parseFloat(row[headers['Net']]) || 0;
 
                     dailyData[currentDate].gross += gross;
@@ -155,6 +207,7 @@ export function importFondexxReport(event) {
 export function importFondexxTrades(event) {
     const file = event.target.files[0];
     if (!file) return;
+    if (!canMutateJournalImports(event)) return;
     const reader = new FileReader();
     reader.onload = function(e) {
         try {
@@ -187,7 +240,8 @@ export function importFondexxTrades(event) {
                 const closed = row[headers['Closed']] || '';
                 if (!opened || !closed) continue;
                 const comm = parseFloat(row[headers['Comm']]) || 0;
-                const ecn = parseFloat(row[headers['Ecn Fee']]) || 0;
+                const ecnIdx = ecnFeeColumnIndex(headers);
+                const ecn = ecnIdx !== undefined ? parseFloat(row[ecnIdx]) || 0 : 0;
                 dailyTrades[currentDate].push({
                     symbol: sym,
                     type: row[headers['Type']] || '',
@@ -206,11 +260,18 @@ export function importFondexxTrades(event) {
             for (let d in dailyTrades) {
                 if (!state.appData.journal[d]) state.appData.journal[d] = window.getDefaultDayEntry ? window.getDefaultDayEntry() : {};
                 state.appData.journal[d].trades = dailyTrades[d];
+                syncFondexxFromTradesForDay(d);
                 markJournalDayDirty(d);
                 daysUpdated++;
             }
             saveJournalData().then(() => {
                 showToast(`Trades імпортовано! Днів: ${daysUpdated}`);
+                if (window.updateAutoFlags) window.updateAutoFlags();
+                if (window.renderView) window.renderView();
+                const viewStats = document.getElementById('view-stats');
+                if (viewStats && viewStats.classList.contains('active') && window.refreshStatsView) {
+                    window.refreshStatsView();
+                }
                 if (window.selectDate) window.selectDate(state.selectedDateStr);
             });
         } catch(err) { showToast('Помилка імпорту Trades: ' + err.message); }
@@ -221,6 +282,7 @@ export function importFondexxTrades(event) {
 export function importPPROReport(event) {
     const file = event.target.files[0];
     if (!file) return;
+    if (!canMutateJournalImports(event)) return;
     const reader = new FileReader();
     reader.onload = function(e) {
         try {

@@ -9,6 +9,11 @@ const MAX_RESPONSE_PREVIEW = 2000;
 
 export const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+/**
+ * Усі виклики Gemini йдуть через POST `/api/gemini` з Bearer-сесією; ключ Google AI задається
+ * на сервері як GEMINI_API_KEY (див. api/gemini.js). Поля gemini_key у profiles.settings не використовуються.
+ * Повертаємо непорожній масив, щоб наступна логіка не вважала «ключ не додано».
+ */
 export function getGeminiKeys() {
     return ['proxy'];
 }

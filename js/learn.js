@@ -2,10 +2,43 @@
 import { state } from './state.js';
 import { callGemini, getGeminiKeys } from './ai.js';
 
-async function getYoutubeApiKey() {
-    const key = state.systemConfig?.youtube_api_key || state.appData?.settings?.youtube_api_key || null;
-    if (!key) throw new Error('YouTube API ключ не налаштовано. Зверніться до адміністратора.');
-    return key;
+function getYoutubeApiKeyOptional() {
+    const raw = state.systemConfig?.youtube_api_key || state.appData?.settings?.youtube_api_key || '';
+    const key = String(raw).trim();
+    return key || null;
+}
+
+function escapeLearnHtml(text) {
+    return String(text ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+/** Без YouTube Data API: лише посилання на пошук за запитами від AI. */
+function buildLearnHtmlFromQueriesOnly(queries) {
+    const qList = queries.slice(0, 3).filter(Boolean);
+    if (!qList.length) {
+        return '<div style="color:var(--text-muted); text-align:center; padding:40px; grid-column:1/-1;">Немає пошукових запитів</div>';
+    }
+    const hint =
+        '<p style="color:var(--text-muted); font-size:0.82rem; margin:0 0 16px; grid-column:1/-1; line-height:1.45;">' +
+        'Ключ YouTube Data API не задано — показуємо лише персональні пошукові запити. ' +
+        'Для карток з превʼю відео додайте ключ у <strong>Налаштування → API ключі</strong>.</p>';
+    const cards = qList.map((query, idx) => {
+        const safeQ = escapeLearnHtml(query);
+        const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+        return `
+            <div class="learn-card learn-card--search-only">
+                <div class="learn-card-body">
+                    <div class="learn-card-title">${safeQ}</div>
+                    <div class="learn-card-meta">Запит ${idx + 1} · підібрано AI</div>
+                    <a href="${searchUrl}" target="_blank" rel="noopener noreferrer" class="btn-secondary" style="display:inline-block;margin-top:10px;text-decoration:none;padding:8px 14px;border-radius:6px;font-size:0.85rem;">Відкрити пошук на YouTube</a>
+                </div>
+            </div>`;
+    }).join('');
+    return hint + cards;
 }
 
 function getTodayStr() {
@@ -72,8 +105,7 @@ export async function loadLearnContent() {
 Відповідь тільки JSON масив: ["query1", "query2", "query3"]`;
 
         const geminiKey = getGeminiKeys()[0];
-        if (!geminiKey) throw new Error('Gemini API ключ не налаштовано. Додайте ключ у Налаштуваннях.');
-        const youtubeKey = await getYoutubeApiKey();
+        if (!geminiKey) throw new Error('AI недоступний (проксі). Перевірте GEMINI_API_KEY на сервері.');
 
         const aiResponse = await callGemini(geminiKey, {
             contents: [{ parts: [{ text: contextPrompt }] }]
@@ -87,21 +119,29 @@ export async function loadLearnContent() {
             queries = ['prop trading psychology', 'day trading mistakes', 'trading discipline'];
         }
 
+        const youtubeKey = getYoutubeApiKeyOptional();
+        let html;
 
-        const allVideos = [];
-        for (const query of queries.slice(0, 3)) {
-            const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=3&relevanceLanguage=en&key=${youtubeKey}`;
-            const res = await fetch(url);
-            const data = await res.json();
-            if (data.items) allVideos.push(...data.items);
-        }
+        if (!youtubeKey) {
+            html = buildLearnHtmlFromQueriesOnly(queries);
+        } else {
+            const allVideos = [];
+            for (const query of queries.slice(0, 3)) {
+                const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=3&relevanceLanguage=en&key=${youtubeKey}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                if (data.error?.message) {
+                    throw new Error(`YouTube API: ${data.error.message}`);
+                }
+                if (data.items) allVideos.push(...data.items);
+            }
 
-        if (allVideos.length === 0) {
-            resultsEl.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding:40px; grid-column:1/-1;">Нічого не знайдено</div>';
-            return;
-        }
+            if (allVideos.length === 0) {
+                resultsEl.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding:40px; grid-column:1/-1;">Нічого не знайдено</div>';
+                return;
+            }
 
-        const html = allVideos.map(item => {
+            html = allVideos.map(item => {
             const vid = item.id.videoId;
             const title = item.snippet.title;
             const channel = item.snippet.channelTitle;
@@ -122,7 +162,8 @@ export async function loadLearnContent() {
                     <div id="summary-${vid}" style="display:none; margin-top:8px; font-size:0.82rem; color:var(--text-main); background:rgba(139,92,246,0.08); border:1px solid var(--accent); border-radius:6px; padding:10px; line-height:1.5;"></div>
                 </div>
             </div>`;
-        }).join('');
+            }).join('');
+        }
 
         const labelText = `🔍 Пошук по: ${queries.join(' | ')}`;
         if (queryLabel) queryLabel.textContent = labelText;
@@ -148,7 +189,7 @@ window.summarizeVideo = async function(vid, title, desc) {
     btn.disabled = true;
     try {
         const geminiKey = getGeminiKeys()[0];
-        if (!geminiKey) throw new Error('Gemini API ключ не налаштовано.');
+        if (!geminiKey) throw new Error('AI недоступний (проксі). Перевірте GEMINI_API_KEY на сервері.');
         const text = await callGemini(geminiKey, {
             systemInstruction: { parts: [{ text: 'Ти помічник трейдера. Пиши коротко українською (3-4 речення): про що це відео, що головне розбирається і чи корисно це для трейдера.' }] },
             contents: [{ parts: [{ text: `Назва: "${title}"\nОпис: "${desc}"` }] }]

@@ -969,6 +969,25 @@
             </div>
 
             <div class="panel">
+                <h3 style="color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 10px;">🔑 API ключі</h3>
+                <p style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 14px; line-height: 1.45;">
+                    <strong>Polygon.io</strong> — для хвилинного графіка у вкладці «Угоди» (запит з браузера на <code>api.polygon.io</code>, параметр <code>apiKey</code>).
+                    Ключ зберігається у вашому профілі (Supabase <code>profiles.settings</code>).<br>
+                    <strong>Gemini (AI)</strong> — запити через серверний проксі <code>/api/gemini</code>; на хості має бути задана змінна <code>GEMINI_API_KEY</code> (див. <code>api/gemini.js</code>). Окремий ключ Gemini у цьому блоці не вводиться.<br>
+                    <strong>YouTube Data API</strong> — опційно: з ключем у «Навчанні» будуть превʼю відео з API; без ключа — лише персональні пошукові запити від AI з посиланням на YouTube.
+                </p>
+                <div class="form-group" style="max-width: 520px; margin-bottom: 12px;">
+                    <label for="setting-polygon-key">Polygon.io API key</label>
+                    <input type="password" id="setting-polygon-key" autocomplete="off" placeholder="Вставте ключ Polygon" style="width:100%;">
+                </div>
+                <div class="form-group" style="max-width: 520px; margin-bottom: 14px;">
+                    <label for="setting-youtube-api-key">YouTube Data API key (опційно)</label>
+                    <input type="password" id="setting-youtube-api-key" autocomplete="off" placeholder="Для навчання" style="width:100%;">
+                </div>
+                <button type="button" class="btn-primary" style="width: auto;" onclick="window.saveApiKeysSettings?.()">💾 Зберегти ключі</button>
+            </div>
+
+            <div class="panel">
                 <h3 style="color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 10px;">🛑 Налаштування Дейлосу</h3>
                 <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 15px;">Встановіть ліміт втрат. Він буде застосований до місяця, який зараз відкритий у календарі (<span id="settings-current-month-label" style="font-weight:bold; color:var(--text-main);"></span>).</p>
                 <div class="form-group" style="max-width: 250px;">

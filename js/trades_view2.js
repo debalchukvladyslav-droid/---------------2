@@ -556,7 +556,7 @@ function prevTradingDate(dateStr) {
 
 async function fetchPolygon(symbol, fromMs, toMs) {
     const POLYGON_KEY = state.systemConfig?.polygon_key || state.appData?.settings?.polygon_key || '';
-    if (!POLYGON_KEY) throw new Error('Polygon.io API ключ не налаштований.');
+    if (!POLYGON_KEY) throw new Error('Polygon.io API ключ не задано. Налаштування → «API ключі» (або polygon_key у systemConfig для хостингу).');
     const params = new URLSearchParams({ adjusted: 'false', sort: 'asc', limit: '1000', apiKey: POLYGON_KEY });
     const url = new URL(`https://api.polygon.io/v2/aggs/ticker/${symbol}/range/1/minute/${fromMs}/${toMs}`);
     if (url.hostname !== 'api.polygon.io') throw new Error('Недозволений хост запиту.');

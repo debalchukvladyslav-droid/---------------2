@@ -73,14 +73,7 @@ export function renderAIAdviceUI() {
 }
 
 export async function getAIAdvice() {
-    const keys = getGeminiKeys();
-    if (!keys.length) {
-        const aiBox = document.getElementById('ai-response');
-        aiBox.style.display = 'block';
-        aiBox.innerHTML = '<span style="color:var(--loss)">⚠️ Додайте Gemini API ключ у Налаштуваннях.</span>';
-        return;
-    }
-    let key = keys[0];
+    const key = getGeminiKeys()[0];
     
     let btn = document.getElementById('ai-btn'); btn.innerText = '⏳ Бот аналізує день...'; btn.disabled = true;
     let pnl = document.getElementById('trade-pnl').value || 0;
@@ -102,7 +95,8 @@ export async function getAIAdvice() {
     } catch(e) {
         const aiBox = document.getElementById('ai-response');
         aiBox.style.display = 'block';
-        aiBox.innerHTML = `<span style="color:var(--loss)">⚠️ Помилка Gemini: ${sanitizeHTML(e.message)}</span>`;
+        const hint = /500|GEMINI|proxy|key/i.test(String(e.message)) ? ' Перевірте GEMINI_API_KEY на сервері (/api/gemini).' : '';
+        aiBox.innerHTML = `<span style="color:var(--loss)">⚠️ Помилка AI: ${sanitizeHTML(e.message)}${hint}</span>`;
     } finally { btn.innerText = '🤖 Отримати пораду від Gemini AI'; btn.disabled = false; }
 }
 
@@ -178,9 +172,7 @@ export async function analyzeTagPatterns() {
 }
 
 export async function analyzeChart(encodedPath, cleanId) {
-    const keys = getGeminiKeys();
-    if (!keys.length) { document.getElementById(`ai-vision-${cleanId}`).innerHTML = '⚠️ Додайте Gemini API ключ у Налаштуваннях.'; return; }
-    let key = keys[0];
+    const key = getGeminiKeys()[0];
     let box = document.getElementById(`ai-vision-${cleanId}`); 
     box.style.display = 'block'; box.innerHTML = '⏳ <strong>AI Vision:</strong> Аналізую свічки, об\'єми та формацію...';
     try {
@@ -246,9 +238,7 @@ export function appendSOSMessage(text, isAI) {
 export async function sendSOSMessage() {
     const inputEl = document.getElementById('sos-input'); const btnEl = document.getElementById('sos-send-btn'); const text = inputEl.value.trim();
     if (!text) return;
-    const keys = getGeminiKeys();
-    if (!keys.length) { appendSOSMessage('Додайте Gemini API ключ у Налаштуваннях.', true); return; }
-    let key = keys[0];
+    const key = getGeminiKeys()[0];
 
     appendSOSMessage(text, false); inputEl.value = ''; btnEl.innerText = '⏳...'; btnEl.disabled = true; inputEl.disabled = true;
     sosChatHistory.push({ role: "user", parts: [{ text: text }] });
@@ -285,15 +275,7 @@ export async function sendDataChatMessage() {
     inputEl.value = '';
 
     const key = getGeminiKeys()[0];
-    if (!key) {
-        const errDiv = document.createElement('div');
-        errDiv.className = 'chat-msg ai-msg';
-        errDiv.innerHTML = '<span style="color:var(--loss)">⚠️ Додайте Gemini API ключ у Налаштуваннях.</span>';
-        chatBox.appendChild(errDiv);
-        chatBox.scrollTop = chatBox.scrollHeight;
-        return;
-    }
-    
+
     // Телеграм стиль для користувача (без "Ти:")
     const userMsgDiv = document.createElement('div');
     userMsgDiv.className = 'chat-msg user-msg';

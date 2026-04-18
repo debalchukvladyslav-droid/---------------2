@@ -6,7 +6,7 @@ import { state } from './state.js';
 import { getDefaultDayEntry } from './data_utils.js';
 import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm, canAccessMentorReviewQueue, mentorAcceptReviewRequest, ensureAuthUserProfile, signInWithTelegram, maybeFinishTelegramClaim } from './auth.js';
 import { loadTeams, openTeamManager, createNewTeam, moveTrader, deleteTeam, deleteTraderProfile, renderTeamSidebar, switchUser } from './teams.js';
-import { saveToLocal, initializeApp, exportData, importData, loadMonth, resolveViewedUserId, setCurrentViewedUserId,
+import { saveToLocal, saveJournalData, markJournalDayDirty, initializeApp, exportData, importData, loadMonth, resolveViewedUserId, setCurrentViewedUserId,
          uploadBackground, setActiveBackground, deleteBackground, loadBackgroundGallery } from './storage.js';
 import { applyTheme, saveThemeSettings, switchTab, toggleMobileSidebar, switchMainTab, scrollMainTabs, toggleMoreTabs, toggleMobileMoreMenu, closeMobileMoreMenu } from './ui.js';
 import { shiftDate, selectDateFromInput, saveEntry, renderView, selectDate, updateAutoFlags, initSelectors, renderSidebarTradesList } from './calendar.js';
@@ -183,7 +183,8 @@ window.saveSessionData = function() {
     state.appData.journal[state.selectedDateStr].sessionReadiness = parseInt(readiness);
     state.appData.journal[state.selectedDateStr].sessionSetups = setups;
     state.appData.journal[state.selectedDateStr].__detailsLoaded = true;
-    import('./storage.js').then(m => m.saveToLocal());
+    markJournalDayDirty(state.selectedDateStr);
+    saveJournalData();
 };
 
 // === SESSION MODAL ===
@@ -254,8 +255,8 @@ window.saveSessionModal = async function() {
     state.appData.journal[today].sessionSetups = [...document.querySelectorAll('#sm-playbook-checks input:checked')].map(cb => cb.value);
     state.appData.journal[today].sessionDone = true;
     state.appData.journal[today].__detailsLoaded = true;
-    const { saveToLocal } = await import('./storage.js');
-    await saveToLocal();
+    markJournalDayDirty(today);
+    await saveJournalData();
     if (state.selectedDateStr === today) {
         const goalEl = document.getElementById('session-goal');
         const planEl = document.getElementById('session-plan');
@@ -282,15 +283,13 @@ window.checkSessionModalReadiness = async function() {
     resultEl.textContent = '⏳ AI аналізує...';
     try {
         const { callGemini, getGeminiKeys } = await import('./ai.js');
-        const _keys = getGeminiKeys();
-        if (!_keys.length) { resultEl.textContent = '⚠️ Додайте Gemini API ключ у Налаштуваннях.'; return; }
         const today = getTodayEST();
         const recentDays = Object.entries(state.appData.journal)
             .filter(([d, v]) => d.match(/^\d{4}-\d{2}-\d{2}$/) && v.pnl !== null && v.pnl !== undefined)
             .sort((a, b) => b[0].localeCompare(a[0])).slice(0, 5)
             .map(([d, v]) => `${d}: PnL=${v.pnl}$, помилки=${(v.errors||[]).join(',') || 'немає'}`).join('\n');
         const prompt = `Початок дня. Ціль: ${goal || 'не вказана'}. План: ${plan || 'не вказаний'}. Сетапи: ${setups.join(', ') || 'не обрані'}. Готовність: ${readiness}/10.\n\nОстанні 5 сесій:\n${recentDays || 'немає даних'}\n\nДай коротке спостереження (3-4 речення).`;
-        const res = await callGemini(_keys[0], {
+        const res = await callGemini(getGeminiKeys()[0], {
             systemInstruction: { parts: [{ text: 'Ти досвідчений напарник-трейдер. Говориш коротко, по-людськи, українською.' }] },
             contents: [{ parts: [{ text: prompt }] }]
         });
@@ -334,15 +333,13 @@ window.checkSessionReadiness = async function() {
     resultEl.textContent = '⏳ AI аналізує...';
     try {
         const { callGemini, getGeminiKeys } = await import('./ai.js');
-        const _keys = getGeminiKeys();
-        if (!_keys.length) { resultEl.textContent = '⚠️ Додайте Gemini API ключ у Налаштуваннях.'; return; }
         const recentDays = Object.entries(state.appData.journal)
             .filter(([d, v]) => d.match(/^\d{4}-\d{2}-\d{2}$/) && v.pnl !== null && v.pnl !== undefined)
             .sort((a, b) => b[0].localeCompare(a[0])).slice(0, 5)
             .map(([d, v]) => `${d}: PnL=${v.pnl}$, помилки=${(v.errors||[]).join(',') || 'немає'}, готовність=${v.sessionReadiness || '-'}/10`)
             .join('\n');
         const prompt = `Початок дня. Ось мій стан і контекст:\nЦіль: ${goal || 'не вказана'}\nПлан: ${plan || 'не вказаний'}\nСетапи: ${setups.join(', ') || 'не обрані'}\nГотовність: ${readiness}/10\nСтан: ${sliders.join(', ')}\n\nОстанні 5 сесій:\n${recentDays || 'немає даних'}\n\nДай коротке спостереження (3-4 речення).`;
-        const res = await callGemini(_keys[0], {
+        const res = await callGemini(getGeminiKeys()[0], {
             systemInstruction: { parts: [{ text: 'Ти досвідчений напарник-трейдер. Говориш коротко, по-людськи, українською. Не командуєш і не лякаєш.' }] },
             contents: [{ parts: [{ text: prompt }] }]
         });
@@ -355,7 +352,8 @@ window.checkSessionReadiness = async function() {
         });
         if (!state.appData.journal[state.selectedDateStr]) state.appData.journal[state.selectedDateStr] = {};
         state.appData.journal[state.selectedDateStr].sessionAiResult = res;
-        import('./storage.js').then(m => m.saveToLocal());
+        markJournalDayDirty(state.selectedDateStr);
+        saveJournalData();
     } catch(e) {
         resultEl.textContent = '⚠️ Помилка: ' + e.message;
     }
@@ -417,6 +415,15 @@ window.syncDriveScreenshots = syncDriveScreenshots;
 window.updateDriveUI = updateDriveUI;
 window.disconnectGoogleDrive = disconnectGoogleDrive;
 window.loadBackgroundGallery = loadBackgroundGallery;
+
+window.saveApiKeysSettings = function() {
+    const poly = document.getElementById('setting-polygon-key');
+    const yt = document.getElementById('setting-youtube-api-key');
+    if (!state.appData.settings) state.appData.settings = {};
+    state.appData.settings.polygon_key = (poly?.value || '').trim();
+    state.appData.settings.youtube_api_key = (yt?.value || '').trim();
+    saveToLocal().then(() => import('./utils.js').then(m => m.showToast('Ключі збережено')));
+};
 
 window.saveDaylossSetting = function() {
     const input = document.getElementById('setting-dayloss-limit');

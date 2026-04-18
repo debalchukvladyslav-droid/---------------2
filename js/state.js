@@ -26,7 +26,9 @@ export const state = {
         settings: {
             screenshot_folder: "", 
             gemini_key: "",
-            gemini_keys: [], 
+            gemini_keys: [],
+            polygon_key: "",
+            youtube_api_key: "",
             theme: "dark", 
             font: "inter", 
             customTheme: null, 
