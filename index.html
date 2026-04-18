@@ -526,6 +526,19 @@
                     </div>
                 </div>
             </div><!-- /dash-3col -->
+
+            <div class="panel dash-news-panel">
+                <div class="dash-news-header">
+                    <div>
+                        <h3>Новини по моїх тикерах</h3>
+                        <p id="dash-news-meta">Після імпорту угод тут будуть заголовки по активних тикерах</p>
+                    </div>
+                    <button type="button" class="btn-secondary dash-news-refresh-btn" onclick="window.refreshDashboardNews?.()">Оновити</button>
+                </div>
+                <div id="dash-news-list" class="dash-news-list">
+                    <div class="dash-news-empty">Новини ще не завантажені</div>
+                </div>
+            </div>
         </div><!-- /view-dash -->
 
         <div id="view-calendar" class="view-content calendar-view-page">

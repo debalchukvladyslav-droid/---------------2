@@ -438,6 +438,7 @@ export function switchMainTab(tab) {
             window.populateSymbolSelect(window.state.selectedDateStr);
         }
     }
+    if (tab === 'dash' && window.renderDashboardNews) window.renderDashboardNews();
     if (tab === 'settings' && window.loadLatestImageForOCR) window.loadLatestImageForOCR();
     if (tab === 'screens') {
         if (window.updateDriveUI) window.updateDriveUI();

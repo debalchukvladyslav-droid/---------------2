@@ -29,6 +29,7 @@ import { submitReviewRequest, refreshReviewRequestButtons } from './review_reque
 import { showToast } from './utils.js';
 import { connectGoogleDrive, syncDriveScreenshots, updateDriveUI, disconnectGoogleDrive, startDriveAutoSync, tryRestoreDriveToken } from './drive.js';
 import { initPlaybookChart } from './playbook_chart.js';
+import { renderDashboardNews, refreshDashboardNews } from './news.js';
 
 
 // 2. ПРОКИДАННЯ ФУНКЦІЙ ДЛЯ HTML (window)
@@ -68,6 +69,8 @@ window.state = state;
 window.refreshSidebarAccount = refreshSidebarAccount;
 window.refreshMentorReviewQueue = refreshMentorReviewQueue;
 window.setMentorReviewNavBadges = setMentorReviewNavBadges;
+window.renderDashboardNews = renderDashboardNews;
+window.refreshDashboardNews = refreshDashboardNews;
 window.toggleAuthMode = toggleAuthMode;
 window.handleAuth = handleAuth;
 window.signInWithTelegram = signInWithTelegram;
@@ -704,6 +707,7 @@ async function bootApp(user) {
         if (window.renderSettingsSituations) window.renderSettingsSituations();
         if (window.applyAccessRights) window.applyAccessRights();
         if (window.loadAIChatHistory) window.loadAIChatHistory();
+        if (window.renderDashboardNews) void window.renderDashboardNews();
         cleanupUnusedAIRequests();
 
         _applyPersistedBackground();

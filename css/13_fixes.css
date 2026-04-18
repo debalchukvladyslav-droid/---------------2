@@ -1019,6 +1019,111 @@
     margin-bottom: 6px;
 }
 
+.dash-news-panel {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+}
+.dash-news-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+.dash-news-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--text-main);
+}
+.dash-news-header p {
+    margin: 4px 0 0;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+.dash-news-refresh-btn {
+    width: auto;
+    margin: 0;
+    flex-shrink: 0;
+}
+.dash-news-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+.dash-news-item {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    min-height: 136px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-main) 72%, var(--bg-panel) 28%);
+    color: var(--text-main);
+    text-decoration: none;
+    overflow: hidden;
+}
+.dash-news-item:hover {
+    border-color: var(--accent);
+}
+.dash-news-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+.dash-news-source,
+.dash-news-time {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.dash-news-item h4 {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.32;
+}
+.dash-news-summary {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+.dash-news-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: auto;
+}
+.dash-news-tags span {
+    padding: 2px 7px;
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border) 65%);
+    border-radius: 6px;
+    color: var(--accent);
+    font-size: 0.7rem;
+}
+.dash-news-empty {
+    grid-column: 1 / -1;
+    padding: 18px;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    color: var(--text-muted);
+    text-align: center;
+    font-size: 0.86rem;
+}
+@media (max-width: 1100px) {
+    .dash-news-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+    .dash-news-header { flex-direction: column; }
+    .dash-news-list { grid-template-columns: 1fr; }
+    .dash-news-refresh-btn { width: 100%; }
+}
+
 .app-sidebar.collapsed .sidebar-account-wrap {
     display: none !important;
 }
