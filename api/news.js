@@ -22,7 +22,9 @@ export default async function handler(req, res) {
     if (!apiKey) return res.status(500).json({ message: 'FINNHUB_API_KEY not configured on server' });
 
     const tickers = parseTickers(req.query?.tickers);
-    const cacheKey = `finnhub:${tickers.join(',') || 'market'}`;
+    const fromTs = parseUnixSeconds(req.query?.fromTs);
+    const toTs = parseUnixSeconds(req.query?.toTs);
+    const cacheKey = `finnhub:${tickers.join(',') || 'market'}:${fromTs || ''}:${toTs || ''}`;
     const cached = cache.get(cacheKey);
     if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
         return res.status(200).json({ ...cached.payload, cached: true });
@@ -31,15 +33,24 @@ export default async function handler(req, res) {
     try {
         const [marketNews, companyNews] = await Promise.all([
             fetchMarketNews(apiKey),
-            tickers.length ? fetchCompanyNews(tickers, apiKey) : Promise.resolve([]),
+            tickers.length ? fetchCompanyNews(tickers, apiKey, fromTs, toTs) : Promise.resolve([]),
         ]);
 
         const generalItems = normalizeItems(marketNews, 'general').slice(0, 8);
-        const tickerItems = normalizeItems(companyNews, 'tickers').slice(0, 16);
+        const allTickerItems = normalizeItems(companyNews, 'tickers');
+        const windowTickerItems = filterNewsWindow(allTickerItems, fromTs, toTs);
+        const tickerItems = (windowTickerItems.length ? windowTickerItems : allTickerItems)
+            .map((item) => ({
+                ...item,
+                windowScore: scoreWindowNews(item, fromTs, toTs),
+            }))
+            .sort((a, b) => b.windowScore - a.windowScore || b.eventScore - a.eventScore || b.datetime - a.datetime)
+            .slice(0, 16);
 
         const payload = {
             provider: 'finnhub',
             tickers,
+            newsWindow: fromTs && toTs ? { fromTs, toTs, matched: windowTickerItems.length } : null,
             items: [...generalItems, ...tickerItems].slice(0, MAX_NEWS_ITEMS),
             updatedAt: new Date().toISOString(),
         };
@@ -50,6 +61,11 @@ export default async function handler(req, res) {
     }
 }
 
+function parseUnixSeconds(value) {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+}
+
 function parseTickers(value) {
     return String(value || '')
         .split(',')
@@ -58,11 +74,16 @@ function parseTickers(value) {
         .slice(0, MAX_TICKERS);
 }
 
-async function fetchCompanyNews(tickers, apiKey) {
+async function fetchCompanyNews(tickers, apiKey, fromTs = null, toTs = null) {
     const to = new Date();
-    const from = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const from = fromTs
+        ? new Date((fromTs - 24 * 60 * 60) * 1000)
+        : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const toDate = toTs
+        ? new Date((toTs + 24 * 60 * 60) * 1000)
+        : to;
     const fromStr = from.toISOString().slice(0, 10);
-    const toStr = to.toISOString().slice(0, 10);
+    const toStr = toDate.toISOString().slice(0, 10);
 
     const results = await Promise.all(tickers.map(async (symbol) => {
         const url = new URL(`${FINNHUB_BASE}/company-news`);
@@ -74,6 +95,25 @@ async function fetchCompanyNews(tickers, apiKey) {
     }));
 
     return results.flat();
+}
+
+function filterNewsWindow(items, fromTs, toTs) {
+    if (!fromTs || !toTs) return [];
+    const pad = 90 * 60;
+    return items.filter((item) => {
+        const ts = Number(item.datetime) || 0;
+        return ts >= fromTs - pad && ts <= toTs + pad;
+    });
+}
+
+function scoreWindowNews(item, fromTs, toTs) {
+    const eventScore = Number(item.eventScore) || 0;
+    if (!fromTs || !toTs || !item.datetime) return eventScore;
+    const mid = (fromTs + toTs) / 2;
+    const distanceMinutes = Math.abs(Number(item.datetime) - mid) / 60;
+    const proximityScore = Math.max(0, 18 - Math.floor(distanceMinutes / 15));
+    const inTradeWindow = item.datetime >= fromTs && item.datetime <= toTs ? 8 : 0;
+    return eventScore * 2 + proximityScore + inTradeWindow;
 }
 
 async function fetchMarketNews(apiKey) {
@@ -113,6 +153,7 @@ function normalizeItems(rawItems, section = 'general') {
                 related,
                 section,
                 datetime: Number(item.datetime) || 0,
+                eventScore: scoreCatalystNews(item),
             };
         })
         .filter((item) => item.title && item.url)
@@ -123,6 +164,21 @@ function normalizeItems(rawItems, section = 'general') {
             seen.add(key);
             return true;
         });
+}
+
+function scoreCatalystNews(item) {
+    const text = `${item.headline || ''} ${item.summary || ''}`.toLowerCase();
+    const weights = [
+        [/phase\s*(1|2|3|i|ii|iii)|clinical trial|trial data|endpoint|fda|approval|clearance|pdufa|drug|therapy|patients|biotech|study|data readout/, 14],
+        [/earnings|revenue|guidance|forecast|outlook|eps|sales|profit|loss|quarter|q[1-4]/, 11],
+        [/offering|public offering|registered direct|private placement|atm|warrant|dilution|convertible/, 10],
+        [/merger|acquisition|buyout|takeover|strategic alternatives|asset sale/, 10],
+        [/upgrade|downgrade|price target|initiates|analyst|rating/, 8],
+        [/contract|partnership|collaboration|agreement|license|supply|order/, 7],
+        [/sec|investigation|lawsuit|class action|delisting|nasdaq notice|compliance/, 7],
+        [/launch|product|patent|presentation|conference|webcast/, 4],
+    ];
+    return weights.reduce((score, [pattern, value]) => score + (pattern.test(text) ? value : 0), 0);
 }
 
 async function verifySupabaseAuth(req) {

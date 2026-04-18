@@ -17,6 +17,7 @@ let candleSeries = null;
 let lwChartsReady = null;
 let _storyPanelOpen = false;
 let _tradeDaysLoadPromise = null;
+let _tradeDaysLoadUserId = null;
 
 // Активна угода для поточного дня { symbol, dateStr, tradeIndex }
 let _activeTrade = null;
@@ -44,15 +45,19 @@ export function initTradesView() {
         wrapper.querySelector('#ts-show-btn')?.remove();
         wrapper.querySelector('#ts-fullscreen-btn')?.remove();
     }
-    void populateDateSelect();
 }
 
 async function ensureTradeDaysLoaded() {
-    if (!_tradeDaysLoadPromise) {
+    const userId = state.currentViewedUserId || state.myUserId || null;
+    if (!userId) return;
+
+    if (!_tradeDaysLoadPromise || _tradeDaysLoadUserId !== userId) {
+        _tradeDaysLoadUserId = userId;
         showGlobalLoader('trade-days-load', 'Завантаження імпортованих угод...');
         _tradeDaysLoadPromise = loadTradeDays()
             .catch((e) => {
                 _tradeDaysLoadPromise = null;
+                _tradeDaysLoadUserId = null;
                 throw e;
             })
             .finally(() => hideGlobalLoader('trade-days-load'));

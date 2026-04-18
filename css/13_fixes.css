@@ -424,14 +424,21 @@
     white-space: nowrap;
 }
 .news-ticker-text {
-    display: inline-block;
-    min-width: max-content;
+    display: inline-flex;
+    align-items: center;
+    gap: 40px;
     font-size: 0.75rem;
     color: var(--text-muted);
     line-height: 30px;
     transform: translateX(0);
-    animation: ticker-scroll 120s linear infinite;
-    animation-delay: 3s;
+    animation: ticker-scroll 180s linear infinite;
+    will-change: transform;
+}
+.news-ticker-segment {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    min-width: max-content;
 }
 .news-ticker-text a {
     color: var(--text-muted);
@@ -447,8 +454,7 @@
 }
 @keyframes ticker-scroll {
     0%   { transform: translateX(0); }
-    12%  { transform: translateX(0); }
-    100% { transform: translateX(calc(-100% - 40px)); }
+    100% { transform: translateX(-50%); }
 }
 
 /* === QUICK TRADE FLOATING BTN === */
