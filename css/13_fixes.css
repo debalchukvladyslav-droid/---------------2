@@ -425,9 +425,13 @@
 }
 .news-ticker-text {
     display: inline-block;
+    min-width: max-content;
     font-size: 0.75rem;
     color: var(--text-muted);
-    animation: ticker-scroll 40s linear infinite;
+    line-height: 30px;
+    transform: translateX(0);
+    animation: ticker-scroll 120s linear infinite;
+    animation-delay: 3s;
 }
 .news-ticker-text a {
     color: var(--text-muted);
@@ -442,8 +446,9 @@
     padding: 0 10px;
 }
 @keyframes ticker-scroll {
-    0%   { transform: translateX(100%); }
-    100% { transform: translateX(-100%); }
+    0%   { transform: translateX(0); }
+    12%  { transform: translateX(0); }
+    100% { transform: translateX(calc(-100% - 40px)); }
 }
 
 /* === QUICK TRADE FLOATING BTN === */

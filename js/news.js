@@ -1,5 +1,6 @@
 import { state } from './state.js';
 import { supabase } from './supabase.js';
+import { callGemini, getGeminiKeys } from './ai.js';
 
 const CLIENT_CACHE_TTL_MS = 2 * 60 * 1000;
 let _newsCache = { key: '', ts: 0, payload: null };
@@ -13,7 +14,11 @@ function sanitizeHTML(str) {
 
 function setTickerHTML(html) {
     const ticker = document.getElementById('news-ticker-text');
-    if (ticker) ticker.innerHTML = html;
+    if (!ticker) return;
+    ticker.style.animation = 'none';
+    ticker.innerHTML = html;
+    ticker.offsetHeight;
+    ticker.style.animation = '';
 }
 
 function getRecentTradeTickers(limit = 8) {
@@ -66,8 +71,49 @@ async function fetchDashboardNews(force = false) {
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data?.message || `News API error ${response.status}`);
 
-    _newsCache = { key: cacheKey, ts: Date.now(), payload: data };
-    return data;
+    const translated = await translateNewsPayload(data);
+    _newsCache = { key: cacheKey, ts: Date.now(), payload: translated };
+    return translated;
+}
+
+async function translateNewsPayload(payload) {
+    const items = Array.isArray(payload?.items) ? payload.items.slice(0, 24) : [];
+    if (!items.length) return payload;
+
+    try {
+        const key = getGeminiKeys()[0];
+        if (!key) return payload;
+
+        const source = items.map((item, index) => ({
+            index,
+            title: String(item.title || '').slice(0, 240),
+        }));
+        const text = await callGemini(key, {
+            systemInstruction: {
+                parts: [{
+                    text: 'Переклади фінансові новинні заголовки українською. Збережи тикери, назви компаній і цифри. Відповідай тільки JSON масивом рядків у тому самому порядку.',
+                }],
+            },
+            contents: [{ parts: [{ text: JSON.stringify(source) }] }],
+        });
+
+        const match = text.match(/\[[\s\S]*\]/);
+        const translated = match ? JSON.parse(match[0]) : [];
+        if (!Array.isArray(translated) || translated.length !== items.length) return payload;
+
+        return {
+            ...payload,
+            items: payload.items.map((item, index) => ({
+                ...item,
+                titleUk: typeof translated[index] === 'string' && translated[index].trim()
+                    ? translated[index].trim()
+                    : item.title,
+            })),
+        };
+    } catch (error) {
+        console.warn('[News] translate skipped:', error);
+        return payload;
+    }
 }
 
 function formatNewsTime(timestamp) {
@@ -87,21 +133,28 @@ function renderTickerNews(payload) {
         return;
     }
 
-    const prefix = tickers.length
-        ? `<strong>${sanitizeHTML(tickers.join(', '))}</strong><span class="news-ticker-sep">•</span>`
-        : '';
+    const generalItems = items.filter((item) => item.section === 'general').slice(0, 6);
+    const tickerItems = items.filter((item) => item.section !== 'general').slice(0, 8);
+    const orderedItems = [...generalItems, ...tickerItems];
+    const tickerLabel = tickers.length ? `Після угод: ${sanitizeHTML(tickers.join(', '))}` : 'Після угод';
 
-    const html = items.slice(0, 10).map((item) => {
+    const html = orderedItems.map((item, index) => {
+        const beforeTickerLabel = index === generalItems.length && tickerItems.length;
+        const label = index === 0
+            ? '<strong>Загальні</strong><span class="news-ticker-sep">•</span>'
+            : beforeTickerLabel
+                ? `<strong>${tickerLabel}</strong><span class="news-ticker-sep">•</span>`
+                : '';
         const related = Array.isArray(item.related) && item.related.length
             ? `[${sanitizeHTML(item.related.slice(0, 3).join(','))}] `
             : '';
         const time = formatNewsTime(item.datetime);
-        const title = sanitizeHTML(item.title);
+        const title = sanitizeHTML(item.titleUk || item.title);
         const suffix = time ? ` (${sanitizeHTML(time)})` : '';
-        return `<a href="${sanitizeHTML(item.url)}" target="_blank" rel="noopener noreferrer">${related}${title}${suffix}</a>`;
+        return `${label}<a href="${sanitizeHTML(item.url)}" target="_blank" rel="noopener noreferrer">${related}${title}${suffix}</a>`;
     }).join('<span class="news-ticker-sep">•</span>');
 
-    setTickerHTML(prefix + html);
+    setTickerHTML(html);
 }
 
 export async function renderDashboardNews(options = {}) {
@@ -110,7 +163,7 @@ export async function renderDashboardNews(options = {}) {
     const force = !!options.force;
 
     if (!_newsPromise || force) {
-        setTickerHTML('Завантаження live news...');
+        setTickerHTML('Завантаження live news українською...');
         _newsPromise = fetchDashboardNews(force);
     }
 

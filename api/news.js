@@ -29,14 +29,18 @@ export default async function handler(req, res) {
     }
 
     try {
-        const news = tickers.length
-            ? await fetchCompanyNews(tickers, apiKey)
-            : await fetchMarketNews(apiKey);
+        const [marketNews, companyNews] = await Promise.all([
+            fetchMarketNews(apiKey),
+            tickers.length ? fetchCompanyNews(tickers, apiKey) : Promise.resolve([]),
+        ]);
+
+        const generalItems = normalizeItems(marketNews, 'general').slice(0, 8);
+        const tickerItems = normalizeItems(companyNews, 'tickers').slice(0, 16);
 
         const payload = {
             provider: 'finnhub',
             tickers,
-            items: normalizeItems(news).slice(0, MAX_NEWS_ITEMS),
+            items: [...generalItems, ...tickerItems].slice(0, MAX_NEWS_ITEMS),
             updatedAt: new Date().toISOString(),
         };
         cache.set(cacheKey, { ts: Date.now(), payload });
@@ -91,7 +95,7 @@ async function fetchJson(url) {
     return Array.isArray(data) ? data : [];
 }
 
-function normalizeItems(rawItems) {
+function normalizeItems(rawItems, section = 'general') {
     const seen = new Set();
     return rawItems
         .map((item) => {
@@ -107,6 +111,7 @@ function normalizeItems(rawItems) {
                 source: String(item.source || 'Finnhub').trim(),
                 image: String(item.image || '').trim(),
                 related,
+                section,
                 datetime: Number(item.datetime) || 0,
             };
         })
