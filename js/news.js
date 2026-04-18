@@ -1,6 +1,5 @@
 import { state } from './state.js';
 import { supabase } from './supabase.js';
-import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 
 const CLIENT_CACHE_TTL_MS = 2 * 60 * 1000;
 let _newsCache = { key: '', ts: 0, payload: null };
@@ -10,6 +9,11 @@ function sanitizeHTML(str) {
     const div = document.createElement('div');
     div.textContent = String(str ?? '');
     return div.innerHTML;
+}
+
+function setTickerHTML(html) {
+    const ticker = document.getElementById('news-ticker-text');
+    if (ticker) ticker.innerHTML = html;
 }
 
 function getRecentTradeTickers(limit = 8) {
@@ -73,62 +77,52 @@ function formatNewsTime(timestamp) {
     return date.toLocaleString('uk-UA', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
-function renderNewsItems(payload) {
-    const list = document.getElementById('dash-news-list');
-    const meta = document.getElementById('dash-news-meta');
-    if (!list) return;
-
+function renderTickerNews(payload) {
     const items = Array.isArray(payload?.items) ? payload.items : [];
     const tickers = Array.isArray(payload?.tickers) ? payload.tickers : [];
-    if (meta) {
-        meta.textContent = tickers.length
-            ? `Тикери: ${tickers.join(', ')}`
-            : 'Загальні market headlines';
-    }
 
     if (!items.length) {
-        list.innerHTML = '<div class="dash-news-empty">Новин поки немає. Після імпорту угод тут зʼявляться заголовки по ваших тикерах.</div>';
+        const scope = tickers.length ? `по ${sanitizeHTML(tickers.join(', '))}` : 'по ринку';
+        setTickerHTML(`Немає свіжих новин ${scope}<span class="news-ticker-sep">•</span>Імпортуйте угоди, щоб стрічка брала ваші тикери`);
         return;
     }
 
-    list.innerHTML = items.slice(0, 12).map((item) => {
-        const related = Array.isArray(item.related) ? item.related.slice(0, 4) : [];
-        const relatedHtml = related.length
-            ? `<div class="dash-news-tags">${related.map((ticker) => `<span>${sanitizeHTML(ticker)}</span>`).join('')}</div>`
+    const prefix = tickers.length
+        ? `<strong>${sanitizeHTML(tickers.join(', '))}</strong><span class="news-ticker-sep">•</span>`
+        : '';
+
+    const html = items.slice(0, 10).map((item) => {
+        const related = Array.isArray(item.related) && item.related.length
+            ? `[${sanitizeHTML(item.related.slice(0, 3).join(','))}] `
             : '';
-        const summary = item.summary
-            ? `<p class="dash-news-summary">${sanitizeHTML(item.summary).slice(0, 220)}</p>`
-            : '';
-        return `<a class="dash-news-item" href="${sanitizeHTML(item.url)}" target="_blank" rel="noopener noreferrer">
-            <div class="dash-news-top">
-                <span class="dash-news-source">${sanitizeHTML(item.source || 'Finnhub')}</span>
-                <span class="dash-news-time">${sanitizeHTML(formatNewsTime(item.datetime))}</span>
-            </div>
-            <h4>${sanitizeHTML(item.title)}</h4>
-            ${summary}
-            ${relatedHtml}
-        </a>`;
-    }).join('');
+        const time = formatNewsTime(item.datetime);
+        const title = sanitizeHTML(item.title);
+        const suffix = time ? ` (${sanitizeHTML(time)})` : '';
+        return `<a href="${sanitizeHTML(item.url)}" target="_blank" rel="noopener noreferrer">${related}${title}${suffix}</a>`;
+    }).join('<span class="news-ticker-sep">•</span>');
+
+    setTickerHTML(prefix + html);
 }
 
 export async function renderDashboardNews(options = {}) {
-    const list = document.getElementById('dash-news-list');
-    if (!list) return;
+    const ticker = document.getElementById('news-ticker-text');
+    if (!ticker) return;
     const force = !!options.force;
 
     if (!_newsPromise || force) {
-        list.innerHTML = '<div class="dash-news-empty">Завантаження новин...</div>';
-        showGlobalLoader('dash-news', 'Завантаження новин...');
-        _newsPromise = fetchDashboardNews(force)
-            .finally(() => hideGlobalLoader('dash-news'));
+        setTickerHTML('Завантаження live news...');
+        _newsPromise = fetchDashboardNews(force);
     }
 
     try {
         const payload = await _newsPromise;
-        renderNewsItems(payload);
+        renderTickerNews(payload);
     } catch (error) {
         const msg = String(error?.message || error);
-        list.innerHTML = `<div class="dash-news-empty">Новини не завантажились: ${sanitizeHTML(msg)}</div>`;
+        const hint = msg.includes('FINNHUB_API_KEY')
+            ? 'Додайте FINNHUB_API_KEY у Vercel Environment Variables і зробіть Redeploy'
+            : msg;
+        setTickerHTML(`Live news не підключені: ${sanitizeHTML(hint)}`);
     }
 }
 
