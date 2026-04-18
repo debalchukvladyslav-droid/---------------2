@@ -1,6 +1,17 @@
 # Мінімальний конфіг для Edge Functions. Проєкт уже може бути злінкований через supabase link.
 # Деплой: supabase functions deploy telegram-auth
+# AI / Polygon: supabase functions deploy gemini-proxy polygon-aggs
+# Секрети: див. supabase/SECRETS-SETUP.txt
 
 # Якщо preflight далі падає: Dashboard → Edge Functions → telegram-auth → вимкнути «Verify JWT».
 [functions.telegram-auth]
+verify_jwt = false
+
+[functions.gemini-proxy]
+verify_jwt = false
+
+[functions.polygon-aggs]
+verify_jwt = false
+
+[functions.youtube-search]
 verify_jwt = false

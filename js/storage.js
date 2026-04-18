@@ -190,6 +190,7 @@ let _journalSaveQueue = Promise.resolve();
 let _settingsSaveQueue = Promise.resolve();
 const _dirtyJournalDates = new Set();
 const _dayDetailsPromises = new Map();
+const _tradeDaysLoadedFor = new Set();
 
 export function saveToLocal() {
     return Promise.all([saveJournalData(), saveSettingsQueued()])
@@ -197,10 +198,15 @@ export function saveToLocal() {
 }
 
 export function saveJournalData(opts = {}) {
-    _journalSaveQueue = _journalSaveQueue
-        .then(() => _doSave(opts))
-        .catch(e => console.error('saveJournalData queue error:', e));
-    return _journalSaveQueue;
+    const run = _journalSaveQueue
+        .catch(() => {})
+        .then(() => _doSave(opts));
+
+    _journalSaveQueue = run.catch(e => {
+        console.error('saveJournalData queue error:', e);
+    });
+
+    return run;
 }
 
 export function markJournalDayDirty(dateStr) {
@@ -370,6 +376,7 @@ async function _doSave(opts = {}) {
         console.log('✅ Дані днів успішно збережено в Supabase!');
     } catch (e) {
         console.error('❌ Помилка збереження днів у Supabase:', e);
+        throw e;
     }
 }
 
@@ -531,6 +538,56 @@ export async function loadAllMonths(nick, userId = null) {
     }
 }
 
+export async function loadTradeDays(nick = state.CURRENT_VIEWED_USER, userId = null, options = {}) {
+    const targetUserId = getCurrentViewedUserId(userId) || await resolveViewedUserId(nick);
+    if (!targetUserId) { console.warn('[LOAD] loadTradeDays: currentViewedUserId не встановлено'); return; }
+
+    const cacheKey = `${targetUserId}:trade-days`;
+    if (!options.force && _tradeDaysLoadedFor.has(cacheKey)) return;
+
+    try {
+        const { data, error } = await supabase
+            .from('journal_days')
+            .select('*')
+            .eq('user_id', targetUserId)
+            .gte('trade_date', '2024-01-01')
+            .lte('trade_date', '2030-12-31')
+            .order('trade_date', { ascending: true });
+
+        if (error) throw error;
+
+        if (!state.loadedMonths[nick]) state.loadedMonths[nick] = new Set();
+        if (!state._availableMonthKeys) state._availableMonthKeys = new Set();
+
+        (data || []).forEach(row => {
+            const dateStr = row.trade_date;
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
+
+            const fullEntry = markDayEntryDetailsLoaded(journalRowToDayEntry(row), true);
+            if (!Array.isArray(fullEntry.trades) || fullEntry.trades.length === 0) return;
+
+            const currentEntry = state.appData.journal[dateStr];
+            if (Array.isArray(currentEntry?.trades) && currentEntry.trades.length > 0 && currentEntry.__detailsLoaded !== false) {
+                return;
+            }
+
+            state.appData.journal[dateStr] = {
+                ...(currentEntry || {}),
+                ...fullEntry,
+            };
+
+            const mk = monthKey(dateStr);
+            state.loadedMonths[nick].add(mk);
+            state._availableMonthKeys.add(mk);
+        });
+
+        _tradeDaysLoadedFor.add(cacheKey);
+        console.log(`[LOAD] loadTradeDays: завантажено ${(data || []).length} рядків, угоди змерджено у state`);
+    } catch (e) {
+        console.error('[LOAD] Помилка завантаження днів з угодами:', e);
+    }
+}
+
 function showLoadingToast(msg, persistent = false, withRetry = false) {
     let t = document.getElementById('_load-toast');
     if (!t) {
@@ -628,10 +685,6 @@ export async function initializeApp() {
         state.statsSourceSelection = { type: 'current', key: state.CURRENT_VIEWED_USER };
         if (window.applyTheme) window.applyTheme();
         if (window.updateAutoFlags) window.updateAutoFlags().then(() => { if (window.renderView) window.renderView(); });
-        const polyIn = document.getElementById('setting-polygon-key');
-        const ytIn = document.getElementById('setting-youtube-api-key');
-        if (polyIn) polyIn.value = typeof s.polygon_key === 'string' ? s.polygon_key : '';
-        if (ytIn) ytIn.value = typeof s.youtube_api_key === 'string' ? s.youtube_api_key : '';
         if (window.renderErrorsList) window.renderErrorsList();
         if (window.renderSettingsChecklist) window.renderSettingsChecklist();
         if (window.renderSettingsSliders) window.renderSettingsSliders();

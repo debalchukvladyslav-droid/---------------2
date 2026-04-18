@@ -416,15 +416,6 @@ window.updateDriveUI = updateDriveUI;
 window.disconnectGoogleDrive = disconnectGoogleDrive;
 window.loadBackgroundGallery = loadBackgroundGallery;
 
-window.saveApiKeysSettings = function() {
-    const poly = document.getElementById('setting-polygon-key');
-    const yt = document.getElementById('setting-youtube-api-key');
-    if (!state.appData.settings) state.appData.settings = {};
-    state.appData.settings.polygon_key = (poly?.value || '').trim();
-    state.appData.settings.youtube_api_key = (yt?.value || '').trim();
-    saveToLocal().then(() => import('./utils.js').then(m => m.showToast('Ключі збережено')));
-};
-
 window.saveDaylossSetting = function() {
     const input = document.getElementById('setting-dayloss-limit');
     if (!input) return;

@@ -1,8 +1,10 @@
 // === js/trades_view2.js ===
 import { state } from './state.js';
+import { supabase, SUPABASE_URL } from './supabase.js';
 import { buildTradeContext, analyzeTradeStory, renderStoryOverlay } from './trade_story.js';
 import { sleep } from './ai.js';
-import { saveJournalData, markJournalDayDirty } from './storage.js';
+import { saveJournalData, markJournalDayDirty, loadTradeDays } from './storage.js';
+import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 
 function sanitizeHTML(str) {
     const div = document.createElement('div');
@@ -14,6 +16,7 @@ let lwChart = null;
 let candleSeries = null;
 let lwChartsReady = null;
 let _storyPanelOpen = false;
+let _tradeDaysLoadPromise = null;
 
 // Активна угода для поточного дня { symbol, dateStr, tradeIndex }
 let _activeTrade = null;
@@ -41,12 +44,27 @@ export function initTradesView() {
         wrapper.querySelector('#ts-show-btn')?.remove();
         wrapper.querySelector('#ts-fullscreen-btn')?.remove();
     }
-    populateDateSelect();
+    void populateDateSelect();
 }
 
-export function populateDateSelect() {
+async function ensureTradeDaysLoaded() {
+    if (!_tradeDaysLoadPromise) {
+        showGlobalLoader('trade-days-load', 'Завантаження імпортованих угод...');
+        _tradeDaysLoadPromise = loadTradeDays()
+            .catch((e) => {
+                _tradeDaysLoadPromise = null;
+                throw e;
+            })
+            .finally(() => hideGlobalLoader('trade-days-load'));
+    }
+    return _tradeDaysLoadPromise;
+}
+
+export async function populateDateSelect() {
     const sel = document.getElementById('trades-date-select');
     if (!sel) return;
+
+    await ensureTradeDaysLoaded();
 
     const dates = Object.keys(state.appData.journal)
         .filter(d => state.appData.journal[d].trades?.length > 0)
@@ -80,7 +98,7 @@ export function populateSymbolSelect(dateStr) {
         const hasTrades = (state.appData.journal[dateStr]?.trades?.length > 0);
         if (hasTrades) {
             if (!sel.querySelector(`option[value="${dateStr}"]`)) {
-                populateDateSelect();
+                void populateDateSelect();
             }
             sel.value = dateStr;
         }
@@ -205,14 +223,14 @@ export function loadTradeChart(symbol, dateStr) {
 }
 
 /** Відкрити вкладку «Угоди» і конкретну угоду дня (після імпорту Fondexx). */
-export function openTradesAtDayIndex(dateStr, tradeIndex) {
+export async function openTradesAtDayIndex(dateStr, tradeIndex) {
     if (!dateStr || !state.appData?.journal?.[dateStr]?.trades?.length) return;
     const idx = Math.max(0, Math.min(parseInt(tradeIndex, 10) || 0, state.appData.journal[dateStr].trades.length - 1));
     if (window.switchMainTab) window.switchMainTab('trades');
-    populateDateSelect();
+    await populateDateSelect();
     const sel = document.getElementById('trades-date-select');
     if (sel) {
-        if (!sel.querySelector(`option[value="${dateStr}"]`)) populateDateSelect();
+        if (!sel.querySelector(`option[value="${dateStr}"]`)) await populateDateSelect();
         sel.value = dateStr;
     }
     renderPillNav(dateStr);
@@ -554,19 +572,38 @@ function prevTradingDate(dateStr) {
     return d.toISOString().slice(0, 10);
 }
 
-async function fetchPolygon(symbol, fromMs, toMs) {
-    const POLYGON_KEY = state.systemConfig?.polygon_key || state.appData?.settings?.polygon_key || '';
-    if (!POLYGON_KEY) throw new Error('Polygon.io API ключ не задано. Налаштування → «API ключі» (або polygon_key у systemConfig для хостингу).');
-    const params = new URLSearchParams({ adjusted: 'false', sort: 'asc', limit: '1000', apiKey: POLYGON_KEY });
-    const url = new URL(`https://api.polygon.io/v2/aggs/ticker/${symbol}/range/1/minute/${fromMs}/${toMs}`);
-    if (url.hostname !== 'api.polygon.io') throw new Error('Недозволений хост запиту.');
-    url.search = params.toString();
-    const res  = await fetch(url.toString(), { credentials: 'omit' });
-    const data = await res.json();
-    if (!data.results?.length) return [];
-    return data.results.map(v => ({
+function mapPolygonResults(data) {
+    if (!data?.results?.length) return [];
+    return data.results.map((v) => ({
         time: Math.floor(v.t / 1000), open: v.o, high: v.h, low: v.l, close: v.c, volume: v.v,
     }));
+}
+
+async function fetchPolygon(symbol, fromMs, toMs) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) {
+        throw new Error(
+            'Polygon: увійдіть у акаунт. Свічки завантажуються через Edge (секрет POLYGON_API_KEY у Supabase). Див. supabase/SECRETS-SETUP.txt',
+        );
+    }
+    const edgeUrl = `${String(SUPABASE_URL).replace(/\/$/, '')}/functions/v1/polygon-aggs`;
+    const res = await fetch(edgeUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ symbol, fromMs, toMs }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        if (res.status === 429) {
+            throw new Error('Polygon: перевищено ліміт запитів для цього ключа. Спробуйте ще раз трохи пізніше.');
+        }
+        throw new Error(data?.message || `Polygon: помилка сервера ${res.status}. Перевірте POLYGON_API_KEY і деплой polygon-aggs.`);
+    }
+    return mapPolygonResults(data);
 }
 
 async function fetchYahooCandles(symbol, dateStr) {
@@ -588,12 +625,15 @@ async function fetchYahooCandles(symbol, dateStr) {
     const curFrom  = Math.floor(new Date(`${dateStr}T04:00:00${offset}`).getTime() / 1000) * 1000;
     const curTo    = Math.floor(new Date(`${dateStr}T23:59:00${offset}`).getTime() / 1000) * 1000;
 
-    const [prevCandles, curCandles] = await Promise.all([
-        fetchPolygon(symbol, prevFrom, prevTo),
-        fetchPolygon(symbol, curFrom, curTo),
-    ]);
-
+    const curCandles = await fetchPolygon(symbol, curFrom, curTo);
     if (!curCandles.length) throw new Error('Немає даних від Polygon');
+
+    let prevCandles = [];
+    try {
+        prevCandles = await fetchPolygon(symbol, prevFrom, prevTo);
+    } catch (error) {
+        console.warn('[Polygon] previous session candles skipped:', error);
+    }
 
     // Об'єднуємо: постмаркет попереднього + поточний день, без дублів
     const seen = new Set();

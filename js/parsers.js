@@ -1,6 +1,7 @@
 // === js/parsers.js ===
 import { state } from './state.js';
 import { saveJournalData, markJournalDayDirty } from './storage.js';
+import { getDefaultDayEntry } from './data_utils.js';
 
 function showToast(text) {
     const t = document.createElement('div');
@@ -63,8 +64,8 @@ function syncFondexxFromTradesForDay(dateStr) {
 function recalculateDailyTotals(d) {
     if (!state.appData.journal[d]) return;
     let entry = state.appData.journal[d];
-    let f = entry.fondexx;
-    let p = entry.ppro;
+    let f = entry.fondexx || getDefaultDayEntry().fondexx;
+    let p = entry.ppro || getDefaultDayEntry().ppro;
     
     entry.gross_pnl = parseFloat((f.gross + p.gross).toFixed(2));
     entry.commissions = parseFloat((f.comm + p.comm).toFixed(2));
@@ -184,7 +185,7 @@ export function importFondexxReport(event) {
 
             let daysUpdated = 0;
             for(let d in dailyData) {
-                if (!state.appData.journal[d]) state.appData.journal[d] = window.getDefaultDayEntry ? window.getDefaultDayEntry() : {};
+                if (!state.appData.journal[d]) state.appData.journal[d] = getDefaultDayEntry();
                 state.appData.journal[d].fondexx = { gross: dailyData[d].gross, net: dailyData[d].net, comm: dailyData[d].comm, locates: dailyData[d].locates, tickers: Array.from(dailyData[d].tickers) };
                 if (dailyData[d].trades.length > 0) state.appData.journal[d].trades = dailyData[d].trades;
                 recalculateDailyTotals(d);
@@ -198,6 +199,8 @@ export function importFondexxReport(event) {
                 let viewStats = document.getElementById('view-stats');
                 if (viewStats && viewStats.classList.contains('active') && window.refreshStatsView) { window.refreshStatsView(); }
                 if(window.selectDate) window.selectDate(state.selectedDateStr);
+            }).catch(err => {
+                showToast('Import save error: ' + (err?.message || err));
             });
         } catch(err) { showToast('Помилка обробки Fondexx: ' + err.message); }
     };
@@ -258,7 +261,7 @@ export function importFondexxTrades(event) {
 
             let daysUpdated = 0;
             for (let d in dailyTrades) {
-                if (!state.appData.journal[d]) state.appData.journal[d] = window.getDefaultDayEntry ? window.getDefaultDayEntry() : {};
+                if (!state.appData.journal[d]) state.appData.journal[d] = getDefaultDayEntry();
                 state.appData.journal[d].trades = dailyTrades[d];
                 syncFondexxFromTradesForDay(d);
                 markJournalDayDirty(d);
@@ -273,6 +276,8 @@ export function importFondexxTrades(event) {
                     window.refreshStatsView();
                 }
                 if (window.selectDate) window.selectDate(state.selectedDateStr);
+            }).catch(err => {
+                showToast('Import save error: ' + (err?.message || err));
             });
         } catch(err) { showToast('Помилка імпорту Trades: ' + err.message); }
     };
@@ -325,7 +330,7 @@ export function importPPROReport(event) {
             
             let daysUpdated = 0;
             for(let d in dailyData) {
-                if (!state.appData.journal[d]) state.appData.journal[d] = window.getDefaultDayEntry ? window.getDefaultDayEntry() : {};
+                if (!state.appData.journal[d]) state.appData.journal[d] = getDefaultDayEntry();
                 state.appData.journal[d].ppro = { gross: dailyData[d].profit, net: dailyData[d].profit, comm: 0, locates: 0, tickers: [] };
                 recalculateDailyTotals(d);
                 markJournalDayDirty(d);
@@ -338,6 +343,8 @@ export function importPPROReport(event) {
                 let viewStats = document.getElementById('view-stats');
                 if (viewStats && viewStats.classList.contains('active') && window.refreshStatsView) { window.refreshStatsView(); }
                 if(window.selectDate) window.selectDate(state.selectedDateStr);
+            }).catch(err => {
+                showToast('Import save error: ' + (err?.message || err));
             });
         } catch(err) { showToast('Помилка обробки PPRO: ' + err.message); }
     };

@@ -1,3 +1,10 @@
+/**
+ * Якщо на хості (Vercel) не задано env — беремо ті самі публічні значення, що й у js/supabase.js.
+ * Оновлюйте обидва місця при зміні проєкту Supabase.
+ */
+const DEFAULT_SUPABASE_URL = 'https://gijarvlerztfggxhuvow.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_4gU0201mMkinUqwH-4SkWA_eSoNqew6';
+
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 const MAX_PAYLOAD_BYTES = 8 * 1024 * 1024;
@@ -69,8 +76,15 @@ function isPayloadSizeAllowed(payload) {
 }
 
 async function verifySupabaseAuth(req) {
-    const SUPABASE_URL = process.env.SUPABASE_URL;
-    const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const SUPABASE_URL = (
+        process.env.SUPABASE_URL ||
+        process.env.NEXT_PUBLIC_SUPABASE_URL ||
+        DEFAULT_SUPABASE_URL
+    ).replace(/\/$/, '');
+    const SUPABASE_ANON_KEY =
+        process.env.SUPABASE_ANON_KEY ||
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+        DEFAULT_SUPABASE_ANON_KEY;
 
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
         return { ok: false, status: 500, message: 'Supabase auth env is not configured on server' };
@@ -81,7 +95,7 @@ async function verifySupabaseAuth(req) {
     if (!token) return { ok: false, status: 401, message: 'Missing auth token' };
 
     try {
-        const authRes = await fetch(`${SUPABASE_URL.replace(/\/$/, '')}/auth/v1/user`, {
+        const authRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
             headers: {
                 Authorization: `Bearer ${token}`,
                 apikey: SUPABASE_ANON_KEY,

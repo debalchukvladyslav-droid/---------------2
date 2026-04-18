@@ -1,3 +1,4 @@
 sync_config.json
 sync_history.json
 config.js
+supabase/.secrets.env

@@ -1,11 +1,30 @@
 // === js/learn.js ===
 import { state } from './state.js';
+import { supabase, SUPABASE_URL } from './supabase.js';
 import { callGemini, getGeminiKeys } from './ai.js';
 
-function getYoutubeApiKeyOptional() {
-    const raw = state.systemConfig?.youtube_api_key || state.appData?.settings?.youtube_api_key || '';
-    const key = String(raw).trim();
-    return key || null;
+function youtubeSearchEdgeUrl() {
+    return `${String(SUPABASE_URL).replace(/\/$/, '')}/functions/v1/youtube-search`;
+}
+
+/** Пошук відео через Edge (секрет YOUTUBE_API_KEY у Supabase). */
+async function youtubeSearchViaEdge(query) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) return { __noAuth: true };
+    const res = await fetch(youtubeSearchEdgeUrl(), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ query }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(data?.message || `YouTube proxy: ${res.status}`);
+    }
+    return data;
 }
 
 function escapeLearnHtml(text) {
@@ -16,16 +35,24 @@ function escapeLearnHtml(text) {
         .replace(/"/g, '&quot;');
 }
 
-/** Без YouTube Data API: лише посилання на пошук за запитами від AI. */
-function buildLearnHtmlFromQueriesOnly(queries) {
+/** Лише посилання на пошук за запитами від AI (без превʼю з YouTube API). */
+function buildLearnHtmlFromQueriesOnly(queries, reason = 'default') {
     const qList = queries.slice(0, 3).filter(Boolean);
     if (!qList.length) {
         return '<div style="color:var(--text-muted); text-align:center; padding:40px; grid-column:1/-1;">Немає пошукових запитів</div>';
     }
+    const hints = {
+        noAuth:
+            'Увійдіть у акаунт — тоді превʼю відео завантажуються через захищений сервер.',
+        noServerKey:
+            'На сервері не задано секрет YOUTUBE_API_KEY (Supabase → Edge Functions → Secrets). Показуємо лише пошукові посилання.',
+        default: 'Показуємо персональні пошукові запити без превʼю відео.',
+    };
+    const hintText = hints[reason] || hints.default;
     const hint =
         '<p style="color:var(--text-muted); font-size:0.82rem; margin:0 0 16px; grid-column:1/-1; line-height:1.45;">' +
-        'Ключ YouTube Data API не задано — показуємо лише персональні пошукові запити. ' +
-        'Для карток з превʼю відео додайте ключ у <strong>Налаштування → API ключі</strong>.</p>';
+        escapeLearnHtml(hintText) +
+        '</p>';
     const cards = qList.map((query, idx) => {
         const safeQ = escapeLearnHtml(query);
         const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
@@ -119,28 +146,32 @@ export async function loadLearnContent() {
             queries = ['prop trading psychology', 'day trading mistakes', 'trading discipline'];
         }
 
-        const youtubeKey = getYoutubeApiKeyOptional();
         let html;
+        const allVideos = [];
+        let fallbackReason = null;
 
-        if (!youtubeKey) {
-            html = buildLearnHtmlFromQueriesOnly(queries);
+        for (const query of queries.slice(0, 3)) {
+            const data = await youtubeSearchViaEdge(query);
+            if (data?.__noAuth) {
+                fallbackReason = 'noAuth';
+                break;
+            }
+            if (data?.message === 'YOUTUBE_API_KEY not set') {
+                fallbackReason = 'noServerKey';
+                break;
+            }
+            if (data?.error?.message) {
+                throw new Error(`YouTube API: ${data.error.message}`);
+            }
+            if (Array.isArray(data?.items)) allVideos.push(...data.items);
+        }
+
+        if (fallbackReason) {
+            html = buildLearnHtmlFromQueriesOnly(queries, fallbackReason);
+        } else if (allVideos.length === 0) {
+            resultsEl.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding:40px; grid-column:1/-1;">Нічого не знайдено</div>';
+            return;
         } else {
-            const allVideos = [];
-            for (const query of queries.slice(0, 3)) {
-                const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=3&relevanceLanguage=en&key=${youtubeKey}`;
-                const res = await fetch(url);
-                const data = await res.json();
-                if (data.error?.message) {
-                    throw new Error(`YouTube API: ${data.error.message}`);
-                }
-                if (data.items) allVideos.push(...data.items);
-            }
-
-            if (allVideos.length === 0) {
-                resultsEl.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding:40px; grid-column:1/-1;">Нічого не знайдено</div>';
-                return;
-            }
-
             html = allVideos.map(item => {
             const vid = item.id.videoId;
             const title = item.snippet.title;

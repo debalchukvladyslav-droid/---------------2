@@ -1,6 +1,10 @@
-import { supabase } from '../supabase.js';
+import { supabase, SUPABASE_URL } from '../supabase.js';
 
-const PROXY_URL = '/api/gemini';
+/** Основний проксі: Edge Function (секрет GEMINI_API_KEY у Supabase). Резерв: /api/gemini (Vercel). */
+function geminiEdgeUrl() {
+    return `${String(SUPABASE_URL).replace(/\/$/, '')}/functions/v1/gemini-proxy`;
+}
+const PROXY_FALLBACK = '/api/gemini';
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 const REQUEST_TIMEOUT_MS = 20000;
 const UNUSED_LOG_RETENTION_DAYS = 2;
@@ -10,9 +14,8 @@ const MAX_RESPONSE_PREVIEW = 2000;
 export const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * Усі виклики Gemini йдуть через POST `/api/gemini` з Bearer-сесією; ключ Google AI задається
- * на сервері як GEMINI_API_KEY (див. api/gemini.js). Поля gemini_key у profiles.settings не використовуються.
- * Повертаємо непорожній масив, щоб наступна логіка не вважала «ключ не додано».
+ * Gemini: POST на Supabase Edge `gemini-proxy` (секрет GEMINI_API_KEY у консолі Supabase).
+ * Якщо функція не задеплоєна (404) — fallback на /api/gemini.
  */
 export function getGeminiKeys() {
     return ['proxy'];
@@ -36,12 +39,20 @@ export async function callGeminiViaProxy(payload, model = DEFAULT_MODEL) {
         const token = await getAccessToken();
         if (token) headers.Authorization = `Bearer ${token}`;
 
-        const res = await fetch(PROXY_URL, {
+        let res = await fetch(geminiEdgeUrl(), {
             method: 'POST',
             headers,
             body: JSON.stringify({ payload, model }),
             signal: controller.signal,
         });
+        if (res.status === 404) {
+            res = await fetch(PROXY_FALLBACK, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ payload, model }),
+                signal: controller.signal,
+            });
+        }
 
         const raw = await res.text();
         let data;
