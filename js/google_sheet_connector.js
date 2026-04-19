@@ -18,7 +18,7 @@ export const GOOGLE_SHEETS_CLIENT_ID =
     '860755721651-lj7ds44epl45augj0og1nilq9f0ug9qg.apps.googleusercontent.com';
 
 /** Browser API key (обмежте по referrer). */
-export const GOOGLE_SHEETS_API_KEY = 'AIzaSyBd91SFHc7xb4FJucC4YLa8lqqzFgMcao4';
+export const GOOGLE_SHEETS_API_KEY = 'AIzaSyBE0DPHpWquQkkW0Kds_Zpv9PYzJ1aU-b4';
 
 /** Номер проєкту Google Cloud — для Picker.setAppId. */
 const GOOGLE_CLOUD_PROJECT_NUMBER = '860755721651';
