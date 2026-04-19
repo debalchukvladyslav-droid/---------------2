@@ -793,7 +793,7 @@
                     <div id="sheet-smart-mapping" class="sheet-smart-mapping" hidden>
                         <div class="sheet-smart-head">
                             <h3 class="sheet-smart-title">Мапінг колонок</h3>
-                            <p class="sheet-smart-sub">Після вибору файлу підтягується перший рядок таблиці — ваші реальні заголовки в списках. Можна перемкнутись на введення колонки вручну (✍️).</p>
+                            <p class="sheet-smart-sub">Перший рядок (A1…) — підписи для мапінгу. Угоди читаються з рядка 6: у колонці «Дата» з’являється день — усі нижчі рядки з тікером у колонці «Тікер» йдуть у цей день; для кожного тікера імпортується весь рядок (наприклад B8 = USEG → рядок 8).</p>
                         </div>
 
                         <form id="sheet-smart-form" class="sheet-smart-form" onsubmit="event.preventDefault(); saveSheetMapping();">
@@ -812,7 +812,27 @@
                                             <option value="Notes">Notes</option>
                                         </select>
                                         <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
-                                        <input type="text" id="sheet-smart-date-manual" class="sheet-input-group__manual" placeholder="Напр. C або D" autocomplete="off" aria-label="Дата вручну">
+                                        <input type="text" id="sheet-smart-date-manual" class="sheet-input-group__manual" placeholder="Напр. A" autocomplete="off" aria-label="Дата вручну">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="sheet-smart-row" data-smart-field="symbol">
+                                <div class="sheet-smart-row__left">
+                                    <span class="sheet-smart-row__label">Тікер (symbol)</span>
+                                    <span class="sheet-smart-row__hint">Колонка з тікером; рядки з тікером з 6-го — кожен рядок = одна угода.</span>
+                                </div>
+                                <div class="sheet-smart-row__right">
+                                    <div class="sheet-input-group" data-mode="select">
+                                        <select id="sheet-smart-symbol" class="sheet-input-group__select" aria-label="Колонка для тікера">
+                                            <option value="">Виберіть колонку...</option>
+                                            <option value="Date">Date</option>
+                                            <option value="Ticker">Ticker</option>
+                                            <option value="Profit/Loss">Profit/Loss</option>
+                                            <option value="Notes">Notes</option>
+                                        </select>
+                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <input type="text" id="sheet-smart-symbol-manual" class="sheet-input-group__manual" placeholder="Напр. B" autocomplete="off" aria-label="Тікер вручну">
                                     </div>
                                 </div>
                             </div>
@@ -897,8 +917,133 @@
                                 </div>
                             </div>
 
+                            <p class="sheet-smart-section-title">Колонки для таблиці угод / статистики</p>
+
+                            <div class="sheet-smart-row" data-smart-field="altPv">
+                                <div class="sheet-smart-row__left">
+                                    <span class="sheet-smart-row__label">Alt PV</span>
+                                    <span class="sheet-smart-row__hint">Другий показник у колонці «Профіт / AltPV».</span>
+                                </div>
+                                <div class="sheet-smart-row__right">
+                                    <div class="sheet-input-group" data-mode="select">
+                                        <select id="sheet-smart-altpv" class="sheet-input-group__select" aria-label="Колонка Alt PV">
+                                            <option value="">Виберіть колонку...</option>
+                                            <option value="Date">Date</option>
+                                            <option value="Ticker">Ticker</option>
+                                            <option value="Profit/Loss">Profit/Loss</option>
+                                            <option value="Notes">Notes</option>
+                                        </select>
+                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <input type="text" class="sheet-input-group__manual" placeholder="Літера колонки" autocomplete="off" aria-label="Alt PV вручну">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="sheet-smart-row" data-smart-field="traderComment">
+                                <div class="sheet-smart-row__left">
+                                    <span class="sheet-smart-row__label">Коментар трейдера</span>
+                                    <span class="sheet-smart-row__hint"></span>
+                                </div>
+                                <div class="sheet-smart-row__right">
+                                    <div class="sheet-input-group" data-mode="select">
+                                        <select class="sheet-input-group__select" aria-label="Коментар трейдера"><option value="">Виберіть колонку...</option><option value="Date">Date</option><option value="Ticker">Ticker</option><option value="Profit/Loss">Profit/Loss</option><option value="Notes">Notes</option></select>
+                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <input type="text" class="sheet-input-group__manual" placeholder="Літера" autocomplete="off">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="sheet-smart-row" data-smart-field="exit">
+                                <div class="sheet-smart-row__left"><span class="sheet-smart-row__label">Вихід</span><span class="sheet-smart-row__hint"></span></div>
+                                <div class="sheet-smart-row__right"><div class="sheet-input-group" data-mode="select">
+                                        <select class="sheet-input-group__select" aria-label="Вихід"><option value="">Виберіть колонку...</option><option value="Date">Date</option><option value="Ticker">Ticker</option><option value="Profit/Loss">Profit/Loss</option><option value="Notes">Notes</option></select>
+                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <input type="text" class="sheet-input-group__manual" placeholder="Літера" autocomplete="off"></div></div>
+                            </div>
+                            <div class="sheet-smart-row" data-smart-field="teamLeadComment">
+                                <div class="sheet-smart-row__left"><span class="sheet-smart-row__label">Коментар TeamLead</span><span class="sheet-smart-row__hint"></span></div>
+                                <div class="sheet-smart-row__right"><div class="sheet-input-group" data-mode="select">
+                                        <select class="sheet-input-group__select" aria-label="TeamLead"><option value="">Виберіть колонку...</option><option value="Date">Date</option><option value="Ticker">Ticker</option><option value="Profit/Loss">Profit/Loss</option><option value="Notes">Notes</option></select>
+                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <input type="text" class="sheet-input-group__manual" placeholder="Літера" autocomplete="off"></div></div>
+                            </div>
+                            <div class="sheet-smart-row" data-smart-field="paperType">
+                                <div class="sheet-smart-row__left"><span class="sheet-smart-row__label">Тип паперу</span><span class="sheet-smart-row__hint"></span></div>
+                                <div class="sheet-smart-row__right"><div class="sheet-input-group" data-mode="select">
+                                        <select class="sheet-input-group__select" aria-label="Тип паперу"><option value="">Виберіть колонку...</option><option value="Date">Date</option><option value="Ticker">Ticker</option><option value="Profit/Loss">Profit/Loss</option><option value="Notes">Notes</option></select>
+                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <input type="text" class="sheet-input-group__manual" placeholder="Літера" autocomplete="off"></div></div>
+                            </div>
+                            <div class="sheet-smart-row" data-smart-field="period">
+                                <div class="sheet-smart-row__left"><span class="sheet-smart-row__label">Період</span><span class="sheet-smart-row__hint"></span></div>
+                                <div class="sheet-smart-row__right"><div class="sheet-input-group" data-mode="select">
+                                        <select class="sheet-input-group__select" aria-label="Період"><option value="">Виберіть колонку...</option><option value="Date">Date</option><option value="Ticker">Ticker</option><option value="Profit/Loss">Profit/Loss</option><option value="Notes">Notes</option></select>
+                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <input type="text" class="sheet-input-group__manual" placeholder="Літера" autocomplete="off"></div></div>
+                            </div>
+                            <div class="sheet-smart-row" data-smart-field="growthPct">
+                                <div class="sheet-smart-row__left"><span class="sheet-smart-row__label">Виросла %</span><span class="sheet-smart-row__hint"></span></div>
+                                <div class="sheet-smart-row__right"><div class="sheet-input-group" data-mode="select">
+                                        <select class="sheet-input-group__select" aria-label="Виросла %"><option value="">Виберіть колонку...</option><option value="Date">Date</option><option value="Ticker">Ticker</option><option value="Profit/Loss">Profit/Loss</option><option value="Notes">Notes</option></select>
+                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <input type="text" class="sheet-input-group__manual" placeholder="Літера" autocomplete="off"></div></div>
+                            </div>
+                            <div class="sheet-smart-row" data-smart-field="riskUsd">
+                                <div class="sheet-smart-row__left"><span class="sheet-smart-row__label">Ризик ($)</span><span class="sheet-smart-row__hint"></span></div>
+                                <div class="sheet-smart-row__right"><div class="sheet-input-group" data-mode="select">
+                                        <select class="sheet-input-group__select" aria-label="Ризик"><option value="">Виберіть колонку...</option><option value="Date">Date</option><option value="Ticker">Ticker</option><option value="Profit/Loss">Profit/Loss</option><option value="Notes">Notes</option></select>
+                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <input type="text" class="sheet-input-group__manual" placeholder="Літера" autocomplete="off"></div></div>
+                            </div>
+                            <div class="sheet-smart-row" data-smart-field="consolidateCents">
+                                <div class="sheet-smart-row__left"><span class="sheet-smart-row__label">Консол. (цц)</span><span class="sheet-smart-row__hint"></span></div>
+                                <div class="sheet-smart-row__right"><div class="sheet-input-group" data-mode="select">
+                                        <select class="sheet-input-group__select" aria-label="Консол"><option value="">Виберіть колонку...</option><option value="Date">Date</option><option value="Ticker">Ticker</option><option value="Profit/Loss">Profit/Loss</option><option value="Notes">Notes</option></select>
+                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <input type="text" class="sheet-input-group__manual" placeholder="Літера" autocomplete="off"></div></div>
+                            </div>
+                            <div class="sheet-smart-row" data-smart-field="entryPrice">
+                                <div class="sheet-smart-row__left"><span class="sheet-smart-row__label">Ціна входу</span><span class="sheet-smart-row__hint"></span></div>
+                                <div class="sheet-smart-row__right"><div class="sheet-input-group" data-mode="select">
+                                        <select class="sheet-input-group__select" aria-label="Ціна входу"><option value="">Виберіть колонку...</option><option value="Date">Date</option><option value="Ticker">Ticker</option><option value="Profit/Loss">Profit/Loss</option><option value="Notes">Notes</option></select>
+                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <input type="text" class="sheet-input-group__manual" placeholder="Літера" autocomplete="off"></div></div>
+                            </div>
+                            <div class="sheet-smart-row" data-smart-field="qtyShares">
+                                <div class="sheet-smart-row__left"><span class="sheet-smart-row__label">Шер брав</span><span class="sheet-smart-row__hint"></span></div>
+                                <div class="sheet-smart-row__right"><div class="sheet-input-group" data-mode="select">
+                                        <select class="sheet-input-group__select" aria-label="Шер"><option value="">Виберіть колонку...</option><option value="Date">Date</option><option value="Ticker">Ticker</option><option value="Profit/Loss">Profit/Loss</option><option value="Notes">Notes</option></select>
+                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <input type="text" class="sheet-input-group__manual" placeholder="Літера" autocomplete="off"></div></div>
+                            </div>
+                            <div class="sheet-smart-row" data-smart-field="qtySharesCalc">
+                                <div class="sheet-smart-row__left"><span class="sheet-smart-row__label">Розрах. шер</span><span class="sheet-smart-row__hint"></span></div>
+                                <div class="sheet-smart-row__right"><div class="sheet-input-group" data-mode="select">
+                                        <select class="sheet-input-group__select" aria-label="Розрах шер"><option value="">Виберіть колонку...</option><option value="Date">Date</option><option value="Ticker">Ticker</option><option value="Profit/Loss">Profit/Loss</option><option value="Notes">Notes</option></select>
+                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <input type="text" class="sheet-input-group__manual" placeholder="Літера" autocomplete="off"></div></div>
+                            </div>
+
+                            <div class="sheet-auto-sync" id="sheet-auto-sync-block">
+                                <p class="sheet-auto-sync__title">Автосинхронізація з Google Sheets</p>
+                                <p class="sheet-auto-sync__hint">Один запит на інтервал; не виконується, коли вкладка браузера у фоні, щоб не навантажувати таблицю й сайт.</p>
+                                <label class="sheet-auto-sync__row">
+                                    <input type="checkbox" id="sheet-auto-sync-enabled">
+                                    <span>Увімкнути авто-оновлення угод з таблиці</span>
+                                </label>
+                                <label class="sheet-auto-sync__row">
+                                    <span>Інтервал (хвилини)</span>
+                                    <select id="sheet-auto-sync-interval" aria-label="Інтервал авто-синхронізації">
+                                        <option value="5">5</option>
+                                        <option value="10">10</option>
+                                        <option value="15" selected>15</option>
+                                        <option value="30">30</option>
+                                        <option value="45">45</option>
+                                        <option value="60">60</option>
+                                    </select>
+                                </label>
+                            </div>
+
                             <div class="sheet-smart-actions">
-                                <button type="submit" id="sheet-save-sync-btn" class="btn-primary sheet-save-sync-btn">Зберегти мапінг та продовжити</button>
+                                <button type="submit" id="sheet-save-sync-btn" class="btn-primary sheet-save-sync-btn">Зберегти мапінг і синхронізувати угоди</button>
                             </div>
                         </form>
                     </div>

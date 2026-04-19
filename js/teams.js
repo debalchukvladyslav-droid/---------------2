@@ -507,6 +507,7 @@ export async function switchUser(nick) {
     if (state.CURRENT_VIEWED_USER === `${nick}_stats`) return;
 
     _isSwitching = true;
+    if (typeof window.stopSheetAutoSync === 'function') window.stopSheetAutoSync();
     const selectedDocName = `${nick}_stats`;
     state.CURRENT_VIEWED_USER = selectedDocName;
     _renderTeamSidebarDOM(document.getElementById('team-list-container'));

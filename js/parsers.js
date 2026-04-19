@@ -29,8 +29,51 @@ function ecnFeeColumnIndex(headers) {
     return undefined;
 }
 
-/** Після імпорту лише списку угод — узгоджуємо fondexx і day.pnl з тими ж правилами, що й після Fondexx summary. */
-function syncFondexxFromTradesForDay(dateStr) {
+/**
+ * Консоль: які угоди знайшов парсер (перед збереженням) + підсумок після запису.
+ * @param {string} label — джерело (для префікса в консолі)
+ * @param {Record<string, unknown[]>} tradesByDate — YYYY-MM-DD → масив об'єктів угоди
+ * @returns {number} загальна кількість угод
+ */
+export function logTradesImportConsole(label, tradesByDate) {
+    const dates = Object.keys(tradesByDate)
+        .filter((d) => Array.isArray(tradesByDate[d]) && tradesByDate[d].length > 0)
+        .sort();
+    const total = dates.reduce((n, d) => n + tradesByDate[d].length, 0);
+    if (total === 0) {
+        console.info(
+            `[Імпорт ${label}] Окремих рядків угод не знайдено (перевірте дати YYYY-MM-DD, рядок «Opened» і наявність Opened/Closed).`,
+        );
+        return 0;
+    }
+    console.group(`[Імпорт ${label}] Знайдено ${total} угод у ${dates.length} днях`);
+    for (const dateStr of dates) {
+        const trades = tradesByDate[dateStr];
+        console.log(`${dateStr} — ${trades.length} шт.`);
+        trades.forEach((t, idx) => {
+            const sym = t.symbol != null ? String(t.symbol) : '—';
+            const typ = t.type ? String(t.type) : '';
+            const suffix = typ ? ` [${typ}]` : '';
+            console.log(
+                `  ${idx + 1}. ${sym}${suffix}  net=${t.net ?? '—'}  gross=${t.gross ?? '—'}  qty=${t.qty ?? '—'}  opened=${t.opened ?? ''}  closed=${t.closed ?? ''}`,
+            );
+        });
+    }
+    console.groupEnd();
+    return total;
+}
+
+function isGoogleSheetTrade(t) {
+    return !!(t && typeof t.sheet === 'object' && t.sheet.source === 'google');
+}
+
+/**
+ * Після імпорту угод — узгоджуємо fondexx і day.pnl.
+ * Прибуток/комісії з агрегату fondexx: пріоритет угод з імпорту (Fondexx тощо), без подвійного сумування
+ * з рядків Google Sheet; якщо «імпортних» угод немає — тоді беремо лише дані з таблиці (sheet).
+ * Тікери для списку дня збираємо з усіх угод.
+ */
+export function syncFondexxFromTradesForDay(dateStr) {
     if (!state.appData.journal[dateStr]) return;
     const entry = state.appData.journal[dateStr];
     const trades = Array.isArray(entry.trades) ? entry.trades : [];
@@ -40,16 +83,23 @@ function syncFondexxFromTradesForDay(dateStr) {
     if (trades.length === 0) {
         entry.fondexx = { gross: 0, net: 0, comm: 0, locates, tickers: [] };
     } else {
+        const importTrades = trades.filter((t) => !isGoogleSheetTrade(t));
+        const basisForPnl = importTrades.length > 0 ? importTrades : trades;
+
         let gross = 0;
         let net = 0;
         let comm = 0;
-        const tickers = new Set();
-        for (const t of trades) {
+        for (const t of basisForPnl) {
             gross += parseFloat(t.gross) || 0;
             net += parseFloat(t.net) || 0;
             comm += parseFloat(t.comm) || 0;
+        }
+
+        const tickers = new Set();
+        for (const t of trades) {
             if (t.symbol) tickers.add(String(t.symbol).trim());
         }
+
         entry.fondexx = {
             gross: parseFloat(gross.toFixed(2)),
             net: parseFloat(net.toFixed(2)),
@@ -185,6 +235,12 @@ export function importFondexxReport(event) {
                 }
             }
 
+            const fondexxTradesByDay = {};
+            for (const d in dailyData) {
+                if (dailyData[d].trades && dailyData[d].trades.length > 0) fondexxTradesByDay[d] = dailyData[d].trades;
+            }
+            const fondexxTradeCount = logTradesImportConsole('Fondexx звіт', fondexxTradesByDay);
+
             let daysUpdated = 0;
             for(let d in dailyData) {
                 if (!state.appData.journal[d]) state.appData.journal[d] = getDefaultDayEntry();
@@ -195,6 +251,15 @@ export function importFondexxReport(event) {
                 daysUpdated++;
             }
             saveJournalData().then(() => {
+                if (fondexxTradeCount > 0) {
+                    console.log(
+                        `[Імпорт Fondexx звіт] Імпортовано у журнал: ${fondexxTradeCount} угод, оновлено календарних днів: ${daysUpdated}.`,
+                    );
+                } else {
+                    console.log(
+                        `[Імпорт Fondexx звіт] Записано агрегати по днях (summary або без рядків угод), днів: ${daysUpdated}.`,
+                    );
+                }
                 showToast(`Звіт Fondexx імпортовано! Оновлено днів: ${daysUpdated}`); 
                 if(window.updateAutoFlags) window.updateAutoFlags(); 
                 if(window.renderView) window.renderView();
@@ -263,6 +328,12 @@ export function importFondexxTrades(event) {
                 });
             }
 
+            const tradesOnlyByDay = {};
+            for (const d in dailyTrades) {
+                if (dailyTrades[d].length > 0) tradesOnlyByDay[d] = dailyTrades[d];
+            }
+            const fondexxListCount = logTradesImportConsole('Fondexx Trades (лише угоди)', tradesOnlyByDay);
+
             let daysUpdated = 0;
             for (let d in dailyTrades) {
                 if (!state.appData.journal[d]) state.appData.journal[d] = getDefaultDayEntry();
@@ -272,6 +343,11 @@ export function importFondexxTrades(event) {
                 daysUpdated++;
             }
             saveJournalData().then(() => {
+                if (fondexxListCount > 0) {
+                    console.log(
+                        `[Імпорт Fondexx Trades] Імпортовано у журнал: ${fondexxListCount} угод, оновлено днів: ${daysUpdated}.`,
+                    );
+                }
                 showToast(`Trades імпортовано! Днів: ${daysUpdated}`);
                 if (window.updateAutoFlags) window.updateAutoFlags();
                 if (window.renderView) window.renderView();

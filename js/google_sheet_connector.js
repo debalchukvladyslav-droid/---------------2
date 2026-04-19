@@ -215,15 +215,7 @@ export async function openPicker() {
             showToast('Picker API не завантажився. Оновіть сторінку.');
             return;
         }
-        // Діагностика: після перевірки приберіть або закоментуйте (ключ видно в консолі).
         const API_KEY = GOOGLE_SHEETS_API_KEY;
-        console.log('🔴 УВАГА! Зараз для Picker використовується ключ:', API_KEY);
-        console.log(
-            '[Picker debug] typeof key:',
-            typeof API_KEY,
-            'length:',
-            API_KEY ? String(API_KEY).length : 0,
-        );
 
         const view = new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS);
         const picker = new google.picker.PickerBuilder()
@@ -274,7 +266,7 @@ export async function fetchSpreadsheetData(fileId) {
     try {
         const response = await gapi.client.sheets.spreadsheets.values.get({
             spreadsheetId: fileId,
-            range: 'A1:Z1',
+            range: 'A1:ZZ1',
         });
         const range = response.result;
         const row = range.values && range.values.length > 0 ? range.values[0] : [];
@@ -289,6 +281,25 @@ export async function fetchSpreadsheetData(fileId) {
 /** Зчитує перший рядок A1:Z1 і оновлює випадаючі списки мапінгу. */
 export async function loadSheetHeaders(fileId) {
     return fetchSpreadsheetData(fileId);
+}
+
+/**
+ * Довільний діапазон A1-нотації (наприклад A6:ZZ2000 для рядків угод).
+ * @param {string} spreadsheetId
+ * @param {string} range
+ * @returns {Promise<string[][]>}
+ */
+export async function fetchSpreadsheetValuesRange(spreadsheetId, range) {
+    await ensureGapiClientAndPicker();
+    const token = accessToken || sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    if (!token) throw new Error('Немає access token');
+    applyAccessTokenToGapiClient(token);
+
+    const response = await gapi.client.sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range,
+    });
+    return response.result.values || [];
 }
 
 export async function googleSheetsLogout() {
@@ -358,3 +369,4 @@ window.openPicker = openPicker;
 window.googleSheetsLogout = googleSheetsLogout;
 window.fetchSpreadsheetData = fetchSpreadsheetData;
 window.loadSheetHeaders = loadSheetHeaders;
+window.fetchSpreadsheetValuesRange = fetchSpreadsheetValuesRange;

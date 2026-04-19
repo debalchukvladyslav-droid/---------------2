@@ -391,6 +391,66 @@ body[data-theme="light"] .btn-google-signin {
     cursor: not-allowed;
 }
 
+.sheet-smart-section-title {
+    margin: 20px 0 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+}
+
+.sheet-auto-sync {
+    margin-top: 20px;
+    padding: 16px 18px;
+    border-radius: var(--radius-md, 10px);
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg-main) 88%, var(--accent) 4%);
+}
+
+@supports not (background: color-mix(in srgb, red 10%, transparent)) {
+    .sheet-auto-sync {
+        background: var(--bg-main);
+    }
+}
+
+.sheet-auto-sync__title {
+    margin: 0 0 6px;
+    font-size: 0.95rem;
+    font-weight: 650;
+    color: var(--text-main);
+}
+
+.sheet-auto-sync__hint {
+    margin: 0 0 12px;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: var(--text-muted);
+}
+
+.sheet-auto-sync__row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+    font-size: 0.88rem;
+    color: var(--text-main);
+}
+
+.sheet-auto-sync__row:last-child {
+    margin-bottom: 0;
+}
+
+.sheet-auto-sync__row select {
+    min-width: 72px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-panel);
+    color: var(--text-main);
+}
+
 @media (max-width: 560px) {
     .sheet-smart-row {
         flex-direction: column;
