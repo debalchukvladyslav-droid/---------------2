@@ -231,7 +231,7 @@ export async function openPicker() {
             .addView(new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS))
             .setOAuthToken(accessToken)
             .setDeveloperKey(pickerDevKey)
-            .setAppId(GOOGLE_CLOUD_PROJECT_NUMBER)
+            .setAppId(860755721651)
             .setOrigin(window.location.origin)
             .setCallback(pickerCallback)
             .build();
