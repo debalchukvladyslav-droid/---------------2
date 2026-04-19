@@ -217,10 +217,20 @@ export async function openPicker() {
             showToast('Picker API не завантажився. Оновіть сторінку.');
             return;
         }
+        // Діагностика: після перевірки приберіть або закоментуйте (ключ видно в консолі).
+        const pickerDevKey = GOOGLE_SHEETS_API_KEY;
+        console.log('🔴 УВАГА! Зараз для Picker використовується ключ:', pickerDevKey);
+        console.log(
+            '[Picker debug] typeof key:',
+            typeof pickerDevKey,
+            'length:',
+            pickerDevKey ? String(pickerDevKey).length : 0,
+        );
+
         const picker = new google.picker.PickerBuilder()
             .addView(new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS))
             .setOAuthToken(accessToken)
-            .setDeveloperKey(GOOGLE_SHEETS_API_KEY)
+            .setDeveloperKey(pickerDevKey)
             .setAppId(GOOGLE_CLOUD_PROJECT_NUMBER)
             .setOrigin(window.location.origin)
             .setCallback(pickerCallback)
