@@ -12,20 +12,40 @@ const SESSION_SPREADSHEET_TITLE = 'sheet_spreadsheet_title';
 
 const SMART_KEYS = ['date', 'tradeType', 'profit', 'pv', 'exceptions'];
 
-/** Статичні приклади + динамічні заголовки з першого рядка таблиці. */
+/** Статичні приклади (старі збереження) + динаміка з таблиці. */
 const PRESET_FALLBACK = ['Date', 'Ticker', 'Profit/Loss', 'Notes'];
 
 let _dynamicHeaders = [];
+/** Пари літера колонки ↔ текст заголовка з рядка A1:Z1 (value у select = літера). */
+let _dynamicColumnChoices = [];
 
 function el(id) {
     return document.getElementById(id);
 }
 
-/** Оновлює опції <select> у блоці мапінгу з реальних заголовків таблиці. */
+/** Індекс 0 → A, 25 → Z, 26 → AA (на випадок розширення діапазону). */
+function indexToColumnLetter(index) {
+    let n = index + 1;
+    let result = '';
+    while (n > 0) {
+        const rem = (n - 1) % 26;
+        result = String.fromCharCode(65 + rem) + result;
+        n = Math.floor((n - 1) / 26);
+    }
+    return result;
+}
+
+/**
+ * Оновлює <select> у блоці мапінгу: option.value = літера колонки (A, B…),
+ * option.text = «Заголовок (A)» — як у вашому описі renderMappingDropdowns.
+ */
 export function populateSheetMappingFromHeaders(headers) {
-    _dynamicHeaders = Array.isArray(headers)
-        ? headers.map((h) => String(h ?? '').trim()).filter((h) => h.length > 0)
-        : [];
+    const row = Array.isArray(headers) ? headers : [];
+    _dynamicColumnChoices = row.map((cell, index) => ({
+        letter: indexToColumnLetter(index),
+        header: String(cell ?? '').trim(),
+    }));
+    _dynamicHeaders = _dynamicColumnChoices.map((c) => c.header).filter((h) => h.length > 0);
 
     const mapping = el('sheet-smart-mapping');
     if (!mapping) return;
@@ -37,16 +57,39 @@ export function populateSheetMappingFromHeaders(headers) {
         opt0.value = '';
         opt0.textContent = 'Виберіть колонку...';
         sel.appendChild(opt0);
-        _dynamicHeaders.forEach((h) => {
+
+        _dynamicColumnChoices.forEach(({ letter, header }) => {
             const o = document.createElement('option');
-            o.value = h;
-            o.textContent = h;
+            o.value = letter;
+            o.textContent = header ? `${header} (${letter})` : `(${letter} порожньо)`;
             sel.appendChild(o);
         });
-        if (prev && [...sel.options].some((o) => o.value === prev)) {
-            sel.value = prev;
+
+        let nextVal = prev;
+        if (prev && ![...sel.options].some((o) => o.value === prev)) {
+            const byLetter = _dynamicColumnChoices.find((c) => c.letter === prev.toUpperCase());
+            const byHeader = _dynamicColumnChoices.find(
+                (c) => c.header === prev || (c.header && c.header.toLowerCase() === prev.toLowerCase()),
+            );
+            if (byLetter) nextVal = byLetter.letter;
+            else if (byHeader) nextVal = byHeader.letter;
+        }
+        if (nextVal && [...sel.options].some((o) => o.value === nextVal)) {
+            sel.value = nextVal;
         }
     });
+
+    const cfg = readStoredConfig();
+    if (cfg?.smartColumns && typeof cfg.smartColumns === 'object') {
+        SMART_KEYS.forEach((k) => {
+            setSmartRowValue(k, cfg.smartColumns[k] || '', false);
+        });
+    }
+}
+
+/** Аліас назви з ТЗ. */
+export function renderMappingDropdowns(headers) {
+    return populateSheetMappingFromHeaders(headers);
 }
 
 export function setGoogleAccountEmail(email) {
@@ -89,11 +132,32 @@ export function syncSheetWorkspaceVisibility() {
 function getKnownColumnValues() {
     const s = new Set(PRESET_FALLBACK);
     _dynamicHeaders.forEach((h) => s.add(h));
+    _dynamicColumnChoices.forEach((c) => {
+        s.add(c.letter);
+        if (c.header) s.add(c.header);
+    });
     return s;
 }
 
+function isColumnLetterToken(v) {
+    return typeof v === 'string' && /^[A-Z]{1,3}$/i.test(v.trim());
+}
+
 function isPresetValue(v) {
+    if (isColumnLetterToken(v)) return true;
     return getKnownColumnValues().has(v);
+}
+
+/** Підставляє літеру колонки, якщо збережено старий текст заголовка з таблиці. */
+function resolveMappingValueToSelectLetter(raw) {
+    const v = typeof raw === 'string' ? raw.trim() : '';
+    if (!v || v.includes(',')) return v;
+    if (isColumnLetterToken(v)) return v.toUpperCase();
+    if (!_dynamicColumnChoices.length) return v;
+    const hit = _dynamicColumnChoices.find(
+        (c) => c.header === v || (c.header && c.header.toLowerCase() === v.toLowerCase()),
+    );
+    return hit ? hit.letter : v;
 }
 
 export function toggleMappingMode(buttonElement) {
@@ -128,7 +192,7 @@ function setSmartRowValue(key, value, preferManual) {
     const toggle = group?.querySelector('.sheet-input-group__toggle');
     if (!group || !sel || !inp) return;
 
-    const v = typeof value === 'string' ? value.trim() : '';
+    let v = typeof value === 'string' ? value.trim() : '';
     if (!v) {
         group.setAttribute('data-mode', 'select');
         sel.value = '';
@@ -138,6 +202,10 @@ function setSmartRowValue(key, value, preferManual) {
             toggle.title = 'Вручну';
         }
         return;
+    }
+
+    if (!v.includes(',')) {
+        v = resolveMappingValueToSelectLetter(v);
     }
 
     const useManual = preferManual || !isPresetValue(v);
@@ -264,3 +332,5 @@ export async function saveSheetMapping() {
 
 window.toggleMappingMode = toggleMappingMode;
 window.saveSheetMapping = saveSheetMapping;
+window.renderMappingDropdowns = renderMappingDropdowns;
+window.populateSheetMappingFromHeaders = populateSheetMappingFromHeaders;

@@ -271,15 +271,22 @@ export async function fetchSpreadsheetData(fileId) {
     if (!token) throw new Error('Немає access token');
     applyAccessTokenToGapiClient(token);
 
-    const res = await gapi.client.sheets.spreadsheets.values.get({
-        spreadsheetId: fileId,
-        range: '1:1',
-    });
-    const row = res.result.values && res.result.values[0] ? res.result.values[0] : [];
-    populateSheetMappingFromHeaders(row);
-    return row;
+    try {
+        const response = await gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: fileId,
+            range: 'A1:Z1',
+        });
+        const range = response.result;
+        const row = range.values && range.values.length > 0 ? range.values[0] : [];
+        populateSheetMappingFromHeaders(row);
+        return row;
+    } catch (err) {
+        console.error('Помилка отримання заголовків:', err);
+        throw err;
+    }
 }
 
+/** Зчитує перший рядок A1:Z1 і оновлює випадаючі списки мапінгу. */
 export async function loadSheetHeaders(fileId) {
     return fetchSpreadsheetData(fileId);
 }
