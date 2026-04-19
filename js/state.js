@@ -77,6 +77,7 @@ export const state = {
     statsLoadRequestId: 0,
     activeStatsDropdown: null,
     activeTradeTypeFilter: null,
+    statsEquityAdvancedMode: false,
     autoFlagsCache: { records: new Set(), absoluteRecord: null }
 };
 

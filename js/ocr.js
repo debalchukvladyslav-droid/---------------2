@@ -280,22 +280,49 @@ const TICKER_GARBAGE = new Set([
     'AFTER','HOURS','MARKET','LIMIT','STOP','ORDER','FILLED','CANCEL'
 ]);
 
-function extractTickerFromText(rawText, tradedTickers = []) {
+function normalizeTicker(value) {
+    return String(value || '').toUpperCase().replace(/[^A-Z]/g, '');
+}
+
+function validTickerWord(w) {
+    return w.length >= 2 && w.length <= 5 && /^[A-Z]+$/.test(w) && !TICKER_GARBAGE.has(w);
+}
+
+function findScreenshotDate(path) {
+    for (const [dateStr, day] of Object.entries(state.appData?.journal || {})) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
+        const screens = day?.screenshots || {};
+        const all = [...(screens.good || []), ...(screens.normal || []), ...(screens.bad || []), ...(screens.error || [])];
+        if (all.includes(path)) return dateStr;
+    }
+    return state.selectedDateStr;
+}
+
+function tradeTickersForPath(path) {
+    const day = state.appData?.journal?.[findScreenshotDate(path)] || {};
+    const set = new Set();
+    (day.traded_tickers || []).forEach(t => { const n = normalizeTicker(t); if (n) set.add(n); });
+    (day.trades || []).forEach(t => { const n = normalizeTicker(t.symbol); if (n) set.add(n); });
+    return Array.from(set);
+}
+
+function extractTickerFromText(rawText, tradedTickers = [], ocrWords = []) {
     const clean = rawText.toUpperCase().replace(/[^A-Z\s]/g, ' ');
-    const words = clean.split(/\s+/).filter(w =>
-        w.length >= 2 && w.length <= 5 &&
-        /^[A-Z]+$/.test(w) &&
-        !TICKER_GARBAGE.has(w)
-    );
+    const words = clean.split(/\s+/).filter(validTickerWord);
+    const traded = tradedTickers.map(normalizeTicker).filter(Boolean);
+    const highConfidence = (ocrWords || [])
+        .map(w => ({ text: normalizeTicker(w.text), confidence: Number(w.confidence) || 0 }))
+        .filter(w => validTickerWord(w.text));
 
     // 1. Збіг з traded_tickers — найвищий пріоритет
-    for (const w of words) {
-        if (tradedTickers.includes(w)) return w;
+    for (const w of traded) {
+        if (words.includes(w) || highConfidence.some(item => item.text === w && item.confidence >= 45)) return w;
     }
 
     // 2. Найчастіше слово
     const freq = {};
     for (const w of words) freq[w] = (freq[w] || 0) + 1;
+    for (const w of highConfidence) freq[w.text] = (freq[w.text] || 0) + Math.max(1, w.confidence / 40);
     const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
     return sorted.length ? sorted[0][0] : '???';
 }
@@ -322,6 +349,36 @@ function applyContrast(canvas) {
     return canvas;
 }
 
+function buildAutoOCRZones(iw, ih) {
+    const clampZone = (x, y, w, h) => {
+        const left = Math.max(0, Math.round(x));
+        const top = Math.max(0, Math.round(y));
+        return {
+            x: left,
+            y: top,
+            w: Math.max(20, Math.min(iw - left, Math.round(w))),
+            h: Math.max(20, Math.min(ih - top, Math.round(h))),
+        };
+    };
+
+    return [
+        clampZone(0, 0, iw * 0.28, ih * 0.09),
+        clampZone(0, 0, iw * 0.42, ih * 0.14),
+        clampZone(0, 0, iw, ih * 0.16),
+        clampZone(iw * 0.18, 0, iw * 0.42, ih * 0.12),
+        clampZone(0, ih * 0.05, iw * 0.5, ih * 0.16),
+        clampZone(0, 0, iw, ih * 0.28),
+    ];
+}
+
+function makeOCRCanvas(imgObj, zone, scale = 3) {
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, zone.w * scale);
+    canvas.height = Math.max(1, zone.h * scale);
+    canvas.getContext('2d').drawImage(imgObj, zone.x, zone.y, zone.w, zone.h, 0, 0, canvas.width, canvas.height);
+    return applyContrast(canvas);
+}
+
 export async function runOCR(encodedPath, force = false) {
     if (!window.Tesseract) return;
     const safePath = decodeURIComponent(encodedPath);
@@ -339,41 +396,31 @@ export async function runOCR(encodedPath, force = false) {
         const iw = imgObj.naturalWidth;
         const ih = imgObj.naturalHeight;
 
-        // ThinkorSwim: тікер завжди у верхньому лівому кутку.
-        // Читаємо ліву четверть ширини, верхню шосту висоти.
-        const zones = [
-            { x: 0,       y: 0,       w: Math.round(iw * 0.25), h: Math.round(ih * 0.08) }, // верх ліво
-            { x: 0,       y: 0,       w: Math.round(iw * 0.35), h: Math.round(ih * 0.12) }, // ширше якщо перша зона не дала результату
-            { x: 0,       y: 0,       w: iw,                    h: Math.round(ih * 0.15) }, // весь верх як фолбек
-        ];
+        const zones = buildAutoOCRZones(iw, ih);
 
-        const dayData = state.appData.journal[state.selectedDateStr];
-        const traded = dayData?.traded_tickers || [];
+        const traded = tradeTickersForPath(safePath);
 
         let ticker = '???';
         for (const zone of zones) {
-            // Масштабуємо зону до 2x — Tesseract краще читає великий текст
-            const scale = 2;
-            const canvas = document.createElement('canvas');
-            canvas.width = zone.w * scale;
-            canvas.height = zone.h * scale;
-            canvas.getContext('2d').drawImage(imgObj, zone.x, zone.y, zone.w, zone.h, 0, 0, canvas.width, canvas.height);
-            applyContrast(canvas);
+            const canvas = makeOCRCanvas(imgObj, zone, 3);
 
-            const { data: { text } } = await Tesseract.recognize(canvas.toDataURL('image/png'), 'eng', {
-                tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ '
+            const { data } = await Tesseract.recognize(canvas.toDataURL('image/png'), 'eng', {
+                tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ ',
+                tessedit_pageseg_mode: '6',
             });
 
-            ticker = extractTickerFromText(text, traded);
+            ticker = extractTickerFromText(data.text || '', traded, data.words || []);
             if (ticker !== '???') break; // знайшли — зупиняємось
         }
 
         state.appData.tickers[safePath] = ticker;
         saveToLocal();
         updateBadgeUI(encodedPath, false);
+        return ticker;
     } catch (e) {
         console.error('Помилка OCR:', e);
         state.appData.tickers[safePath] = '???';
         updateBadgeUI(encodedPath, false);
+        return '???';
     }
 }

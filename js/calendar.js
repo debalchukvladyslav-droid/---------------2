@@ -6,6 +6,7 @@ import { isMentorViewingOtherJournal, canAccessMentorReviewQueue } from './auth.
 import { reviewReasonsForDay } from './review_signals.js';
 import { updateDashMiniEquityChart } from './dash_mini_chart.js';
 import { hideGlobalLoader, setElementLoading, showGlobalLoader } from './loading.js';
+import { findScreenshotsForTicker, openScreenshotForTrade } from './gallery.js';
 
 let _selectDateRequestId = 0;
 
@@ -178,12 +179,13 @@ export function updateDashboardWidgets(year, month) {
                         : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>';
                     const safeDate = sanitizeHTML(r.date);
                     const safeSym = sanitizeHTML(r.sym);
+                    const hasScreen = findScreenshotsForTicker(r.date, r.sym).length > 0;
                     return `<div class="recent-trade-item" role="button" tabindex="0" data-recent-date="${safeDate}" data-recent-idx="${r.idx}">
                 <div class="recent-trade-left">
                     <div class="recent-trade-dir-icon ${isPos ? 'long' : 'short'}">${arrow}</div>
                     <div>
                         <div class="recent-trade-symbol">${safeSym}</div>
-                        <div class="recent-trade-meta">${dateStr}${r.type ? ' · ' + sanitizeHTML(r.type) : ''}</div>
+                        <div class="recent-trade-meta">${dateStr}${r.type ? ' · ' + sanitizeHTML(r.type) : ''} · ${hasScreen ? 'скрін є' : 'скріна ще немає'}</div>
                     </div>
                 </div>
                 <div class="recent-trade-right">
@@ -197,8 +199,8 @@ export function updateDashboardWidgets(year, month) {
                 el.addEventListener('click', () => {
                     const ds = el.getAttribute('data-recent-date');
                     const ix = parseInt(el.getAttribute('data-recent-idx') || '0', 10);
-                    if (ds && window.selectDate) void window.selectDate(ds);
-                    if (window.openTradesAtDayIndex) window.openTradesAtDayIndex(ds, ix);
+                    const trade = state.appData?.journal?.[ds]?.trades?.[ix];
+                    void openScreenshotForTrade(ds, trade);
                 });
             });
         }
@@ -294,8 +296,9 @@ export function renderSidebarTradesList(dateStr) {
             const sign = ok && net >= 0 ? '+' : '';
             const netStr = ok ? `${sign}$${net.toFixed(2)}` : '—';
             const typ = sanitizeHTML(String(t.type || ''));
-            return `<button type="button" class="sidebar-trade-row" data-sb-trade-idx="${i}">
-                <span class="sidebar-trade-sym">${sym}${typ ? `<span class="sidebar-trade-type">${typ}</span>` : ''}</span>
+            const hasScreen = findScreenshotsForTicker(dateStr, t.symbol).length > 0;
+            return `<button type="button" class="sidebar-trade-row" data-sb-trade-idx="${i}" title="${hasScreen ? 'Відкрити скрін угоди' : 'Скріна для цього тікера ще немає'}">
+                <span class="sidebar-trade-sym">${sym}${typ ? `<span class="sidebar-trade-type">${typ}</span>` : ''}<span class="sidebar-trade-type">${hasScreen ? 'скрін' : 'немає скріна'}</span></span>
                 <span class="sidebar-trade-net ${cls}">${netStr}</span>
             </button>`;
         })
@@ -303,7 +306,7 @@ export function renderSidebarTradesList(dateStr) {
     wrap.querySelectorAll('.sidebar-trade-row').forEach((btn) => {
         btn.addEventListener('click', () => {
             const ix = parseInt(btn.getAttribute('data-sb-trade-idx') || '0', 10);
-            if (window.openTradesAtDayIndex) window.openTradesAtDayIndex(dateStr, ix);
+            void openScreenshotForTrade(dateStr, trades[ix]);
         });
     });
 }

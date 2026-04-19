@@ -159,7 +159,9 @@ export function importFondexxReport(event) {
                             qty: parseInt(row[headers['Qty']]) || 0,
                             gross: gross,
                             comm: parseFloat((comm + ecn).toFixed(2)),
-                            net: net
+                            net: net,
+                            // Real persisted screenshot binding is disabled for now.
+                            // screenshotPath: null,
                         });
                     }
                 } else {
@@ -255,7 +257,9 @@ export function importFondexxTrades(event) {
                     qty: parseInt(row[headers['Qty']]) || 0,
                     gross: parseFloat(row[headers['Gross']]) || 0,
                     comm: parseFloat((comm + ecn).toFixed(2)),
-                    net: parseFloat(row[headers['Net']]) || 0
+                    net: parseFloat(row[headers['Net']]) || 0,
+                    // Real persisted screenshot binding is disabled for now.
+                    // screenshotPath: null,
                 });
             }
 

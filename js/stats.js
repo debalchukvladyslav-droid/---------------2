@@ -418,6 +418,11 @@ export function selectTradeTypeFilter(type) {
     renderStatsTab();
 }
 
+export function toggleStatsEquityMode(enabled) {
+    state.statsEquityAdvancedMode = !!enabled;
+    renderStatsTab();
+}
+
 // Maps each logical dropdown name to its panel-id and trigger-id.
 const _DROPDOWN_IDS = {
     source:    ['stats-source-panel',    'stats-source-trigger'],
@@ -778,6 +783,11 @@ function renderMistakeChart(filteredEntries, cssRed, cssText, cssBgPanel) {
         },
         options: {
             indexAxis: 'y',
+            animation: {
+                duration: 850,
+                easing: 'easeOutQuart',
+                delay: (context) => context.type === 'data' ? Math.min(context.dataIndex * 55, 420) : 0,
+            },
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
@@ -792,6 +802,392 @@ function renderMistakeChart(filteredEntries, cssRed, cssText, cssBgPanel) {
         }
     });
 }
+
+function statsColorWithAlpha(color, alpha) {
+    const c = String(color || '').trim();
+    if (c.startsWith('#')) {
+        const hex = c.length === 4
+            ? c.slice(1).split('').map(ch => ch + ch).join('')
+            : c.slice(1, 7);
+        const n = parseInt(hex, 16);
+        if (Number.isFinite(n)) return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+    }
+    if (c.startsWith('rgb(')) return c.replace('rgb(', 'rgba(').replace(')', `, ${alpha})`);
+    if (c.startsWith('rgba(')) return c.replace(/,\s*[\d.]+\)$/, `, ${alpha})`);
+    return c || `rgba(156, 163, 175, ${alpha})`;
+}
+
+function statsCssVar(name, fallback) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+}
+
+function statsLerp(a, b, t) {
+    return Math.round(a + (b - a) * Math.max(0, Math.min(1, t)));
+}
+
+function statsColorToRgb(color, fallback = '#10b981') {
+    const c = String(color || fallback).trim();
+    if (c.startsWith('#')) {
+        const hex = c.length === 4
+            ? c.slice(1).split('').map(ch => ch + ch).join('')
+            : c.slice(1, 7);
+        const n = parseInt(hex, 16);
+        if (Number.isFinite(n)) return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    }
+    const m = c.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+    if (m) return [Number(m[1]), Number(m[2]), Number(m[3])];
+    return statsColorToRgb(fallback, '#10b981');
+}
+
+function statsMixColor(a, b, t) {
+    const ca = statsColorToRgb(a);
+    const cb = statsColorToRgb(b);
+    return `rgb(${statsLerp(ca[0], cb[0], t)}, ${statsLerp(ca[1], cb[1], t)}, ${statsLerp(ca[2], cb[2], t)})`;
+}
+
+function statsInterpolateSeries(series, t) {
+    if (!series.length) return 0;
+    if (series.length === 1) return series[0] || 0;
+    const pos = Math.max(0, Math.min(1, t)) * (series.length - 1);
+    const left = Math.floor(pos);
+    const right = Math.min(series.length - 1, left + 1);
+    const local = pos - left;
+    return (series[left] || 0) + ((series[right] || 0) - (series[left] || 0)) * local;
+}
+
+function statsValueGradientColor(value, minValue, maxValue, palette = {}) {
+    const red = palette.loss || statsCssVar('--loss', '#dc2626');
+    const orange = palette.orange || '#f97316';
+    const green = palette.profit || statsCssVar('--profit', '#10b981');
+    const n = Number(value) || 0;
+    if (n <= 0) {
+        const span = Math.max(1, Math.abs(Math.min(0, minValue)));
+        return statsMixColor(red, orange, 1 - Math.min(1, Math.abs(n) / span));
+    }
+    const span = Math.max(1, Math.max(0, maxValue));
+    return statsMixColor(orange, green, Math.min(1, n / span));
+}
+
+function buildStatsValueGradient(ctx, chartArea, values, alpha = 1, palette = {}) {
+    const gradient = ctx.createLinearGradient(chartArea.left, 0, chartArea.right, 0);
+    const minValue = Math.min(...values, 0);
+    const maxValue = Math.max(...values, 0);
+    const samples = Math.max(16, Math.min(64, values.length * 5 || 16));
+    for (let i = 0; i < samples; i++) {
+        const stop = samples === 1 ? 0 : i / (samples - 1);
+        const value = statsInterpolateSeries(values, stop);
+        gradient.addColorStop(stop, statsColorWithAlpha(statsValueGradientColor(value, minValue, maxValue, palette), alpha));
+    }
+    return gradient;
+}
+
+function statsDrawdownColor(drawdown, worstDrawdown, palette = {}) {
+    const loss = palette.loss || statsCssVar('--loss', '#ef4444');
+    const orange = palette.orange || '#f97316';
+    const profit = palette.profit || statsCssVar('--profit', '#10b981');
+    const worstAbs = Math.abs(Number(worstDrawdown) || 0);
+    const ddAbs = Math.abs(Math.min(0, Number(drawdown) || 0));
+    if (!worstAbs || ddAbs <= 0) return profit;
+
+    const ratio = Math.min(1, ddAbs / worstAbs);
+    if (ratio < 0.18) return profit;
+    if (ratio < 0.6) return statsMixColor(profit, orange, (ratio - 0.18) / 0.42);
+    return statsMixColor(orange, loss, (ratio - 0.6) / 0.4);
+}
+
+function buildStatsDrawdownGradient(ctx, chartArea, rows, worstDrawdown, alpha = 1, palette = {}) {
+    const gradient = ctx.createLinearGradient(chartArea.left, 0, chartArea.right, 0);
+    if (!rows.length) {
+        gradient.addColorStop(0, statsColorWithAlpha(palette.profit || '#10b981', alpha));
+        gradient.addColorStop(1, statsColorWithAlpha(palette.profit || '#10b981', alpha));
+        return gradient;
+    }
+
+    const drawdowns = rows.map(row => row.drawdown || 0);
+    const samples = Math.max(16, Math.min(80, rows.length * 5 || 16));
+    for (let i = 0; i < samples; i++) {
+        const stop = samples === 1 ? 0 : i / (samples - 1);
+        const drawdown = statsInterpolateSeries(drawdowns, stop);
+        gradient.addColorStop(stop, statsColorWithAlpha(statsDrawdownColor(drawdown, worstDrawdown, palette), alpha));
+    }
+    return gradient;
+}
+
+function buildStatsChartTheme(cssGreen, cssRed, cssAccent, cssBgPanel, cssText) {
+    const bgPanel = statsCssVar('--bg-panel', cssBgPanel);
+    const bgMain = statsCssVar('--bg-main', '#0f172a');
+    const border = statsCssVar('--border', '#1f2937');
+    const muted = statsCssVar('--text-muted', '#9ca3af');
+    const text = statsCssVar('--text-main', cssText);
+    const bgRgb = statsColorToRgb(bgPanel, '#0f172a');
+    const luminance = (0.2126 * bgRgb[0] + 0.7152 * bgRgb[1] + 0.0722 * bgRgb[2]) / 255;
+    const isLight = luminance > 0.72 || document.body?.getAttribute('data-theme') === 'light';
+
+    return {
+        isLight,
+        bgPanel,
+        bgMain,
+        text,
+        muted,
+        grid: statsColorWithAlpha(border, isLight ? 0.72 : 0.62),
+        labelBg: statsColorWithAlpha(bgPanel, isLight ? 0.94 : 0.86),
+        labelBorder: statsColorWithAlpha(border, isLight ? 0.9 : 0.75),
+        labelShadow: isLight ? 'rgba(15, 23, 42, 0.16)' : 'rgba(0, 0, 0, 0.42)',
+        profit: cssGreen || statsCssVar('--profit', '#10b981'),
+        loss: cssRed || statsCssVar('--loss', '#ef4444'),
+        accent: cssAccent || statsCssVar('--accent', '#3b82f6'),
+        orange: '#f97316',
+    };
+}
+
+function buildStatsEquityAnalysis(entries, cumulativeValues) {
+    const rows = [];
+    let peak = 0;
+    let worstDrawdown = 0;
+    let positiveRun = 0;
+    const longHorizon = entries.length > 90;
+    const minZoneSpan = entries.length > 260 ? 8 : entries.length > 120 ? 5 : 1;
+    const mergeGap = entries.length > 260 ? 4 : entries.length > 120 ? 2 : 0;
+
+    entries.forEach((entry, index) => {
+        const equity = cumulativeValues[index] || 0;
+        const previousPeak = peak;
+        peak = Math.max(peak, equity);
+        const drawdown = equity - peak;
+        worstDrawdown = Math.min(worstDrawdown, drawdown);
+        positiveRun = entry.pnl > 0 ? positiveRun + 1 : 0;
+        rows.push({
+            dateStr: entry.dateStr,
+            pnl: entry.pnl,
+            equity,
+            peak,
+            drawdown,
+            drawdownAbs: Math.abs(drawdown),
+            isNewHigh: equity >= previousPeak && equity > 0,
+            isGoodDay: entry.pnl > 0,
+            isRecovery: drawdown < 0 && index > 0 && drawdown > (rows[index - 1]?.drawdown || 0),
+            positiveRun,
+        });
+    });
+
+    let zones = [];
+    const worstAbs = Math.abs(worstDrawdown);
+    let current = null;
+    rows.forEach((row, index) => {
+        const ddRatio = worstAbs > 0 ? row.drawdownAbs / worstAbs : 0;
+        let type = 'neutral';
+        if (longHorizon) {
+            const lookback = rows.slice(Math.max(0, index - 9), index + 1);
+            const avgPnl = lookback.reduce((sum, item) => sum + item.pnl, 0) / Math.max(1, lookback.length);
+            const improving = index > 0 && row.equity > (rows[Math.max(0, index - 5)]?.equity || row.equity);
+            if (row.drawdown < 0 && ddRatio >= 0.55) type = 'deep-drawdown';
+            else if (row.drawdown < 0 && ddRatio >= 0.28) type = 'drawdown';
+            else if (row.isNewHigh || (avgPnl > 0 && improving)) type = 'good';
+            else if (row.isRecovery && improving) type = 'recovery';
+        } else {
+            if (row.drawdown < 0 && ddRatio >= 0.6) type = 'deep-drawdown';
+            else if (row.drawdown < 0 && ddRatio >= 0.25) type = 'drawdown';
+            else if (row.isNewHigh || row.positiveRun >= 2) type = 'good';
+            else if (row.isRecovery) type = 'recovery';
+        }
+
+        if (type === 'neutral') {
+            if (current) { zones.push(current); current = null; }
+            return;
+        }
+        if (!current || current.type !== type) {
+            if (current) zones.push(current);
+            current = { type, start: index, end: index };
+        } else {
+            current.end = index;
+        }
+    });
+    if (current) zones.push(current);
+    if (longHorizon) zones = normalizeStatsZones(zones, minZoneSpan, mergeGap);
+    return { rows, zones, worstDrawdown, longHorizon };
+}
+
+function normalizeStatsZones(zones, minSpan, mergeGap) {
+    const merged = [];
+    zones.forEach((zone) => {
+        const last = merged[merged.length - 1];
+        if (last && last.type === zone.type && zone.start - last.end <= mergeGap + 1) {
+            last.end = zone.end;
+        } else {
+            merged.push({ ...zone });
+        }
+    });
+
+    return merged.filter((zone) => {
+        if (zone.type === 'deep-drawdown') return zone.end - zone.start + 1 >= Math.max(2, Math.floor(minSpan / 2));
+        return zone.end - zone.start + 1 >= minSpan;
+    });
+}
+
+function getStatsZoneColor(type, theme = {}) {
+    if (type === 'deep-drawdown') return statsColorWithAlpha(theme.loss || '#ef4444', theme.isLight ? 0.16 : 0.18);
+    if (type === 'drawdown') return statsColorWithAlpha(theme.orange || '#f97316', theme.isLight ? 0.12 : 0.14);
+    if (type === 'recovery') return statsColorWithAlpha('#14b8a6', theme.isLight ? 0.1 : 0.12);
+    if (type === 'good') return statsColorWithAlpha(theme.profit || '#10b981', theme.isLight ? 0.11 : 0.14);
+    return 'transparent';
+}
+
+function statsZoneBounds(points, area, start, end) {
+    const p0 = points[start];
+    const p1 = points[end];
+    if (!p0 || !p1) return null;
+    const prev = points[start - 1];
+    const next = points[end + 1];
+    const left = prev ? (prev.x + p0.x) / 2 : area.left;
+    const right = next ? (next.x + p1.x) / 2 : area.right;
+    return { left: Math.max(area.left, left), right: Math.min(area.right, right) };
+}
+
+const statsEquityZonesPlugin = {
+    id: 'statsEquityZones',
+    beforeDatasetsDraw(chart) {
+        const zones = chart.canvas?.$statsEquityZones || [];
+        if (!zones.length) return;
+        const mainIndex = chart.data.datasets.findIndex(ds => ds.role === 'stats-equity-main');
+        const meta = chart.getDatasetMeta(mainIndex);
+        const points = meta?.data || [];
+        const area = chart.chartArea;
+        if (!points.length || !area) return;
+
+        const { ctx } = chart;
+        const theme = chart.canvas?.$statsChartTheme || {};
+        ctx.save();
+        zones.forEach((zone) => {
+            const bounds = statsZoneBounds(points, area, zone.start, zone.end);
+            if (!bounds || bounds.right <= bounds.left) return;
+            ctx.fillStyle = getStatsZoneColor(zone.type, theme);
+            ctx.fillRect(bounds.left, area.top, bounds.right - bounds.left, area.bottom - area.top);
+        });
+        ctx.restore();
+    },
+};
+
+const statsZeroLinePlugin = {
+    id: 'statsZeroLine',
+    beforeDatasetsDraw(chart) {
+        const yScale = chart.scales?.y;
+        const area = chart.chartArea;
+        if (!yScale || !area || yScale.min > 0 || yScale.max < 0) return;
+        const y = yScale.getPixelForValue(0);
+        const { ctx } = chart;
+        const theme = chart.canvas?.$statsChartTheme || {};
+        const profit = theme.profit || '#10b981';
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(area.left, y);
+        ctx.lineTo(area.right, y);
+        ctx.lineWidth = 1.6;
+        ctx.strokeStyle = statsColorWithAlpha(profit, 0.92);
+        ctx.shadowColor = statsColorWithAlpha(profit, theme.isLight ? 0.18 : 0.35);
+        ctx.shadowBlur = 8;
+        ctx.stroke();
+        ctx.restore();
+    },
+};
+
+const statsKeyLabelsPlugin = {
+    id: 'statsKeyLabels',
+    afterDatasetsDraw(chart) {
+        const rows = chart.canvas?.$statsEquityRows || [];
+        if (!rows.length) return;
+        const mainIndex = chart.data.datasets.findIndex(ds => ds.role === 'stats-equity-main');
+        const meta = chart.getDatasetMeta(mainIndex);
+        const points = meta?.data || [];
+        if (!points.length) return;
+
+        const values = rows.map(row => row.equity);
+        const peakValue = Math.max(...values);
+        const peakIndex = values.lastIndexOf(peakValue);
+        const lastIndex = rows.length - 1;
+        const labels = [
+            { index: peakIndex, text: fmtMoney(peakValue), color: chart.canvas?.$statsChartTheme?.profit || '#10b981', dy: -18 },
+            { index: lastIndex, text: fmtMoney(rows[lastIndex]?.equity || 0), color: chart.canvas?.$statsChartTheme?.orange || '#f97316', dy: -18 },
+        ].filter((label, index, all) => all.findIndex(item => item.index === label.index) === index);
+
+        const { ctx, chartArea } = chart;
+        const theme = chart.canvas?.$statsChartTheme || {};
+        ctx.save();
+        ctx.font = "700 10px 'DM Mono', monospace";
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        labels.forEach(({ index, text, color, dy }) => {
+            const point = points[index];
+            if (!point) return;
+            const width = ctx.measureText(text).width + 12;
+            const x = Math.max(chartArea.left + width / 2, Math.min(chartArea.right - width / 2, point.x));
+            const y = Math.max(chartArea.top + 10, Math.min(chartArea.bottom - 10, point.y + dy));
+            ctx.fillStyle = theme.labelBg || statsColorWithAlpha('#0b0f14', 0.8);
+            ctx.strokeStyle = theme.labelBorder || statsColorWithAlpha(color, 0.35);
+            ctx.lineWidth = 1;
+            ctx.shadowColor = theme.labelShadow || 'rgba(0,0,0,0.35)';
+            ctx.shadowBlur = 10;
+            if (ctx.roundRect) {
+                ctx.beginPath();
+                ctx.roundRect(x - width / 2, y - 9, width, 18, 6);
+                ctx.fill();
+                ctx.stroke();
+            } else {
+                ctx.fillRect(x - width / 2, y - 9, width, 18);
+                ctx.strokeRect(x - width / 2, y - 9, width, 18);
+            }
+            ctx.fillStyle = color;
+            ctx.shadowColor = statsColorWithAlpha(color, theme.isLight ? 0.24 : 0.45);
+            ctx.shadowBlur = 8;
+            ctx.fillText(text, x, y);
+            ctx.shadowBlur = 0;
+        });
+        ctx.restore();
+    },
+};
+
+const statsFinalPointPlugin = {
+    id: 'statsFinalPoint',
+    afterDatasetsDraw(chart) {
+        const rows = chart.canvas?.$statsEquityRows || [];
+        if (!rows.length) return;
+        const mainIndex = chart.data.datasets.findIndex(ds => ds.role === 'stats-equity-main');
+        const meta = chart.getDatasetMeta(mainIndex);
+        const point = meta?.data?.[rows.length - 1];
+        if (!point) return;
+
+        const { ctx } = chart;
+        const theme = chart.canvas?.$statsChartTheme || {};
+        const orange = theme.orange || '#f97316';
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 8, 0, Math.PI * 2);
+        ctx.fillStyle = orange;
+        ctx.shadowColor = statsColorWithAlpha(orange, theme.isLight ? 0.45 : 0.9);
+        ctx.shadowBlur = 22;
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 3.6, 0, Math.PI * 2);
+        ctx.fillStyle = statsColorWithAlpha('#ffffff', 0.88);
+        ctx.shadowColor = statsColorWithAlpha(orange, 0.95);
+        ctx.shadowBlur = 10;
+        ctx.fill();
+        ctx.restore();
+    },
+};
+
+const statsBarGlowPlugin = {
+    id: 'statsBarGlow',
+    beforeDatasetsDraw(chart) {
+        const { ctx } = chart;
+        ctx.save();
+        ctx.shadowColor = statsColorWithAlpha(chart.canvas?.$statsGlowColor || '#10b981', 0.22);
+        ctx.shadowBlur = 12;
+    },
+    afterDatasetsDraw(chart) {
+        chart.ctx.restore();
+    },
+};
 
 export function buildStatsTree() {
     // Для current: дерево будується з _availableMonthKeys (список ID документів без завантаження даних)
@@ -985,26 +1381,93 @@ export function renderStatsTab() {
     let pfEl = document.getElementById('stat-pf');
     if (profitFactor !== '∞' && parseFloat(profitFactor) > 1.5) pfEl.style.color = cssGreen; else if (profitFactor !== '∞' && parseFloat(profitFactor) < 1) pfEl.style.color = cssRed; else pfEl.style.color = cssGold;
     
+    const advancedEquityMode = !!state.statsEquityAdvancedMode;
+    const advancedToggle = document.getElementById('stats-equity-advanced-toggle');
+    if (advancedToggle) advancedToggle.checked = advancedEquityMode;
+
+    const statsChartTheme = buildStatsChartTheme(cssGreen, cssRed, cssAccent, cssBgPanel, cssText);
+    const equityAnalysis = buildStatsEquityAnalysis(filteredEntries, periodCumData);
+    const longHorizon = !!equityAnalysis.longHorizon;
+    const worstDrawdownAbs = Math.abs(equityAnalysis.worstDrawdown);
+    const peakEquity = Math.max(...equityAnalysis.rows.map(row => row.equity), 0);
+    const advancedPointColors = equityAnalysis.rows.map((row, index) => {
+        if (index === equityAnalysis.rows.length - 1) return statsChartTheme.orange;
+        if (row.equity === peakEquity && peakEquity > 0) return statsChartTheme.profit;
+        if (longHorizon) return statsDrawdownColor(row.drawdown, equityAnalysis.worstDrawdown, statsChartTheme);
+        if (row.pnl > 0 && (row.isNewHigh || row.positiveRun >= 2)) return statsChartTheme.profit;
+        if (row.pnl > 0) return '#14b8a6';
+        if (row.drawdown < 0) return row.drawdownAbs >= worstDrawdownAbs * 0.6 ? statsChartTheme.loss : statsChartTheme.orange;
+        return statsDrawdownColor(row.drawdown, equityAnalysis.worstDrawdown, statsChartTheme);
+    });
+    const advancedPointRadius = equityAnalysis.rows.map((row, index) => {
+        if (index === equityAnalysis.rows.length - 1) return 5;
+        if (row.equity === peakEquity && peakEquity > 0) return 4;
+        if (longHorizon) return 0;
+        if (row.isNewHigh) return 4;
+        if (row.pnl > 0) return 3;
+        if (row.drawdown < 0 && row.drawdownAbs >= worstDrawdownAbs * 0.6) return 3;
+        return periodCumData.length > 70 ? 0 : 2;
+    });
+
     const ctxPeriod = document.getElementById('pnlChart').getContext('2d');
+    ctxPeriod.canvas.$statsEquityZones = advancedEquityMode ? equityAnalysis.zones : [];
+    ctxPeriod.canvas.$statsEquityRows = advancedEquityMode ? equityAnalysis.rows : [];
+    ctxPeriod.canvas.$statsChartTheme = statsChartTheme;
     if (state.pnlChartInstance) state.pnlChartInstance.destroy();
     state.pnlChartInstance = new Chart(ctxPeriod, {
         type: 'line',
         data: {
             labels: periodLabels,
-            datasets: [{
+            datasets: [
+            ...(advancedEquityMode ? [{
+                role: 'stats-equity-glow',
                 data: periodCumData,
-                borderColor: cssAccent,
-                backgroundColor: cssAccent + '33',
-                borderWidth: 2,
-                pointBackgroundColor: cssBgPanel,
-                pointBorderColor: cssAccent,
-                pointHoverBackgroundColor: cssAccent,
-                pointRadius: periodCumData.length > 60 ? 0 : 3,
-                pointHoverRadius: 5,
+                borderColor: (context) => {
+                    const area = context.chart.chartArea;
+                    if (!area) return statsColorWithAlpha(statsChartTheme.profit, 0.18);
+                    return buildStatsDrawdownGradient(context.chart.ctx, area, equityAnalysis.rows, equityAnalysis.worstDrawdown, statsChartTheme.isLight ? 0.16 : 0.22, statsChartTheme);
+                },
+                borderWidth: statsChartTheme.isLight ? 7 : 9,
+                pointRadius: 0,
+                pointHoverRadius: 0,
+                fill: false,
+                tension: 0.4,
+                borderCapStyle: 'round',
+                borderJoinStyle: 'round',
+                order: 2,
+            }] : []),
+            {
+                role: 'stats-equity-main',
+                data: periodCumData,
+                borderColor: advancedEquityMode
+                    ? ((context) => {
+                        const area = context.chart.chartArea;
+                        if (!area) return cssAccent;
+                        return buildStatsDrawdownGradient(context.chart.ctx, area, equityAnalysis.rows, equityAnalysis.worstDrawdown, 1, statsChartTheme);
+                    })
+                    : cssAccent,
+                backgroundColor: advancedEquityMode
+                    ? ((context) => {
+                        const area = context.chart.chartArea;
+                        if (!area) return statsColorWithAlpha(cssAccent, 0.16);
+                        return buildStatsDrawdownGradient(context.chart.ctx, area, equityAnalysis.rows, equityAnalysis.worstDrawdown, statsChartTheme.isLight ? 0.1 : 0.15, statsChartTheme);
+                    })
+                    : cssAccent + '33',
+                borderWidth: advancedEquityMode ? 4 : 2,
+                pointBackgroundColor: advancedEquityMode ? advancedPointColors : cssBgPanel,
+                pointBorderColor: advancedEquityMode ? advancedPointColors : cssAccent,
+                pointHoverBackgroundColor: advancedEquityMode ? advancedPointColors : cssAccent,
+                pointRadius: advancedEquityMode ? advancedPointRadius : (periodCumData.length > 60 ? 0 : 3),
+                pointHoverRadius: advancedEquityMode ? 7 : 5,
+                pointBorderWidth: advancedEquityMode ? 2 : 1,
                 fill: true,
-                tension: 0.4
+                tension: 0.4,
+                borderCapStyle: 'round',
+                borderJoinStyle: 'round',
+                order: 1,
             }]
         },
+        plugins: advancedEquityMode ? [statsEquityZonesPlugin, statsZeroLinePlugin, statsFinalPointPlugin, statsKeyLabelsPlugin] : [],
         options: {
             animation: {
                 duration: 800,
@@ -1018,34 +1481,136 @@ export function renderStatsTab() {
                 legend: { display: false },
                 tooltip: {
                     backgroundColor: cssBgPanel,
-                    borderColor: cssAccent + '66',
+                    borderColor: statsColorWithAlpha(statsChartTheme.accent, statsChartTheme.isLight ? 0.35 : 0.45),
                     borderWidth: 1,
-                    titleColor: cssText,
-                    bodyColor: cssAccent,
+                    titleColor: statsChartTheme.text,
+                    bodyColor: statsChartTheme.accent,
                     padding: 10,
-                    callbacks: { label: ctx => ' ' + fmtMoney(ctx.parsed.y) }
+                    filter: item => item.dataset.role === 'stats-equity-main',
+                    callbacks: {
+                        label: ctx => ' ' + fmtMoney(ctx.parsed.y),
+                        afterLabel: (ctx) => {
+                            if (!advancedEquityMode) return '';
+                            const row = equityAnalysis.rows[ctx.dataIndex];
+                            if (!row) return '';
+                            const stateLabel = row.isNewHigh
+                                ? 'Новий пік'
+                                : row.isRecovery
+                                    ? 'Відновлення'
+                                    : row.drawdown < 0
+                                        ? 'Глобальний відкат'
+                                        : 'Нейтрально';
+                            return [
+                                `День: ${fmtMoney(row.pnl)}`,
+                                `Відкат: ${fmtMoneyAbs(row.drawdown)}`,
+                                stateLabel,
+                            ];
+                        }
+                    }
                 }
             },
             scales: {
                 y: {
-                    grid: { color: 'rgba(100,116,139,0.15)' },
-                    ticks: { color: cssText, callback: v => fmtMoneyAbs(v) }
+                    grid: {
+                        color: advancedEquityMode
+                            ? ((context) => Number(context.tick.value) === 0 ? statsColorWithAlpha(statsChartTheme.profit, 0.75) : statsChartTheme.grid)
+                            : 'rgba(100,116,139,0.15)',
+                        lineWidth: advancedEquityMode
+                            ? ((context) => Number(context.tick.value) === 0 ? 1.6 : 1)
+                            : 1,
+                    },
+                    ticks: { color: advancedEquityMode ? statsChartTheme.muted : cssText, callback: v => fmtMoneyAbs(v) }
                 },
                 x: {
                     grid: { display: false },
-                    ticks: { color: cssText, maxTicksLimit: 12 }
+                    ticks: { color: advancedEquityMode ? statsChartTheme.muted : cssText, maxTicksLimit: longHorizon ? 8 : 12 }
                 }
             }
         }
     });
 
     const ctxDays = document.getElementById('daysChart').getContext('2d');
+    ctxDays.canvas.$statsGlowColor = cssGreen;
     if (state.daysChartInstance) state.daysChartInstance.destroy();
-    state.daysChartInstance = new Chart(ctxDays, { type: 'bar', data: { labels: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт'], datasets: [{ data: dayTotals.map(v => parseFloat(v.toFixed(2))), backgroundColor: dayTotals.map(v => v >= 0 ? cssGreen : cssRed), borderColor: dayTotals.map(v => v >= 0 ? cssGreen : cssRed), borderWidth: 2, borderRadius: 4 }] }, options: { animation: false, responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + fmtMoney(ctx.parsed.y) } } }, scales: { y: { grid: { color: 'rgba(100, 116, 139, 0.2)' }, ticks: { color: cssText, callback: v => fmtMoneyAbs(v) } }, x: { grid: { display: false }, ticks: { color: cssText } } } } });
+    state.daysChartInstance = new Chart(ctxDays, {
+        type: 'bar',
+        data: {
+            labels: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт'],
+            datasets: [{
+                data: dayTotals.map(v => parseFloat(v.toFixed(2))),
+                backgroundColor: dayTotals.map(v => v >= 0 ? statsColorWithAlpha(cssGreen, 0.82) : statsColorWithAlpha(cssRed, 0.82)),
+                borderColor: dayTotals.map(v => v >= 0 ? cssGreen : cssRed),
+                borderWidth: 2,
+                borderRadius: 5,
+                borderSkipped: false,
+            }]
+        },
+        plugins: [statsBarGlowPlugin],
+        options: {
+            animation: {
+                duration: 850,
+                easing: 'easeOutQuart',
+                delay: (context) => context.type === 'data' ? context.dataIndex * 80 : 0,
+            },
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: ctx => ' ' + fmtMoney(ctx.parsed.y) } }
+            },
+            scales: {
+                y: {
+                    grid: { color: statsChartTheme.grid },
+                    ticks: { color: statsChartTheme.muted, callback: v => fmtMoneyAbs(v) }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: { color: statsChartTheme.muted }
+                }
+            }
+        }
+    });
     
     const ctxPie = document.getElementById('winLossChart').getContext('2d');
+    ctxPie.canvas.$statsGlowColor = cssGreen;
     if (state.winLossChartInstance) state.winLossChartInstance.destroy();
-    state.winLossChartInstance = new Chart(ctxPie, { type: 'doughnut', data: { labels: ['Плюс', 'Мінус', 'Нуль'], datasets: [{ data: [winDays, lossDays, beDays], backgroundColor: [cssGreen, cssRed, '#94a3b8'], borderColor: [cssBgPanel, cssBgPanel, cssBgPanel], borderWidth: 2 }] }, options: { animation: false, responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: cssText, boxWidth: 12, boxHeight: 12, padding: 10, font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed} дн.` } } } } });
+    state.winLossChartInstance = new Chart(ctxPie, {
+        type: 'doughnut',
+        data: {
+            labels: ['Плюс', 'Мінус', 'Нуль'],
+            datasets: [{
+                data: [winDays, lossDays, beDays],
+                backgroundColor: [cssGreen, cssRed, '#94a3b8'].map(c => statsColorWithAlpha(c, 0.86)),
+                borderColor: [cssBgPanel, cssBgPanel, cssBgPanel],
+                borderWidth: 2,
+                hoverOffset: 8,
+            }]
+        },
+        plugins: [statsBarGlowPlugin],
+        options: {
+            animation: {
+                animateRotate: true,
+                animateScale: true,
+                duration: 900,
+                easing: 'easeOutQuart',
+            },
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        color: statsChartTheme.muted,
+                        boxWidth: 12,
+                        boxHeight: 12,
+                        padding: 10,
+                        font: { size: 11 }
+                    }
+                },
+                tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed} дн.` } }
+            }
+        }
+    });
 
     renderMistakeChart(filteredEntries, cssRed, cssText, cssBgPanel);
 }

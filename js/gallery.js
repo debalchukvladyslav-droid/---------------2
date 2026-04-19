@@ -74,6 +74,68 @@ export async function getStorageUrl(pathOrUrl) {
 }
 
 // Гарантує, що в об'єкті дня є правильна структура
+function normalizeTicker(value) {
+    return String(value || '').toUpperCase().replace(/[^A-Z]/g, '');
+}
+
+function screenshotsForDate(dateStr) {
+    const screens = state.appData?.journal?.[dateStr]?.screenshots || {};
+    return SCREEN_CATS.flatMap(cat => (screens[cat.id] || []).map(path => ({ path, category: cat.id })));
+}
+
+function unassignedScreenshots() {
+    return (state.appData?.unassignedImages || []).map(path => ({ path, category: 'unassigned' }));
+}
+
+export function findScreenshotsForTicker(dateStr, symbol) {
+    const wanted = normalizeTicker(symbol);
+    if (!dateStr || !wanted) return [];
+
+    return [...screenshotsForDate(dateStr), ...unassignedScreenshots()].filter(({ path }) => {
+        const savedTicker = normalizeTicker(state.appData?.tickers?.[path]);
+        if (savedTicker && savedTicker === wanted) return true;
+
+        const tags = state.appData?.screenTags?.[path] || [];
+        if (tags.some(tag => normalizeTicker(tag) === wanted)) return true;
+
+        const filename = normalizeTicker(path.split(/[\\/]/).pop());
+        return filename.includes(wanted);
+    });
+}
+
+export async function openScreenshotForTrade(dateStr, tradeOrSymbol) {
+    const symbol = typeof tradeOrSymbol === 'string' ? tradeOrSymbol : tradeOrSymbol?.symbol;
+    const wanted = normalizeTicker(symbol);
+    if (!dateStr || !wanted) {
+        showToast('Не вдалося визначити тікер угоди.');
+        return false;
+    }
+
+    let matches = findScreenshotsForTicker(dateStr, wanted);
+    if (!matches.length) {
+        const unknownScreens = [...screenshotsForDate(dateStr), ...unassignedScreenshots()]
+            .map(({ path }) => path)
+            .filter(path => !normalizeTicker(state.appData?.tickers?.[path]) && window.runOCR);
+
+        if (unknownScreens.length) {
+            showToast(`Шукаю скрін для ${wanted}: запускаю OCR по скрінах...`);
+            for (const path of unknownScreens) {
+                await window.runOCR(encodeURIComponent(path), true);
+            }
+            matches = findScreenshotsForTicker(dateStr, wanted);
+        }
+    }
+
+    if (!matches.length) {
+        showToast(`Скріна для ${wanted} ще немає.`);
+        return false;
+    }
+
+    const src = await getStorageUrl(matches[0].path);
+    openZoom(src);
+    return true;
+}
+
 export function ensureDayStructure(d) {
     if (!state.appData.journal[d]) {
         state.appData.journal[d] = getDefaultDayEntry();

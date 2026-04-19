@@ -5,6 +5,7 @@ import { buildTradeContext, analyzeTradeStory, renderStoryOverlay } from './trad
 import { sleep } from './ai.js';
 import { saveJournalData, markJournalDayDirty, loadTradeDays } from './storage.js';
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
+import { findScreenshotsForTicker, openScreenshotForTrade } from './gallery.js';
 
 function sanitizeHTML(str) {
     const div = document.createElement('div');
@@ -286,6 +287,16 @@ function renderTradeInfoBar(trades) {
         card.appendChild(lbl);
         bar.appendChild(card);
     });
+
+    if (trade) {
+        const hasScreen = findScreenshotsForTicker(_activeTrade?.dateStr, trade.symbol).length > 0;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.style.cssText = `padding:6px 12px;background:${hasScreen ? 'rgba(59,130,246,0.12)' : 'var(--bg-main)'};border:1px solid ${hasScreen ? 'var(--accent)' : 'var(--border)'};border-radius:8px;color:${hasScreen ? 'var(--accent)' : 'var(--text-muted)'};font-weight:700;cursor:pointer;`;
+        btn.textContent = hasScreen ? 'Відкрити скрін' : 'Скріна ще немає';
+        btn.addEventListener('click', () => void openScreenshotForTrade(_activeTrade?.dateStr, trade));
+        bar.appendChild(btn);
+    }
 }
 
 // ─── VWAP ────────────────────────────────────────────────────────────────────

@@ -313,6 +313,8 @@ export function applyTheme(forceSync = false) {
             Chart.defaults.borderColor = gridColor;
             const statsView = document.getElementById('view-stats');
             if (statsView?.classList.contains('active') && window.refreshStatsView) window.refreshStatsView();
+            const dashView = document.getElementById('view-dash');
+            if (dashView?.classList.contains('active') && window.renderView) window.renderView();
         }
     }, 50); 
 }
