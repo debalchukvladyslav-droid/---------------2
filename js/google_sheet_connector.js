@@ -1,5 +1,8 @@
 // === js/google_sheet_connector.js — Google Identity + Picker + Sheets (перший рядок для мапінгу) ===
 // Обмежте Client ID та API Key у Google Cloud Console (HTTP referrers / OAuth consent).
+//
+// COOP / вікно входу: для локальної розробки відкривайте саме http://localhost:5500 (не 127.0.0.1).
+// Якщо в консолі «липне» COOP — нове вікно Інкогніто з тим самим localhost часто скидає політики.
 
 import { showToast } from './utils.js';
 import {
@@ -20,8 +23,12 @@ export const GOOGLE_SHEETS_API_KEY = 'AIzaSyBd91SFHc7xb4FJucC4YLa8lqqzFgMcao4';
 /** Номер проєкту Google Cloud — для Picker.setAppId. */
 const GOOGLE_CLOUD_PROJECT_NUMBER = '860755721651';
 
-const SCOPES =
-    'https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/drive.readonly';
+const SCOPES = [
+    'https://www.googleapis.com/auth/spreadsheets.readonly',
+    'https://www.googleapis.com/auth/drive.readonly',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile',
+].join(' ');
 
 const TOKEN_STORAGE_KEY = 'sheet_google_access_token';
 
@@ -77,15 +84,42 @@ function applyAccessTokenToGapiClient(token) {
     gapi.client.setToken({ access_token: token });
 }
 
+/**
+ * Профіль користувача — викликати лише після отримання accessToken.
+ * Без scope userinfo.* Google відповість 401 навіть з коректним Bearer.
+ */
 async function fetchGoogleUserEmail(token) {
+    if (!token || typeof token !== 'string' || !token.trim()) {
+        console.warn('[Google] userinfo: пропущено — access token ще порожній');
+        return null;
+    }
+    const accessTok = token.trim();
+
     try {
-        const r = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-            headers: { Authorization: `Bearer ${token}` },
+        const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+            method: 'GET',
+            headers: {
+                Authorization: `Bearer ${accessTok}`,
+                Accept: 'application/json',
+            },
         });
-        if (!r.ok) return null;
-        const j = await r.json();
-        return j.email || null;
-    } catch {
+
+        if (!response.ok) {
+            if (response.status === 401) {
+                console.error('[Google] userinfo: Помилка авторизації 401 (перевірте SCOPES та момент виклику після логіну)');
+            } else {
+                console.error('[Google] userinfo: HTTP', response.status);
+            }
+            throw new Error(response.status === 401 ? 'Помилка авторизації 401' : `HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.email) {
+            console.log('[Google] Дані користувача (email):', data.email);
+        }
+        return data.email || null;
+    } catch (error) {
+        console.error('[Google] Помилка профілю:', error);
         return null;
     }
 }
