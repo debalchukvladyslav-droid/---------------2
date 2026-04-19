@@ -30,7 +30,11 @@ const SCOPES = [
     'https://www.googleapis.com/auth/userinfo.profile',
 ].join(' ');
 
+/** Збільшуйте після зміни SCOPES — старі токени з sessionStorage ігноруються (інакше userinfo дає 401). */
+const OAUTH_SCOPES_VERSION = '2';
+
 const TOKEN_STORAGE_KEY = 'sheet_google_access_token';
+const SCOPES_VERSION_KEY = 'sheet_google_scopes_v';
 
 let tokenClient = null;
 let accessToken = null;
@@ -84,13 +88,29 @@ function applyAccessTokenToGapiClient(token) {
     gapi.client.setToken({ access_token: token });
 }
 
+/** Скидає OAuth у сесії (токен виданий без актуальних scope або прострочений). */
+function invalidateStoredGoogleOAuth() {
+    sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    sessionStorage.removeItem(SCOPES_VERSION_KEY);
+    accessToken = null;
+    tokenClient = null;
+    if (typeof gapi !== 'undefined' && gapi.client) {
+        gapi.client.setToken(null);
+    }
+    sessionStorage.removeItem('sheet_google_connected');
+    clearGoogleSheetSession();
+    setGoogleAccountEmail('—');
+    syncSheetWorkspaceVisibility();
+}
+
 /**
- * Профіль користувача — викликати лише після отримання accessToken.
- * Без scope userinfo.* Google відповість 401 навіть з коректним Bearer.
+ * Профіль користувача — лише після валідного accessToken з потрібними scope.
+ * @param {{ silent401?: boolean }} opts — при silent401 (restore) не шумимо в консоль і очищаємо застарілий токен.
  */
-async function fetchGoogleUserEmail(token) {
+async function fetchGoogleUserEmail(token, opts = {}) {
+    const silent401 = !!opts.silent401;
     if (!token || typeof token !== 'string' || !token.trim()) {
-        console.warn('[Google] userinfo: пропущено — access token ще порожній');
+        if (!silent401) console.warn('[Google] userinfo: пропущено — access token ще порожній');
         return null;
     }
     const accessTok = token.trim();
@@ -106,20 +126,29 @@ async function fetchGoogleUserEmail(token) {
 
         if (!response.ok) {
             if (response.status === 401) {
-                console.error('[Google] userinfo: Помилка авторизації 401 (перевірте SCOPES та момент виклику після логіну)');
-            } else {
+                if (silent401) {
+                    console.warn(
+                        '[Google] userinfo 401 — токен без userinfo scope або прострочений. Натисніть «Увійти через Google» ще раз.',
+                    );
+                    invalidateStoredGoogleOAuth();
+                } else {
+                    console.error(
+                        '[Google] userinfo 401: перевірте SCOPES у Cloud Console та повторний вхід (consent).',
+                    );
+                }
+            } else if (!silent401) {
                 console.error('[Google] userinfo: HTTP', response.status);
             }
-            throw new Error(response.status === 401 ? 'Помилка авторизації 401' : `HTTP ${response.status}`);
+            return null;
         }
 
         const data = await response.json();
-        if (data.email) {
+        if (data.email && !silent401) {
             console.log('[Google] Дані користувача (email):', data.email);
         }
         return data.email || null;
     } catch (error) {
-        console.error('[Google] Помилка профілю:', error);
+        if (!silent401) console.error('[Google] Помилка профілю:', error);
         return null;
     }
 }
@@ -131,6 +160,7 @@ function onTokenSuccess(resp) {
     }
     accessToken = resp.access_token;
     sessionStorage.setItem(TOKEN_STORAGE_KEY, accessToken);
+    sessionStorage.setItem(SCOPES_VERSION_KEY, OAUTH_SCOPES_VERSION);
     sessionStorage.setItem('sheet_google_connected', '1');
     applyAccessTokenToGapiClient(accessToken);
     void (async () => {
@@ -167,7 +197,12 @@ export async function handleAuthClick() {
     }
 }
 
-/** Google Picker — вибір таблиці. */
+/**
+ * Google Picker — вибір таблиці.
+ * Помилка «The API developer key is invalid»: у Google Cloud → Credentials → API key
+ * обмеження «HTTP referrers» має містити http://localhost:5500/* (той самий origin, що в адресному рядку).
+ * Увімкніть також API: Google Picker API, Google Drive API, Google Sheets API.
+ */
 export async function openPicker() {
     try {
         await ensureGapiClientAndPicker();
@@ -252,6 +287,7 @@ export async function googleSheetsLogout() {
     }
     accessToken = null;
     tokenClient = null;
+    sessionStorage.removeItem(SCOPES_VERSION_KEY);
     if (typeof gapi !== 'undefined' && gapi.client) {
         gapi.client.setToken(null);
     }
@@ -264,16 +300,27 @@ export async function googleSheetsLogout() {
 export async function restoreGoogleSession() {
     const tok = sessionStorage.getItem(TOKEN_STORAGE_KEY);
     if (!tok) return;
+
+    const scopeVer = sessionStorage.getItem(SCOPES_VERSION_KEY);
+    if (scopeVer !== OAUTH_SCOPES_VERSION) {
+        console.warn(
+            '[Google] збережений токен виданий зі старими дозволами — виконайте вхід знову (потрібні userinfo + Sheets + Drive).',
+        );
+        invalidateStoredGoogleOAuth();
+        return;
+    }
+
     try {
         await ensureGapiClientAndPicker();
         accessToken = tok;
         applyAccessTokenToGapiClient(tok);
         sessionStorage.setItem('sheet_google_connected', '1');
-        const email = await fetchGoogleUserEmail(tok);
+        const email = await fetchGoogleUserEmail(tok, { silent401: true });
         setGoogleAccountEmail(email || 'Google акаунт');
+
         const sid = sessionStorage.getItem('sheet_spreadsheet_id');
         const st = sessionStorage.getItem('sheet_spreadsheet_title');
-        if (sid) {
+        if (sid && sessionStorage.getItem(TOKEN_STORAGE_KEY)) {
             const nameEl = document.getElementById('sheet-selected-file-name');
             if (nameEl) nameEl.textContent = st || sid;
             try {
@@ -285,8 +332,7 @@ export async function restoreGoogleSession() {
         syncSheetWorkspaceVisibility();
     } catch (e) {
         console.warn('[Google Sheets] restore session failed', e);
-        sessionStorage.removeItem(TOKEN_STORAGE_KEY);
-        sessionStorage.removeItem('sheet_google_connected');
+        invalidateStoredGoogleOAuth();
     }
 }
 
