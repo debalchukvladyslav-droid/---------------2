@@ -20,9 +20,6 @@ export const GOOGLE_SHEETS_CLIENT_ID =
 /** Browser API key (обмежте по referrer). */
 export const GOOGLE_SHEETS_API_KEY = 'AIzaSyBE0DPHpWquQkkW0Kds_Zpv9PYzJ1aU-b4';
 
-/** Номер проєкту Google Cloud — для Picker.setAppId. */
-const GOOGLE_CLOUD_PROJECT_NUMBER = '860755721651';
-
 const SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets.readonly',
     'https://www.googleapis.com/auth/drive.readonly',
@@ -208,6 +205,7 @@ export async function openPicker() {
         await ensureGapiClientAndPicker();
         accessToken = accessToken || sessionStorage.getItem(TOKEN_STORAGE_KEY);
         if (!accessToken) {
+            console.error('Немає accessToken! Спочатку треба залогінитись.');
             showToast('Спочатку увійдіть через Google.');
             return;
         }
@@ -218,20 +216,22 @@ export async function openPicker() {
             return;
         }
         // Діагностика: після перевірки приберіть або закоментуйте (ключ видно в консолі).
-        const pickerDevKey = GOOGLE_SHEETS_API_KEY;
-        console.log('🔴 УВАГА! Зараз для Picker використовується ключ:', pickerDevKey);
+        const API_KEY = GOOGLE_SHEETS_API_KEY;
+        console.log('🔴 УВАГА! Зараз для Picker використовується ключ:', API_KEY);
         console.log(
             '[Picker debug] typeof key:',
-            typeof pickerDevKey,
+            typeof API_KEY,
             'length:',
-            pickerDevKey ? String(pickerDevKey).length : 0,
+            API_KEY ? String(API_KEY).length : 0,
         );
 
+        const view = new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS);
         const picker = new google.picker.PickerBuilder()
-            .addView(new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS))
+            .enableFeature(google.picker.Feature.NAV_HIDDEN)
+            .setDeveloperKey(API_KEY)
+            .setAppId('860755721651')
             .setOAuthToken(accessToken)
-            .setDeveloperKey(pickerDevKey)
-            .setAppId(860755721651)
+            .addView(view)
             .setOrigin(window.location.origin)
             .setCallback(pickerCallback)
             .build();
