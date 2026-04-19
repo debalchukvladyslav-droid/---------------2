@@ -24,6 +24,8 @@ import { initSidebarAccount, refreshSidebarAccount } from './sidebar_account.js'
 import { initMentorReviewUI, refreshMentorReviewQueue, setMentorReviewNavBadges } from './mentor_review.js';
 
 import { initTradesView, populateDateSelect, populateSymbolSelect, loadTradeChart, openTradesAtDayIndex } from './trades_view2.js';
+import { initSheetTableView, saveSheetMapping } from './sheet_table.js';
+import { renderTradesDatagrid, TRADE_TYPES } from './trades_datagrid.js';
 import { initNotifications } from './notifications.js';
 import { submitReviewRequest, refreshReviewRequestButtons } from './review_requests.js';
 import { showToast } from './utils.js';
@@ -823,3 +825,8 @@ window.appendReviewTag = function (chunk) {
 
 initTradesView();
 initNotifications();
+initSheetTableView();
+window.initSheetTableView = initSheetTableView;
+window.saveSheetMapping = saveSheetMapping;
+window.renderTradesDatagrid = renderTradesDatagrid;
+window.TRADE_TYPES = TRADE_TYPES;

@@ -27,6 +27,8 @@
     <link rel="stylesheet" href="css/11_misc2.css">
     <link rel="stylesheet" href="css/12_saas.css">
     <link rel="stylesheet" href="css/13_fixes.css">
+    <link rel="stylesheet" href="css/14_sheet_table.css">
+    <link rel="stylesheet" href="css/15_trades_datagrid.css">
 
     <link rel="icon" type="image/x-icon" href="favicon.ico">
 
@@ -262,6 +264,14 @@
                 <span class="ti-icon ti-list-check"></span>
                 <span class="nav-label">Угоди</span>
             </button>
+            <button class="sidebar-nav-item" data-tab="datagrid" onclick="switchMainTab('datagrid')" title="Таблиця угод — горизонтальний перегляд">
+                <span class="ti-icon ti-table"></span>
+                <span class="nav-label">Таблиця Угод</span>
+            </button>
+            <button class="sidebar-nav-item" data-tab="table" onclick="switchMainTab('table')" title="Мапінг колонок Google Sheets">
+                <span class="ti-icon ti-columns"></span>
+                <span class="nav-label">Імпорт Sheets</span>
+            </button>
             <button class="sidebar-nav-item" data-tab="screens" onclick="switchMainTab('screens')">
                 <span class="ti-icon ti-image"></span>
                 <span class="nav-label">Скріншоти</span>
@@ -407,6 +417,12 @@
             <div class="mobile-more-grid">
                 <button class="mobile-more-item" data-tab="trades" onclick="switchMainTab('trades'); closeMobileMoreMenu()">
                     <span>Угоди</span>
+                </button>
+                <button class="mobile-more-item" data-tab="datagrid" onclick="switchMainTab('datagrid'); closeMobileMoreMenu()">
+                    <span>Таблиця Угод</span>
+                </button>
+                <button class="mobile-more-item" data-tab="table" onclick="switchMainTab('table'); closeMobileMoreMenu()">
+                    <span>Імпорт Sheets</span>
                 </button>
                 <button class="mobile-more-item" data-tab="calendar" onclick="switchMainTab('calendar'); closeMobileMoreMenu()">
                     <span>Календар</span>
@@ -696,6 +712,197 @@
                     <span>Оберіть угоду для перегляду</span>
                 </div>
                 <div id="tradingview-widget" style="width:100%; height:100%; display:none;"></div>
+            </div>
+        </div>
+
+        <div id="view-datagrid" class="view-content">
+            <div class="datagrid-view-inner">
+                <h2 class="datagrid-view-title">Таблиця угод</h2>
+                <p class="datagrid-view-sub">Статистика в одному рядку на угоду; групи за календарною датою. Джерело: імпорт Fondexx; додаткові колонки заповнюються з об’єкта trade.sheet після синхронізації з Google Sheets.</p>
+                <div class="datagrid-container">
+                    <table class="trades-datagrid">
+                        <thead>
+                            <tr>
+                                <th>Дата</th>
+                                <th>Тікер</th>
+                                <th>Тип угоди</th>
+                                <th>Профіт / AltPV</th>
+                                <th>PV=PV</th>
+                                <th>В чому виключення</th>
+                                <th>Коментар трейдера</th>
+                                <th>Вихід</th>
+                                <th>Комент TeamLead</th>
+                                <th>Тип бумаги</th>
+                                <th>Період</th>
+                                <th>Виросла %</th>
+                                <th>Ризик ($)</th>
+                                <th>Консол. (цц)</th>
+                                <th>Ціна входу</th>
+                                <th>Шер брав</th>
+                                <th>Розрах. шер</th>
+                            </tr>
+                        </thead>
+                        <tbody id="datagrid-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-table" class="view-content">
+            <div class="sheet-zapier-page">
+                <p class="sheet-zapier-kicker">Конектор</p>
+                <h2 class="sheet-zapier-title">Google Sheets</h2>
+                <p class="sheet-zapier-lead">Підключення в стилі Zapier / Make: спочатку акаунт, потім файл на Диску, далі мапінг колонок.</p>
+
+                <!-- Стан 1: неавторизований -->
+                <section id="sheet-state-connect" class="sheet-card sheet-card--hero" aria-labelledby="sheet-connect-title">
+                    <div class="sheet-drive-icon" aria-hidden="true">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M4.5 16.5L8 21h8l3.5-4.5M12 3L4.5 16.5h15L12 3z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                            <path d="M8 21l4-7.5M16 21l-4-7.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <h3 id="sheet-connect-title" class="sheet-card-title">Підключіть свій Google Диск</h3>
+                    <p class="sheet-card-desc">OAuth через Google Identity Services і вибір файлу через Google Picker. Потрібні дозволи на читання таблиць і перегляд Диску (лише для вибору файлу).</p>
+                    <button type="button" class="btn-google-signin" onclick="handleAuthClick()">Увійти через Google</button>
+                </section>
+
+                <!-- Стан 2 (+3): робоча зона після «логіну» -->
+                <section id="sheet-state-workspace" class="sheet-workspace" hidden>
+                    <div class="sheet-account-row">
+                        <p class="sheet-account-text">Акаунт підключено: <strong id="sheet-mock-email">—</strong></p>
+                        <button type="button" class="btn-secondary sheet-btn-compact" onclick="googleSheetsLogout()">Вийти</button>
+                    </div>
+
+                    <div class="sheet-file-actions">
+                        <button type="button" class="btn-secondary sheet-btn-file" onclick="openPicker()">📁 Вибрати таблицю з Google Диску</button>
+                    </div>
+
+                    <div id="sheet-mock-file-card" class="sheet-file-card" hidden>
+                        <span class="sheet-file-card__icon" aria-hidden="true">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                                <path d="M3 9h18M3 15h18M12 3v18" stroke="currentColor" stroke-width="1.5"/>
+                            </svg>
+                        </span>
+                        <span id="sheet-selected-file-name" class="sheet-file-card__name">—</span>
+                        <span class="sheet-file-card__ok" title="Файл обрано">✓</span>
+                    </div>
+
+                    <!-- Стан 3: розумний мапінг -->
+                    <div id="sheet-smart-mapping" class="sheet-smart-mapping" hidden>
+                        <div class="sheet-smart-head">
+                            <h3 class="sheet-smart-title">Мапінг колонок</h3>
+                            <p class="sheet-smart-sub">Після вибору файлу підтягується перший рядок таблиці — ваші реальні заголовки в списках. Можна перемкнутись на введення колонки вручну (✍️).</p>
+                        </div>
+
+                        <form id="sheet-smart-form" class="sheet-smart-form" onsubmit="event.preventDefault(); saveSheetMapping();">
+                            <div class="sheet-smart-row" data-smart-field="date">
+                                <div class="sheet-smart-row__left">
+                                    <span class="sheet-smart-row__label">Дата</span>
+                                    <span class="sheet-smart-row__hint">Календарний день угоди.</span>
+                                </div>
+                                <div class="sheet-smart-row__right">
+                                    <div class="sheet-input-group" data-mode="select">
+                                        <select id="sheet-smart-date" class="sheet-input-group__select" aria-label="Колонка для дати">
+                                            <option value="">Виберіть колонку...</option>
+                                            <option value="Date">Date</option>
+                                            <option value="Ticker">Ticker</option>
+                                            <option value="Profit/Loss">Profit/Loss</option>
+                                            <option value="Notes">Notes</option>
+                                        </select>
+                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <input type="text" id="sheet-smart-date-manual" class="sheet-input-group__manual" placeholder="Напр. C або D" autocomplete="off" aria-label="Дата вручну">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="sheet-smart-row" data-smart-field="tradeType">
+                                <div class="sheet-smart-row__left">
+                                    <span class="sheet-smart-row__label">Тип угоди</span>
+                                    <span class="sheet-smart-row__hint">Напр. шорт, виключення, памп-тренд…</span>
+                                </div>
+                                <div class="sheet-smart-row__right">
+                                    <div class="sheet-input-group" data-mode="select">
+                                        <select id="sheet-smart-trade-type" class="sheet-input-group__select" aria-label="Колонка для типу угоди">
+                                            <option value="">Виберіть колонку...</option>
+                                            <option value="Date">Date</option>
+                                            <option value="Ticker">Ticker</option>
+                                            <option value="Profit/Loss">Profit/Loss</option>
+                                            <option value="Notes">Notes</option>
+                                        </select>
+                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <input type="text" id="sheet-smart-trade-type-manual" class="sheet-input-group__manual" placeholder="Напр. C або D" autocomplete="off" aria-label="Тип угоди вручну">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="sheet-smart-row" data-smart-field="profit">
+                                <div class="sheet-smart-row__left">
+                                    <span class="sheet-smart-row__label">Профіт від угоди</span>
+                                    <span class="sheet-smart-row__hint">Чистий результат угоди у вашій таблиці.</span>
+                                </div>
+                                <div class="sheet-smart-row__right">
+                                    <div class="sheet-input-group" data-mode="select">
+                                        <select id="sheet-smart-profit" class="sheet-input-group__select" aria-label="Колонка для профіту">
+                                            <option value="">Виберіть колонку...</option>
+                                            <option value="Date">Date</option>
+                                            <option value="Ticker">Ticker</option>
+                                            <option value="Profit/Loss">Profit/Loss</option>
+                                            <option value="Notes">Notes</option>
+                                        </select>
+                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <input type="text" id="sheet-smart-profit-manual" class="sheet-input-group__manual" placeholder="Напр. C або D" autocomplete="off" aria-label="Профіт вручну">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="sheet-smart-row" data-smart-field="pv">
+                                <div class="sheet-smart-row__left">
+                                    <span class="sheet-smart-row__label">PV / PV</span>
+                                    <span class="sheet-smart-row__hint">Показник PV=PV з журналу.</span>
+                                </div>
+                                <div class="sheet-smart-row__right">
+                                    <div class="sheet-input-group" data-mode="select">
+                                        <select id="sheet-smart-pv" class="sheet-input-group__select" aria-label="Колонка для PV">
+                                            <option value="">Виберіть колонку...</option>
+                                            <option value="Date">Date</option>
+                                            <option value="Ticker">Ticker</option>
+                                            <option value="Profit/Loss">Profit/Loss</option>
+                                            <option value="Notes">Notes</option>
+                                        </select>
+                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <input type="text" id="sheet-smart-pv-manual" class="sheet-input-group__manual" placeholder="Напр. C або D" autocomplete="off" aria-label="PV вручну">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="sheet-smart-row" data-smart-field="exceptions">
+                                <div class="sheet-smart-row__left">
+                                    <span class="sheet-smart-row__label">У чому виключення</span>
+                                    <span class="sheet-smart-row__hint">Кілька колонок — через кому в ручному режимі (напр. D, E, F).</span>
+                                </div>
+                                <div class="sheet-smart-row__right">
+                                    <div class="sheet-input-group" data-mode="select">
+                                        <select id="sheet-smart-exceptions" class="sheet-input-group__select" aria-label="Колонка для виключень">
+                                            <option value="">Виберіть колонку...</option>
+                                            <option value="Date">Date</option>
+                                            <option value="Ticker">Ticker</option>
+                                            <option value="Profit/Loss">Profit/Loss</option>
+                                            <option value="Notes">Notes</option>
+                                        </select>
+                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <input type="text" id="sheet-smart-exceptions-manual" class="sheet-input-group__manual" placeholder="Напр. D, E або D" autocomplete="off" aria-label="Виключення вручну">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="sheet-smart-actions">
+                                <button type="submit" id="sheet-save-sync-btn" class="btn-primary sheet-save-sync-btn">Зберегти мапінг та продовжити</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
             </div>
         </div>
 
@@ -1236,6 +1443,8 @@
     });
     </script>
     <script src="lw-charts.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://apis.google.com/js/api.js" async defer></script>
     <script type="module" src="js/main.js"></script>
 
     <!-- FAB -->

@@ -375,6 +375,8 @@ const TAB_TITLES = {
     calendar: 'Календар',
     stats: 'Статистика',
     trades: 'Угоди',
+    datagrid: 'Таблиця Угод',
+    table: 'Імпорт Sheets',
     screens: 'Скріншоти',
     ai: 'AI Аналітик',
     'mentor-review': 'Черга рев’ю',
@@ -415,7 +417,7 @@ export function switchMainTab(tab) {
         b.classList.toggle('active', b.dataset.tab === tab);
     });
     // Якщо активна вкладка в more menu — підсвічуємо кнопку Ще
-    const moreTabIds = ['trades', 'calendar', 'playbook', 'learn', 'settings', 'mentor-review'];
+    const moreTabIds = ['trades', 'datagrid', 'table', 'calendar', 'playbook', 'learn', 'settings', 'mentor-review'];
     const moreBtn = document.querySelector('.mobile-nav-more-btn');
     if (moreBtn) moreBtn.classList.toggle('more-open', moreTabIds.includes(tab));
 
@@ -440,6 +442,8 @@ export function switchMainTab(tab) {
             window.populateSymbolSelect(window.state.selectedDateStr);
         }
     }
+    if (tab === 'table' && window.initSheetTableView) window.initSheetTableView();
+    if (tab === 'datagrid' && window.renderTradesDatagrid) window.renderTradesDatagrid();
     if (tab === 'dash' && window.renderDashboardNews) window.renderDashboardNews();
     if (tab === 'settings' && window.loadLatestImageForOCR) window.loadLatestImageForOCR();
     if (tab === 'screens') {

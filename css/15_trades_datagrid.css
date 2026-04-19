@@ -1,0 +1,170 @@
+/* === Таблиця угод (Excel-подібний datagrid) === */
+
+.datagrid-view-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+}
+
+.datagrid-view-title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    color: var(--text-main);
+}
+
+.datagrid-view-sub {
+    margin: -4px 0 0;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    line-height: 1.45;
+}
+
+.datagrid-container {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: calc(100vh - 100px);
+    background: var(--bg-panel);
+    border-radius: var(--radius-md, 8px);
+    border: 1px solid var(--border);
+    flex: 1;
+    min-height: 0;
+}
+
+.trades-datagrid {
+    width: max-content;
+    min-width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 13px;
+}
+
+.trades-datagrid thead th {
+    position: sticky;
+    top: 0;
+    background: var(--bg-main);
+    color: var(--text-muted);
+    padding: 12px 16px;
+    border-bottom: 2px solid var(--border);
+    font-weight: 600;
+    white-space: nowrap;
+    z-index: 10;
+    box-shadow: 0 1px 0 var(--border);
+}
+
+.trades-datagrid tbody td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-main);
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.trades-datagrid .date-group-row td {
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    color: var(--accent);
+    font-weight: 700;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+@supports not (background: color-mix(in srgb, red 10%, transparent)) {
+    .trades-datagrid .date-group-row td {
+        background: rgba(128, 128, 128, 0.12);
+    }
+}
+
+.trade-data-row:hover {
+    background: var(--bg-main);
+}
+
+.datagrid-ticker {
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.datagrid-profit {
+    font-weight: 600;
+    color: var(--profit, #10b981);
+}
+
+.datagrid-profit--loss {
+    color: var(--loss, #ef4444);
+}
+
+.datagrid-profit-sep {
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.datagrid-truncate {
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.datagrid-cell-soft-ok {
+    background: color-mix(in srgb, var(--profit, #10b981) 12%, transparent);
+    border-radius: var(--radius-sm, 6px);
+}
+
+@supports not (background: color-mix(in srgb, red 10%, transparent)) {
+    .datagrid-cell-soft-ok {
+        background: rgba(16, 185, 129, 0.08);
+    }
+}
+
+/* Бейджі (без Tailwind) */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 9px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.2;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg-main) 85%, var(--text-muted));
+    color: var(--text-main);
+    white-space: nowrap;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@supports not (background: color-mix(in srgb, red 10%, transparent)) {
+    .badge {
+        background: var(--bg-main);
+    }
+}
+
+.datagrid-badge--type {
+    border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+    background: color-mix(in srgb, var(--accent) 14%, var(--bg-main));
+    color: var(--text-main);
+}
+
+.datagrid-badge--exception {
+    border-color: color-mix(in srgb, var(--loss, #ef4444) 25%, var(--border));
+    background: color-mix(in srgb, var(--loss, #ef4444) 10%, var(--bg-main));
+    color: var(--text-main);
+}
+
+.datagrid-badge--exit {
+    border-color: color-mix(in srgb, var(--text-muted) 40%, var(--border));
+    background: var(--bg-panel);
+    color: var(--text-muted);
+}
+
+.datagrid-empty {
+    padding: 32px 20px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
