@@ -23,4 +23,6 @@ CREATE INDEX IF NOT EXISTS idx_ai_request_logs_unused_created
     ON ai_request_logs(created_at)
     WHERE used = FALSE;
 
-ALTER TABLE ai_request_logs DISABLE ROW LEVEL SECURITY;
+-- Secure by default. Owner/admin policies are installed by
+-- database/security/01_enable_rls.sql.
+ALTER TABLE ai_request_logs ENABLE ROW LEVEL SECURITY;

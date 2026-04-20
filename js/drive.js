@@ -277,14 +277,14 @@ export function updateDriveUI() {
         btn.style.borderColor = 'var(--profit)';
         btn.style.color = 'var(--profit)';
         if (info) info.textContent = `📁 ${folderName || folderId}`;
-        if (disconnectBtn) disconnectBtn.style.display = 'inline-block';
+        if (disconnectBtn) disconnectBtn.classList.remove('initially-hidden');
     } else {
         btn.textContent = '🔗 Підключити Google Drive';
         btn.style.background = '';
         btn.style.borderColor = '';
         btn.style.color = '';
         if (info) info.textContent = '';
-        if (disconnectBtn) disconnectBtn.style.display = 'none';
+        if (disconnectBtn) disconnectBtn.classList.add('initially-hidden');
     }
 }
 

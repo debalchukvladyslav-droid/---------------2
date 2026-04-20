@@ -4,12 +4,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="description" content="Trading Journal Pro — журнал трейдера для календаря, угод, статистики, плейбуку та менторського рев'ю.">
+    <meta name="theme-color" content="#00e5a0">
+    <meta name="color-scheme" content="dark light">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=(), payment=(), usb=(), bluetooth=()">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' https://cdn.jsdelivr.net https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://generativelanguage.googleapis.com https://finnhub.io https://www.googleapis.com https://oauth2.googleapis.com https://api.telegram.org https://api.polygon.io; frame-src 'self' https://accounts.google.com https://content.googleapis.com https://docs.google.com https://drive.google.com https://www.youtube.com https://www.youtube-nocookie.com https://t.me; worker-src 'self' blob: https://cdn.jsdelivr.net; media-src 'self' blob: data: https:; manifest-src 'self'">
     <title>Trading Journal Pro</title>
     
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js" defer crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js" defer crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -29,101 +35,95 @@
     <link rel="stylesheet" href="css/13_fixes.css">
     <link rel="stylesheet" href="css/14_sheet_table.css">
     <link rel="stylesheet" href="css/15_trades_datagrid.css">
+    <link rel="stylesheet" href="css/16_polish.css">
 
     <link rel="icon" type="image/x-icon" href="favicon.ico">
-
-    <style>
-        /* === INLINE OVERRIDES (мінімум — тільки те що не покрито CSS модулями) === */
-        .tab-nav-btn { display: none; }
-        .btn-save-icon {
-            background: transparent; border: none; font-size: 1.4rem;
-            cursor: pointer; color: var(--text-muted); transition: 0.2s;
-            padding: 5px; opacity: 0.5; display: flex; align-items: center;
-        }
-        .btn-save-icon:hover { opacity: 1; color: var(--gold); transform: scale(1.15); }
-    </style>
 </head>
 <body data-theme="dark" data-font="inter">
+    <a class="skip-link" href="#main-content">Перейти до контенту</a>
+    <noscript>
+        <div class="noscript-warning">Для роботи Trading Journal Pro потрібен JavaScript.</div>
+    </noscript>
 
     <div id="auth-overlay" class="auth-overlay">
-        <div class="auth-card">
-            <h1 class="auth-title">Trading Journal</h1>
+        <div class="auth-card" role="dialog" aria-labelledby="auth-title" aria-describedby="auth-subtitle" aria-modal="true">
+            <h1 id="auth-title" class="auth-title">Trading Journal</h1>
             <p id="auth-subtitle" class="auth-subtitle">Вхід у систему</p>
             
-            <input type="text" id="auth-nick" class="auth-input" placeholder="Нікнейм або email">
-            <input type="password" id="auth-pass" class="auth-input" placeholder="Пароль (мін. 6 симв.)">
+            <input type="text" id="auth-nick" class="auth-input" placeholder="Нікнейм або email" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+            <input type="password" id="auth-pass" class="auth-input" placeholder="Пароль (мін. 6 симв.)" autocomplete="current-password" minlength="6" required>
 
             <div id="register-fields" class="register-fields">
-                <input type="email" id="auth-email" class="auth-input" placeholder="Реальний Email (для бази)">
-                <input type="text" id="auth-fname" class="auth-input" placeholder="Ім'я">
-                <input type="text" id="auth-lname" class="auth-input" placeholder="Прізвище">
+                <input type="email" id="auth-email" class="auth-input" placeholder="Реальний Email (для бази)" autocomplete="email" autocapitalize="none" spellcheck="false">
+                <input type="text" id="auth-fname" class="auth-input" placeholder="Ім'я" autocomplete="given-name">
+                <input type="text" id="auth-lname" class="auth-input" placeholder="Прізвище" autocomplete="family-name">
                 <select id="auth-team" class="auth-input">
                     <option value="" disabled selected>Оберіть свій кущ...</option>
                 </select>
             </div>
 
-            <div id="auth-error" class="auth-error">Помилка</div>
-            <button class="btn-primary" id="btn-submit" onclick="window.handleAuth?.()">Увійти</button>
-            <button type="button" class="auth-input" id="btn-auth-telegram" style="margin-top:10px;cursor:pointer;background:linear-gradient(135deg,#2aabee,#229ed9);color:#fff;border:none;font-weight:600;" onclick="window.signInWithTelegram?.()">📱 Увійти через Telegram</button>
+            <div id="auth-error" class="auth-error" role="alert" aria-live="polite">Помилка</div>
+            <button class="btn-primary" id="btn-submit" data-action="auth-submit">Увійти</button>
+            <button type="button" class="auth-input auth-telegram-btn" id="btn-auth-telegram" data-action="auth-telegram">📱 Увійти через Telegram</button>
             
             <div class="auth-links">
                 <span id="auth-switch-text">Ще немає акаунта?</span> 
-                <span class="auth-link" onclick="window.toggleAuthMode?.()">Створити</span>
+                <span class="auth-link" id="auth-mode-toggle" role="button" tabindex="0" data-action="auth-toggle-mode">Створити</span>
             </div>
             <div id="forgot-link" class="auth-forgot">
-                <span class="auth-link" onclick="window.showResetStep?.(1)">Забули пароль?</span>
+                <span class="auth-link" role="button" tabindex="0" data-action="reset-step" data-step="1">Забули пароль?</span>
             </div>
 
             <div id="reset-step-1" class="reset-step">
                 <p class="reset-text">Введіть нікнейм та пошту акаунту — надішлемо посилання для скидання паролю.</p>
-                <input type="text" id="reset-nick" class="auth-input" placeholder="Нікнейм">
-                <input type="email" id="reset-email" class="auth-input" placeholder="Пошта акаунту">
-                <div id="reset-error" class="auth-error"></div>
-                <button class="btn-primary" onclick="window.sendResetCode?.()">📨 Надіслати лист</button>
-                <div class="reset-back"><span class="auth-link" onclick="window.showResetStep?.(0)">← Назад</span></div>
+                <input type="text" id="reset-nick" class="auth-input" placeholder="Нікнейм" autocomplete="username" autocapitalize="none" spellcheck="false">
+                <input type="email" id="reset-email" class="auth-input" placeholder="Пошта акаунту" autocomplete="email" autocapitalize="none" spellcheck="false">
+                <div id="reset-error" class="auth-error" role="alert" aria-live="polite"></div>
+                <button class="btn-primary" data-action="reset-send">📨 Надіслати лист</button>
+                <div class="reset-back"><span class="auth-link" role="button" tabindex="0" data-action="reset-step" data-step="0">← Назад</span></div>
             </div>
             <div id="reset-step-2" class="reset-step">
                 <p class="reset-text">Введіть 6-значний код з листа.</p>
-                <input type="text" id="reset-code" class="auth-input reset-code" placeholder="000000" maxlength="6">
-                <div id="reset-error-2" class="auth-error"></div>
-                <button class="btn-primary" onclick="window.verifyResetCode?.()">✅ Підтвердити код</button>
+                <input type="text" id="reset-code" class="auth-input reset-code" placeholder="000000" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code">
+                <div id="reset-error-2" class="auth-error" role="alert" aria-live="polite"></div>
+                <button class="btn-primary" data-action="reset-verify">✅ Підтвердити код</button>
                 <div class="reset-actions">
-                    <span class="auth-link" onclick="window.showResetStep?.(1)">← Назад</span>
-                    <span class="auth-link" onclick="window.sendResetCode?.()">Надіслати ще раз</span>
+                    <span class="auth-link" role="button" tabindex="0" data-action="reset-step" data-step="1">← Назад</span>
+                    <span class="auth-link" role="button" tabindex="0" data-action="reset-send">Надіслати ще раз</span>
                 </div>
             </div>
-            <div id="reset-step-3" style="display:none;"></div>
+            <div id="reset-step-3"></div>
         </div>
     </div>
 
-    <div id="tooltip"></div>
+    <div id="tooltip" role="tooltip"></div>
     
-    <div id="image-preview" class="image-preview" onclick="closeZoom(event)">
-        <img src="" onclick="openOriginal(event)" title="Клікніть, щоб відкрити оригінал">
+    <div id="image-preview" class="image-preview" data-action="zoom-close">
+        <img src="" data-action="zoom-open-original" title="Клікніть, щоб відкрити оригінал">
     </div>
 
-    <div id="form-sidebar-backdrop" class="form-sidebar-backdrop" onclick="window.toggleRightSidebar?.()"></div>
-    <div class="sidebar collapsed" id="form-sidebar" style="border-left:1px solid var(--border);box-shadow:-8px 0 32px rgba(0,0,0,0.4);">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border);">
-            <h3 style="margin:0;font-size:1.1rem;font-weight:600;color:var(--text-main);">Форма дня</h3>
-            <button onclick="window.toggleRightSidebar?.()" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;padding:6px;border-radius:8px;display:flex;align-items:center;transition:background 0.2s;" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
+    <div id="form-sidebar-backdrop" class="form-sidebar-backdrop" data-action="right-sidebar-toggle"></div>
+    <div class="sidebar collapsed" id="form-sidebar">
+        <div class="sidebar-panel-head">
+            <h3 class="sidebar-panel-title">Форма дня</h3>
+            <button class="icon-button-plain" data-action="right-sidebar-toggle">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
         </div>
         
         <div class="header-actions">
-            <button class="date-nav-btn" onclick="shiftDate(-1)" title="Попередній день">❮</button>
-            <span class="date-display" id="display-date" onclick="var d=document.getElementById('trade-date'); d&&(d.showPicker?d.showPicker():d.focus())" title="Вибрати дату">Сьогодні</span>
-            <input type="date" id="trade-date" class="trade-date" onchange="selectDateFromInput(this.value)">
-            <button class="date-nav-btn" onclick="shiftDate(1)" title="Наступний день">❯</button>
+            <button class="date-nav-btn" data-action="date-shift" data-offset="-1" title="Попередній день">❮</button>
+            <span class="date-display" id="display-date" role="button" tabindex="0" data-action="date-picker" title="Вибрати дату">Сьогодні</span>
+            <input type="date" id="trade-date" class="trade-date" data-action="date-select">
+            <button class="date-nav-btn" data-action="date-shift" data-offset="1" title="Наступний день">❯</button>
         </div>
         
         <div class="tabs">
-            <button type="button" class="tab-btn active" data-tab="tab-profit" onclick="switchTab('tab-profit')">Профіт</button>
-            <button type="button" class="tab-btn" data-tab="tab-mind" onclick="switchTab('tab-mind')">Думка</button>
-            <button type="button" class="tab-btn" data-tab="tab-errors" onclick="switchTab('tab-errors')">Помилки</button>
-            <button type="button" class="tab-btn" data-tab="tab-trades" onclick="switchTab('tab-trades')">Угоди</button>
-            <button type="button" class="tab-btn" data-tab="tab-session" onclick="switchTab('tab-session')">🎯 Сесія</button>
+            <button type="button" class="tab-btn active" data-tab="tab-profit">Профіт</button>
+            <button type="button" class="tab-btn" data-tab="tab-mind">Думка</button>
+            <button type="button" class="tab-btn" data-tab="tab-errors">Помилки</button>
+            <button type="button" class="tab-btn" data-tab="tab-trades">Угоди</button>
+            <button type="button" class="tab-btn" data-tab="tab-session">🎯 Сесія</button>
         </div>
 
         <div id="tab-profit" class="tab-content active">
@@ -170,16 +170,16 @@
             <div id="mentor-comment-block" class="mentor-comment-block">
                 <label class="mentor-label">👑 Коментар Наставника:</label>
                 <textarea id="mentor-notes" class="mentor-notes" placeholder="Ментор ще не залишив коментар..." disabled></textarea>
-                <button id="btn-save-mentor" class="btn-primary mentor-save" onclick="saveMentorComment()">✓ Зберегти коментар</button>
+                <button id="btn-save-mentor" class="btn-primary mentor-save" data-action="mentor-comment-save">✓ Зберегти коментар</button>
             </div>
             
             <div id="private-note-container" class="private-note-container">
                 <label class="private-label">🔒 Моя приватна нотатка (про цього трейдера):</label>
                 <textarea id="private-user-note" class="private-note" rows="3" placeholder="Ваші думки або аналіз чужих помилок (ніхто крім вас цього не побачить)..."></textarea>
-                <button class="btn-primary private-save" onclick="savePrivateNote()">💾 Зберегти для себе</button>
+                <button class="btn-primary private-save" data-action="private-note-save">💾 Зберегти для себе</button>
             </div>
             
-            <button class="btn-ai" id="ai-btn" onclick="getAIAdvice()">🤖 Отримати пораду від Gemini AI</button>
+            <button class="btn-ai" id="ai-btn" data-action="ai-advice">🤖 Отримати пораду від Gemini AI</button>
             <div id="ai-response" class="ai-response-box"></div>
         </div>
         
@@ -187,7 +187,7 @@
             <label>Додати нову помилку</label>
             <div class="error-add-row">
                 <input type="text" id="new-error-input" placeholder="Назва помилки...">
-                <button class="btn-secondary error-add-btn" onclick="addNewErrorType()">+</button>
+                <button class="btn-secondary error-add-btn" data-action="error-type-add">+</button>
             </div>
             <label>Список помилок (відмітьте, якщо порушили)</label>
             <div id="errors-list-container" class="errors-list-container"></div>
@@ -220,85 +220,85 @@
                     <span id="session-readiness-val" class="readiness-val">5/10</span>
                     <span>🟢 Готовий</span>
                 </div>
-                <input type="range" min="1" max="10" value="5" id="session-readiness" class="discipline-slider session-readiness" oninput="document.getElementById('session-readiness-val').textContent=this.value+'/10'">
+                <input type="range" min="1" max="10" value="5" id="session-readiness" class="discipline-slider session-readiness" data-output="session-readiness-val" data-suffix="/10">
             </div>
-            <button class="btn-ai" onclick="window.checkSessionReadiness?.()">🤖 AI: Чи готовий торгувати?</button>
+            <button class="btn-ai" data-action="session-readiness-check">🤖 AI: Чи готовий торгувати?</button>
             <div id="session-ai-result" class="session-ai-result"></div>
         </div>
 
-        <button type="button" id="btn-save-day" class="btn-primary" onclick="saveEntry()" style="margin-top:auto;flex-shrink:0;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:6px;vertical-align:middle;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        <button type="button" id="btn-save-day" class="btn-primary save-day-btn" data-action="day-save">
+            <svg class="inline-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             Зберегти день
         </button>
         
-        <input type="file" id="file-input" accept=".json" style="display: none;" onchange="importData(event)">
-        <input type="file" id="csv-input" accept=".xlsx, .xls, .csv" style="display: none;" onchange="importFondexxReport(event)">
-        <input type="file" id="trades-input" accept=".xlsx, .xls, .csv" style="display: none;" onchange="importFondexxTrades(event)">
-        <input type="file" id="ppro-input" accept=".xlsx, .xls, .csv" style="display: none;" onchange="importPPROReport(event)">
+        <input type="file" id="file-input" class="file-input-hidden" accept=".json" data-import="json">
+        <input type="file" id="csv-input" class="file-input-hidden" accept=".xlsx, .xls, .csv" data-import="fondexx">
+        <input type="file" id="trades-input" class="file-input-hidden" accept=".xlsx, .xls, .csv" data-import="fondexx-trades">
+        <input type="file" id="ppro-input" class="file-input-hidden" accept=".xlsx, .xls, .csv" data-import="ppro">
     </div>
 
     <!-- Нове ліве бокове меню -->
     <aside class="app-sidebar">
         <!-- Logo -->
-        <div style="height:64px;display:flex;align-items:center;padding:0 20px;border-bottom:1px solid var(--border);gap:10px;flex-shrink:0;">
-            <div style="width:32px;height:32px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-                <span style="font-size:0.8rem;font-weight:800;color:#000;">TJ</span>
+        <div class="sidebar-brand">
+            <div class="sidebar-brand-mark">
+                <span class="sidebar-brand-initials">TJ</span>
             </div>
-            <span class="brand-text" style="font-size:1rem;font-weight:700;color:var(--text-main);white-space:nowrap;">TJ Pro</span>
+            <span class="brand-text sidebar-brand-text">TJ Pro</span>
         </div>
 
         <nav class="sidebar-nav">
-            <button class="sidebar-nav-item active" data-tab="dash" onclick="switchMainTab('dash')">
+            <button class="sidebar-nav-item active" data-tab="dash">
                 <span class="ti-icon ti-chart-bar"></span>
                 <span class="nav-label">Дашборд</span>
             </button>
-            <button class="sidebar-nav-item" data-tab="calendar" onclick="switchMainTab('calendar')">
+            <button class="sidebar-nav-item" data-tab="calendar">
                 <span class="ti-icon ti-calendar"></span>
                 <span class="nav-label">Календар</span>
             </button>
-            <button class="sidebar-nav-item" data-tab="stats" onclick="switchMainTab('stats')">
+            <button class="sidebar-nav-item" data-tab="stats">
                 <span class="ti-icon ti-chart-line"></span>
                 <span class="nav-label">Статистика</span>
             </button>
-            <button class="sidebar-nav-item" data-tab="trades" onclick="switchMainTab('trades')">
+            <button class="sidebar-nav-item" data-tab="trades">
                 <span class="ti-icon ti-list-check"></span>
                 <span class="nav-label">Угоди</span>
             </button>
-            <button class="sidebar-nav-item" data-tab="datagrid" onclick="switchMainTab('datagrid')" title="Таблиця угод — горизонтальний перегляд">
+            <button class="sidebar-nav-item" data-tab="datagrid" title="Таблиця угод — горизонтальний перегляд">
                 <span class="ti-icon ti-table"></span>
                 <span class="nav-label">Таблиця Угод</span>
             </button>
-            <button class="sidebar-nav-item" data-tab="table" onclick="switchMainTab('table')" title="Мапінг колонок Google Sheets">
+            <button class="sidebar-nav-item" data-tab="table" title="Мапінг колонок Google Sheets">
                 <span class="ti-icon ti-columns"></span>
                 <span class="nav-label">Імпорт Sheets</span>
             </button>
-            <button class="sidebar-nav-item" data-tab="screens" onclick="switchMainTab('screens')">
+            <button class="sidebar-nav-item" data-tab="screens">
                 <span class="ti-icon ti-image"></span>
                 <span class="nav-label">Скріншоти</span>
             </button>
-            <button class="sidebar-nav-item" data-tab="ai" onclick="switchMainTab('ai')">
+            <button class="sidebar-nav-item" data-tab="ai">
                 <span class="ti-icon ti-brain"></span>
                 <span class="nav-label">AI Ментор</span>
             </button>
-            <button type="button" class="sidebar-nav-item mentor-review-nav-item" data-tab="mentor-review" onclick="switchMainTab('mentor-review')" style="display:none;" title="Черга днів для рев'ю">
+            <button type="button" class="sidebar-nav-item mentor-review-nav-item initially-hidden" data-tab="mentor-review" title="Черга днів для рев'ю">
                 <span class="ti-icon ti-inbox"></span>
                 <span class="nav-label">Черга рев'ю</span>
                 <span class="mentor-review-nav-badge" hidden aria-label="Кількість у черзі">0</span>
             </button>
-            <div class="nav-divider" style="height:1px;background:var(--border);margin:6px 16px;"></div>
-            <button class="sidebar-nav-item" data-tab="playbook" onclick="switchMainTab('playbook')">
+            <div class="nav-divider"></div>
+            <button class="sidebar-nav-item" data-tab="playbook">
                 <span class="ti-icon ti-book"></span>
                 <span class="nav-label">Плейбук</span>
             </button>
-            <button class="sidebar-nav-item" data-tab="learn" onclick="switchMainTab('learn')">
+            <button class="sidebar-nav-item" data-tab="learn">
                 <span class="ti-icon ti-graduation"></span>
                 <span class="nav-label">Навчання</span>
             </button>
-            <button class="sidebar-nav-item" data-tab="settings" onclick="switchMainTab('settings')">
+            <button class="sidebar-nav-item" data-tab="settings">
                 <span class="ti-icon ti-settings"></span>
                 <span class="nav-label">Налаштування</span>
             </button>
-            <button class="sidebar-nav-item admin-nav-item" data-tab="admin" onclick="switchMainTab('admin')" style="display:none;">
+            <button class="sidebar-nav-item admin-nav-item initially-hidden" data-tab="admin">
                 <span class="ti-icon ti-shield"></span>
                 <span class="nav-label">Адмін</span>
             </button>
@@ -358,31 +358,31 @@
 
         <!-- Collapse button -->
         <div class="sidebar-footer-collapse">
-            <button type="button" onclick="window.toggleLeftSidebar?.()" class="sidebar-nav-item sidebar-nav-item-collapse" style="width:100%;border-radius:8px;justify-content:flex-start;">
+            <button type="button" data-action="left-sidebar-toggle" class="sidebar-nav-item sidebar-nav-item-collapse sidebar-collapse-btn">
                 <span class="sidebar-collapse-icon" aria-hidden="true">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 19l-7-7 7-7"/><path d="M18 19l-7-7 7-7"/></svg>
                 </span>
-                <span class="nav-label" style="margin-left:10px;">Згорнути</span>
+                <span class="nav-label nav-label-offset">Згорнути</span>
             </button>
         </div>
     </aside>
 
-    <div class="main-content">
+    <div id="main-content" class="main-content">
         <!-- Новий верхній хедер -->
         <header class="app-header">
-            <div class="header-left" style="display:flex;align-items:center;gap:12px;">
-                <button onclick="window.toggleLeftSidebar?.()" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;padding:6px;border-radius:8px;display:flex;align-items:center;transition:background 0.2s;" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
+            <div class="header-left header-row">
+                <button class="icon-button-plain" data-action="left-sidebar-toggle">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
                 </button>
                 <h2 id="page-title" class="page-title">Дашборд</h2>
             </div>
-            <div class="header-right" style="display:flex;align-items:center;gap:8px;">
+            <div class="header-right header-row">
                 <button type="button" id="notif-bell-btn" class="header-btn notif-bell-btn" aria-label="Сповіщення" title="Сповіщення">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="notif-bell-svg"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                     <span class="notif-bell-badge" hidden aria-live="polite">0</span>
                 </button>
-                <button id="team-toggle-btn" class="header-btn" onclick="openTeamSidebar()">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:middle;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <button id="team-toggle-btn" class="header-btn" data-action="team-sidebar-open">
+                    <svg class="inline-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                     Команда
                 </button>
             </div>
@@ -390,57 +390,57 @@
 
         <!-- Старий mobile-tabs-wrapper для мобільних -->
         <div class="mobile-tabs-wrapper">
-            <button id="mobile-menu-btn" class="mobile-menu-btn" onclick="toggleMobileSidebar()">☰</button>
+            <button id="mobile-menu-btn" class="mobile-menu-btn" data-action="mobile-sidebar-toggle">☰</button>
             <span id="mobile-section-title" class="mobile-section-title">Дашборд</span>
         </div>
 
         <!-- Bottom Navigation (mobile only) -->
         <nav class="mobile-bottom-nav">
-            <button class="mobile-nav-btn active" data-tab="dash" onclick="switchMainTab('dash')">
+            <button class="mobile-nav-btn active" data-tab="dash">
                 <span>Дашборд</span>
             </button>
-            <button class="mobile-nav-btn" data-tab="stats" onclick="switchMainTab('stats')">
+            <button class="mobile-nav-btn" data-tab="stats">
                 <span>Статистика</span>
             </button>
-            <button class="mobile-nav-btn" data-tab="screens" onclick="switchMainTab('screens')">
+            <button class="mobile-nav-btn" data-tab="screens">
                 <span>Скріни</span>
             </button>
-            <button class="mobile-nav-btn" data-tab="ai" onclick="switchMainTab('ai')">
+            <button class="mobile-nav-btn" data-tab="ai">
                 <span>AI</span>
             </button>
-            <button class="mobile-nav-btn mobile-nav-more-btn" onclick="toggleMobileMoreMenu()">
+            <button class="mobile-nav-btn mobile-nav-more-btn" data-action="mobile-more-toggle">
                 <span>Ще</span>
             </button>
         </nav>
 
         <div id="mobile-more-menu" class="mobile-more-menu">
             <div class="mobile-more-grid">
-                <button class="mobile-more-item" data-tab="trades" onclick="switchMainTab('trades'); closeMobileMoreMenu()">
+                <button class="mobile-more-item" data-tab="trades">
                     <span>Угоди</span>
                 </button>
-                <button class="mobile-more-item" data-tab="datagrid" onclick="switchMainTab('datagrid'); closeMobileMoreMenu()">
+                <button class="mobile-more-item" data-tab="datagrid">
                     <span>Таблиця Угод</span>
                 </button>
-                <button class="mobile-more-item" data-tab="table" onclick="switchMainTab('table'); closeMobileMoreMenu()">
+                <button class="mobile-more-item" data-tab="table">
                     <span>Імпорт Sheets</span>
                 </button>
-                <button class="mobile-more-item" data-tab="calendar" onclick="switchMainTab('calendar'); closeMobileMoreMenu()">
+                <button class="mobile-more-item" data-tab="calendar">
                     <span>Календар</span>
                 </button>
-                <button class="mobile-more-item" data-tab="playbook" onclick="switchMainTab('playbook'); closeMobileMoreMenu()">
+                <button class="mobile-more-item" data-tab="playbook">
                     <span>Плейбук</span>
                 </button>
-                <button class="mobile-more-item" data-tab="learn" onclick="switchMainTab('learn'); closeMobileMoreMenu()">
+                <button class="mobile-more-item" data-tab="learn">
                     <span>Навчання</span>
                 </button>
-                <button class="mobile-more-item mentor-review-nav-item" data-tab="mentor-review" onclick="switchMainTab('mentor-review'); closeMobileMoreMenu()" style="display: none;">
+            <button class="mobile-more-item mentor-review-nav-item initially-hidden" data-tab="mentor-review">
                     <span>Черга рев'ю</span>
                     <span class="mentor-review-nav-badge mentor-review-nav-badge--inline" hidden aria-label="Кількість у черзі">0</span>
                 </button>
-                <button class="mobile-more-item" data-tab="settings" onclick="switchMainTab('settings'); closeMobileMoreMenu()">
+                <button class="mobile-more-item" data-tab="settings">
                     <span>Налашт.</span>
                 </button>
-                <button class="mobile-more-item admin-tab-mobile" data-tab="admin" onclick="switchMainTab('admin'); closeMobileMoreMenu()" style="display: none;">
+            <button class="mobile-more-item admin-tab-mobile initially-hidden" data-tab="admin">
                     <span>Адмін</span>
                 </button>
             </div>
@@ -450,7 +450,7 @@
 
             <div class="dash-calendar-strip" aria-label="Серія перемог">
                 <div class="dash-calendar-strip-inner dash-calendar-strip-inner--end">
-                    <div id="winstreak-counter" class="winstreak-counter" style="display:none">
+                    <div id="winstreak-counter" class="winstreak-counter initially-hidden">
                         <span class="winstreak-lbl">Стрік</span>
                         <span id="winstreak-val" class="winstreak-val">0</span>
                     </div>
@@ -522,7 +522,7 @@
                     <div class="panel dash-mini-equity-panel">
                         <div class="dash-mini-equity-head">
                             <h3 class="dash-mini-equity-title">Дохідність місяця</h3>
-                            <button type="button" class="btn-secondary dash-open-calendar-tab-btn rr-exempt-access" onclick="switchMainTab('calendar')" title="Повний календар">Календар</button>
+                            <button type="button" class="btn-secondary dash-open-calendar-tab-btn rr-exempt-access" data-tab="calendar" title="Повний календар">Календар</button>
                         </div>
                         <p class="dash-mini-equity-sub">Кумулятивний PnL по торгових днях поточного місяця</p>
                         <div class="dash-mini-equity-stats" aria-label="Відкат кривої дохідності">
@@ -539,10 +539,10 @@
 
                 <!-- COL 2: Recent trades -->
                 <div class="dash-col dash-col-recent">
-                    <div class="recent-trades-panel" id="recent-trades-panel" style="flex:1;">
+                <div class="recent-trades-panel recent-trades-flex" id="recent-trades-panel">
                         <div class="recent-trades-header">
                             <h3>Останні угоди</h3>
-                            <button onclick="switchMainTab('trades')" class="recent-trades-link">Всі →</button>
+                            <button class="recent-trades-link" data-tab="trades">Всі →</button>
                         </div>
                         <div id="recent-trades-list" class="recent-trades-list"></div>
                     </div>
@@ -560,15 +560,15 @@
             </div>
             <div class="panel calendar-rr-row">
                 <p class="calendar-rr-lead">Загальний розбір дня (усі скріни) — запит до ментора вашого куща.</p>
-                <button type="button" id="rr-btn-screens-general" class="btn-secondary rr-toggle-btn rr-exempt-access" onclick="window.submitReviewRequest?.('screens_general')">Запит: загальний розбір</button>
-                <div id="mentor-rr-panel" class="mentor-rr-panel--calendar" style="display:none;">
+                <button type="button" id="rr-btn-screens-general" class="btn-secondary rr-toggle-btn rr-exempt-access" data-action="review-request" data-review-type="screens_general">Запит: загальний розбір</button>
+                <div id="mentor-rr-panel" class="mentor-rr-panel--calendar initially-hidden">
                     <h4 class="mentor-rr-calendar-title">Запити на вас за цей день</h4>
                     <div id="mentor-rr-list"></div>
                 </div>
             </div>
             <div id="calendar-tab-slot" class="calendar-tab-slot calendar-tab-slot--full">
                     <div id="calendar-bundle">
-                    <div class="panel" style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;">
+                    <div class="panel calendar-panel-fill">
                         <div class="dash-toolbar dash-toolbar-totals-only">
                             <div class="dash-toolbar-totals">
                                 <div>Комісія: <span id="total-comm">$0</span></div>
@@ -576,8 +576,8 @@
                                 <div>Місяць: <span id="total-pnl">$0</span></div>
                             </div>
                         </div>
-                        <div style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;flex:1;display:flex;flex-direction:column;min-height:0;">
-                            <div class="grid" id="calendar-grid" style="min-width:480px;flex:1;align-content:start;"></div>
+                        <div class="calendar-scroll-wrap">
+                            <div class="grid calendar-grid-fill" id="calendar-grid"></div>
                         </div>
                     </div>
                     </div>
@@ -588,130 +588,130 @@
             <!-- Горизонтальна панель фільтрів -->
             <div class="stats-filters-bar">
                 <div id="stats-source-dropdown-wrap" class="stats-bar-item">
-                    <button id="stats-source-trigger" class="stats-bar-trigger" onclick="toggleStatsDropdown('source')">
+                    <button id="stats-source-trigger" class="stats-bar-trigger" data-action="stats-dropdown" data-dropdown="source">
                         <span class="stats-bar-label">Джерело</span>
                         <span id="stats-source-trigger-label" class="stats-bar-value">Мій профіль</span>
                         <span class="stats-dropdown-caret">▼</span>
                     </button>
-                    <div id="stats-source-panel" class="stats-bar-dropdown" style="display: none;">
-                        <div id="stats-source-container" style="max-height: 360px; overflow-y: auto;"></div>
+                    <div id="stats-source-panel" class="stats-bar-dropdown initially-hidden">
+                        <div id="stats-source-container" class="dropdown-scroll-lg"></div>
                     </div>
                 </div>
 
                 <div class="stats-bar-item">
-                    <button id="stats-tradetype-trigger" class="stats-bar-trigger" onclick="toggleStatsDropdown('tradetype')">
+                    <button id="stats-tradetype-trigger" class="stats-bar-trigger" data-action="stats-dropdown" data-dropdown="tradetype">
                         <span class="stats-bar-label">Тип трейду</span>
                         <span id="stats-tradetype-trigger-label" class="stats-bar-value">Всі типи</span>
                         <span class="stats-dropdown-caret">▼</span>
                     </button>
-                    <div id="stats-tradetype-panel" class="stats-bar-dropdown" style="display: none;">
-                        <div id="stats-tradetype-container" style="max-height: 300px; overflow-y: auto;"></div>
+                    <div id="stats-tradetype-panel" class="stats-bar-dropdown initially-hidden">
+                        <div id="stats-tradetype-container" class="dropdown-scroll-md"></div>
                     </div>
                 </div>
 
                 <div class="stats-bar-item">
-                    <button id="stats-period-trigger" class="stats-bar-trigger" onclick="toggleStatsDropdown('period')">
+                    <button id="stats-period-trigger" class="stats-bar-trigger" data-action="stats-dropdown" data-dropdown="period">
                         <span class="stats-bar-label">Період</span>
                         <span id="stats-period-trigger-label" class="stats-bar-value">За весь час</span>
                         <span class="stats-dropdown-caret">▼</span>
                     </button>
-                    <div id="stats-period-panel" class="stats-bar-dropdown" style="display: none;">
-                        <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 10px;">Клікайте для множинного вибору.</div>
-                        <div id="stats-tree-container" style="max-height: 360px; overflow-y: auto;"></div>
+                    <div id="stats-period-panel" class="stats-bar-dropdown initially-hidden">
+                        <div class="stats-dropdown-hint">Клікайте для множинного вибору.</div>
+                        <div id="stats-tree-container" class="dropdown-scroll-lg"></div>
                     </div>
                 </div>
             </div>
 
-            <div class="stats-layout" style="display: flex; gap: 20px; flex: 1; min-height: 0; overflow: hidden;">
-                <div class="stats-main-panel" style="flex-grow: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding-right: 5px;">
+            <div class="stats-layout">
+                <div class="stats-main-panel">
                     <div class="stats-grid">
-                        <div class="stat-card" style="grid-column: 1 / -1;">
+                        <div class="stat-card stat-card-full">
                             <div class="label">Загальний Профіт</div>
-                            <div class="value" id="stat-total-pnl" style="font-size: 2rem;">0$</div>
+                            <div class="value stat-total-value" id="stat-total-pnl">0$</div>
                         </div>
                         <div class="stat-card">
                             <div class="label">Winrate (Вінрейт)</div>
-                            <div class="value" id="stat-winrate" style="color: var(--accent);">0%</div>
+                            <div class="value text-accent" id="stat-winrate">0%</div>
                         </div>
                         <div class="stat-card">
                             <div class="label">Profit Factor</div>
-                            <div class="value" id="stat-pf" style="color: var(--gold);">0.00</div>
+                            <div class="value text-gold" id="stat-pf">0.00</div>
                         </div>
                         <div class="stat-card">
                             <div class="label">Середній Плюс</div>
-                            <div class="value" id="stat-avg-win" style="color: var(--profit);">0$</div>
+                            <div class="value text-profit" id="stat-avg-win">0$</div>
                         </div>
                         <div class="stat-card">
                             <div class="label">Середній Мінус</div>
-                            <div class="value" id="stat-avg-loss" style="color: var(--loss);">0$</div>
+                            <div class="value text-loss" id="stat-avg-loss">0$</div>
                         </div>
                         <div class="stat-card">
                             <div class="label">Найкращий День</div>
-                            <div class="value" id="stat-best" style="color: var(--profit);">0$</div>
+                            <div class="value text-profit" id="stat-best">0$</div>
                         </div>
                         <div class="stat-card">
                             <div class="label">Найгірший День</div>
-                            <div class="value" id="stat-worst" style="color: var(--loss);">0$</div>
+                            <div class="value text-loss" id="stat-worst">0$</div>
                         </div>
                         <div class="stat-card">
                             <div class="label">Загальні Комісії</div>
-                            <div class="value" id="stat-comm" style="color: var(--text-main);">0$</div>
+                            <div class="value text-main" id="stat-comm">0$</div>
                         </div>
                         <div class="stat-card">
                             <div class="label">Загальні Локейти</div>
-                            <div class="value" id="stat-locates" style="color: var(--text-main);">0$</div>
+                            <div class="value text-main" id="stat-locates">0$</div>
                         </div>
                     </div>
                     
                     <div class="panel stats-equity-panel">
                         <div class="stats-equity-head">
-                            <h3 style="margin: 0; color: var(--accent); font-size: 1.1rem;">📈 Крива дохідності (<span id="stats-period-label">За весь час</span>)</h3>
+                            <h3 class="stats-equity-title">📈 Крива дохідності (<span id="stats-period-label">За весь час</span>)</h3>
                             <label class="stats-equity-mode-toggle">
-                                <input type="checkbox" id="stats-equity-advanced-toggle" onchange="toggleStatsEquityMode(this.checked)">
+                                <input type="checkbox" id="stats-equity-advanced-toggle" data-action="stats-equity-mode">
                                 <span>Режим Аналізу</span>
                             </label>
                         </div>
-                        <div class="chart-container" style="height: 250px;"><canvas id="pnlChart"></canvas></div>
+                        <div class="chart-container chart-fixed-250"><canvas id="pnlChart"></canvas></div>
                     </div>
 
-                    <div class="stats-charts-row" style="display: flex; gap: 20px; flex-wrap: wrap;">
-                        <div class="panel stats-chart-panel-wide" style="flex: 2; min-width: 400px; padding: 20px;">
-                            <h3 style="color: var(--accent); margin-bottom: 5px;">📊 PnL за днями тижня</h3>
-                            <div class="chart-container" style="height: 250px;"><canvas id="daysChart"></canvas></div>
+                    <div class="stats-charts-row">
+                        <div class="panel stats-chart-panel-wide">
+                            <h3 class="stats-chart-title">📊 PnL за днями тижня</h3>
+                            <div class="chart-container chart-fixed-250"><canvas id="daysChart"></canvas></div>
                         </div>
-                        <div class="panel stats-chart-panel" style="flex: 1; min-width: 250px; padding: 20px;">
-                            <h3 style="color: var(--accent); margin-bottom: 5px;">🍕 Співвідношення днів</h3>
-                            <div class="chart-container" style="height: 250px; display: flex; justify-content: center;"><canvas id="winLossChart"></canvas></div>
+                        <div class="panel stats-chart-panel">
+                            <h3 class="stats-chart-title">🍕 Співвідношення днів</h3>
+                            <div class="chart-container chart-fixed-250 chart-centered"><canvas id="winLossChart"></canvas></div>
                         </div>
                     </div>
 
-                    <div class="panel" id="mistake-chart-panel" style="display:none; padding: 20px;">
-                        <h3 style="color: var(--accent); margin-bottom: 5px;">⚠️ Аналіз помилок — що коштувало найдорожче</h3>
-                        <p style="color: var(--text-muted); font-size: 0.82rem; margin-bottom: 12px;">PnL розподілено рівномірно між усіма помилками дня. Показані лише дні з відміченими помилками.</p>
-                        <div class="chart-container" style="min-height: 180px; overflow: hidden;"><canvas id="mistakeChart"></canvas></div>
+                    <div class="panel mistake-chart-panel initially-hidden" id="mistake-chart-panel">
+                        <h3 class="stats-chart-title">⚠️ Аналіз помилок — що коштувало найдорожче</h3>
+                        <p class="mistake-note">PnL розподілено рівномірно між усіма помилками дня. Показані лише дні з відміченими помилками.</p>
+                        <div class="chart-container mistake-chart"><canvas id="mistakeChart"></canvas></div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div id="view-trades" class="view-content" style="flex-direction: column; gap: 0; padding: 0; overflow: hidden;">
+        <div id="view-trades" class="view-content trades-view">
             <!-- Панель вибору дня -->
-            <div id="trades-selector-panel" style="display:flex; gap:10px; align-items:center; padding:8px 15px; background:var(--bg-panel); border-bottom:1px solid var(--border); flex-shrink:0; flex-wrap:wrap;">
-                <select id="trades-date-select" style="background:var(--bg-main); color:var(--text-main); border:1px solid var(--border); padding:6px 10px; border-radius:6px; font-size:0.9rem;" onchange="window.populateSymbolSelect?.(this.value)">
+            <div id="trades-selector-panel" class="trades-selector-panel">
+                <select id="trades-date-select" class="trade-date-select" data-action="trade-date-symbol-select">
                     <option value="">— Оберіть день —</option>
                 </select>
             </div>
             <!-- Pill-навігація угод -->
-            <div id="trade-pill-nav" style="flex-shrink:0; display:flex; align-items:center; gap:6px; padding:6px 12px; background:var(--bg-panel); border-bottom:1px solid var(--border); overflow-x:auto; scrollbar-width:none; min-height:44px;"></div>
+            <div id="trade-pill-nav" class="trade-pill-nav"></div>
             <!-- Інфо-плашка угоди -->
-            <div id="trade-info-bar" style="display:none; flex-shrink:0; padding:8px 15px; background:var(--bg-panel); border-bottom:1px solid var(--border);"></div>
+            <div id="trade-info-bar" class="trade-info-bar initially-hidden"></div>
             <!-- Графік -->
-            <div id="tv-widget-container" style="flex:1; min-height:0; position:relative;">
-                <div id="tv-placeholder" style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:var(--text-muted); gap:10px;">
-                    <span style="font-size:2rem;">📊</span>
+            <div id="tv-widget-container" class="tv-widget-container">
+                <div id="tv-placeholder" class="tv-placeholder">
+                    <span class="placeholder-icon-lg">📊</span>
                     <span>Оберіть угоду для перегляду</span>
                 </div>
-                <div id="tradingview-widget" style="width:100%; height:100%; display:none;"></div>
+                <div id="tradingview-widget" class="tradingview-widget initially-hidden"></div>
             </div>
         </div>
 
@@ -764,18 +764,18 @@
                     </div>
                     <h3 id="sheet-connect-title" class="sheet-card-title">Підключіть свій Google Диск</h3>
                     <p class="sheet-card-desc">OAuth через Google Identity Services і вибір файлу через Google Picker. Потрібні дозволи на читання таблиць і перегляд Диску (лише для вибору файлу).</p>
-                    <button type="button" class="btn-google-signin" onclick="handleAuthClick()">Увійти через Google</button>
+                    <button type="button" class="btn-google-signin" data-action="google-auth">Увійти через Google</button>
                 </section>
 
                 <!-- Стан 2 (+3): робоча зона після «логіну» -->
                 <section id="sheet-state-workspace" class="sheet-workspace" hidden>
                     <div class="sheet-account-row">
                         <p class="sheet-account-text">Акаунт підключено: <strong id="sheet-mock-email">—</strong></p>
-                        <button type="button" class="btn-secondary sheet-btn-compact" onclick="googleSheetsLogout()">Вийти</button>
+                        <button type="button" class="btn-secondary sheet-btn-compact" data-action="google-logout">Вийти</button>
                     </div>
 
                     <div class="sheet-file-actions">
-                        <button type="button" class="btn-secondary sheet-btn-file" onclick="openPicker()">📁 Вибрати таблицю з Google Диску</button>
+                        <button type="button" class="btn-secondary sheet-btn-file" data-action="google-picker">📁 Вибрати таблицю з Google Диску</button>
                     </div>
 
                     <div id="sheet-mock-file-card" class="sheet-file-card" hidden>
@@ -796,7 +796,7 @@
                             <p class="sheet-smart-sub">Перший рядок (A1…) — підписи для мапінгу. Угоди читаються з рядка 6: у колонці «Дата» з’являється день — усі нижчі рядки з тікером у колонці «Тікер» йдуть у цей день; для кожного тікера імпортується весь рядок (наприклад B8 = USEG → рядок 8).</p>
                         </div>
 
-                        <form id="sheet-smart-form" class="sheet-smart-form" onsubmit="event.preventDefault(); saveSheetMapping();">
+                        <form id="sheet-smart-form" class="sheet-smart-form" data-action="sheet-mapping-form">
                             <div class="sheet-smart-row" data-smart-field="date">
                                 <div class="sheet-smart-row__left">
                                     <span class="sheet-smart-row__label">Дата</span>
@@ -811,7 +811,7 @@
                                             <option value="Profit/Loss">Profit/Loss</option>
                                             <option value="Notes">Notes</option>
                                         </select>
-                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <button type="button" class="sheet-input-group__toggle" data-action="sheet-toggle-mapping" title="Вручну">✍️</button>
                                         <input type="text" id="sheet-smart-date-manual" class="sheet-input-group__manual" placeholder="Напр. A" autocomplete="off" aria-label="Дата вручну">
                                     </div>
                                 </div>
@@ -831,7 +831,7 @@
                                             <option value="Profit/Loss">Profit/Loss</option>
                                             <option value="Notes">Notes</option>
                                         </select>
-                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <button type="button" class="sheet-input-group__toggle" data-action="sheet-toggle-mapping" title="Вручну">✍️</button>
                                         <input type="text" id="sheet-smart-symbol-manual" class="sheet-input-group__manual" placeholder="Напр. B" autocomplete="off" aria-label="Тікер вручну">
                                     </div>
                                 </div>
@@ -851,7 +851,7 @@
                                             <option value="Profit/Loss">Profit/Loss</option>
                                             <option value="Notes">Notes</option>
                                         </select>
-                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <button type="button" class="sheet-input-group__toggle" data-action="sheet-toggle-mapping" title="Вручну">✍️</button>
                                         <input type="text" id="sheet-smart-trade-type-manual" class="sheet-input-group__manual" placeholder="Напр. C або D" autocomplete="off" aria-label="Тип угоди вручну">
                                     </div>
                                 </div>
@@ -871,7 +871,7 @@
                                             <option value="Profit/Loss">Profit/Loss</option>
                                             <option value="Notes">Notes</option>
                                         </select>
-                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <button type="button" class="sheet-input-group__toggle" data-action="sheet-toggle-mapping" title="Вручну">✍️</button>
                                         <input type="text" id="sheet-smart-profit-manual" class="sheet-input-group__manual" placeholder="Напр. C або D" autocomplete="off" aria-label="Профіт вручну">
                                     </div>
                                 </div>
@@ -891,7 +891,7 @@
                                             <option value="Profit/Loss">Profit/Loss</option>
                                             <option value="Notes">Notes</option>
                                         </select>
-                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <button type="button" class="sheet-input-group__toggle" data-action="sheet-toggle-mapping" title="Вручну">✍️</button>
                                         <input type="text" id="sheet-smart-pv-manual" class="sheet-input-group__manual" placeholder="Напр. C або D" autocomplete="off" aria-label="PV вручну">
                                     </div>
                                 </div>
@@ -911,7 +911,7 @@
                                             <option value="Profit/Loss">Profit/Loss</option>
                                             <option value="Notes">Notes</option>
                                         </select>
-                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <button type="button" class="sheet-input-group__toggle" data-action="sheet-toggle-mapping" title="Вручну">✍️</button>
                                         <input type="text" id="sheet-smart-exceptions-manual" class="sheet-input-group__manual" placeholder="Напр. D, E або D" autocomplete="off" aria-label="Виключення вручну">
                                     </div>
                                 </div>
@@ -933,7 +933,7 @@
                                             <option value="Profit/Loss">Profit/Loss</option>
                                             <option value="Notes">Notes</option>
                                         </select>
-                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <button type="button" class="sheet-input-group__toggle" data-action="sheet-toggle-mapping" title="Вручну">✍️</button>
                                         <input type="text" class="sheet-input-group__manual" placeholder="Літера колонки" autocomplete="off" aria-label="Alt PV вручну">
                                     </div>
                                 </div>
@@ -946,7 +946,7 @@
                                 <div class="sheet-smart-row__right">
                                     <div class="sheet-input-group" data-mode="select">
                                         <select class="sheet-input-group__select" aria-label="Коментар трейдера"><option value="">Виберіть колонку...</option><option value="Date">Date</option><option value="Ticker">Ticker</option><option value="Profit/Loss">Profit/Loss</option><option value="Notes">Notes</option></select>
-                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <button type="button" class="sheet-input-group__toggle" data-action="sheet-toggle-mapping" title="Вручну">✍️</button>
                                         <input type="text" class="sheet-input-group__manual" placeholder="Літера" autocomplete="off">
                                     </div>
                                 </div>
@@ -955,70 +955,70 @@
                                 <div class="sheet-smart-row__left"><span class="sheet-smart-row__label">Вихід</span><span class="sheet-smart-row__hint"></span></div>
                                 <div class="sheet-smart-row__right"><div class="sheet-input-group" data-mode="select">
                                         <select class="sheet-input-group__select" aria-label="Вихід"><option value="">Виберіть колонку...</option><option value="Date">Date</option><option value="Ticker">Ticker</option><option value="Profit/Loss">Profit/Loss</option><option value="Notes">Notes</option></select>
-                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <button type="button" class="sheet-input-group__toggle" data-action="sheet-toggle-mapping" title="Вручну">✍️</button>
                                         <input type="text" class="sheet-input-group__manual" placeholder="Літера" autocomplete="off"></div></div>
                             </div>
                             <div class="sheet-smart-row" data-smart-field="teamLeadComment">
                                 <div class="sheet-smart-row__left"><span class="sheet-smart-row__label">Коментар TeamLead</span><span class="sheet-smart-row__hint"></span></div>
                                 <div class="sheet-smart-row__right"><div class="sheet-input-group" data-mode="select">
                                         <select class="sheet-input-group__select" aria-label="TeamLead"><option value="">Виберіть колонку...</option><option value="Date">Date</option><option value="Ticker">Ticker</option><option value="Profit/Loss">Profit/Loss</option><option value="Notes">Notes</option></select>
-                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <button type="button" class="sheet-input-group__toggle" data-action="sheet-toggle-mapping" title="Вручну">✍️</button>
                                         <input type="text" class="sheet-input-group__manual" placeholder="Літера" autocomplete="off"></div></div>
                             </div>
                             <div class="sheet-smart-row" data-smart-field="paperType">
                                 <div class="sheet-smart-row__left"><span class="sheet-smart-row__label">Тип паперу</span><span class="sheet-smart-row__hint"></span></div>
                                 <div class="sheet-smart-row__right"><div class="sheet-input-group" data-mode="select">
                                         <select class="sheet-input-group__select" aria-label="Тип паперу"><option value="">Виберіть колонку...</option><option value="Date">Date</option><option value="Ticker">Ticker</option><option value="Profit/Loss">Profit/Loss</option><option value="Notes">Notes</option></select>
-                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <button type="button" class="sheet-input-group__toggle" data-action="sheet-toggle-mapping" title="Вручну">✍️</button>
                                         <input type="text" class="sheet-input-group__manual" placeholder="Літера" autocomplete="off"></div></div>
                             </div>
                             <div class="sheet-smart-row" data-smart-field="period">
                                 <div class="sheet-smart-row__left"><span class="sheet-smart-row__label">Період</span><span class="sheet-smart-row__hint"></span></div>
                                 <div class="sheet-smart-row__right"><div class="sheet-input-group" data-mode="select">
                                         <select class="sheet-input-group__select" aria-label="Період"><option value="">Виберіть колонку...</option><option value="Date">Date</option><option value="Ticker">Ticker</option><option value="Profit/Loss">Profit/Loss</option><option value="Notes">Notes</option></select>
-                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <button type="button" class="sheet-input-group__toggle" data-action="sheet-toggle-mapping" title="Вручну">✍️</button>
                                         <input type="text" class="sheet-input-group__manual" placeholder="Літера" autocomplete="off"></div></div>
                             </div>
                             <div class="sheet-smart-row" data-smart-field="growthPct">
                                 <div class="sheet-smart-row__left"><span class="sheet-smart-row__label">Виросла %</span><span class="sheet-smart-row__hint"></span></div>
                                 <div class="sheet-smart-row__right"><div class="sheet-input-group" data-mode="select">
                                         <select class="sheet-input-group__select" aria-label="Виросла %"><option value="">Виберіть колонку...</option><option value="Date">Date</option><option value="Ticker">Ticker</option><option value="Profit/Loss">Profit/Loss</option><option value="Notes">Notes</option></select>
-                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <button type="button" class="sheet-input-group__toggle" data-action="sheet-toggle-mapping" title="Вручну">✍️</button>
                                         <input type="text" class="sheet-input-group__manual" placeholder="Літера" autocomplete="off"></div></div>
                             </div>
                             <div class="sheet-smart-row" data-smart-field="riskUsd">
                                 <div class="sheet-smart-row__left"><span class="sheet-smart-row__label">Ризик ($)</span><span class="sheet-smart-row__hint"></span></div>
                                 <div class="sheet-smart-row__right"><div class="sheet-input-group" data-mode="select">
                                         <select class="sheet-input-group__select" aria-label="Ризик"><option value="">Виберіть колонку...</option><option value="Date">Date</option><option value="Ticker">Ticker</option><option value="Profit/Loss">Profit/Loss</option><option value="Notes">Notes</option></select>
-                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <button type="button" class="sheet-input-group__toggle" data-action="sheet-toggle-mapping" title="Вручну">✍️</button>
                                         <input type="text" class="sheet-input-group__manual" placeholder="Літера" autocomplete="off"></div></div>
                             </div>
                             <div class="sheet-smart-row" data-smart-field="consolidateCents">
                                 <div class="sheet-smart-row__left"><span class="sheet-smart-row__label">Консол. (цц)</span><span class="sheet-smart-row__hint"></span></div>
                                 <div class="sheet-smart-row__right"><div class="sheet-input-group" data-mode="select">
                                         <select class="sheet-input-group__select" aria-label="Консол"><option value="">Виберіть колонку...</option><option value="Date">Date</option><option value="Ticker">Ticker</option><option value="Profit/Loss">Profit/Loss</option><option value="Notes">Notes</option></select>
-                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <button type="button" class="sheet-input-group__toggle" data-action="sheet-toggle-mapping" title="Вручну">✍️</button>
                                         <input type="text" class="sheet-input-group__manual" placeholder="Літера" autocomplete="off"></div></div>
                             </div>
                             <div class="sheet-smart-row" data-smart-field="entryPrice">
                                 <div class="sheet-smart-row__left"><span class="sheet-smart-row__label">Ціна входу</span><span class="sheet-smart-row__hint"></span></div>
                                 <div class="sheet-smart-row__right"><div class="sheet-input-group" data-mode="select">
                                         <select class="sheet-input-group__select" aria-label="Ціна входу"><option value="">Виберіть колонку...</option><option value="Date">Date</option><option value="Ticker">Ticker</option><option value="Profit/Loss">Profit/Loss</option><option value="Notes">Notes</option></select>
-                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <button type="button" class="sheet-input-group__toggle" data-action="sheet-toggle-mapping" title="Вручну">✍️</button>
                                         <input type="text" class="sheet-input-group__manual" placeholder="Літера" autocomplete="off"></div></div>
                             </div>
                             <div class="sheet-smart-row" data-smart-field="qtyShares">
                                 <div class="sheet-smart-row__left"><span class="sheet-smart-row__label">Шер брав</span><span class="sheet-smart-row__hint"></span></div>
                                 <div class="sheet-smart-row__right"><div class="sheet-input-group" data-mode="select">
                                         <select class="sheet-input-group__select" aria-label="Шер"><option value="">Виберіть колонку...</option><option value="Date">Date</option><option value="Ticker">Ticker</option><option value="Profit/Loss">Profit/Loss</option><option value="Notes">Notes</option></select>
-                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <button type="button" class="sheet-input-group__toggle" data-action="sheet-toggle-mapping" title="Вручну">✍️</button>
                                         <input type="text" class="sheet-input-group__manual" placeholder="Літера" autocomplete="off"></div></div>
                             </div>
                             <div class="sheet-smart-row" data-smart-field="qtySharesCalc">
                                 <div class="sheet-smart-row__left"><span class="sheet-smart-row__label">Розрах. шер</span><span class="sheet-smart-row__hint"></span></div>
                                 <div class="sheet-smart-row__right"><div class="sheet-input-group" data-mode="select">
                                         <select class="sheet-input-group__select" aria-label="Розрах шер"><option value="">Виберіть колонку...</option><option value="Date">Date</option><option value="Ticker">Ticker</option><option value="Profit/Loss">Profit/Loss</option><option value="Notes">Notes</option></select>
-                                        <button type="button" class="sheet-input-group__toggle" onclick="toggleMappingMode(this)" title="Вручну">✍️</button>
+                                        <button type="button" class="sheet-input-group__toggle" data-action="sheet-toggle-mapping" title="Вручну">✍️</button>
                                         <input type="text" class="sheet-input-group__manual" placeholder="Літера" autocomplete="off"></div></div>
                             </div>
 
@@ -1053,37 +1053,37 @@
 
         <div id="view-screens" class="view-content">
             <div class="panel">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
-                    <h3 style="margin:0; color:var(--accent);" id="unassigned-title">
+                <div class="screens-panel-head">
+                    <h3 class="panel-title-accent" id="unassigned-title">
                         Нерозподілені скріншоти: 
-                        <span style="font-size:0.85rem; color:var(--text-muted); font-weight:normal; margin-left:10px;">(або вставте картинку через Ctrl+V)</span>
+                        <span class="muted-inline-note">(або вставте картинку через Ctrl+V)</span>
                     </h3>
-                    <div style="display:flex; gap:10px; align-items:center;">
-                        <span id="drive-sync-status" style="font-size:0.85rem; color:var(--text-muted);"></span>
-                        <button class="btn-secondary" style="width:auto;" onclick="window.toggleTagSearch?.()">🔍 Пошук по тегах</button>
-                        <button class="btn-secondary" style="width:auto;" onclick="window.viewLeaderScreens?.()">🏆 Лідер дня</button>
+                    <div class="inline-flex-row">
+                        <span id="drive-sync-status" class="muted-status"></span>
+                        <button class="btn-secondary btn-auto" data-action="tag-search-toggle">🔍 Пошук по тегах</button>
+                        <button class="btn-secondary btn-auto" data-action="leader-screens">🏆 Лідер дня</button>
                     </div>
                 </div>
 
                 <!-- Панель пошуку -->
-                <div id="tag-search-panel" style="display:none; margin-bottom:15px; padding:15px; background:var(--bg-main); border-radius:10px; border:1px solid var(--border);">
-                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
-                        <div style="flex:1; min-width:150px; position:relative;">
-                            <label style="font-size:0.8rem; color:var(--text-muted); margin-bottom:4px; display:block;">Тег</label>
-                            <input type="text" id="tag-search-input" placeholder="напр. пробій" style="margin:0;" oninput="window.showTagSearchSuggestions?.(this)" onfocus="window.showTagSearchSuggestions?.(this)" onblur="setTimeout(()=>{const d=document.getElementById('tag-search-suggestions');if(d)d.style.display='none';},150)">
+                <div id="tag-search-panel" class="tag-search-panel">
+                    <div class="tag-search-grid">
+                        <div class="tag-search-field">
+                            <label class="tag-search-label">Тег</label>
+                            <input type="text" id="tag-search-input" class="tag-search-input" placeholder="напр. пробій" data-action="tag-search-input">
                             <div id="tag-search-suggestions" class="tag-suggestions"></div>
                         </div>
                         <div>
-                            <label style="font-size:0.8rem; color:var(--text-muted); margin-bottom:4px; display:block;">Від</label>
-                            <input type="date" id="tag-search-from" style="margin:0; width:160px; background:var(--bg-main); border:1px solid var(--border); color:var(--text-main); border-radius:8px; padding:10px 12px; font-family:inherit;">
+                            <label class="tag-search-label">Від</label>
+                            <input type="date" id="tag-search-from" class="tag-search-date">
                         </div>
                         <div>
-                            <label style="font-size:0.8rem; color:var(--text-muted); margin-bottom:4px; display:block;">До</label>
-                            <input type="date" id="tag-search-to" style="margin:0; width:160px; background:var(--bg-main); border:1px solid var(--border); color:var(--text-main); border-radius:8px; padding:10px 12px; font-family:inherit;">
+                            <label class="tag-search-label">До</label>
+                            <input type="date" id="tag-search-to" class="tag-search-date">
                         </div>
                         <div>
-                            <label style="font-size:0.8rem; color:var(--text-muted); margin-bottom:4px; display:block;">Ліміт</label>
-                            <select id="tag-search-limit" style="margin:0; width:90px; background:var(--bg-main); border:1px solid var(--border); color:var(--text-main); border-radius:8px; padding:10px 12px; font-family:inherit; cursor:pointer;">
+                            <label class="tag-search-label">Ліміт</label>
+                            <select id="tag-search-limit" class="tag-search-limit">
                                 <option value="10">10</option>
                                 <option value="20">20</option>
                                 <option value="50" selected>50</option>
@@ -1091,51 +1091,51 @@
                                 <option value="200">200</option>
                             </select>
                         </div>
-                        <button class="btn-primary" style="width:auto; margin:0;" onclick="window.runTagSearch?.()">🔍 Знайти</button>
-                        <button class="btn-secondary" style="width:auto; margin:0;" onclick="window.clearTagSearch?.()">✕ Скинути</button>
+                        <button class="btn-primary btn-auto" data-action="tag-search-run">🔍 Знайти</button>
+                        <button class="btn-secondary btn-auto" data-action="tag-search-clear">✕ Скинути</button>
                     </div>
-                    <div id="tag-search-results" style="margin-top:15px;"></div>
+                    <div id="tag-search-results" class="tag-search-results"></div>
                 </div>
 
                 <div class="unassigned-gallery" id="unassigned-container"></div>
             </div>
 
             <div class="panel rr-screens-panel" id="screens-review-requests">
-                <h3 style="margin:0 0 8px 0; font-size:1.05rem; color:var(--accent);">Запит розбору до ментора куща</h3>
-                <p style="margin:0 0 14px 0; font-size:0.82rem; color:var(--text-muted); line-height:1.45;">Після натискання кнопка стає активною, поки ментор не прийме запит. Загальний розбір дня — у вкладці «Календар». Тут — прибутковість і окремі скріни.</p>
-                <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
-                    <button type="button" id="rr-btn-calendar-profit" class="btn-secondary rr-toggle-btn rr-exempt-access" onclick="window.submitReviewRequest?.('calendar_profit')">Розбір прибутковості / календар</button>
+                <h3 class="review-request-title">Запит розбору до ментора куща</h3>
+                <p class="review-request-text">Після натискання кнопка стає активною, поки ментор не прийме запит. Загальний розбір дня — у вкладці «Календар». Тут — прибутковість і окремі скріни.</p>
+                <div class="flex-wrap-row">
+                    <button type="button" id="rr-btn-calendar-profit" class="btn-secondary rr-toggle-btn rr-exempt-access" data-action="review-request" data-review-type="calendar_profit">Розбір прибутковості / календар</button>
                 </div>
             </div>
             
-            <div class="panel" style="flex-grow: 1;">
-                <h3 style="margin:0 0 15px 0; font-size: 1.4rem;">Детальний розбір сетапів за: <span id="big-screen-date" style="color: var(--accent);"></span></h3>
+            <div class="panel panel-flex-grow">
+                <h3 class="detail-title">Детальний розбір сетапів за: <span id="big-screen-date" class="text-accent"></span></h3>
                 <div id="assigned-container"></div>
             </div>
         </div>
 
         <div id="view-ai" class="view-content">
-            <div style="display: flex; flex-direction: column; flex: 1; min-height: 0;">
-                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                    <button class="btn-primary" id="btn-ai-chat" onclick="switchAITab('chat')" style="flex: 1;">💬 Чат з AI</button>
-                    <button class="btn-secondary" id="btn-ai-saved" onclick="switchAITab('saved')" style="flex: 1;">💾 Збережене</button>
+            <div class="ai-workspace">
+                <div class="ai-tab-row">
+                    <button class="btn-primary btn-flex-1" id="btn-ai-chat" data-action="ai-tab" data-ai-tab="chat">💬 Чат з AI</button>
+                    <button class="btn-secondary btn-flex-1" id="btn-ai-saved" data-action="ai-tab" data-ai-tab="saved">💾 Збережене</button>
                 </div>
 
-                <div id="ai-chat-section" style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">
-                    <div id="data-chat-box" style="flex: 1; overflow-y: auto; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 15px; margin-bottom: 15px;">
-                        <div class="chat-msg ai-msg" style="border-left-color: var(--accent);">
+                <div id="ai-chat-section" class="ai-section">
+                    <div id="data-chat-box" class="data-chat-box">
+                        <div class="chat-msg ai-msg chat-msg-accent">
                             <strong>📊 AI Аналітик:</strong><br>Привіт! Я проаналізую твої угоди. Що тебе цікавить?
                         </div>
                     </div>
-                    <div style="display: flex; gap: 10px;">
-                        <input type="text" id="data-chat-input" placeholder="Напишіть ваш запит до бази..." style="flex: 1; padding: 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-main); color: var(--text-main);" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendDataChatMessage();}">
-                        <button class="btn-primary" onclick="sendDataChatMessage()" style="width: auto; padding: 0 20px;">Відправити</button>
+                    <div class="data-chat-row">
+                        <input type="text" id="data-chat-input" class="data-chat-input" placeholder="Напишіть ваш запит до бази..." data-action="data-chat-input">
+                        <button class="btn-primary data-chat-send" data-action="data-chat-send">Відправити</button>
                     </div>
                 </div>
 
-                <div id="ai-saved-section" style="display: none; flex-direction: column; flex: 1; overflow-y: auto;">
-                    <h3 style="color: var(--accent); margin-bottom: 15px;">💾 Збережені аналізи</h3>
-                    <div id="ai-saved-list" style="display: flex; flex-direction: column; gap: 15px;"></div>
+                <div id="ai-saved-section" class="ai-saved-section initially-hidden">
+                    <h3 class="ai-saved-title">💾 Збережені аналізи</h3>
+                    <div id="ai-saved-list" class="ai-saved-list"></div>
                 </div>
             </div>
         </div>
@@ -1221,24 +1221,24 @@
         
         <div id="view-learn" class="view-content">
             <div class="panel">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
-                    <h3 style="margin:0; color:var(--accent)">Навчання</h3>
-                    <button class="btn-primary" style="width:auto; margin:0;" id="learn-refresh-btn" onclick="window.loadLearnContent?.()">Оновити рекомендації</button>
+                <div class="section-head">
+                    <h3 class="section-title-accent">Навчання</h3>
+                    <button class="btn-primary btn-auto" id="learn-refresh-btn" data-action="learn-refresh">Оновити рекомендації</button>
                 </div>
-                <p id="learn-query-label" style="color:var(--text-muted); font-size:0.85rem; margin-bottom:20px;"></p>
-                <div id="learn-results" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:16px;">
-                    <div style="color:var(--text-muted); text-align:center; padding:40px; grid-column:1/-1;">Натисніть “Оновити” щоб AI підібрав відео для вас</div>
+                <p id="learn-query-label" class="learn-query-label"></p>
+                <div id="learn-results" class="learn-results-grid">
+                    <div class="empty-grid-state">Натисніть “Оновити” щоб AI підібрав відео для вас</div>
                 </div>
             </div>
         </div>
 
         <div id="view-playbook" class="view-content">
             <div class="panel">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                    <h3 style="margin:0; color:var(--accent)">📖 Мій Плейбук</h3>
-                    <button class="btn-primary" style="width:auto; margin:0;" onclick="window.addPlaybookSetup?.()">+ Додати сетап</button>
+                <div class="section-head-tight">
+                    <h3 class="section-title-accent">📖 Мій Плейбук</h3>
+                    <button class="btn-primary btn-auto" data-action="playbook-setup-add">+ Додати сетап</button>
                 </div>
-                <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:20px;">Опишіть свої ідеальні сетапи. AI буде використовувати це при аналізі скрінів і в чаті.</p>
+                <p class="playbook-intro">Опишіть свої ідеальні сетапи. AI буде використовувати це при аналізі скрінів і в чаті.</p>
                 <div id="playbook-list"></div>
             </div>
 
@@ -1252,27 +1252,27 @@
                     <label class="theme-section-label">Колірна тема</label>
                     <div class="theme-cards" role="group">
                         <label class="theme-card" data-theme="dark">
-                            <input type="radio" name="theme" value="dark" id="theme-dark" onchange="applyTheme()">
+                            <input type="radio" name="theme" value="dark" id="theme-dark">
                             <span class="theme-card-preview theme-preview-dark"></span>
                             <span class="theme-card-name">Темна</span>
                         </label>
                         <label class="theme-card" data-theme="light">
-                            <input type="radio" name="theme" value="light" id="theme-light" onchange="applyTheme()">
+                            <input type="radio" name="theme" value="light" id="theme-light">
                             <span class="theme-card-preview theme-preview-light"></span>
                             <span class="theme-card-name">Світла</span>
                         </label>
                         <label class="theme-card" data-theme="matrix">
-                            <input type="radio" name="theme" value="matrix" id="theme-matrix" onchange="applyTheme()">
+                            <input type="radio" name="theme" value="matrix" id="theme-matrix">
                             <span class="theme-card-preview theme-preview-matrix"></span>
                             <span class="theme-card-name">Термінал</span>
                         </label>
                         <label class="theme-card" data-theme="dracula">
-                            <input type="radio" name="theme" value="dracula" id="theme-dracula" onchange="applyTheme()">
+                            <input type="radio" name="theme" value="dracula" id="theme-dracula">
                             <span class="theme-card-preview theme-preview-dracula"></span>
                             <span class="theme-card-name">Дракула</span>
                         </label>
                         <label class="theme-card" data-theme="custom">
-                            <input type="radio" name="theme" value="custom" id="theme-custom" onchange="applyTheme()">
+                            <input type="radio" name="theme" value="custom" id="theme-custom">
                             <span class="theme-card-preview theme-preview-custom">🎨</span>
                             <span class="theme-card-name">Своя</span>
                         </label>
@@ -1284,27 +1284,27 @@
                     <div class="theme-color-grid">
                         <div class="theme-color-item">
                             <label>Фон</label>
-                            <div class="color-input-wrapper"><input type="color" id="ct-bg-main" value="#0f172a" oninput="applyTheme()"></div>
+                            <div class="color-input-wrapper"><input type="color" id="ct-bg-main" value="#0f172a"></div>
                         </div>
                         <div class="theme-color-item">
                             <label>Панелі</label>
-                            <div class="color-input-wrapper"><input type="color" id="ct-bg-panel" value="#1e293b" oninput="applyTheme()"></div>
+                            <div class="color-input-wrapper"><input type="color" id="ct-bg-panel" value="#1e293b"></div>
                         </div>
                         <div class="theme-color-item">
                             <label>Текст</label>
-                            <div class="color-input-wrapper"><input type="color" id="ct-text-main" value="#f8fafc" oninput="applyTheme()"></div>
+                            <div class="color-input-wrapper"><input type="color" id="ct-text-main" value="#f8fafc"></div>
                         </div>
                         <div class="theme-color-item">
                             <label>Акцент</label>
-                            <div class="color-input-wrapper"><input type="color" id="ct-accent" value="#3b82f6" oninput="applyTheme()"></div>
+                            <div class="color-input-wrapper"><input type="color" id="ct-accent" value="#3b82f6"></div>
                         </div>
                         <div class="theme-color-item">
                             <label>Плюс</label>
-                            <div class="color-input-wrapper"><input type="color" id="ct-profit" value="#10b981" oninput="applyTheme()"></div>
+                            <div class="color-input-wrapper"><input type="color" id="ct-profit" value="#10b981"></div>
                         </div>
                         <div class="theme-color-item">
                             <label>Мінус</label>
-                            <div class="color-input-wrapper"><input type="color" id="ct-loss" value="#ef4444" oninput="applyTheme()"></div>
+                            <div class="color-input-wrapper"><input type="color" id="ct-loss" value="#ef4444"></div>
                         </div>
                     </div>
                 </div>
@@ -1312,125 +1312,125 @@
                 <div class="theme-section">
                     <label class="theme-section-label">Шрифт</label>
                     <div class="font-pills">
-                        <label class="font-pill"><input type="radio" name="font" value="inter" id="font-inter" onchange="applyTheme()"><span>Inter</span></label>
-                        <label class="font-pill"><input type="radio" name="font" value="roboto" id="font-roboto" onchange="applyTheme()"><span>Roboto</span></label>
-                        <label class="font-pill"><input type="radio" name="font" value="montserrat" id="font-montserrat" onchange="applyTheme()"><span>Montserrat</span></label>
-                        <label class="font-pill"><input type="radio" name="font" value="playfair" id="font-playfair" onchange="applyTheme()"><span>Playfair</span></label>
-                        <label class="font-pill"><input type="radio" name="font" value="mono" id="font-mono" onchange="applyTheme()"><span>Mono</span></label>
+                        <label class="font-pill"><input type="radio" name="font" value="inter" id="font-inter"><span>Inter</span></label>
+                        <label class="font-pill"><input type="radio" name="font" value="roboto" id="font-roboto"><span>Roboto</span></label>
+                        <label class="font-pill"><input type="radio" name="font" value="montserrat" id="font-montserrat"><span>Montserrat</span></label>
+                        <label class="font-pill"><input type="radio" name="font" value="playfair" id="font-playfair"><span>Playfair</span></label>
+                        <label class="font-pill"><input type="radio" name="font" value="mono" id="font-mono"><span>Mono</span></label>
                     </div>
                 </div>
                 
-                <button class="btn-primary btn-save-theme" onclick="saveThemeSettings()">Зберегти стиль</button>
+                <button class="btn-primary btn-save-theme" data-action="theme-save">Зберегти стиль</button>
             </div>
 
             <div class="panel">
-                <h3 style="color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 10px;">☁️ Google Drive</h3>
-                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 15px;">Підключіть папку з Google Drive для автоматичної синхронізації скріншотів.</p>
-                <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                    <button class="btn-secondary" style="width:auto;" id="drive-connect-btn" onclick="window.connectGoogleDrive?.();">🔗 Підключити Google Drive</button>
-                    <button class="btn-secondary" style="width:auto; display:none; border-color:var(--loss); color:var(--loss);" id="drive-disconnect-btn" onclick="window.disconnectGoogleDrive?.()">🔓 Вийти</button>
-                    <span id="drive-folder-info" style="font-size:0.9rem; color:var(--profit);"></span>
+                <h3 class="settings-title">☁️ Google Drive</h3>
+                <p class="settings-copy">Підключіть папку з Google Drive для автоматичної синхронізації скріншотів.</p>
+                <div class="settings-row">
+                    <button class="btn-secondary btn-auto" id="drive-connect-btn" data-action="drive-connect">🔗 Підключити Google Drive</button>
+                    <button class="btn-secondary btn-auto drive-disconnect-btn initially-hidden" id="drive-disconnect-btn" data-action="drive-disconnect">🔓 Вийти</button>
+                    <span id="drive-folder-info" class="drive-folder-info"></span>
                 </div>
             </div>
 
             <div class="panel">
-                <h3 style="color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 10px;">🛑 Налаштування Дейлосу</h3>
-                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 15px;">Встановіть ліміт втрат. Він буде застосований до місяця, який зараз відкритий у календарі (<span id="settings-current-month-label" style="font-weight:bold; color:var(--text-main);"></span>).</p>
-                <div class="form-group" style="max-width: 250px;">
+                <h3 class="settings-title">🛑 Налаштування Дейлосу</h3>
+                <p class="settings-copy">Встановіть ліміт втрат. Він буде застосований до місяця, який зараз відкритий у календарі (<span id="settings-current-month-label" class="settings-month-label"></span>).</p>
+                <div class="form-group settings-narrow">
                     <label>Ліміт втрат на день ($)</label>
                     <input type="number" id="setting-dayloss-limit" step="1" placeholder="напр. -100">
                 </div>
-                <button class="btn-primary" style="width: auto;" onclick="saveDaylossSetting()">💾 Зберегти для цього місяця</button>
+                <button class="btn-primary btn-auto" data-action="dayloss-save">💾 Зберегти для цього місяця</button>
             </div>
 
             <div class="panel">
-                <h3 style="color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 10px;">3. Візуальне налаштування OCR (Авто-тікери)</h3>
-                <p style="color: var(--text-muted); font-size: 0.9rem;">Крутіть коліщатко, щоб наблизити картинку до курсору. Виділіть зону лівою кнопкою. Перетягуйте зображення правою кнопкою миші.</p>
+                <h3 class="settings-title">3. Візуальне налаштування OCR (Авто-тікери)</h3>
+                <p class="muted-copy">Крутіть коліщатко, щоб наблизити картинку до курсору. Виділіть зону лівою кнопкою. Перетягуйте зображення правою кнопкою миші.</p>
                 <div id="ocr-setup-container">
                     <div id="ocr-zoom-wrapper">
                         <img id="ocr-setup-img" src="" alt="Завантаження...">
                         <div id="ocr-selection-box"></div>
                     </div>
                 </div>
-                <div id="ocr-setup-status" style="color: var(--text-muted); font-size: 0.85rem; margin-top: 10px; margin-bottom: 15px;"></div>
-                <button class="btn-primary" style="width: auto;" onclick="saveVisualOCRSettings()">💾 Зберегти виділену зону та Оновити скріншоти</button>
+                <div id="ocr-setup-status" class="settings-status"></div>
+                <button class="btn-primary btn-auto" data-action="ocr-save">💾 Зберегти виділену зону та Оновити скріншоти</button>
             </div>
 
             <div class="panel">
-                <h3 style="color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 10px;">4. Щоденний Чекліст (Відмітки)</h3>
-                <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 10px;">Рекорди та Дейлоси тепер визначаються автоматично. Створіть свої унікальні правила.</p>
-                <div id="settings-checklist-list" style="margin-bottom: 15px;"></div>
-                <div style="display: flex; gap: 10px;">
-                    <button class="btn-secondary" style="width: auto;" onclick="addNewChecklistItem()">+ Додати новий пункт</button>
-                    <button class="btn-primary" style="width: auto; margin: 0;" onclick="saveChecklist()">💾 Зберегти чекліст</button>
+                <h3 class="settings-title">4. Щоденний Чекліст (Відмітки)</h3>
+                <p class="settings-copy-sm">Рекорди та Дейлоси тепер визначаються автоматично. Створіть свої унікальні правила.</p>
+                <div id="settings-checklist-list" class="settings-list"></div>
+                <div class="settings-actions">
+                    <button class="btn-secondary btn-auto" data-action="settings-checklist-add">+ Додати новий пункт</button>
+                    <button class="btn-primary btn-auto" data-action="settings-checklist-save">💾 Зберегти чекліст</button>
                 </div>
             </div>
             
             <div class="panel">
-                <h3 style="color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 10px;">5. Трекінг Стану (Повзунки 1-10)</h3>
-                <div id="settings-sliders-list" style="margin-bottom: 15px;"></div>
-                <div style="display: flex; gap: 10px;">
-                    <button class="btn-secondary" style="width: auto;" onclick="addNewSliderItem()">+ Додати шкалу</button>
-                    <button class="btn-primary" style="width: auto; margin: 0;" onclick="saveSlidersSettings()">💾 Зберегти шкали</button>
+                <h3 class="settings-title">5. Трекінг Стану (Повзунки 1-10)</h3>
+                <div id="settings-sliders-list" class="settings-list"></div>
+                <div class="settings-actions">
+                    <button class="btn-secondary btn-auto" data-action="settings-slider-add">+ Додати шкалу</button>
+                    <button class="btn-primary btn-auto" data-action="settings-slider-save">💾 Зберегти шкали</button>
                 </div>
             </div>
 
             <div class="panel">
-                <h3 style="color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 10px;">6. Мої Типи Трейдів</h3>
-                <div id="my-trade-types-list" style="margin-bottom: 15px;"></div>
-                <div style="display: flex; gap: 10px;">
-                    <button class="btn-secondary" style="width: auto;" onclick="addMyTradeType()">+ Додати тип</button>
-                    <button class="btn-primary" style="width: auto; margin: 0;" onclick="saveMyTradeTypes()">💾 Зберегти типи</button>
+                <h3 class="settings-title">6. Мої Типи Трейдів</h3>
+                <div id="my-trade-types-list" class="settings-list"></div>
+                <div class="settings-actions">
+                    <button class="btn-secondary btn-auto" data-action="my-trade-type-add">+ Додати тип</button>
+                    <button class="btn-primary btn-auto" data-action="my-trade-type-save">💾 Зберегти типи</button>
                 </div>
             </div>
 
             <div class="panel">
-                <h3 style="color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 10px;">7. Конструктор Ситуацій Плейбуку</h3>
-                <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 10px;">Створіть ситуації (напр. "Відкриття ринку", "Пробій рівня") — потім призначайте їх сетапам у Плейбуку. AI враховуватиме це при аналізі.</p>
-                <div id="settings-situations-list" style="margin-bottom: 15px;"></div>
-                <div style="display: flex; gap: 10px;">
-                    <button class="btn-secondary" style="width: auto;" onclick="addPlaybookSituation()">+ Додати ситуацію</button>
-                    <button class="btn-primary" style="width: auto; margin: 0;" onclick="savePlaybookSituations()">💾 Зберегти ситуації</button>
+                <h3 class="settings-title">7. Конструктор Ситуацій Плейбуку</h3>
+                <p class="settings-copy-sm">Створіть ситуації (напр. "Відкриття ринку", "Пробій рівня") — потім призначайте їх сетапам у Плейбуку. AI враховуватиме це при аналізі.</p>
+                <div id="settings-situations-list" class="settings-list"></div>
+                <div class="settings-actions">
+                    <button class="btn-secondary btn-auto" data-action="playbook-situation-add">+ Додати ситуацію</button>
+                    <button class="btn-primary btn-auto" data-action="playbook-situation-save">💾 Зберегти ситуації</button>
                 </div>
             </div>
 
-            <div class="panel" id="mentor-trade-types-panel" style="display: none; border-color: var(--gold);">
-                <h3 style="color: var(--gold); border-bottom: 1px solid var(--border); padding-bottom: 10px;">👑 Типи трейдів (Тільки Ментор)</h3>
-                <div id="settings-trade-types-list" style="margin-bottom: 15px;"></div>
-                <div style="display: flex; gap: 10px;">
-                    <button class="btn-secondary" style="width: auto;" onclick="addNewTradeType()">+ Додати тип</button>
-                    <button class="btn-primary" style="width: auto; margin: 0; background: var(--gold); color: black;" onclick="saveTradeTypes()">💾 Зберегти типи</button>
+            <div class="panel mentor-panel initially-hidden" id="mentor-trade-types-panel">
+                <h3 class="settings-title settings-title-gold">👑 Типи трейдів (Тільки Ментор)</h3>
+                <div id="settings-trade-types-list" class="settings-list"></div>
+                <div class="settings-actions">
+                    <button class="btn-secondary btn-auto" data-action="trade-type-add">+ Додати тип</button>
+                    <button class="btn-primary btn-auto mentor-save-btn" data-action="trade-type-save">💾 Зберегти типи</button>
                 </div>
             </div>
 
-            <p style="color: var(--text-muted); font-size: 0.82rem; margin-top: 12px; line-height: 1.45;">Режим ментора та структура кущів — у вкладці «Адмін-панель» (для адміністратора та менторів з доступом).</p>
+            <p class="settings-mentor-note">Режим ментора та структура кущів — у вкладці «Адмін-панель» (для адміністратора та менторів з доступом).</p>
 
-            <div class="settings-block" style="margin-top: 30px; border-top: 1px solid var(--border); padding-top: 20px;">
-                <div class="panel" style="margin-bottom: 15px;">
-                    <h3 style="color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 15px;">💾 Імпорт / Експорт</h3>
-                    <div style="display:flex; flex-wrap:wrap; gap:10px;">
-                        <button class="btn-secondary" style="flex:1;" onclick="exportData()">💾 Експорт БД</button>
-                        <button class="btn-secondary" style="flex:1;" onclick="document.getElementById('file-input').click()">📂 Імпорт БД</button>
-                        <button class="btn-secondary" style="flex:1; background:rgba(59,130,246,0.1); color:var(--accent); border-color:var(--accent);" onclick="document.getElementById('csv-input').click()">📊 Fondexx</button>
-                        <button class="btn-secondary" style="flex:1; background:rgba(139,92,246,0.1); color:#a78bfa; border-color:#a78bfa;" onclick="document.getElementById('trades-input').click()">📋 Trades</button>
-                        <button class="btn-secondary" style="flex:1; background:rgba(16,185,129,0.1); color:var(--profit); border-color:var(--profit);" onclick="document.getElementById('ppro-input').click()">📊 PPRO</button>
+            <div class="settings-block settings-block-separated">
+                <div class="panel panel-spaced">
+                    <h3 class="settings-title settings-title-spaced">💾 Імпорт / Експорт</h3>
+                    <div class="import-export-grid">
+                        <button class="btn-secondary flex-fill" data-action="export-data">💾 Експорт БД</button>
+                        <button class="btn-secondary flex-fill" data-action="file-picker" data-target="file-input">📂 Імпорт БД</button>
+                        <button class="btn-secondary flex-fill import-fondexx-btn" data-action="file-picker" data-target="csv-input">📊 Fondexx</button>
+                        <button class="btn-secondary flex-fill import-trades-btn" data-action="file-picker" data-target="trades-input">📋 Trades</button>
+                        <button class="btn-secondary flex-fill import-ppro-btn" data-action="file-picker" data-target="ppro-input">📊 PPRO</button>
                     </div>
                 </div>
-                <button class="btn-primary" style="background: var(--loss); border: none; width: 100%;" onclick="logout()">🚪 Вийти з акаунту</button>
+                <button class="btn-primary logout-danger-btn" data-action="logout">🚪 Вийти з акаунту</button>
             </div>
         </div>
 
-        <div id="view-admin" class="view-content admin-panel" style="display:none;">
+        <div id="view-admin" class="view-content admin-panel initially-hidden">
             <div class="panel admin-panel-content">
                 <div class="admin-panel-header">
                     <h3 class="admin-panel-title">Адмін-панель</h3>
-                    <button type="button" id="admin-refresh-users-btn" class="btn-secondary admin-refresh-btn" onclick="window.renderAdminPanel?.()">Оновити список</button>
+                    <button type="button" id="admin-refresh-users-btn" class="btn-secondary admin-refresh-btn" data-action="admin-refresh">Оновити список</button>
                 </div>
-                <p style="color:var(--text-muted);font-size:0.85rem;margin:0 0 16px;line-height:1.45;">Керування ролями, менторством у кущі, ніком і кущами. Ментори в «Команді» відображаються першими в групі.</p>
-                <div id="admin-team-structure" class="panel admin-team-structure" style="display:none;">
+                <p class="admin-lead">Керування ролями, менторством у кущі, ніком і кущами. Ментори в «Команді» відображаються першими в групі.</p>
+                <div id="admin-team-structure" class="panel admin-team-structure initially-hidden">
                     <h4 class="admin-team-structure-title">Структура кущів</h4>
                     <p class="admin-team-structure-lead">Створення кущів, переміщення трейдерів і небезпечні операції — тут же, без окремого блоку в налаштуваннях.</p>
-                    <button type="button" id="btn-admin-team-manager" class="btn-primary admin-team-manager-btn rr-exempt-access" onclick="window.openTeamManager?.()">Управління кущами</button>
+                    <button type="button" id="btn-admin-team-manager" class="btn-primary admin-team-manager-btn rr-exempt-access" data-action="team-manager-open">Управління кущами</button>
                 </div>
                 <div id="admin-users-list" class="admin-users-list"></div>
             </div>
@@ -1438,26 +1438,26 @@
 
     </div><!-- /main-content -->
 
-    <div id="name-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.7); z-index:99998; justify-content:center; align-items:center;">
-        <div style="background:var(--bg-panel); padding:35px; border-radius:12px; border:1px solid var(--border); width:340px; text-align:center;">
-            <h2 style="color:var(--accent); margin:0 0 8px 0;">👤 Одна хвилинка</h2>
-            <p style="color:var(--text-muted); font-size:0.9rem; margin:0 0 20px 0;">Введіть своє ім'я та прізвище — вони будуть видні ментору та команді.</p>
-            <input type="text" id="modal-fname" placeholder="Ім'я" style="width:100%; padding:12px; margin-bottom:10px; background:var(--bg-main); border:1px solid var(--border); color:var(--text-main); border-radius:6px; box-sizing:border-box;">
-            <input type="text" id="modal-lname" placeholder="Прізвище" style="width:100%; padding:12px; margin-bottom:10px; background:var(--bg-main); border:1px solid var(--border); color:var(--text-main); border-radius:6px; box-sizing:border-box;">
-            <div id="name-modal-error" style="display:none; color:var(--loss); font-size:0.85rem; margin-bottom:10px;"></div>
-            <button class="btn-primary" style="width:100%;" onclick="saveProfileName()">Зберегти</button>
+    <div id="name-modal" class="app-modal-overlay">
+        <div class="app-modal-card">
+            <h2 class="app-modal-title">👤 Одна хвилинка</h2>
+            <p class="app-modal-text">Введіть своє ім'я та прізвище — вони будуть видні ментору та команді.</p>
+            <input type="text" id="modal-fname" class="app-modal-input" placeholder="Ім'я">
+            <input type="text" id="modal-lname" class="app-modal-input" placeholder="Прізвище">
+            <div id="name-modal-error" class="app-modal-error"></div>
+            <button class="btn-primary" data-action="profile-name-save">Зберегти</button>
         </div>
     </div>
 
     <!-- SESSION MODAL -->
-    <div id="session-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:99990; justify-content:center; align-items:center; padding:16px; box-sizing:border-box;">
-        <div style="background:var(--bg-panel); border:1px solid var(--border); border-radius:14px; width:100%; max-width:480px; max-height:90vh; overflow-y:auto; padding:28px; box-sizing:border-box; position:relative;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+    <div id="session-modal" class="app-modal-overlay session-modal-overlay">
+        <div class="session-modal-card">
+            <div class="session-modal-head">
                 <div>
-                    <h2 style="margin:0; color:var(--accent); font-size:1.3rem;">🎯 Підготовка до сесії</h2>
-                    <div id="session-modal-date" style="color:var(--text-muted); font-size:0.85rem; margin-top:4px;"></div>
+                    <h2 class="session-modal-title">🎯 Підготовка до сесії</h2>
+                    <div id="session-modal-date" class="session-modal-date"></div>
                 </div>
-                <button onclick="window.snoozeSessionModal?.()" style="background:transparent; border:none; color:var(--text-muted); font-size:1.4rem; cursor:pointer; padding:4px 8px; border-radius:6px;" title="Нагадати пізніше">✕</button>
+                <button class="icon-button-plain" data-action="session-modal-snooze" title="Нагадати пізніше">✕</button>
             </div>
 
             <div class="form-group">
@@ -1470,38 +1470,38 @@
             </div>
             <div class="form-group">
                 <label>📚 Сетапи з плейбуку</label>
-                <div id="sm-playbook-checks" style="display:flex; flex-direction:column; gap:6px; margin-top:4px;"></div>
+                <div id="sm-playbook-checks" class="session-playbook-checks"></div>
             </div>
             <div class="form-group">
                 <label>💪 Загальна готовність</label>
-                <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text-muted); margin-bottom:4px;">
+                <div class="session-readiness-head">
                     <span>🔴 Не готовий</span>
-                    <span id="sm-readiness-val" style="font-weight:bold; color:var(--accent);">5/10</span>
+                    <span id="sm-readiness-val" class="session-readiness-value">5/10</span>
                     <span>🟢 Готовий</span>
                 </div>
-                <input type="range" min="1" max="10" value="5" id="sm-readiness" class="discipline-slider" style="width:100%; accent-color:var(--accent);" oninput="document.getElementById('sm-readiness-val').textContent=this.value+'/10'">
+                <input type="range" min="1" max="10" value="5" id="sm-readiness" class="discipline-slider range-full-accent" data-output="sm-readiness-val" data-suffix="/10">
             </div>
 
-            <button class="btn-ai" onclick="window.checkSessionModalReadiness?.()" style="margin-bottom:10px;">🤖 AI: Чи готовий торгувати?</button>
-            <div id="sm-ai-result" style="display:none; margin-bottom:14px; padding:12px; border-radius:8px; font-size:0.9rem; line-height:1.5;"></div>
+            <button class="btn-ai session-ai-check" data-action="session-modal-check">🤖 AI: Чи готовий торгувати?</button>
+            <div id="sm-ai-result" class="session-ai-result"></div>
 
-            <div style="display:flex; gap:10px; margin-top:4px;">
-                <button class="btn-primary" style="flex:2;" onclick="window.saveSessionModal?.()">💾 Зберегти і почати</button>
-                <button class="btn-secondary" style="flex:1;" onclick="window.snoozeSessionModal?.()">⏰ Пізніше</button>
+            <div class="session-modal-actions">
+                <button class="btn-primary btn-flex-2" data-action="session-modal-save">💾 Зберегти і почати</button>
+                <button class="btn-secondary btn-flex-1" data-action="session-modal-snooze">⏰ Пізніше</button>
             </div>
         </div>
     </div>
 
-    <button id="sos-btn" onclick="openSOSModal()" title="Натисни, якщо криє тільт">
+    <button id="sos-btn" data-action="sos-open" title="Натисни, якщо криє тільт">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
     </button>
     <div id="sos-modal" class="modal-overlay">
         <div class="modal-content sos-theme">
             <div class="modal-header">
-                <h3 style="color: #ef4444; margin: 0; display: flex; align-items: center; gap: 10px;">
-                    <span style="animation: sos-blink 1s infinite;">🚨</span> ЕКСТРЕНА ЗУПИНКА
+                <h3 class="sos-title">
+                    <span class="sos-blink">🚨</span> ЕКСТРЕНА ЗУПИНКА
                 </h3>
-                <button class="close-btn" onclick="closeSOSModal()" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;padding:6px;border-radius:8px;display:flex;align-items:center;" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
+                <button class="close-btn icon-button-plain" data-action="sos-close">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
             </div>
@@ -1509,28 +1509,28 @@
                 <div class="chat-msg ai-msg">Ти натиснув кнопку SOS. Я твій психолог трейдера. Опиши ситуацію, можливо я тобі допоможу.</div>
             </div>
             <div class="chat-input-area">
-                <input type="text" id="sos-input" placeholder="Що сталось? Напиши сюди..." onkeypress="if(event.key === 'Enter') sendSOSMessage()">
-                <button class="btn-primary" style="width: auto; margin: 0; background: #ef4444;" id="sos-send-btn" onclick="sendSOSMessage()">Відправити</button>
+                <input type="text" id="sos-input" placeholder="Що сталось? Напиши сюди..." data-action="sos-input">
+                <button class="btn-primary sos-send-btn" id="sos-send-btn" data-action="sos-send">Відправити</button>
             </div>
         </div>
     </div>
 
-    <div id="team-sidebar-backdrop" class="team-sidebar-backdrop" onclick="window.closeTeamSidebar?.()"></div>
+    <div id="team-sidebar-backdrop" class="team-sidebar-backdrop" data-action="team-sidebar-close"></div>
     <div id="team-sidebar" class="team-sidebar-panel">
         <div class="team-sidebar-header">
             <div class="team-sidebar-head-text">
                 <h2 class="team-sidebar-title">Команда</h2>
                 <p class="team-sidebar-sub">Кущі та учасники. Ментори — зверху в кожній групі. Натисніть рядок, щоб відкрити журнал трейдера.</p>
             </div>
-            <button type="button" class="team-sidebar-close" onclick="window.closeTeamSidebar?.()" aria-label="Закрити">
+            <button type="button" class="team-sidebar-close" data-action="team-sidebar-close" aria-label="Закрити">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
         </div>
         <div id="team-list-container" class="team-list-container"></div>
     </div>
     
-    <div id="team-manager-modal" class="team-manager-overlay" style="display: none;" onclick="if(event.target===this)this.style.display='none'">
-        <div class="team-manager-card" role="dialog" aria-labelledby="team-manager-title" onclick="event.stopPropagation()">
+    <div id="team-manager-modal" class="team-manager-overlay" data-action="team-manager-backdrop">
+        <div class="team-manager-card" role="dialog" aria-labelledby="team-manager-title">
             <div class="team-manager-head">
                 <h2 id="team-manager-title" class="team-manager-title">Управління кущами</h2>
                 <p class="team-manager-lead">Створення груп, переміщення трейдерів між кущами та небезпечні операції — лише для менторів з доступом.</p>
@@ -1539,32 +1539,32 @@
             <section class="tm-section">
                 <label class="tm-label" for="new-team-name">Новий кущ</label>
                 <input type="text" id="new-team-name" class="tm-input" placeholder="Наприклад: Група Львів" autocomplete="off">
-                <button type="button" class="btn-primary tm-btn-full" onclick="createNewTeam()">Додати кущ</button>
+                <button type="button" class="btn-primary tm-btn-full" data-action="team-create">Додати кущ</button>
             </section>
 
             <section class="tm-section">
                 <label class="tm-label tm-warn" for="delete-team-select">Видалити кущ</label>
-                <p class="team-manager-lead" style="margin:0 0 8px;">Учасники повернуться в «Без куща».</p>
+                <p class="team-manager-lead team-manager-lead-tight">Учасники повернуться в «Без куща».</p>
                 <select id="delete-team-select" class="tm-select"></select>
-                <button type="button" class="btn-primary tm-btn-full tm-delete-team-btn" onclick="deleteTeam()">Видалити кущ</button>
+                <button type="button" class="btn-primary tm-btn-full tm-delete-team-btn" data-action="team-delete">Видалити кущ</button>
             </section>
 
             <section class="tm-section">
                 <label class="tm-label" for="move-trader-nick">Перемістити трейдера</label>
                 <select id="move-trader-nick" class="tm-select" aria-label="Трейдер"></select>
                 <select id="move-trader-team" class="tm-select" aria-label="Цільовий кущ"></select>
-                <button type="button" class="btn-primary tm-btn-full tm-move-btn" onclick="moveTrader()">Перемістити</button>
+                <button type="button" class="btn-primary tm-btn-full tm-move-btn" data-action="team-move-trader">Перемістити</button>
             </section>
 
             <section class="tm-section">
                 <label class="tm-label tm-danger" for="delete-trader-nick">Видалити профіль трейдера</label>
-                <p class="team-manager-lead" style="margin:0 0 8px;">Без відновлення: журнал і дані профілю.</p>
+                <p class="team-manager-lead team-manager-lead-tight">Без відновлення: журнал і дані профілю.</p>
                 <select id="delete-trader-nick" class="tm-select"></select>
-                <button type="button" class="btn-primary tm-btn-full tm-delete-user-btn" onclick="deleteTraderProfile()">Видалити назавжди</button>
+                <button type="button" class="btn-primary tm-btn-full tm-delete-user-btn" data-action="team-delete-trader">Видалити назавжди</button>
             </section>
 
             <div class="tm-footer">
-                <button type="button" class="btn-secondary tm-btn-full" onclick="document.getElementById('team-manager-modal').style.display='none'">Закрити</button>
+                <button type="button" class="btn-secondary tm-btn-full" data-action="team-manager-close">Закрити</button>
             </div>
         </div>
     </div>
@@ -1582,18 +1582,14 @@
         <div id="notif-dropdown-list" class="notif-dropdown-list"></div>
     </div>
 
-    <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        setTimeout(() => { if (window.renderView) window.renderView(); }, 600);
-    });
-    </script>
     <script src="lw-charts.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://apis.google.com/js/api.js" async defer></script>
     <script type="module" src="js/main.js"></script>
+    <script type="module" src="js/app_enhancements.js"></script>
 
     <!-- FAB -->
-    <button class="quick-trade-fab" onclick="toggleRightSidebar()" title="Додати запис">
+    <button class="quick-trade-fab" data-action="right-sidebar-toggle" title="Додати запис">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
     </button>
 

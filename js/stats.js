@@ -3,6 +3,7 @@ import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { normalizeAppData, getDefaultAppData } from './data_utils.js';
 import { loadMonth, loadAllMonths, getCurrentViewedUserId, resolveViewedUserId } from './storage.js';
+import { escapeHtml } from './utils.js';
 
 // ─── STATS CACHE ───────────────────────────────────────────────────────────────────────────────
 // Module-level Map survives filter switches and profile switches within the
@@ -317,24 +318,30 @@ export function renderStatsSourceSelector() {
     triggerLabel.innerText = getStatsSelectionLabel(state.statsSourceSelection.type, state.statsSourceSelection.key);
 
     let currentKey = state.CURRENT_VIEWED_USER || state.USER_DOC_NAME || '';
-    let html = `<button class="${getStatsSourceButtonClass('current', currentKey)}" onclick="selectStatsSource('current', '${(currentKey || '').replace(/'/g, "\\'")}')">🏠 Мій профіль</button>`;
+    let html = `<button class="${getStatsSourceButtonClass('current', currentKey)}" data-stats-source-type="current" data-stats-source-key="${escapeHtml(currentKey)}">🏠 Мій профіль</button>`;
 
-    html += `<button class="${getStatsSourceButtonClass('all', '')}" onclick="selectStatsSource('all', '')">🌍 Всі трейдери разом</button>`;
+    html += `<button class="${getStatsSourceButtonClass('all', '')}" data-stats-source-type="all" data-stats-source-key="">🌍 Всі трейдери разом</button>`;
 
     Object.keys(state.TEAM_GROUPS || {}).sort((a, b) => a.localeCompare(b, 'uk')).forEach(groupName => {
-        let escapedGroup = groupName.replace(/'/g, "\\'");
-        html += `<div class="stats-group-title">${groupName}</div>`;
-        html += `<button class="${getStatsSourceButtonClass('team', groupName)}" onclick="selectStatsSource('team', '${escapedGroup}')">📚 Весь кущ</button>`;
+        html += `<div class="stats-group-title">${escapeHtml(groupName)}</div>`;
+        html += `<button class="${getStatsSourceButtonClass('team', groupName)}" data-stats-source-type="team" data-stats-source-key="${escapeHtml(groupName)}">📚 Весь кущ</button>`;
         (state.TEAM_GROUPS[groupName] || []).slice().sort((a, b) => String(a).localeCompare(String(b), 'uk')).forEach(nick => {
             let cleanNick = (nick.includes('(') && nick.includes(')')) ? nick.split('(')[1].replace(')', '').trim() : nick;
             // Не показуємо себе в списку
             if (`${cleanNick}_stats` === state.USER_DOC_NAME) return;
-            let escapedNick = (cleanNick || nick).replace(/'/g, "\\'").replace(/"/g, '&quot;');
-            html += `<button class="${getStatsSourceButtonClass('trader', cleanNick)}" onclick="selectStatsSource('trader', '${escapedNick}')">👤 ${nick}</button>`;
+            html += `<button class="${getStatsSourceButtonClass('trader', cleanNick)}" data-stats-source-type="trader" data-stats-source-key="${escapeHtml(cleanNick || nick)}">👤 ${escapeHtml(nick)}</button>`;
         });
     });
 
     container.innerHTML = html;
+    if (!container.dataset.statsSourceBound) {
+        container.dataset.statsSourceBound = 'true';
+        container.addEventListener('click', (event) => {
+            const button = event.target?.closest?.('[data-stats-source-type]');
+            if (!button || !container.contains(button)) return;
+            void selectStatsSource(button.dataset.statsSourceType, button.dataset.statsSourceKey || '');
+        });
+    }
 }
 
 export async function selectStatsSource(type, key) {
@@ -403,12 +410,19 @@ export function renderTradeTypeSelector() {
     const current = state.activeTradeTypeFilter;
     triggerLabel.innerText = current || 'Всі типи';
 
-    let html = `<button class="stats-source-btn${!current ? ' active' : ''}" onclick="selectTradeTypeFilter(null)">Всі типи</button>`;
+    let html = `<button class="stats-source-btn${!current ? ' active' : ''}" data-trade-type-filter="">Всі типи</button>`;
     types.forEach(t => {
-        const esc = t.replace(/'/g, "\\'");
-        html += `<button class="stats-source-btn${current === t ? ' active' : ''}" onclick="selectTradeTypeFilter('${esc}')">${t}</button>`;
+        html += `<button class="stats-source-btn${current === t ? ' active' : ''}" data-trade-type-filter="${escapeHtml(t)}">${escapeHtml(t)}</button>`;
     });
     container.innerHTML = html;
+    if (!container.dataset.tradeTypeBound) {
+        container.dataset.tradeTypeBound = 'true';
+        container.addEventListener('click', (event) => {
+            const button = event.target?.closest?.('[data-trade-type-filter]');
+            if (!button || !container.contains(button)) return;
+            selectTradeTypeFilter(button.dataset.tradeTypeFilter || null);
+        });
+    }
 }
 
 export function selectTradeTypeFilter(type) {
@@ -762,10 +776,10 @@ function renderMistakeChart(filteredEntries, cssRed, cssText, cssBgPanel) {
         .sort((a, b) => a[1] - b[1]); // від найдорожчої (найбільший мінус) до найменшої
 
     if (!entries.length) {
-        panel.style.display = 'none';
+        panel.classList.add('initially-hidden');
         return;
     }
-    panel.style.display = '';
+    panel.classList.remove('initially-hidden');
 
     const labels = entries.map(([k]) => k);
     const values = entries.map(([, v]) => parseFloat(v.toFixed(2)));
@@ -1231,28 +1245,45 @@ export function buildStatsTree() {
     }
     
     let isAllTimeActive = state.activeFilters.some(f => f.type === 'all-time');
-    let html = `<div class="tree-item tree-root ${isAllTimeActive ? 'active-filter' : ''}"><span class="tree-toggle" style="opacity: 0;"></span><span class="tree-label" onclick="toggleStatsFilter('all', null, this.parentElement, event, 'За весь час')">🌍 За весь час</span></div>`;
+    let html = `<div class="tree-item tree-root ${isAllTimeActive ? 'active-filter' : ''}"><span class="tree-toggle" style="opacity: 0;"></span><span class="tree-label" data-stats-filter-type="all" data-stats-filter-value="" data-stats-filter-label="За весь час">🌍 За весь час</span></div>`;
     let monthsNames = ["Січень", "Лютий", "Березень", "Квітень", "Травень", "Червень", "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень"];
     let years = Object.keys(tree).sort((a,b)=>b-a);
     html += `<ul class="tree-nav">`;
     for(let y of years) {
         let isYActive = state.activeFilters.some(f => f.type === 'year' && f.val == y) ? 'active-filter' : '';
-        html += `<li><div class="tree-item ${isYActive}"><span class="tree-toggle" onclick="toggleTree(this)">▼</span><span class="tree-label" onclick="toggleStatsFilter('year', ${y}, this.parentElement, event, '${y} рік')">${y}</span></div><ul>`;
+        html += `<li><div class="tree-item ${isYActive}"><span class="tree-toggle" data-tree-toggle>▼</span><span class="tree-label" data-stats-filter-type="year" data-stats-filter-value="${y}" data-stats-filter-label="${y} рік">${y}</span></div><ul>`;
         let months = Object.keys(tree[y]).map(Number).sort((a,b)=>b-a);
         for(let m of months) {
             let mVal = `${y}-${m}`; let isMActive = state.activeFilters.some(f => f.type === 'month' && f.val === mVal) ? 'active-filter' : '';
-            html += `<li><div class="tree-item ${isMActive}"><span class="tree-toggle" onclick="toggleTree(this)">▼</span><span class="tree-label" onclick="toggleStatsFilter('month', '${mVal}', this.parentElement, event, '${monthsNames[m]} ${y}')">${monthsNames[m]}</span></div><ul>`;
+            html += `<li><div class="tree-item ${isMActive}"><span class="tree-toggle" data-tree-toggle>▼</span><span class="tree-label" data-stats-filter-type="month" data-stats-filter-value="${mVal}" data-stats-filter-label="${escapeHtml(monthsNames[m])} ${y}">${escapeHtml(monthsNames[m])}</span></div><ul>`;
             let weeks = Array.from(tree[y][m]).sort((a,b)=>a-b); 
             for(let w of weeks) {
                 let wVal = `${y}-${m}-${w}`; let isWActive = state.activeFilters.some(f => f.type === 'week' && f.val === wVal) ? 'active-filter' : '';
-                html += `<li><div class="tree-item ${isWActive}"><span class="tree-toggle" style="opacity: 0;"></span><span class="tree-label" onclick="toggleStatsFilter('week', '${wVal}', this.parentElement, event, '${monthsNames[m]}, Тиждень ${w}')">Тиждень ${w}</span></div></li>`;
+                html += `<li><div class="tree-item ${isWActive}"><span class="tree-toggle" style="opacity: 0;"></span><span class="tree-label" data-stats-filter-type="week" data-stats-filter-value="${wVal}" data-stats-filter-label="${escapeHtml(monthsNames[m])}, Тиждень ${w}">Тиждень ${w}</span></div></li>`;
             }
             html += `</ul></li>`;
         }
         html += `</ul></li>`;
     }
     html += `</ul>`;
-    document.getElementById('stats-tree-container').innerHTML = html;
+    const treeContainer = document.getElementById('stats-tree-container');
+    treeContainer.innerHTML = html;
+    if (!treeContainer.dataset.statsTreeBound) {
+        treeContainer.dataset.statsTreeBound = 'true';
+        treeContainer.addEventListener('click', (event) => {
+            const toggle = event.target?.closest?.('[data-tree-toggle]');
+            if (toggle && treeContainer.contains(toggle)) {
+                toggleTree(toggle);
+                return;
+            }
+            const label = event.target?.closest?.('[data-stats-filter-type]');
+            if (!label || !treeContainer.contains(label)) return;
+            const type = label.dataset.statsFilterType;
+            const raw = label.dataset.statsFilterValue || '';
+            const value = type === 'year' ? Number(raw) : raw || null;
+            void toggleStatsFilter(type, value, label.parentElement, event, label.dataset.statsFilterLabel || label.textContent || '');
+        });
+    }
 }
 
 function fmtMoney(val) {

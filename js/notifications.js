@@ -106,30 +106,47 @@ function updateBellBadge() {
 function renderDropdown() {
     const root = document.getElementById('notif-dropdown-list');
     if (!root) return;
-    const items = readList();
-    if (items.length === 0) {
-        root.innerHTML = '<div class="notif-empty">Поки порожньо — з’являться події з журналу та ментора.</div>';
+    root.textContent = '';
+    const safeItems = readList();
+    if (safeItems.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'notif-empty';
+        empty.textContent = 'Поки порожньо - з’являться події з журналу та ментора.';
+        root.appendChild(empty);
         return;
     }
-    root.innerHTML = items
-        .map((it) => {
-            const safe = (s) =>
-                String(s ?? '')
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/"/g, '&quot;');
-            const dt = new Date(it.t).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' });
-            const unread = it.read ? '' : ' notif-row--unread';
-            const click = it.href
-                ? `onclick="window.handleNotifRowClick?.('${safe(it.id)}','${safe(it.href)}')"`
-                : `onclick="window.markNotifRead?.('${safe(it.id)}')"`;
-            return `<div class="notif-row${unread}" ${click} role="button" tabindex="0">
-                <div class="notif-row-title">${safe(it.title)}</div>
-                <div class="notif-row-body">${safe(it.body)}</div>
-                <div class="notif-row-meta">${safe(dt)}</div>
-            </div>`;
-        })
-        .join('');
+
+    safeItems.forEach((it) => {
+        const row = document.createElement('div');
+        row.className = `notif-row${it.read ? '' : ' notif-row--unread'}`;
+        row.role = 'button';
+        row.tabIndex = 0;
+
+        const title = document.createElement('div');
+        title.className = 'notif-row-title';
+        title.textContent = it.title ?? '';
+
+        const body = document.createElement('div');
+        body.className = 'notif-row-body';
+        body.textContent = it.body ?? '';
+
+        const meta = document.createElement('div');
+        meta.className = 'notif-row-meta';
+        meta.textContent = new Date(it.t).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' });
+
+        const activate = () => handleNotificationRowClick(it.id, it.href);
+        row.addEventListener('click', activate);
+        row.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            activate();
+        });
+
+        row.appendChild(title);
+        row.appendChild(body);
+        row.appendChild(meta);
+        root.appendChild(row);
+    });
 }
 
 function markAllRead() {
@@ -147,6 +164,27 @@ function markOneRead(id) {
 }
 
 /** Періодична перевірка: зміни менторського коментаря, тег розбору, порожній сьогоднішній день. */
+function closeNotificationPanel() {
+    document.getElementById('notif-dropdown')?.classList.remove('open');
+    document.getElementById('notif-dropdown-backdrop')?.classList.remove('visible');
+}
+
+function openNotificationHref(href) {
+    const tabs = {
+        'tab:dash': 'dash',
+        'tab:calendar': 'calendar',
+        'tab:mentor-review': 'mentor-review',
+    };
+    const target = tabs[href];
+    if (target && window.switchMainTab) window.switchMainTab(target);
+}
+
+function handleNotificationRowClick(id, href = '') {
+    markOneRead(id);
+    openNotificationHref(href);
+    closeNotificationPanel();
+}
+
 export function scanJournalForNotifications() {
     if (!state.USER_DOC_NAME || !state.appData?.journal) return;
 
@@ -246,18 +284,13 @@ export function initNotifications() {
         markOneRead(id);
     };
     window.handleNotifRowClick = (id, href) => {
-        markOneRead(id);
-        if (href === 'tab:dash' && window.switchMainTab) window.switchMainTab('dash');
-        if (href === 'tab:calendar' && window.switchMainTab) window.switchMainTab('calendar');
-        if (href === 'tab:mentor-review' && window.switchMainTab) window.switchMainTab('mentor-review');
-        closePanel();
+        handleNotificationRowClick(id, href);
     };
     window.requestNotificationPermission = requestNotificationPermission;
     window.scanJournalForNotifications = scanJournalForNotifications;
 
     function closePanel() {
-        panel?.classList.remove('open');
-        backdrop?.classList.remove('visible');
+        closeNotificationPanel();
     }
     function togglePanel() {
         const open = panel?.classList.toggle('open');

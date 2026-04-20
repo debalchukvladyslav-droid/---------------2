@@ -82,12 +82,12 @@ VALUES
     ('files', 'files', false)
 ON CONFLICT (id) DO NOTHING;
 
--- Development-friendly policy. For production, replace this with owner/admin
--- policies instead of disabling RLS.
-ALTER TABLE public.profiles DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.journal_days DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.journal_months DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.screenshots DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.teams DISABLE ROW LEVEL SECURITY;
+-- Secure by default: keep RLS enabled. Apply database/security/01_enable_rls.sql
+-- after this file to install the owner/mentor/admin policies.
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.journal_days ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.journal_months ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.screenshots ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.teams ENABLE ROW LEVEL SECURITY;
 
 NOTIFY pgrst, 'reload schema';

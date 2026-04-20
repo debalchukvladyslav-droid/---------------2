@@ -695,7 +695,7 @@ async function bootApp(user) {
 
         if (canAccessMentorReviewQueue()) {
             document.querySelectorAll('.mentor-review-nav-item').forEach((el) => {
-                el.style.display = '';
+                el.classList.remove('initially-hidden');
             });
             initMentorReviewUI();
             setTimeout(() => {
@@ -744,10 +744,10 @@ function showLoginScreen() {
     const overlay = document.getElementById('auth-overlay');
     if (overlay) overlay.style.display = 'flex';
     document.querySelectorAll('.mentor-review-nav-item').forEach((el) => {
-        el.style.display = 'none';
+        el.classList.add('initially-hidden');
     });
     document.querySelectorAll('.admin-nav-item, .admin-tab-mobile').forEach((el) => {
-        el.style.display = 'none';
+        el.classList.add('initially-hidden');
     });
     setMentorReviewNavBadges(0);
     loadTeams();

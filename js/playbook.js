@@ -2,6 +2,7 @@
 import { state } from './state.js';
 import { saveToLocal } from './storage.js';
 import { initSetupChart, getChartData } from './playbook_chart.js';
+import { escapeHtml } from './utils.js';
 function getPlaybookStorageKey(nick) {
     return `pj:${nick}:playbook`;
 }
@@ -46,15 +47,27 @@ export function renderPlaybook() {
     container.innerHTML = playbook.map((setup, idx) => `
         <div class="playbook-item" id="playbook-item-${idx}">
             <div class="playbook-header">
-                <span class="playbook-name">${setup.name}</span>
+                <span class="playbook-name">${escapeHtml(setup.name)}</span>
                 <div style="display:flex; gap:8px;">
-                    <button class="btn-secondary" style="width:auto; padding:4px 10px; margin:0;" onclick="window.editPlaybookSetup?.(${idx})">✏️</button>
-                    <button class="btn-secondary" style="width:auto; padding:4px 10px; margin:0; border-color:var(--loss); color:var(--loss);" onclick="window.deletePlaybookSetup?.(${idx})">🗑️</button>
+                    <button class="btn-secondary" style="width:auto; padding:4px 10px; margin:0;" data-playbook-action="edit" data-playbook-index="${idx}">✏️</button>
+                    <button class="btn-secondary" style="width:auto; padding:4px 10px; margin:0; border-color:var(--loss); color:var(--loss);" data-playbook-action="delete" data-playbook-index="${idx}">🗑️</button>
                 </div>
             </div>
-            <div class="playbook-desc" id="playbook-desc-${idx}">${setup.description.replace(/\n/g, '<br>')}</div>
+            <div class="playbook-desc" id="playbook-desc-${idx}">${escapeHtml(setup.description).replace(/\n/g, '<br>')}</div>
         </div>
     `).join('');
+
+    if (!container.dataset.playbookActionsBound) {
+        container.dataset.playbookActionsBound = 'true';
+        container.addEventListener('click', (event) => {
+            const button = event.target?.closest?.('[data-playbook-action]');
+            if (!button || !container.contains(button)) return;
+            const idx = Number(button.dataset.playbookIndex);
+            if (!Number.isInteger(idx)) return;
+            if (button.dataset.playbookAction === 'edit') editPlaybookSetup(idx);
+            if (button.dataset.playbookAction === 'delete') deletePlaybookSetup(idx);
+        });
+    }
 }
 
 export function addPlaybookSetup() {
@@ -140,9 +153,9 @@ export function editPlaybookSetup(idx) {
         </div>
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">
             <label style="font-size:0.8rem; color:var(--text-muted);">Свічок: <strong id="pbc-candles-val-${idx}">30</strong></label>
-            <input type="range" id="pbc-candles-${idx}" min="10" max="150" value="30" style="width:120px;" oninput="document.getElementById('pbc-candles-val-${idx}').textContent=this.value">
+            <input type="range" id="pbc-candles-${idx}" min="10" max="150" value="30" style="width:120px;" data-pbc-output="pbc-candles-val-${idx}">
             <label style="font-size:0.8rem; color:var(--text-muted);">Волатильність: <strong id="pbc-vol-val-${idx}">3</strong></label>
-            <input type="range" id="pbc-volatility-${idx}" min="1" max="10" value="3" style="width:100px;" oninput="document.getElementById('pbc-vol-val-${idx}').textContent=this.value">
+            <input type="range" id="pbc-volatility-${idx}" min="1" max="10" value="3" style="width:100px;" data-pbc-output="pbc-vol-val-${idx}">
             <button class="btn-secondary" id="pbc-clear-btn-${idx}" style="width:auto; margin:0; padding:4px 10px; font-size:0.8rem;">🗑 Очистити</button>
             <button class="btn-primary" id="pbc-generate-btn-${idx}" style="width:auto; margin:0; padding:4px 10px; font-size:0.8rem;">⚡ Генерувати</button>
         </div>
@@ -175,6 +188,12 @@ export function editPlaybookSetup(idx) {
 
     item.innerHTML = '';
     item.appendChild(wrapper);
+    chartSection.addEventListener('input', (event) => {
+        const input = event.target?.closest?.('[data-pbc-output]');
+        if (!input) return;
+        const output = document.getElementById(input.dataset.pbcOutput);
+        if (output) output.textContent = input.value;
+    });
     nameInput.focus();
     // Ініціалізуємо конструктор після рендеру DOM
     requestAnimationFrame(() => initSetupChart(idx, setup.chartData || null));

@@ -14,6 +14,15 @@ function sanitizeHTML(str) {
     return div.innerHTML;
 }
 
+function safeExternalUrl(value) {
+    try {
+        const url = new URL(String(value || '').trim());
+        return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : '#';
+    } catch {
+        return '#';
+    }
+}
+
 function setTickerHTML(html) {
     const ticker = document.getElementById('news-ticker-text');
     if (!ticker) return;
@@ -322,7 +331,7 @@ function renderTickerNews(payload) {
         const time = formatNewsTime(item.datetime);
         const title = sanitizeHTML(item.titleUk || item.title);
         const suffix = time ? ` (${sanitizeHTML(time)})` : '';
-        return `${label}<a href="${sanitizeHTML(item.url)}" target="_blank" rel="noopener noreferrer">${related}${title}${suffix}</a>`;
+        return `${label}<a href="${sanitizeHTML(safeExternalUrl(item.url))}" target="_blank" rel="noopener noreferrer">${related}${title}${suffix}</a>`;
     }).join('<span class="news-ticker-sep">•</span>');
 
     setTickerHTML(html);

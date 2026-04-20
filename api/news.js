@@ -1,14 +1,16 @@
-const DEFAULT_SUPABASE_URL = 'https://gijarvlerztfggxhuvow.supabase.co';
-const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_4gU0201mMkinUqwH-4SkWA_eSoNqew6';
-
 const FINNHUB_BASE = 'https://finnhub.io/api/v1';
 const MAX_TICKERS = 8;
 const MAX_NEWS_ITEMS = 24;
 const CACHE_TTL_MS = 2 * 60 * 1000;
+const DEFAULT_ALLOWED_ORIGINS = new Set([
+    'https://traderjournal-six.vercel.app',
+    'http://127.0.0.1:8787',
+    'http://localhost:8787',
+]);
 const cache = new Map();
 
 export default async function handler(req, res) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    setCorsHeaders(req, res);
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
@@ -59,6 +61,25 @@ export default async function handler(req, res) {
     } catch (error) {
         return res.status(502).json({ message: error.message || 'News fetch failed' });
     }
+}
+
+function getAllowedOrigins() {
+    const configured = String(process.env.ALLOWED_ORIGINS || process.env.APP_ALLOWED_ORIGINS || '')
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean);
+    return new Set([...DEFAULT_ALLOWED_ORIGINS, ...configured]);
+}
+
+function setCorsHeaders(req, res) {
+    const origin = req.headers.origin;
+    if (origin && getAllowedOrigins().has(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Vary', 'Origin');
+        return;
+    }
+    res.setHeader('Access-Control-Allow-Origin', 'https://traderjournal-six.vercel.app');
+    res.setHeader('Vary', 'Origin');
 }
 
 function parseUnixSeconds(value) {
@@ -147,7 +168,7 @@ function normalizeItems(rawItems, section = 'general') {
                 id: item.id || `${item.datetime || ''}:${item.url || item.headline || ''}`,
                 title: String(item.headline || '').trim(),
                 summary: String(item.summary || '').trim(),
-                url: String(item.url || '').trim(),
+                url: normalizeHttpUrl(item.url),
                 source: String(item.source || 'Finnhub').trim(),
                 image: String(item.image || '').trim(),
                 related,
@@ -181,16 +202,29 @@ function scoreCatalystNews(item) {
     return weights.reduce((score, [pattern, value]) => score + (pattern.test(text) ? value : 0), 0);
 }
 
+function normalizeHttpUrl(value) {
+    try {
+        const url = new URL(String(value || '').trim());
+        return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : '';
+    } catch {
+        return '';
+    }
+}
+
 async function verifySupabaseAuth(req) {
     const SUPABASE_URL = (
         process.env.SUPABASE_URL ||
         process.env.NEXT_PUBLIC_SUPABASE_URL ||
-        DEFAULT_SUPABASE_URL
+        ''
     ).replace(/\/$/, '');
     const SUPABASE_ANON_KEY =
         process.env.SUPABASE_ANON_KEY ||
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-        DEFAULT_SUPABASE_ANON_KEY;
+        '';
+
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        return { ok: false, status: 500, message: 'Supabase auth env is not configured on server' };
+    }
 
     const authHeader = req.headers.authorization || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';

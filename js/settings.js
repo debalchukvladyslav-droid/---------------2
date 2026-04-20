@@ -3,11 +3,41 @@ import { state } from './state.js';
 import { saveToLocal } from './storage.js';
 import { showToast, showConfirm } from './utils.js';
 
+function clearNode(node) {
+    if (node) node.textContent = '';
+}
+
+function createDeleteButton(onClick, title = 'Видалити') {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'icon-btn delete';
+    btn.title = title;
+    btn.textContent = '×';
+    btn.addEventListener('click', onClick);
+    return btn;
+}
+
+function createParamSetupRow({ inputId, value, onDelete, flex = false, title = 'Видалити' }) {
+    const row = document.createElement('div');
+    row.className = 'param-setup-row';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'param-name';
+    input.id = inputId;
+    input.value = value ?? '';
+    if (flex) input.style.flex = '1';
+
+    row.appendChild(input);
+    row.appendChild(createDeleteButton(onDelete, title));
+    return row;
+}
+
 // --- ПОМИЛКИ ---
 export function renderErrorsList() {
     const container = document.getElementById('errors-list-container');
     if (!container) return;
-    container.innerHTML = '';
+    clearNode(container);
     (state.appData?.errorTypes ?? []).forEach((err, index) => {
         const item = document.createElement('div');
         item.className = 'error-item';
@@ -63,22 +93,48 @@ export function deleteErrorType(index) {
 
 // --- ЧЕКЛІСТИ ---
 export function renderChecklistDisplay() {
-    const container = document.getElementById('sidebar-checklist-container'); if (!container) return; let html = ''; 
-    let dayData = state.appData?.journal?.[state.selectedDateStr] ?? {}; 
-    let checkedItems = dayData.checkedParams || []; 
-    (state.appData?.settings?.checklist ?? []).forEach(p => {
-        let isChecked = checkedItems.includes(p.id) ? 'checked' : '';
-        html += `<div class="error-item" style="padding: 6px 12px; margin-bottom: 0; background: transparent; border-color: var(--border);"><label class="error-label" style="font-size: 0.9rem;"><input type="checkbox" class="daily-param-check checklist-checkbox" value="${p.id}" ${isChecked}><span>${p.name}</span></label></div>`;
+    const safeContainer = document.getElementById('sidebar-checklist-container');
+    if (!safeContainer) return;
+    clearNode(safeContainer);
+    const safeDayData = state.appData?.journal?.[state.selectedDateStr] ?? {};
+    const safeCheckedItems = safeDayData.checkedParams || [];
+    (state.appData?.settings?.checklist ?? []).forEach((p) => {
+        const item = document.createElement('div');
+        item.className = 'error-item';
+        item.style.cssText = 'padding: 6px 12px; margin-bottom: 0; background: transparent; border-color: var(--border);';
+
+        const label = document.createElement('label');
+        label.className = 'error-label';
+        label.style.fontSize = '0.9rem';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'daily-param-check checklist-checkbox';
+        checkbox.value = p.id ?? '';
+        checkbox.checked = safeCheckedItems.includes(p.id);
+
+        const span = document.createElement('span');
+        span.textContent = p.name ?? '';
+
+        label.appendChild(checkbox);
+        label.appendChild(span);
+        item.appendChild(label);
+        safeContainer.appendChild(item);
     });
-    container.innerHTML = html;
 }
 
 export function renderSettingsChecklist() {
-    const container = document.getElementById('settings-checklist-list'); if (!container) return; let html = '';
-    (state.appData?.settings?.checklist ?? []).forEach((p, idx) => { 
-        html += `<div class="param-setup-row"><input type="text" class="param-name" id="check-name-${idx}" value="${p.name}" style="flex: 1;"><button class="icon-btn delete" onclick="deleteChecklistItem(${idx})" title="Видалити">❌</button></div>`; 
+    const safeContainer = document.getElementById('settings-checklist-list');
+    if (!safeContainer) return;
+    clearNode(safeContainer);
+    (state.appData?.settings?.checklist ?? []).forEach((p, idx) => {
+        safeContainer.appendChild(createParamSetupRow({
+            inputId: `check-name-${idx}`,
+            value: p.name,
+            flex: true,
+            onDelete: () => deleteChecklistItem(idx),
+        }));
     });
-    container.innerHTML = html;
 }
 
 export function addNewChecklistItem() { 
@@ -108,22 +164,57 @@ export function saveChecklist() {
 
 // --- ПОВЗУНКИ (ШКАЛИ СТАНУ) ---
 export function renderSidebarSliders() {
-    const container = document.getElementById('sliders-container'); if (!container) return; let html = ''; 
-    let dayData = state.appData?.journal?.[state.selectedDateStr] ?? {}; 
-    let vals = dayData.sliders || {};
-    (state.appData?.settings?.sliders ?? []).forEach(s => {
-        let val = vals[s.id] || 5; 
-        html += `<div class="slider-row"><label title="${s.name}">${s.name}</label><input type="range" id="slider-${s.id}" class="slider-input" data-id="${s.id}" min="1" max="10" step="1" value="${val}" oninput="document.getElementById('val-${s.id}').innerText = this.value"><div class="slider-val" id="val-${s.id}">${val}</div></div>`;
+    const safeContainer = document.getElementById('sliders-container');
+    if (!safeContainer) return;
+    clearNode(safeContainer);
+    const safeDayData = state.appData?.journal?.[state.selectedDateStr] ?? {};
+    const safeVals = safeDayData.sliders || {};
+    (state.appData?.settings?.sliders ?? []).forEach((s) => {
+        const val = safeVals[s.id] || 5;
+        const row = document.createElement('div');
+        row.className = 'slider-row';
+
+        const label = document.createElement('label');
+        label.title = s.name ?? '';
+        label.textContent = s.name ?? '';
+
+        const input = document.createElement('input');
+        input.type = 'range';
+        input.id = `slider-${s.id}`;
+        input.className = 'slider-input';
+        input.dataset.id = s.id ?? '';
+        input.min = '1';
+        input.max = '10';
+        input.step = '1';
+        input.value = val;
+
+        const value = document.createElement('div');
+        value.className = 'slider-val';
+        value.id = `val-${s.id}`;
+        value.textContent = val;
+
+        input.addEventListener('input', () => {
+            value.textContent = input.value;
+        });
+
+        row.appendChild(label);
+        row.appendChild(input);
+        row.appendChild(value);
+        safeContainer.appendChild(row);
     });
-    container.innerHTML = html;
 }
 
 export function renderSettingsSliders() {
-    const container = document.getElementById('settings-sliders-list'); if (!container) return; let html = '';
+    const safeContainer = document.getElementById('settings-sliders-list');
+    if (!safeContainer) return;
+    clearNode(safeContainer);
     (state.appData?.settings?.sliders ?? []).forEach((p, idx) => {
-        html += `<div class="param-setup-row"><input type="text" class="param-name" id="slider-name-${idx}" value="${p.name}"><button class="icon-btn delete" onclick="deleteSliderItem(${idx})" title="Видалити">❌</button></div>`;
+        safeContainer.appendChild(createParamSetupRow({
+            inputId: `slider-name-${idx}`,
+            value: p.name,
+            onDelete: () => deleteSliderItem(idx),
+        }));
     });
-    container.innerHTML = html;
 }
 
 export function addNewSliderItem() { 
@@ -152,12 +243,17 @@ export function saveSlidersSettings() {
 }
 
 export function renderSettingsTradeTypes() {
-    const container = document.getElementById('settings-trade-types-list'); if(!container) return;
-    let html = '';
+    const safeContainer = document.getElementById('settings-trade-types-list');
+    if (!safeContainer) return;
+    clearNode(safeContainer);
     (state.appData.tradeTypes || []).forEach((t, idx) => {
-        html += `<div class="param-setup-row"><input type="text" class="param-name" id="tt-name-${idx}" value="${t}" style="flex: 1;"><button class="icon-btn delete" onclick="deleteTradeType(${idx})">❌</button></div>`;
+        safeContainer.appendChild(createParamSetupRow({
+            inputId: `tt-name-${idx}`,
+            value: t,
+            flex: true,
+            onDelete: () => deleteTradeType(idx),
+        }));
     });
-    container.innerHTML = html;
 }
 export function addNewTradeType() { 
     if(!state.appData.tradeTypes) state.appData.tradeTypes = [];
@@ -175,12 +271,17 @@ export function saveTradeTypes() {
 }
 
 export function renderMyTradeTypes() {
-    const container = document.getElementById('my-trade-types-list'); if(!container) return;
-    let html = '';
+    const safeContainer = document.getElementById('my-trade-types-list');
+    if (!safeContainer) return;
+    clearNode(safeContainer);
     (state.appData.tradeTypes || []).forEach((t, idx) => {
-        html += `<div class="param-setup-row"><input type="text" class="param-name" id="my-tt-name-${idx}" value="${t}" style="flex: 1;"><button class="icon-btn delete" onclick="deleteMyTradeType(${idx})">❌</button></div>`;
+        safeContainer.appendChild(createParamSetupRow({
+            inputId: `my-tt-name-${idx}`,
+            value: t,
+            flex: true,
+            onDelete: () => deleteMyTradeType(idx),
+        }));
     });
-    container.innerHTML = html;
 }
 export function addMyTradeType() {
     if(!state.appData.tradeTypes) state.appData.tradeTypes = [];
@@ -199,14 +300,18 @@ export function saveMyTradeTypes() {
 
 // --- КОНСТРУКТОР СИТУАЦІЙ ПЛЕЙБУКУ ---
 export function renderSettingsSituations() {
-    const container = document.getElementById('settings-situations-list');
-    if (!container) return;
-    const situations = state.appData?.settings?.playbookSituations || [];
-    let html = '';
-    situations.forEach((s, idx) => {
-        html += `<div class="param-setup-row"><input type="text" class="param-name" id="sit-name-${idx}" value="${s.name}" style="flex:1;"><button class="icon-btn delete" onclick="deletePlaybookSituation(${idx})">❌</button></div>`;
+    const safeContainer = document.getElementById('settings-situations-list');
+    if (!safeContainer) return;
+    clearNode(safeContainer);
+    const safeSituations = state.appData?.settings?.playbookSituations || [];
+    safeSituations.forEach((s, idx) => {
+        safeContainer.appendChild(createParamSetupRow({
+            inputId: `sit-name-${idx}`,
+            value: s.name,
+            flex: true,
+            onDelete: () => deletePlaybookSituation(idx),
+        }));
     });
-    container.innerHTML = html;
 }
 
 export function addPlaybookSituation() {

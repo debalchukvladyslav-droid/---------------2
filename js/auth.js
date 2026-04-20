@@ -364,7 +364,7 @@ export function toggleAuthMode() {
     const submitBtn = document.getElementById('btn-submit');
     const switchText = document.getElementById('auth-switch-text');
     const subtitle = document.getElementById('auth-subtitle');
-    const toggleBtn = document.querySelector('[onclick="window.toggleAuthMode?.()"]');
+    const toggleBtn = document.getElementById('auth-mode-toggle') || document.querySelector('[data-action="auth-toggle-mode"]');
 
     document.getElementById('register-fields').style.display = state.isRegisterMode ? 'block' : 'none';
     const tgBtn = document.getElementById('btn-auth-telegram');
@@ -494,12 +494,13 @@ export function showMigrationForm(nick, oldEmail, pass) {
             <input type="email" id="migration-email" placeholder="your@gmail.com" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:8px;border:1px solid var(--border,#334155);background:var(--bg-main,#0f172a);color:var(--text-main,#f8fafc);font-size:0.95rem;margin-bottom:10px;">
             <div id="migration-error" style="color:#ef4444;font-size:0.82rem;margin-bottom:10px;display:none;"></div>
             <button id="migration-btn" style="width:100%;padding:10px;border-radius:8px;border:none;background:var(--accent,#3b82f6);color:#fff;cursor:pointer;font-size:0.95rem;margin-bottom:8px;">✅ Прив'язати та увійти</button>
-            <div style="color:var(--text-muted,#94a3b8);font-size:0.8rem;cursor:pointer;" onclick="document.getElementById('migration-overlay').remove()">Скасувати</div>
+            <button type="button" id="migration-cancel" style="color:var(--text-muted,#94a3b8);font-size:0.8rem;cursor:pointer;background:transparent;border:none;padding:0;">Скасувати</button>
         </div>
     `;
 
     document.body.appendChild(overlay);
     document.getElementById('migration-btn').onclick = () => doMigration(nick, oldEmail, pass);
+    document.getElementById('migration-cancel')?.addEventListener('click', () => overlay.remove());
     document.getElementById('migration-email').addEventListener('keydown', e => { if (e.key === 'Enter') doMigration(nick, oldEmail, pass); });
     document.getElementById('migration-email').focus();
 }
@@ -769,8 +770,8 @@ export function applyAccessRights() {
     const adminNav = document.querySelector('.admin-nav-item');
     const adminMobile = document.querySelector('.admin-tab-mobile');
     const showAdminTab = state.myRole === 'admin' || state.IS_MENTOR_MODE;
-    if (adminNav) adminNav.style.display = showAdminTab ? '' : 'none';
-    if (adminMobile) adminMobile.style.display = showAdminTab ? '' : 'none';
+    if (adminNav) adminNav.classList.toggle('initially-hidden', !showAdminTab);
+    if (adminMobile) adminMobile.classList.toggle('initially-hidden', !showAdminTab);
 
     updateMentorButtons();
 }

@@ -1,5 +1,33 @@
 // === js/utils.js ===
 
+export function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+export function normalizeHttpUrl(value, fallback = '') {
+    const raw = String(value ?? '').trim();
+    if (!raw) return fallback;
+    try {
+        const url = new URL(raw, window.location.origin);
+        return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : fallback;
+    } catch {
+        return fallback;
+    }
+}
+
+export function appendTextWithLineBreaks(parent, value) {
+    const lines = String(value ?? '').split(/\r?\n/);
+    lines.forEach((line, idx) => {
+        if (idx > 0) parent.appendChild(document.createElement('br'));
+        parent.appendChild(document.createTextNode(line));
+    });
+}
+
 /**
  * Показує тимчасовий toast-повідомлення внизу екрану.
  * @param {string} msg - текст повідомлення

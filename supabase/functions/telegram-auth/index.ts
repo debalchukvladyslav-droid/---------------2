@@ -17,19 +17,53 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-function corsHeaders(): Record<string, string> {
+const DEFAULT_ALLOWED_ORIGINS = new Set([
+    'https://traderjournal-six.vercel.app',
+    'http://127.0.0.1:8787',
+    'http://localhost:8787',
+]);
+
+function parseOriginList(raw = ''): string[] {
+    return raw
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean)
+        .map((origin) => {
+            try {
+                return new URL(origin.includes('://') ? origin : `https://${origin}`).origin;
+            } catch {
+                return '';
+            }
+        })
+        .filter(Boolean);
+}
+
+function allowedOrigins(): Set<string> {
+    const configured = [
+        ...parseOriginList(Deno.env.get('APP_ALLOWED_ORIGINS') || Deno.env.get('ALLOWED_ORIGINS') || ''),
+        ...parseOriginList(Deno.env.get('TELEGRAM_ALLOWED_RETURN_ORIGINS') || ''),
+    ];
+    return new Set([...DEFAULT_ALLOWED_ORIGINS, ...configured]);
+}
+
+function corsHeaders(req?: Request): Record<string, string> {
+    const origin = req?.headers.get('Origin')?.trim() || '';
+    const allowOrigin = origin && allowedOrigins().has(origin)
+        ? origin
+        : 'https://traderjournal-six.vercel.app';
     return {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': allowOrigin,
         'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Max-Age': '86400',
+        'Vary': 'Origin',
     };
 }
 
-function json(body: unknown, status = 200) {
+function json(body: unknown, status = 200, req?: Request) {
     return new Response(JSON.stringify(body), {
         status,
-        headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
     });
 }
 
@@ -176,7 +210,7 @@ async function sendTelegramMessage(
 }
 
 Deno.serve(async (req) => {
-    const h = corsHeaders();
+    const h = corsHeaders(req);
     if (req.method === 'OPTIONS') {
         return new Response(null, { status: 204, headers: h });
     }
@@ -191,21 +225,21 @@ Deno.serve(async (req) => {
         const u = new URL(req.url);
         const action = u.searchParams.get('action');
         if (action !== 'start_login') {
-            return json({ error: 'Use GET ?action=start_login&return_to=…&apikey=…' }, 400);
+            return json({ error: 'Use GET ?action=start_login&return_to=…&apikey=…' }, 400, req);
         }
         if (!botToken || !supabaseUrl || !serviceRole) {
-            return json({ error: 'Server misconfigured' }, 500);
+            return json({ error: 'Server misconfigured' }, 500, req);
         }
         const returnTo = u.searchParams.get('return_to');
-        if (!returnTo) return json({ error: 'return_to required' }, 400);
+        if (!returnTo) return json({ error: 'return_to required' }, 400, req);
         let returnUrl: URL;
         try {
             returnUrl = new URL(returnTo);
         } catch {
-            return json({ error: 'Invalid return_to' }, 400);
+            return json({ error: 'Invalid return_to' }, 400, req);
         }
         if (returnUrl.protocol !== 'https:' && returnUrl.protocol !== 'http:') {
-            return json({ error: 'Invalid return_to scheme' }, 400);
+            return json({ error: 'Invalid return_to scheme' }, 400, req);
         }
         const pageOrigin = callerPageOrigin(req);
         const allowedExtra = Deno.env.get('TELEGRAM_ALLOWED_RETURN_ORIGINS')?.trim();
@@ -216,13 +250,14 @@ Deno.serve(async (req) => {
                         'return_to must match site Origin, або додайте secret TELEGRAM_ALLOWED_RETURN_ORIGINS (origin бойового сайту через кому).',
                 },
                 403,
+                req,
             );
         }
 
         const meRes = await fetch(`https://api.telegram.org/bot${botToken}/getMe`);
         const meJson = await meRes.json();
         if (!meJson?.ok || !meJson?.result?.username) {
-            return json({ error: 'Telegram getMe failed' }, 502);
+            return json({ error: 'Telegram getMe failed' }, 502, req);
         }
         const botUsername = String(meJson.result.username).replace(/^@/, '');
 
@@ -239,19 +274,19 @@ Deno.serve(async (req) => {
         });
         if (insErr) {
             console.error('[telegram-auth] insert session', insErr);
-            return json({ error: 'DB insert failed (run 02_telegram_login_sessions.sql?)' }, 500);
+            return json({ error: 'DB insert failed (run 02_telegram_login_sessions.sql?)' }, 500, req);
         }
 
         const tme = `https://t.me/${encodeURIComponent(botUsername)}?start=${startToken}`;
-        return json({ tme_url: tme });
+        return json({ tme_url: tme }, 200, req);
     }
 
     if (req.method !== 'POST') {
-        return json({ error: 'Method not allowed' }, 405);
+        return json({ error: 'Method not allowed' }, 405, req);
     }
 
     if (!botToken || !supabaseUrl || !serviceRole || !anonKey) {
-        return json({ error: 'Server misconfigured' }, 500);
+        return json({ error: 'Server misconfigured' }, 500, req);
     }
 
     const adminDb = createClient(supabaseUrl, serviceRole, {
@@ -262,14 +297,14 @@ Deno.serve(async (req) => {
     try {
         body = JSON.parse(await req.text());
     } catch {
-        return json({ error: 'Invalid JSON' }, 400);
+        return json({ error: 'Invalid JSON' }, 400, req);
     }
 
     if (typeof body.update_id === 'number') {
         if (webhookSecret) {
             const hdr = req.headers.get('X-Telegram-Bot-Api-Secret-Token') || '';
             if (hdr !== webhookSecret) {
-                return new Response('forbidden', { status: 403, headers: corsHeaders() });
+                return new Response('forbidden', { status: 403, headers: corsHeaders(req) });
             }
         }
 
@@ -283,7 +318,7 @@ Deno.serve(async (req) => {
         const startArg = m?.[1];
         if (!chatId || !from) {
             return new Response(JSON.stringify({ ok: true }), {
-                headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
+                headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
             });
         }
 
@@ -294,7 +329,7 @@ Deno.serve(async (req) => {
                 'Відкрийте сайт журналу і натисніть <b>Увійти через Telegram</b> — з’явиться кнопка Start з посиланням.',
             );
             return new Response(JSON.stringify({ ok: true }), {
-                headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
+                headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
             });
         }
 
@@ -307,7 +342,7 @@ Deno.serve(async (req) => {
         if (selErr || !row) {
             await sendTelegramMessage(botToken, chatId, 'Посилання застаріло. Зайдіть на сайт і натисніть «Увійти через Telegram» ще раз.');
             return new Response(JSON.stringify({ ok: true }), {
-                headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
+                headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
             });
         }
         if (row.claim_token) {
@@ -317,14 +352,14 @@ Deno.serve(async (req) => {
                 inline_keyboard: [[{ text: '➡️ Відкрити журнал', url: base.toString() }]],
             });
             return new Response(JSON.stringify({ ok: true }), {
-                headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
+                headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
             });
         }
         if (new Date(String(row.expires_at)).getTime() < Date.now()) {
             await adminDb.from('telegram_login_sessions').delete().eq('start_token', startArg);
             await sendTelegramMessage(botToken, chatId, 'Час посилання вичерпано. Спробуйте знову з сайту.');
             return new Response(JSON.stringify({ ok: true }), {
-                headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
+                headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
             });
         }
 
@@ -332,7 +367,7 @@ Deno.serve(async (req) => {
         if (!tid) {
             await sendTelegramMessage(botToken, chatId, 'Не вдалося прочитати акаунт Telegram.');
             return new Response(JSON.stringify({ ok: true }), {
-                headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
+                headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
             });
         }
 
@@ -360,7 +395,7 @@ Deno.serve(async (req) => {
                 'Помилка входу: ' + String((e as Error)?.message || e).slice(0, 200),
             );
             return new Response(JSON.stringify({ ok: true }), {
-                headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
+                headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
             });
         }
 
@@ -378,7 +413,7 @@ Deno.serve(async (req) => {
             console.error('[telegram-auth] update claim', upErr);
             await sendTelegramMessage(botToken, chatId, 'Помилка збереження сесії. Спробуйте ще раз.');
             return new Response(JSON.stringify({ ok: true }), {
-                headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
+                headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
             });
         }
 
@@ -391,13 +426,13 @@ Deno.serve(async (req) => {
         });
 
         return new Response(JSON.stringify({ ok: true }), {
-            headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
+            headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
         });
     }
 
     const claim = typeof body.claim === 'string' ? body.claim.trim() : '';
     if (!claim || claim.length < 8) {
-        return json({ error: 'Expected { "claim": "<uuid from tg_claim>" }' }, 400);
+        return json({ error: 'Expected { "claim": "<uuid from tg_claim>" }' }, 400, req);
     }
 
     const { data: row, error: cErr } = await adminDb
@@ -407,11 +442,11 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
     if (cErr || !row?.access_token || !row?.refresh_token) {
-        return json({ error: 'Invalid or expired claim' }, 401);
+        return json({ error: 'Invalid or expired claim' }, 401, req);
     }
     if (new Date(String(row.expires_at)).getTime() < Date.now()) {
         await adminDb.from('telegram_login_sessions').delete().eq('claim_token', claim);
-        return json({ error: 'Claim expired' }, 401);
+        return json({ error: 'Claim expired' }, 401, req);
     }
 
     await adminDb.from('telegram_login_sessions').delete().eq('claim_token', claim);
@@ -419,5 +454,5 @@ Deno.serve(async (req) => {
     return json({
         access_token: row.access_token,
         refresh_token: row.refresh_token,
-    });
+    }, 200, req);
 });
