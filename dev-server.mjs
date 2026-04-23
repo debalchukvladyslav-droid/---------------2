@@ -16,7 +16,9 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
-const PORT = Number(process.env.PORT) || 8787;
+const portArgIndex = process.argv.findIndex((arg) => arg === '--port' || arg === '-p');
+const portArg = portArgIndex >= 0 ? process.argv[portArgIndex + 1] : '';
+const PORT = Number(portArg || process.env.PORT) || 8787;
 
 /** Дубль js/supabase.js — для Node без імпорту CDN-модуля */
 const SUPABASE_URL = (process.env.SUPABASE_URL || 'https://gijarvlerztfggxhuvow.supabase.co').replace(/\/$/, '');

@@ -95,6 +95,16 @@ function isProfileMentor(profile) {
     return !!(profile?.mentor_enabled || profile?.role === 'mentor');
 }
 
+function orderedTeamNames() {
+    const myNick = state.USER_DOC_NAME ? state.USER_DOC_NAME.replace('_stats', '') : '';
+    const myTeam = state._teamProfiles?.[myNick]?.team || DEFAULT_TEAM;
+    return Object.keys(state.TEAM_GROUPS || {}).sort((a, b) => {
+        if (a === myTeam && b !== myTeam) return -1;
+        if (b === myTeam && a !== myTeam) return 1;
+        return a.localeCompare(b, 'uk');
+    });
+}
+
 async function fetchProfiles() {
     const { data: sessionData } = await supabase.auth.getSession();
     if (!sessionData?.session) return [];
@@ -163,7 +173,7 @@ function fillAuthTeamSelect() {
     defaultOpt.textContent = 'Оберіть свій кущ...';
     authTeamSelect.appendChild(defaultOpt);
 
-    Object.keys(state.TEAM_GROUPS).sort((a, b) => a.localeCompare(b, 'uk')).forEach(group => {
+    orderedTeamNames().forEach(group => {
         const opt = document.createElement('option');
         opt.value = group;
         opt.textContent = group;
@@ -196,42 +206,36 @@ export async function loadTeams() {
 export async function openTeamManager() {
     document.getElementById('team-manager-modal').style.display = 'flex';
 
-    const traderSelect = document.getElementById('move-trader-nick');
-    const teamSelect = document.getElementById('move-trader-team');
-    const deleteSelect = document.getElementById('delete-trader-nick');
-    const deleteTeamSelect = document.getElementById('delete-team-select');
+    const list = document.getElementById('team-manager-team-list');
+    if (!list) return;
 
-    const addOpt = (sel, val, text, disabled = false, selected = false) => {
-        const option = document.createElement('option');
-        option.value = val;
-        option.textContent = text;
-        option.disabled = disabled;
-        option.selected = selected;
-        sel.appendChild(option);
-    };
-
-    traderSelect.innerHTML = '';
-    teamSelect.innerHTML = '';
-    deleteSelect.innerHTML = '';
-    deleteTeamSelect.innerHTML = '';
-
-    addOpt(traderSelect, '', 'Оберіть трейдера...', true, true);
-    addOpt(teamSelect, '', 'Куди перемістити?', true, true);
-    addOpt(deleteSelect, '', 'Кого видалити?', true, true);
-    addOpt(deleteTeamSelect, '', 'Який кущ видалити?', true, true);
-
-    Object.keys(state.TEAM_GROUPS).sort((a, b) => a.localeCompare(b, 'uk')).forEach(group => {
-        addOpt(teamSelect, group, group);
-        if (group !== DEFAULT_TEAM) addOpt(deleteTeamSelect, group, group);
+    const counts = new Map();
+    Object.values(state._teamProfiles || {}).forEach((profile) => {
+        const team = profile.team || DEFAULT_TEAM;
+        counts.set(team, (counts.get(team) || 0) + 1);
     });
 
-    Object.values(state._teamProfiles || {})
-        .sort((a, b) => profileDisplayName(a).localeCompare(profileDisplayName(b), 'uk'))
-        .forEach(profile => {
-            const label = profileDisplayName(profile);
-            addOpt(traderSelect, profile.nick, label);
-            addOpt(deleteSelect, profile.nick, label);
-        });
+    list.innerHTML = orderedTeamNames()
+        .map((group) => {
+            const count = counts.get(group) || 0;
+            const removable = group !== DEFAULT_TEAM;
+            return `<div class="tm-team-row">
+                <div class="tm-team-row-main">
+                    <span class="tm-team-name">${escapeHtml(group)}</span>
+                    <span class="tm-team-count">${count} уч.</span>
+                </div>
+                ${removable ? `<button type="button" class="tm-team-delete-btn" data-action="team-delete" data-team-name="${escapeHtml(group)}">Видалити</button>` : '<span class="tm-team-fixed">Базовий</span>'}
+            </div>`;
+        })
+        .join('');
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 }
 
 export async function createNewTeam() {
@@ -286,8 +290,11 @@ export async function moveTrader() {
     showToast(`Трейдера ${nick} переміщено в ${targetTeam}!`);
 }
 
-export async function deleteTeam() {
-    const teamToDelete = document.getElementById('delete-team-select').value;
+export async function deleteTeam(teamName = '') {
+    const teamToDelete =
+        teamName ||
+        document.getElementById('delete-team-select')?.value ||
+        '';
     if (!teamToDelete) {
         showToast('Оберіть кущ для видалення!');
         return;
@@ -367,8 +374,12 @@ function _renderTeamSidebarDOM(container) {
     const myNick = state.USER_DOC_NAME ? state.USER_DOC_NAME.replace('_stats', '') : '';
     const isMeActive = state.CURRENT_VIEWED_USER === state.USER_DOC_NAME;
     const myProfile = state._teamProfiles?.[myNick];
+    const myTeam = myProfile?.team || DEFAULT_TEAM;
     const myDisplayName = myProfile ? profileDisplayName(myProfile) : myNick;
     const loadingNick = _isSwitching ? state.CURRENT_VIEWED_USER.replace('_stats', '') : null;
+
+    const teamLabel = document.getElementById('team-sidebar-current-team');
+    if (teamLabel) teamLabel.textContent = myNick ? `Ваш кущ: ${myTeam}` : '';
 
     container.innerHTML = '';
 
@@ -415,7 +426,7 @@ function _renderTeamSidebarDOM(container) {
     }
 
     const seenInRender = new Set([myNick]);
-    Object.keys(state.TEAM_GROUPS).sort((a, b) => a.localeCompare(b, 'uk')).forEach((group) => {
+    orderedTeamNames().forEach((group) => {
         const groupCard = document.createElement('div');
         groupCard.className = 'team-group-card';
 

@@ -23,6 +23,32 @@ function writeSeen(obj) {
     } catch (_) {}
 }
 
+function getKyivClock() {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/Kyiv',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        weekday: 'short',
+        hourCycle: 'h23',
+    }).formatToParts(new Date());
+    const v = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+    return {
+        date: `${v.year}-${v.month}-${v.day}`,
+        hour: parseInt(v.hour || '0', 10) || 0,
+        weekday: v.weekday || '',
+    };
+}
+
+function isKyivTradingDay(weekday) {
+    return !['Sat', 'Sun'].includes(String(weekday));
+}
+
+function pnlFieldEmpty(pnl) {
+    return pnl === null || pnl === undefined || String(pnl).trim() === '';
+}
+
 export function getPrimaryMentorForMyTeam() {
     const myNick = (state.USER_DOC_NAME || '').replace('_stats', '');
     const profiles = Object.values(state._teamProfiles || {});
@@ -214,6 +240,38 @@ export async function fetchMentorReviewNotificationHits() {
         .map((p) => p.id);
     if (!traderIds.length) return hits;
 
+    const seen = readSeen();
+    const kyiv = getKyivClock();
+    if (kyiv.hour >= 19 && isKyivTradingDay(kyiv.weekday)) {
+        try {
+            const { data: dayRows, error: dayErr } = await supabase
+                .from('journal_days')
+                .select('user_id, trade_date, pnl')
+                .in('user_id', traderIds)
+                .eq('trade_date', kyiv.date)
+                .limit(500);
+
+            if (!dayErr) {
+                const rowsByUser = new Map((dayRows || []).map((row) => [row.user_id, row]));
+                for (const p of profiles) {
+                    if (!p?.id || p.id === state.myUserId || p.mentor_enabled || (p.team || 'Без куща') !== team) continue;
+                    const row = rowsByUser.get(p.id);
+                    if (row && !pnlFieldEmpty(row.pnl)) continue;
+                    const sid = `missing-day|${p.id}|${kyiv.date}`;
+                    if (seen[sid]) continue;
+                    seen[sid] = 1;
+                    hits.push({
+                        sid,
+                        title: 'Трейдер не заповнив день',
+                        body: `${p.nick || p.id} · ${kyiv.date} · після 19:00 Київ`,
+                    });
+                }
+            }
+        } catch (e) {
+            console.warn('[review_requests] missing day notification', e);
+        }
+    }
+
     const from = new Date();
     from.setDate(from.getDate() - 45);
     const fromStr = from.toISOString().slice(0, 10);
@@ -225,9 +283,11 @@ export async function fetchMentorReviewNotificationHits() {
         .gte('trade_date', fromStr)
         .limit(400);
 
-    if (error || !data) return hits;
+    if (error || !data) {
+        writeSeen(seen);
+        return hits;
+    }
 
-    const seen = readSeen();
     for (const row of data) {
         const m = row.daily_metrics && typeof row.daily_metrics === 'object' ? row.daily_metrics : {};
         const rr = m.review_requests && typeof m.review_requests === 'object' ? m.review_requests : {};

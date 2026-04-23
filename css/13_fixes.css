@@ -695,6 +695,7 @@
 /* === ADMIN panel === */
 .admin-panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .admin-panel-title { margin: 0; font-size: 1rem; font-weight: 700; color: var(--text-main); }
+.admin-panel-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .admin-refresh-btn { width: auto; }
 .admin-users-list { display: flex; flex-direction: column; gap: 8px; }
 
@@ -946,37 +947,64 @@
 .admin-panel-content { max-width: 920px; margin: 0 auto; }
 .admin-panel-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
 .admin-panel-title { margin: 0; font-size: 1.05rem; font-weight: 700; color: var(--text-main); font-family: var(--font-head); }
-.admin-users-list { display: flex; flex-direction: column; gap: 14px; }
+.admin-users-list { display: grid; gap: 8px; }
 .admin-loading, .admin-empty { color: var(--text-muted); font-size: 0.9rem; }
 .admin-error { color: var(--loss); font-size: 0.9rem; }
 .admin-user-card {
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--border);
-    background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 4%, var(--bg-panel)) 0%, var(--bg-panel) 100%);
-    padding: 16px 18px;
-    transition: opacity 0.2s ease;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px 14px;
+    align-items: start;
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+    background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+    padding: 12px 14px;
+    transition: opacity 0.2s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.admin-user-card:hover {
+    border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+    background: color-mix(in srgb, var(--bg-panel) 84%, var(--accent) 4%);
 }
 .admin-user-busy { opacity: 0.55; pointer-events: none; }
-.admin-user-head { margin-bottom: 12px; }
-.admin-user-title { font-weight: 700; font-size: 1rem; color: var(--text-main); }
+.admin-user-head { min-width: 0; }
+.admin-user-title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-weight: 700; font-size: 1rem; color: var(--text-main); }
+.admin-user-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 0.62rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.admin-user-status--blocked {
+    color: var(--loss);
+    border: 1px solid color-mix(in srgb, var(--loss) 38%, transparent);
+    background: color-mix(in srgb, var(--loss) 12%, transparent);
+}
 .admin-user-meta { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; line-height: 1.4; }
 .admin-user-grid {
+    grid-column: 1 / -1;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 14px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    align-items: end;
 }
-.admin-field-wide { grid-column: 1 / -1; }
-.admin-field { display: flex; flex-direction: column; gap: 6px; }
+.admin-field-wide { grid-column: auto; }
+.admin-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .admin-label { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
 .admin-select, .admin-input {
-    padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 34px; padding: 7px 9px; border-radius: 7px; border: 1px solid var(--border);
     background: var(--bg-main); color: var(--text-main); font: inherit; font-size: 0.84rem;
 }
 .admin-checkbox-row { display: flex; align-items: flex-start; gap: 8px; font-size: 0.8rem; color: var(--text-muted); }
 .admin-checkbox-row input { margin-top: 3px; }
 .admin-checkbox-row label { cursor: pointer; line-height: 1.35; }
 .btn-admin-action {
-    margin-top: 8px; padding: 8px 12px; border-radius: var(--radius-sm);
+    margin-top: 6px; padding: 7px 10px; border-radius: 7px;
     border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
     background: var(--accent-glow-08); color: var(--accent);
     font: inherit; font-weight: 600; font-size: 0.78rem; cursor: pointer;
@@ -984,16 +1012,54 @@
     transition: var(--transition);
 }
 .btn-admin-action:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
-.admin-user-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.admin-user-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: flex-start;
+    width: 100%;
+    min-width: 0;
+}
 .admin-user-actions .btn-admin-action,
-.admin-user-actions .btn-admin-danger { flex: 1 1 160px; margin-top: 0; }
+.admin-user-actions .btn-admin-danger {
+    flex: 0 1 auto;
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
+    margin-top: 0;
+    white-space: nowrap;
+}
 .btn-admin-danger {
-    padding: 8px 14px; border-radius: var(--radius-sm); border: none;
+    padding: 7px 10px; border-radius: 7px; border: none;
     background: color-mix(in srgb, var(--loss) 85%, #000); color: #fff;
     font: inherit; font-weight: 600; font-size: 0.82rem; cursor: pointer; width: 100%;
 }
 .btn-admin-danger:hover { filter: brightness(1.08); }
+.btn-admin-danger:disabled,
+.btn-admin-action:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+    filter: none;
+}
 .admin-refresh-btn { width: auto; margin: 0; }
+@media (max-width: 980px) {
+    .admin-user-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+@media (max-width: 700px) {
+    .admin-user-card {
+        grid-template-columns: 1fr;
+    }
+    .admin-user-grid {
+        grid-template-columns: 1fr;
+    }
+    .admin-user-actions {
+        justify-content: flex-start;
+        max-width: none;
+    }
+}
 
 /* === Dashboard: більше місця під календар, компактніша смуга місяця/стрік === */
 #view-dash {
@@ -1157,36 +1223,38 @@
     overflow: auto;
 }
 .mentor-review-panel {
-    max-width: 1100px;
+    max-width: 920px;
     margin: 0 auto;
     width: 100%;
+    padding: 18px 20px;
 }
 .mentor-review-head {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 16px;
     flex-wrap: wrap;
-    margin-bottom: 16px;
+    margin-bottom: 14px;
 }
 .mentor-review-title {
-    margin: 0 0 6px;
-    font-size: 1.25rem;
+    margin: 0 0 4px;
+    font-size: 1.12rem;
     font-weight: 600;
     color: var(--text-main);
 }
 .mentor-review-sub {
     margin: 0;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     color: var(--text-muted);
     line-height: 1.45;
-    max-width: 52rem;
+    max-width: 34rem;
 }
 .mentor-review-toolbar {
     display: flex;
     flex-wrap: wrap;
-    gap: 16px 24px;
-    margin-bottom: 14px;
+    align-items: flex-end;
+    gap: 10px 14px;
+    margin-bottom: 10px;
 }
 .mr-field {
     display: flex;
@@ -1197,8 +1265,8 @@
 }
 .mr-field select,
 .mr-field input[type="number"] {
-    min-width: 140px;
-    padding: 8px 10px;
+    min-width: 116px;
+    padding: 7px 9px;
     border-radius: 8px;
     border: 1px solid var(--border);
     background: var(--bg-panel);
@@ -1218,7 +1286,7 @@
     appearance: none;
     border: 0;
     margin: 0;
-    padding: 7px 14px;
+    padding: 6px 12px;
     border-radius: 8px;
     font-size: 0.8rem;
     font-weight: 600;
@@ -1242,18 +1310,12 @@
     outline-offset: 2px;
 }
 .mentor-review-filters {
-    margin-bottom: 10px;
-}
-.mr-filters-label {
-    display: block;
-    font-size: 0.78rem;
-    color: var(--text-muted);
     margin-bottom: 8px;
 }
 .mr-filter-pills {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px 10px;
+    gap: 6px;
 }
 .mr-pill {
     position: relative;
@@ -1277,9 +1339,9 @@
     position: relative;
     z-index: 0;
     display: inline-block;
-    padding: 6px 12px;
+    padding: 5px 10px;
     border-radius: 999px;
-    font-size: 0.76rem;
+    font-size: 0.72rem;
     font-weight: 600;
     line-height: 1.35;
     color: var(--text-muted);
@@ -1304,77 +1366,130 @@
 .mentor-review-meta {
     font-size: 0.78rem;
     color: var(--text-muted);
-    margin: 0 0 10px;
+    margin: 0 0 8px;
 }
-.mentor-review-table-wrap {
-    overflow-x: auto;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: var(--bg-panel);
+.mentor-review-list {
+    display: grid;
+    gap: 7px;
 }
-.mentor-review-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.82rem;
-}
-.mentor-review-table th {
-    text-align: left;
+.mentor-review-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+    align-items: center;
     padding: 10px 12px;
-    border-bottom: 1px solid var(--border);
-    color: var(--text-muted);
-    font-weight: 600;
+    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-panel) 90%, transparent);
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+.mentor-review-row:hover {
+    border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+    background: color-mix(in srgb, var(--bg-panel) 82%, var(--accent) 5%);
+    transform: translateY(-1px);
+}
+.mentor-review-main {
+    appearance: none;
+    border: 0;
+    padding: 0;
+    min-width: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.mentor-review-person {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+}
+.mentor-review-name {
+    color: var(--text-main);
+    font-size: 0.9rem;
+    font-weight: 650;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
 }
-.mentor-review-table td {
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--border);
-    vertical-align: top;
-}
-.mentor-review-table tr:last-child td {
-    border-bottom: none;
-}
-.mr-cell-nick {
-    font-size: 0.72rem;
+.mentor-review-nick {
     color: var(--text-muted);
-    margin-top: 2px;
+    font-size: 0.72rem;
+    font-family: var(--font-mono);
+    flex-shrink: 0;
+}
+.mentor-review-status {
+    display: block;
+    margin-top: 3px;
+    color: color-mix(in srgb, var(--text-main) 82%, var(--text-muted));
+    font-size: 0.8rem;
+    line-height: 1.35;
+}
+.mentor-review-side {
+    text-align: right;
+    display: grid;
+    gap: 2px;
+}
+.mentor-review-date {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    white-space: nowrap;
 }
 .mr-cell-pnl {
     font-family: var(--font-mono, ui-monospace, monospace);
-    font-weight: 600;
+    font-weight: 700;
+    font-size: 0.82rem;
+    white-space: nowrap;
 }
 .mr-cell-pnl.neg { color: var(--loss); }
 .mr-cell-pnl.pos { color: var(--profit); }
 .mr-cell-tags {
-    min-width: 180px;
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
 }
 .mentor-review-tag {
-    display: inline-block;
-    margin: 2px 4px 2px 0;
-    padding: 2px 8px;
-    border-radius: 6px;
-    font-size: 0.7rem;
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 0.68rem;
     font-weight: 600;
-    background: color-mix(in srgb, var(--gold) 18%, transparent);
-    color: var(--gold);
-    border: 1px solid color-mix(in srgb, var(--gold) 35%, transparent);
+    line-height: 1.25;
+    background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+    color: color-mix(in srgb, var(--text-main) 78%, var(--text-muted));
+    border: 1px solid color-mix(in srgb, var(--text-muted) 20%, transparent);
 }
-.mentor-review-tag[data-k="mentor"] {
+.mentor-review-tag[data-tone="loss"] {
     background: color-mix(in srgb, var(--loss) 14%, transparent);
     color: var(--loss);
     border-color: color-mix(in srgb, var(--loss) 30%, transparent);
 }
-.mentor-review-tag[data-k="inc"] {
+.mentor-review-tag[data-tone="warn"] {
     background: color-mix(in srgb, var(--gold) 22%, transparent);
     color: color-mix(in srgb, var(--gold) 92%, var(--text-main));
     border-color: color-mix(in srgb, var(--gold) 40%, transparent);
 }
 .mentor-review-empty {
     text-align: center;
-    padding: 28px 16px !important;
+    padding: 28px 16px;
     color: var(--text-muted);
+    border: 1px dashed var(--border);
+    border-radius: 8px;
 }
-.mr-cell-act {
-    white-space: nowrap;
+@media (max-width: 640px) {
+    .mentor-review-row {
+        grid-template-columns: 1fr;
+    }
+    .mentor-review-side {
+        text-align: left;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
 }
 
 /* === Вкладка «Календар» + сповіщення === */
@@ -1382,46 +1497,61 @@
     flex-direction: column;
     padding: 16px 20px 24px;
     overflow: auto;
-    gap: 14px;
-}
-.calendar-view-toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    justify-content: flex-end;
-    gap: 12px;
+    gap: 10px;
 }
 .calendar-view-period {
     display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    gap: 12px 16px;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-left: auto;
+    min-width: 0;
 }
 .cal-period-field {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
     flex: 0 1 auto;
     min-width: 0;
-    max-width: min(192px, 48vw);
+    max-width: none;
 }
 .cal-period-label {
-    font-size: 0.72rem;
+    font-size: 0.62rem;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
 }
 .calendar-view-period select.cal-period-select,
 .calendar-view-period select.strip-select {
-    width: 100%;
-    max-width: 100%;
+    width: auto;
+    max-width: 132px;
     min-width: 0;
     box-sizing: border-box;
-    font-size: 0.76rem;
-    padding: 6px 8px;
+    font-size: 0.74rem;
+    padding: 4px 8px;
+    height: 26px;
+}
+.calendar-view-period .year-select {
+    max-width: 82px;
+}
+@media (max-width: 640px) {
+    .calendar-view-period {
+        width: 100%;
+        justify-content: flex-start;
+        margin-left: 0;
+        flex-wrap: wrap;
+    }
 }
 .calendar-rr-row {
     padding: 12px 14px !important;
+    width: 100%;
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    position: relative;
+    z-index: 1;
 }
 .calendar-rr-lead {
     margin: 0 0 10px 0;
@@ -1440,24 +1570,6 @@
     font-weight: 600;
     color: var(--text-main);
 }
-.admin-team-structure {
-    padding: 14px 16px;
-    border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
-    border-radius: var(--radius-md);
-    background: color-mix(in srgb, var(--accent) 6%, var(--bg-panel));
-}
-.admin-team-structure-title {
-    margin: 0 0 8px 0;
-    font-size: 0.95rem;
-    font-weight: 700;
-    color: var(--text-main);
-}
-.admin-team-structure-lead {
-    margin: 0 0 12px 0;
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    line-height: 1.45;
-}
 .admin-team-manager-btn {
     width: auto;
     margin: 0;
@@ -1471,14 +1583,17 @@
     min-height: 0;
 }
 .calendar-tab-slot {
-    flex: 1 1 420px;
+    flex: 0 0 auto;
     min-width: 280px;
     min-height: 360px;
 }
 .calendar-tab-slot--full {
     width: 100%;
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     min-height: 360px;
+}
+#calendar-bundle {
+    width: 100%;
 }
 .dash-calendar-strip-inner--end {
     justify-content: flex-end;

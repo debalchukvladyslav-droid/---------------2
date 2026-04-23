@@ -27,7 +27,7 @@ export async function renderAdminPanel() {
 
     const { data: profiles, error } = await supabase
         .from('profiles')
-        .select('id, nick, email, first_name, last_name, team, role, mentor_enabled')
+        .select('id, nick, email, first_name, last_name, team, role, mentor_enabled, settings')
         .order('nick', { ascending: true });
 
     if (error) {
@@ -69,6 +69,14 @@ function escapeHtml(s) {
     return d.innerHTML;
 }
 
+function profileSettings(profile) {
+    return profile?.settings && typeof profile.settings === 'object' ? profile.settings : {};
+}
+
+function isProfileBlocked(profile) {
+    return profileSettings(profile).account_blocked === true;
+}
+
 function buildUserCard(profile, teamChoices, options = {}) {
     const { fullAdmin = false, dataManager = false } = options;
     const card = document.createElement('div');
@@ -77,9 +85,14 @@ function buildUserCard(profile, teamChoices, options = {}) {
 
     const head = document.createElement('div');
     head.className = 'admin-user-head';
+    const blocked = isProfileBlocked(profile);
+    const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(' ') || '—';
     head.innerHTML = `
-        <div class="admin-user-title">${escapeHtml(profile.nick || '—')}</div>
-        <div class="admin-user-meta">${escapeHtml([profile.first_name, profile.last_name].filter(Boolean).join(' ') || '—')} · ${escapeHtml(profile.email || '—')}</div>
+        <div class="admin-user-title">
+            <span>${escapeHtml(profile.nick || '—')}</span>
+            ${blocked ? '<span class="admin-user-status admin-user-status--blocked">Заблоковано</span>' : ''}
+        </div>
+        <div class="admin-user-meta">${escapeHtml(fullName)} · ${escapeHtml(profile.email || '—')}</div>
     `;
 
     const grid = document.createElement('div');
@@ -169,8 +182,8 @@ function buildUserCard(profile, teamChoices, options = {}) {
 
     if (fullAdmin) {
         grid.appendChild(roleWrap);
-        grid.appendChild(mentorWrap);
         grid.appendChild(teamWrap);
+        grid.appendChild(mentorWrap);
         grid.appendChild(nickWrap);
     }
 
@@ -180,23 +193,32 @@ function buildUserCard(profile, teamChoices, options = {}) {
         const exportBtn = document.createElement('button');
         exportBtn.type = 'button';
         exportBtn.className = 'btn-admin-action';
-        exportBtn.textContent = 'Скачати дані';
+        exportBtn.textContent = 'Експорт';
         exportBtn.addEventListener('click', () => adminExportProfile(profile.id, profile.nick, card));
         actions.appendChild(exportBtn);
 
         const resetBtn = document.createElement('button');
         resetBtn.type = 'button';
         resetBtn.className = 'btn-admin-danger';
-        resetBtn.textContent = 'Скинути до чистого';
+        resetBtn.textContent = 'Скинути';
         resetBtn.addEventListener('click', () => adminResetProfile(profile.id, profile.nick, card));
         actions.appendChild(resetBtn);
     }
 
     if (fullAdmin) {
+        const blockBtn = document.createElement('button');
+        blockBtn.type = 'button';
+        blockBtn.className = blocked ? 'btn-admin-action' : 'btn-admin-danger';
+        blockBtn.textContent = blocked ? 'Розблокувати' : 'Заблокувати';
+        blockBtn.disabled = profile.id === state.myUserId && !blocked;
+        blockBtn.title = blockBtn.disabled ? 'Не можна заблокувати власний акаунт' : '';
+        blockBtn.addEventListener('click', () => adminToggleUserBlock(profile, !blocked, card));
+        actions.appendChild(blockBtn);
+
         const delBtn = document.createElement('button');
         delBtn.type = 'button';
         delBtn.className = 'btn-admin-danger';
-        delBtn.textContent = 'Видалити акаунт';
+        delBtn.textContent = 'Видалити';
         delBtn.addEventListener('click', () => deleteUser(profile.id, profile.nick, card));
         actions.appendChild(delBtn);
     }
@@ -205,6 +227,41 @@ function buildUserCard(profile, teamChoices, options = {}) {
     if (fullAdmin) card.appendChild(grid);
     card.appendChild(actions);
     return card;
+}
+
+async function adminToggleUserBlock(profile, blocked, cardEl) {
+    if (!profile?.id) return;
+    if (blocked && profile.id === state.myUserId) {
+        showToast('Не можна заблокувати власний акаунт');
+        return;
+    }
+    const ok = blocked
+        ? confirm(`Заблокувати акаунт «${profile.nick}»? Користувач не зможе увійти.`)
+        : confirm(`Розблокувати акаунт «${profile.nick}»?`);
+    if (!ok) return;
+
+    const settings = {
+        ...profileSettings(profile),
+        account_blocked: blocked,
+        account_blocked_at: blocked ? new Date().toISOString() : null,
+    };
+    if (!blocked) delete settings.account_blocked_at;
+
+    cardEl?.classList.add('admin-user-busy');
+    const { error } = await supabase
+        .from('profiles')
+        .update({ settings })
+        .eq('id', profile.id);
+    cardEl?.classList.remove('admin-user-busy');
+
+    if (error) {
+        showToast('Помилка: ' + error.message);
+        return;
+    }
+
+    await loadTeams();
+    renderAdminPanel();
+    showToast(blocked ? 'Користувача заблоковано' : 'Користувача розблоковано');
 }
 
 async function adminExportProfile(userId, nick, cardEl) {

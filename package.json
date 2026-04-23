@@ -4,6 +4,7 @@
     "check": "node --check js/partials.js && node --check js/ui.js && node --check js/main.js && node --check js/app_enhancements.js && node --check scripts/check-partials.mjs && npm run check:partials",
     "check:partials": "node scripts/check-partials.mjs",
     "dev": "node dev-server.mjs",
+    "dev:5500": "node dev-server.mjs --port 5500",
     "start": "node dev-server.mjs"
   }
 }

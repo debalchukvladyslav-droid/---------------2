@@ -1,18 +1,4 @@
-﻿        <div id="view-calendar" class="view-content calendar-view-page">
-            <div class="calendar-view-toolbar">
-                <div class="calendar-view-period">
-                    <label class="mr-field cal-period-field"><span class="cal-period-label">Місяць</span><select id="cal-view-month" class="month-select strip-select cal-period-select"></select></label>
-                    <label class="mr-field cal-period-field"><span class="cal-period-label">Рік</span><select id="cal-view-year" class="year-select strip-select cal-period-select"></select></label>
-                </div>
-            </div>
-            <div class="panel calendar-rr-row">
-                <p class="calendar-rr-lead">Загальний розбір дня (усі скріни) — запит до ментора вашого куща.</p>
-                <button type="button" id="rr-btn-screens-general" class="btn-secondary rr-toggle-btn rr-exempt-access" data-action="review-request" data-review-type="screens_general">Запит: загальний розбір</button>
-                <div id="mentor-rr-panel" class="mentor-rr-panel--calendar initially-hidden">
-                    <h4 class="mentor-rr-calendar-title">Запити на вас за цей день</h4>
-                    <div id="mentor-rr-list"></div>
-                </div>
-            </div>
+        <div id="view-calendar" class="view-content calendar-view-page">
             <div id="calendar-tab-slot" class="calendar-tab-slot calendar-tab-slot--full">
                     <div id="calendar-bundle">
                     <div class="panel calendar-panel-fill">
@@ -22,11 +8,23 @@
                                 <div>Локейти: <span id="total-locates">$0</span></div>
                                 <div>Місяць: <span id="total-pnl">$0</span></div>
                             </div>
+                            <div class="calendar-view-period">
+                                <label class="mr-field cal-period-field"><span class="cal-period-label">Місяць</span><select id="cal-view-month" class="month-select strip-select cal-period-select"></select></label>
+                                <label class="mr-field cal-period-field"><span class="cal-period-label">Рік</span><select id="cal-view-year" class="year-select strip-select cal-period-select"></select></label>
+                            </div>
                         </div>
                         <div class="calendar-scroll-wrap">
                             <div class="grid calendar-grid-fill" id="calendar-grid"></div>
                         </div>
                     </div>
                     </div>
+            </div>
+            <div class="panel calendar-rr-row">
+                <p class="calendar-rr-lead">Загальний розбір дня (усі скріни) — запит до ментора вашого куща.</p>
+                <button type="button" id="rr-btn-screens-general" class="btn-secondary rr-toggle-btn rr-exempt-access" data-action="review-request" data-review-type="screens_general">Запит: загальний розбір</button>
+                <div id="mentor-rr-panel" class="mentor-rr-panel--calendar initially-hidden">
+                    <h4 class="mentor-rr-calendar-title">Запити на вас за цей день</h4>
+                    <div id="mentor-rr-list"></div>
+                </div>
             </div>
         </div>

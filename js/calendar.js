@@ -637,16 +637,68 @@ function positionCalendarTooltip(e, el) {
     el.style.top = y + 'px';
 }
 
+function escapeTooltipHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+    }[ch]));
+}
+
+function renderCalendarTooltip(el, text, type) {
+    if (!el) return;
+    const raw = String(text || '').trim();
+    const allLines = raw.split('\n').map((line) => line.trim()).filter(Boolean);
+    const title = allLines.shift() || (type === 'week' ? 'Тиждень' : 'День');
+    const lines = allLines;
+    let noteIndex = lines.findIndex((line) => /^(Думка|Підсумок|Клік|Запис|Немає)/i.test(line));
+    if (noteIndex < 0 && type === 'week') {
+        noteIndex = lines.findIndex((line) => !/pnl/i.test(line));
+    }
+    const note = noteIndex >= 0 ? lines.splice(noteIndex, 1)[0].replace(/^(Думка|Підсумок):\s*/i, '') : title;
+    const metaTitle = noteIndex >= 0 ? title : '';
+
+    const iconForLine = (line) => {
+        if (/pnl/i.test(line)) return '🎯';
+        if (/помил|увага|ліміт/i.test(line)) return '⚠️';
+        if (/скрін/i.test(line)) return '🖼️';
+        if (/що\s+(змінити|покращити)/i.test(line)) return '💡';
+        if (/тиждень/i.test(line)) return '🗓️';
+        if (/рев/i.test(line)) return '👀';
+        return '✅';
+    };
+
+    const rows = lines.map((line) => {
+        const cls = /pnl/i.test(line) ? ' calendar-tooltip-row--metric' : '';
+        return `
+            <div class="calendar-tooltip-row${cls}">
+                <span class="calendar-tooltip-icon">${iconForLine(line)}</span>
+                <span>${escapeTooltipHtml(line)}</span>
+            </div>
+        `;
+    }).join('');
+
+    el.className = `calendar-tooltip calendar-tooltip--${type}`;
+    el.innerHTML = `
+        ${metaTitle ? `<div class="calendar-tooltip-date">${escapeTooltipHtml(metaTitle)}</div>` : ''}
+        <div class="calendar-tooltip-note">${escapeTooltipHtml(note)}</div>
+        ${rows ? `<div class="calendar-tooltip-list">${rows}</div>` : ''}
+    `;
+}
+
 export function createWeekLabel(wkKey) {
     let w = document.createElement('div'); 
     let hasComment = state.appData.weeklyComments[wkKey] && state.appData.weeklyComments[wkKey].trim() !== '';
     let tooltip = document.getElementById('tooltip');
     
     w.className = 'week-label' + (hasComment ? ' has-comment' : '');
+    w.style.gridColumn = '1';
     w.innerHTML = '<span class="week-label-glyph" aria-hidden="true">W</span>';
     w.onmouseenter = (e) => {
         if (!tooltip) return;
-        tooltip.innerText = buildWeekHoverText(wkKey);
+        renderCalendarTooltip(tooltip, buildWeekHoverText(wkKey), 'week');
         tooltip.style.display = 'block';
         positionCalendarTooltip(e, tooltip);
     };
@@ -684,9 +736,6 @@ export async function renderView() {
     
     if (startPadding > 0) { 
         grid.appendChild(createWeekLabel(getMonday(new Date(year, month, 1)))); 
-        for (let i=0; i<startPadding; i++) { 
-            let e = document.createElement('div'); e.className='day-cell empty'; grid.appendChild(e); 
-        } 
     }
 
     let totalPnl = 0, totalComm = 0, totalLocates = 0;
@@ -720,6 +769,7 @@ export async function renderView() {
         
         let dateKey = `${year}-${(month+1).toString().padStart(2, '0')}-${i.toString().padStart(2, '0')}`;
         let cell = document.createElement('div'); cell.className = 'day-cell'; cell.id = `cell-${dateKey}`;
+        cell.style.gridColumn = String(d.getDay() + 1);
         let pnlDisplay = ''; let data = state.appData.journal[dateKey];
 
         const dayNum = document.createElement('div');
@@ -782,7 +832,7 @@ export async function renderView() {
         }
         if (tooltip) {
             cell.onmouseenter = (e) => {
-                tooltip.innerText = dayHoverText.trim();
+                renderCalendarTooltip(tooltip, dayHoverText.trim(), 'day');
                 tooltip.style.display = 'block';
                 positionCalendarTooltip(e, tooltip);
             };

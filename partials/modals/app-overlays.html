@@ -79,7 +79,7 @@
     <div class="team-sidebar-header">
         <div class="team-sidebar-head-text">
             <h2 class="team-sidebar-title">Команда</h2>
-            <p class="team-sidebar-sub">Кущі та учасники. Ментори — зверху в кожній групі. Натисніть рядок, щоб відкрити журнал трейдера.</p>
+            <p class="team-sidebar-team" id="team-sidebar-current-team"></p>
         </div>
         <button type="button" class="team-sidebar-close" data-action="team-sidebar-close" aria-label="Закрити">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -92,7 +92,7 @@
     <div class="team-manager-card" role="dialog" aria-labelledby="team-manager-title">
         <div class="team-manager-head">
             <h2 id="team-manager-title" class="team-manager-title">Управління кущами</h2>
-            <p class="team-manager-lead">Створення груп, переміщення трейдерів між кущами та небезпечні операції — лише для менторів з доступом.</p>
+            <p class="team-manager-lead">Окремий список кущів. Трейдерів між кущами переміщуйте в адмін-панелі у картці користувача.</p>
         </div>
 
         <section class="tm-section">
@@ -102,24 +102,11 @@
         </section>
 
         <section class="tm-section">
-            <label class="tm-label tm-warn" for="delete-team-select">Видалити кущ</label>
-            <p class="team-manager-lead team-manager-lead-tight">Учасники повернуться в «Без куща».</p>
-            <select id="delete-team-select" class="tm-select"></select>
-            <button type="button" class="btn-primary tm-btn-full tm-delete-team-btn" data-action="team-delete">Видалити кущ</button>
-        </section>
-
-        <section class="tm-section">
-            <label class="tm-label" for="move-trader-nick">Перемістити трейдера</label>
-            <select id="move-trader-nick" class="tm-select" aria-label="Трейдер"></select>
-            <select id="move-trader-team" class="tm-select" aria-label="Цільовий кущ"></select>
-            <button type="button" class="btn-primary tm-btn-full tm-move-btn" data-action="team-move-trader">Перемістити</button>
-        </section>
-
-        <section class="tm-section">
-            <label class="tm-label tm-danger" for="delete-trader-nick">Видалити профіль трейдера</label>
-            <p class="team-manager-lead team-manager-lead-tight">Без відновлення: журнал і дані профілю.</p>
-            <select id="delete-trader-nick" class="tm-select"></select>
-            <button type="button" class="btn-primary tm-btn-full tm-delete-user-btn" data-action="team-delete-trader">Видалити назавжди</button>
+            <div class="tm-team-list-head">
+                <span class="tm-label">Список кущів</span>
+                <span class="team-manager-lead team-manager-lead-tight">Видалення переносить учасників у «Без куща».</span>
+            </div>
+            <div id="team-manager-team-list" class="tm-team-list"></div>
         </section>
 
         <div class="tm-footer">

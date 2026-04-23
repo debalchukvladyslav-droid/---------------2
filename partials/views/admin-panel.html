@@ -2,14 +2,12 @@
     <div class="panel admin-panel-content">
         <div class="admin-panel-header">
             <h3 class="admin-panel-title">Адмін-панель</h3>
-            <button type="button" id="admin-refresh-users-btn" class="btn-secondary admin-refresh-btn" data-action="admin-refresh">Оновити список</button>
+            <div class="admin-panel-actions">
+                <button type="button" id="btn-admin-team-manager" class="btn-secondary admin-team-manager-btn rr-exempt-access" data-action="team-manager-open">Управління кущами</button>
+                <button type="button" id="admin-refresh-users-btn" class="btn-secondary admin-refresh-btn" data-action="admin-refresh">Оновити список</button>
+            </div>
         </div>
-        <p class="admin-lead">Керування ролями, менторством у кущі, ніком, кущами, експортом і очищенням профілів. Ментори в «Команді» відображаються першими в групі.</p>
-        <div id="admin-team-structure" class="panel admin-team-structure initially-hidden">
-            <h4 class="admin-team-structure-title">Структура кущів</h4>
-            <p class="admin-team-structure-lead">Створення кущів, переміщення трейдерів і небезпечні операції — тут же, без окремого блоку в налаштуваннях.</p>
-            <button type="button" id="btn-admin-team-manager" class="btn-primary admin-team-manager-btn rr-exempt-access" data-action="team-manager-open">Управління кущами</button>
-        </div>
+        <p class="admin-lead">Керування ролями, менторством у кущі, ніком, експортом і очищенням профілів.</p>
         <div id="admin-users-list" class="admin-users-list"></div>
     </div>
 </div>

@@ -4,6 +4,7 @@ import { state } from './state.js';
 import { normalizeDayEntry } from './data_utils.js';
 
 const PROFILE_SUFFIX = '_stats';
+export const ACCOUNT_BLOCKED_MESSAGE = 'Акаунт заблоковано. Зверніться до адміна.';
 
 function getNickFromDocName(docName = '') {
     return String(docName).replace(/_stats$/, '');
@@ -21,6 +22,18 @@ function isIgnorableProfileInsertError(error) {
 
     if (code === '42501' || message.includes('row-level security')) return true;
     return code === '23505' && (details.includes('profiles_pkey') || message.includes('profiles_pkey'));
+}
+
+export function isProfileBlocked(profile) {
+    const settings = profile?.settings && typeof profile.settings === 'object' ? profile.settings : {};
+    return settings.account_blocked === true;
+}
+
+export async function rejectBlockedProfile(profile) {
+    if (!isProfileBlocked(profile)) return false;
+    await supabase.auth.signOut().catch(() => {});
+    showError(ACCOUNT_BLOCKED_MESSAGE);
+    return true;
 }
 
 function mapAuthError(error, fallback = 'Помилка') {
@@ -470,12 +483,21 @@ export async function handleAuth() {
             return;
         }
 
-        const { error: signInError } = await supabase.auth.signInWithPassword({
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
             email: foundEmail,
             password: pass
         });
 
         if (signInError) throw signInError;
+        if (signInData?.user?.id) {
+            const { data: profile, error: profileError } = await supabase
+                .from('profiles')
+                .select('settings')
+                .eq('id', signInData.user.id)
+                .maybeSingle();
+            if (profileError) throw profileError;
+            await rejectBlockedProfile(profile);
+        }
     } catch (e) {
         showError(mapAuthError(e, 'Помилка'));
     }
@@ -726,7 +748,7 @@ export function applyAccessRights() {
             'trade-date', 'stats-filter-year', 'stats-filter-month', 'stats-filter-user',
             'sidebar-pf-fname', 'sidebar-pf-lname', 'sidebar-pf-avatar-url',
             'mr-days', 'mr-loss-threshold', 'cal-view-month', 'cal-view-year',
-            'mr-f-need-mentor', 'mr-f-big-loss', 'mr-f-errors', 'mr-f-no-screens', 'mr-f-no-session', 'mr-f-notes-request', 'mr-f-ai-hint', 'mr-f-incomplete',
+            'mr-f-need-mentor', 'mr-f-big-loss', 'mr-f-errors', 'mr-f-no-screens', 'mr-f-no-session', 'mr-f-notes-request', 'mr-f-ai-hint', 'mr-f-incomplete', 'mr-f-no-note', 'mr-f-loss-streak',
             'rr-btn-screens-general', 'rr-btn-calendar-profit',
         ];
         if (safeIds.includes(el.id) || el.id.includes('theme-') || el.id.includes('font-')) return;
@@ -757,10 +779,8 @@ export function applyAccessRights() {
 
     let mentorPanel = document.getElementById('mentor-trade-types-panel');
     if (mentorPanel) mentorPanel.style.display = (privilegedAccess && isLookingAtSomeoneElse) ? 'block' : 'none';
-    const adminTeamWrap = document.getElementById('admin-team-structure');
     const btnAdminTeam = document.getElementById('btn-admin-team-manager');
     const showTeamAdmin = state.myRole === 'admin' || state.IS_MENTOR_MODE;
-    if (adminTeamWrap) adminTeamWrap.style.display = showTeamAdmin ? 'block' : 'none';
     if (btnAdminTeam) btnAdminTeam.style.display = showTeamAdmin ? 'inline-flex' : 'none';
 
     const hideSettingsForOtherProfile = isLookingAtSomeoneElse;
