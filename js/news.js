@@ -185,12 +185,17 @@ async function fetchDashboardNews(force = false) {
         response = await fetch(`${NEWS_PROXY_FALLBACK}?${qs.toString()}`, { headers });
     }
 
-    // Backend fallback: if scoped request fails server-side, retry plain feed.
-    if (!response.ok && response.status >= 500 && qs.toString()) {
-        response = await fetch('/api/news', { headers });
-        if (response.status === 404) {
-            response = await fetch(NEWS_PROXY_FALLBACK, { headers });
-        }
+    // Backend degraded mode: avoid repeated failing requests on server 5xx.
+    if (!response.ok && response.status >= 500) {
+        const degraded = {
+            items: [],
+            tickers,
+            newsWindow: { matched: 0 },
+            degraded: true,
+        };
+        _newsCache = { key: cacheKey, ts: Date.now(), payload: degraded };
+        savePersistentNewsCache(newsContext, degraded);
+        return degraded;
     }
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data?.message || `News API error ${response.status}`);
