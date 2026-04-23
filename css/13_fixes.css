@@ -984,7 +984,9 @@
     transition: var(--transition);
 }
 .btn-admin-action:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
-.admin-user-actions { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.admin-user-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.admin-user-actions .btn-admin-action,
+.admin-user-actions .btn-admin-danger { flex: 1 1 160px; margin-top: 0; }
 .btn-admin-danger {
     padding: 8px 14px; border-radius: var(--radius-sm); border: none;
     background: color-mix(in srgb, var(--loss) 85%, #000); color: #fff;

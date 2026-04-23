@@ -232,9 +232,9 @@
         </button>
         
         <input type="file" id="file-input" class="file-input-hidden" accept=".json" data-import="json">
-        <input type="file" id="csv-input" class="file-input-hidden" accept=".xlsx, .xls, .csv" data-import="fondexx">
-        <input type="file" id="trades-input" class="file-input-hidden" accept=".xlsx, .xls, .csv" data-import="fondexx-trades">
-        <input type="file" id="ppro-input" class="file-input-hidden" accept=".xlsx, .xls, .csv" data-import="ppro">
+        <input type="file" id="csv-input" class="file-input-hidden" accept=".xlsx, .xls, .csv" data-import="fondexx" multiple>
+        <input type="file" id="trades-input" class="file-input-hidden" accept=".xlsx, .xls, .csv" data-import="fondexx-trades" multiple>
+        <input type="file" id="ppro-input" class="file-input-hidden" accept=".xlsx, .xls, .csv" data-import="ppro" multiple>
     </div>
 
     <!-- Нове ліве бокове меню -->
@@ -1426,7 +1426,7 @@
                     <h3 class="admin-panel-title">Адмін-панель</h3>
                     <button type="button" id="admin-refresh-users-btn" class="btn-secondary admin-refresh-btn" data-action="admin-refresh">Оновити список</button>
                 </div>
-                <p class="admin-lead">Керування ролями, менторством у кущі, ніком і кущами. Ментори в «Команді» відображаються першими в групі.</p>
+                <p class="admin-lead">Керування ролями, менторством у кущі, ніком, кущами, експортом і очищенням профілів. Ментори в «Команді» відображаються першими в групі.</p>
                 <div id="admin-team-structure" class="panel admin-team-structure initially-hidden">
                     <h4 class="admin-team-structure-title">Структура кущів</h4>
                     <p class="admin-team-structure-lead">Створення кущів, переміщення трейдерів і небезпечні операції — тут же, без окремого блоку в налаштуваннях.</p>

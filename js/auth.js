@@ -683,7 +683,7 @@ export function updateMentorButtons() {
 /** Ментор переглядає журнал іншого трейдера — лише коментар ментора / приватні нотатки, без редагування дня. */
 export function isMentorViewingOtherJournal() {
     return !!(
-        state.IS_MENTOR_MODE &&
+        (state.IS_MENTOR_MODE || state.myRole === 'admin') &&
         state.USER_DOC_NAME &&
         state.CURRENT_VIEWED_USER &&
         state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME
@@ -694,7 +694,8 @@ export function applyAccessRights() {
     const isSelf = state.CURRENT_VIEWED_USER === state.USER_DOC_NAME;
     const isLookingAtSomeoneElse = !isSelf;
     const mentorViewOnly = isMentorViewingOtherJournal();
-    const hasAccess = isSelf || state.IS_MENTOR_MODE;
+    const privilegedAccess = state.IS_MENTOR_MODE || state.myRole === 'admin';
+    const hasAccess = isSelf || privilegedAccess;
 
     let statusBanner = document.getElementById('status-banner');
     if (!statusBanner) {
@@ -704,13 +705,13 @@ export function applyAccessRights() {
         document.body.appendChild(statusBanner);
     }
 
-    if (isLookingAtSomeoneElse && !state.IS_MENTOR_MODE) {
+    if (isLookingAtSomeoneElse && !privilegedAccess) {
         statusBanner.innerHTML = '👁️ Тільки перегляд';
         statusBanner.style.background = 'var(--bg-panel)';
         statusBanner.style.color = 'var(--text-muted)';
         statusBanner.style.border = '1px solid var(--border)';
         statusBanner.style.display = 'block';
-    } else if (isLookingAtSomeoneElse && state.IS_MENTOR_MODE) {
+    } else if (isLookingAtSomeoneElse && privilegedAccess) {
         statusBanner.innerHTML = '👑 Наставник';
         statusBanner.style.background = 'var(--gold)';
         statusBanner.style.color = 'black';
@@ -755,12 +756,26 @@ export function applyAccessRights() {
     });
 
     let mentorPanel = document.getElementById('mentor-trade-types-panel');
-    if (mentorPanel) mentorPanel.style.display = (state.IS_MENTOR_MODE && isLookingAtSomeoneElse) ? 'block' : 'none';
+    if (mentorPanel) mentorPanel.style.display = (privilegedAccess && isLookingAtSomeoneElse) ? 'block' : 'none';
     const adminTeamWrap = document.getElementById('admin-team-structure');
     const btnAdminTeam = document.getElementById('btn-admin-team-manager');
     const showTeamAdmin = state.myRole === 'admin' || state.IS_MENTOR_MODE;
     if (adminTeamWrap) adminTeamWrap.style.display = showTeamAdmin ? 'block' : 'none';
     if (btnAdminTeam) btnAdminTeam.style.display = showTeamAdmin ? 'inline-flex' : 'none';
+
+    const hideSettingsForOtherProfile = isLookingAtSomeoneElse;
+    document.querySelectorAll('[data-tab="settings"]').forEach((tab) => {
+        tab.style.display = hideSettingsForOtherProfile ? 'none' : '';
+    });
+    const settingsView = document.getElementById('view-settings');
+    if (settingsView) {
+        settingsView.toggleAttribute('aria-disabled', hideSettingsForOtherProfile);
+        if (hideSettingsForOtherProfile && settingsView.classList.contains('active') && window.switchMainTab) {
+            window.switchMainTab('calendar');
+        }
+    }
+    const importExportGrid = document.querySelector('.import-export-grid');
+    if (importExportGrid) importExportGrid.style.display = isSelf ? '' : 'none';
 
     if (state.USER_DOC_NAME) {
         if (window.renderTeamSidebar) window.renderTeamSidebar();
@@ -920,7 +935,7 @@ export async function mentorAcceptReviewRequest(dateStr, kind, screenPath) {
 }
 
 export async function saveMentorComment() {
-    if (!state.IS_MENTOR_MODE || state.CURRENT_VIEWED_USER === state.USER_DOC_NAME) return;
+    if (!(state.IS_MENTOR_MODE || state.myRole === 'admin') || state.CURRENT_VIEWED_USER === state.USER_DOC_NAME) return;
 
     let comment = document.getElementById('mentor-notes').value.trim();
     if (!state.appData.journal[state.selectedDateStr]) {

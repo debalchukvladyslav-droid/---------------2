@@ -627,6 +627,7 @@ export async function initializeApp() {
 
     try {
         const nick = state.CURRENT_VIEWED_USER;
+        const isViewingOwnProfile = nick === state.USER_DOC_NAME;
         const viewedUserId = getCurrentViewedUserId() || await resolveViewedUserId(nick, { force: true });
         if (!viewedUserId) throw new Error(`Не вдалося визначити userId для ${nick}`);
         const previousAppData = state.appData && typeof state.appData === 'object' ? state.appData : {};
@@ -648,10 +649,10 @@ export async function initializeApp() {
         const prevMk = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
 
         await Promise.all([
-            loadSettings(),
+            isViewingOwnProfile ? loadSettings() : Promise.resolve(),
             loadMonth(nick, currentMk, viewedUserId),
             loadMonth(nick, prevMk, viewedUserId),
-            loadPlaybook(),
+            isViewingOwnProfile ? loadPlaybook() : Promise.resolve(),
         ]);
 
         if (state.selectedDateStr) {
@@ -798,6 +799,13 @@ export function loadBackgroundGallery() {
 export async function exportData() {
     const targetDocName = state.CURRENT_VIEWED_USER || state.USER_DOC_NAME;
     const nick = targetDocName.replace(/_stats$/, '');
+    const isSelfExport = targetDocName === state.USER_DOC_NAME;
+    const canExportOther = state.myRole === 'admin' || state.IS_MENTOR_MODE;
+
+    if (!isSelfExport && !canExportOther) {
+        showLoadingToast('Експорт чужого профілю доступний лише ментору або адміну.');
+        return;
+    }
 
     showLoadingToast('⏳ Підготовка експорту...', true);
     showGlobalLoader('export-data', 'Підготовка експорту...');
@@ -853,6 +861,77 @@ export async function exportData() {
     showGlobalLoader('export-data', 'Експорт готовий', { type: 'success' });
     hideGlobalLoader('export-data', 1400);
     hideLoadingToast();
+}
+
+export async function exportProfileData(userId, nick = 'profile') {
+    if (!userId) throw new Error('Не вказано профіль для експорту');
+
+    const safeNick = String(nick || 'profile').replace(/_stats$/, '') || 'profile';
+    const { data: rows, error: rowsError } = await supabase
+        .from('journal_days')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('trade_date', '2024-01-01')
+        .lte('trade_date', '2030-12-31')
+        .order('trade_date', { ascending: true });
+
+    if (rowsError) throw rowsError;
+
+    const journal = {};
+    (rows || []).forEach((row) => {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(row.trade_date)) {
+            journal[row.trade_date] = journalRowToDayEntry(row);
+        }
+    });
+
+    const payload = { nick: safeNick, exportedAt: new Date().toISOString(), journal };
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(payload, null, 2));
+    const dl = document.createElement('a');
+    dl.setAttribute('href', dataStr);
+    dl.setAttribute('download', `export_${safeNick}_${new Date().getFullYear()}.json`);
+    document.body.appendChild(dl);
+    dl.click();
+    dl.remove();
+}
+
+export async function resetProfileData(userId, nick = '') {
+    if (!userId) throw new Error('Не вказано профіль для очищення');
+
+    const { error: journalError } = await supabase
+        .from('journal_days')
+        .delete()
+        .eq('user_id', userId);
+    if (journalError) throw journalError;
+
+    const clean = getDefaultAppData();
+    const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+            settings: {
+                ...clean.settings,
+                aiChatHistory: [],
+                aiSavedChats: [],
+                errorTypes: clean.errorTypes,
+                learnCache: null,
+                tickers: {},
+                tradeTypes: clean.tradeTypes,
+                unassignedImages: [],
+                screenTags: {},
+                screenDiscipline: {},
+                weeklyComments: {},
+            },
+        })
+        .eq('id', userId);
+    if (profileError) throw profileError;
+
+    if (nick) clearStatsCache(`${String(nick).replace(/_stats$/, '')}_stats`);
+    if (userId === getCurrentViewedUserId()) {
+        state.appData = normalizeAppData(getDefaultAppData());
+        state.loadedMonths = {};
+        state._availableMonthKeys = new Set();
+        state._monthListLoaded = false;
+        state._allMonthsLoaded = false;
+    }
 }
 
 export function importData(event) {

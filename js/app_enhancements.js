@@ -32,12 +32,12 @@ function enhanceIconButtons() {
 function guardLargeImports() {
     document.querySelectorAll('input[type="file"]').forEach((input) => {
         input.addEventListener('change', () => {
-            const file = input.files?.[0];
-            if (!file) return;
-            const sizeMb = file.size / 1024 / 1024;
-            if (sizeMb <= MAX_IMPORT_SIZE_MB) return;
+            const files = Array.from(input.files || []);
+            const tooLarge = files.find((file) => file.size / 1024 / 1024 > MAX_IMPORT_SIZE_MB);
+            if (!tooLarge) return;
+            const sizeMb = tooLarge.size / 1024 / 1024;
             input.value = '';
-            showToast(`Файл завеликий: ${sizeMb.toFixed(1)} MB. Ліміт ${MAX_IMPORT_SIZE_MB} MB.`);
+            showToast(`Файл завеликий: ${tooLarge.name} (${sizeMb.toFixed(1)} MB). Ліміт ${MAX_IMPORT_SIZE_MB} MB.`);
         });
     });
 }
@@ -235,7 +235,24 @@ function handleImportInput(event) {
     };
     const fn = handlers[kind];
     if (typeof fn !== 'function') return false;
-    fn(event);
+    const files = Array.from(target.files || []);
+    if (files.length <= 1) {
+        fn(event);
+        return true;
+    }
+
+    files.forEach((file) => {
+        fn({
+            ...event,
+            target: {
+                files: [file],
+                dataset: target.dataset,
+                value: '',
+            },
+        });
+    });
+    target.value = '';
+    showToast(`Запущено імпорт ${files.length} файлів`);
     return true;
 }
 

@@ -3,6 +3,7 @@ import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { showToast } from './utils.js';
 import { loadTeams } from './teams.js';
+import { exportProfileData, resetProfileData } from './storage.js';
 
 const ROLES = ['trader', 'mentor', 'admin'];
 const DEFAULT_TEAM = 'Без куща';
@@ -12,7 +13,9 @@ export async function renderAdminPanel() {
     if (!container) return;
 
     const refreshUsersBtn = document.getElementById('admin-refresh-users-btn');
-    if (state.myRole !== 'admin') {
+    const fullAdmin = state.myRole === 'admin';
+    const dataManager = fullAdmin || state.IS_MENTOR_MODE;
+    if (!dataManager) {
         if (refreshUsersBtn) refreshUsersBtn.style.display = 'none';
         container.innerHTML =
             '<p class="admin-empty">Повний список профілів і зміна ролей доступні лише адміністратору. Для кущів використайте блок вище або «Команда» в шапці.</p>';
@@ -37,10 +40,21 @@ export async function renderAdminPanel() {
         return;
     }
 
+    const myNick = state.USER_DOC_NAME ? state.USER_DOC_NAME.replace('_stats', '') : '';
+    const myProfile = (profiles || []).find((p) => p.nick === myNick);
+    const visibleProfiles = fullAdmin
+        ? profiles
+        : (profiles || []).filter((p) => p.team && myProfile?.team && p.team === myProfile.team);
+
+    if (!visibleProfiles.length) {
+        container.innerHTML = '<p class="admin-empty">У вашому кущі немає доступних профілів.</p>';
+        return;
+    }
+
     const teamChoices = teamListForSelect();
 
     container.innerHTML = '';
-    profiles.forEach((p) => container.appendChild(buildUserCard(p, teamChoices)));
+    visibleProfiles.forEach((p) => container.appendChild(buildUserCard(p, teamChoices, { fullAdmin, dataManager })));
 }
 
 function teamListForSelect() {
@@ -55,7 +69,8 @@ function escapeHtml(s) {
     return d.innerHTML;
 }
 
-function buildUserCard(profile, teamChoices) {
+function buildUserCard(profile, teamChoices, options = {}) {
+    const { fullAdmin = false, dataManager = false } = options;
     const card = document.createElement('div');
     card.className = 'admin-user-card';
     card.dataset.userId = profile.id;
@@ -152,24 +167,72 @@ function buildUserCard(profile, teamChoices) {
     nickWrap.appendChild(nickInput);
     nickWrap.appendChild(nickBtn);
 
-    grid.appendChild(roleWrap);
-    grid.appendChild(mentorWrap);
-    grid.appendChild(teamWrap);
-    grid.appendChild(nickWrap);
+    if (fullAdmin) {
+        grid.appendChild(roleWrap);
+        grid.appendChild(mentorWrap);
+        grid.appendChild(teamWrap);
+        grid.appendChild(nickWrap);
+    }
 
     const actions = document.createElement('div');
     actions.className = 'admin-user-actions';
-    const delBtn = document.createElement('button');
-    delBtn.type = 'button';
-    delBtn.className = 'btn-admin-danger';
-    delBtn.textContent = 'Видалити акаунт';
-    delBtn.addEventListener('click', () => deleteUser(profile.id, profile.nick, card));
-    actions.appendChild(delBtn);
+    if (dataManager) {
+        const exportBtn = document.createElement('button');
+        exportBtn.type = 'button';
+        exportBtn.className = 'btn-admin-action';
+        exportBtn.textContent = 'Скачати дані';
+        exportBtn.addEventListener('click', () => adminExportProfile(profile.id, profile.nick, card));
+        actions.appendChild(exportBtn);
+
+        const resetBtn = document.createElement('button');
+        resetBtn.type = 'button';
+        resetBtn.className = 'btn-admin-danger';
+        resetBtn.textContent = 'Скинути до чистого';
+        resetBtn.addEventListener('click', () => adminResetProfile(profile.id, profile.nick, card));
+        actions.appendChild(resetBtn);
+    }
+
+    if (fullAdmin) {
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'btn-admin-danger';
+        delBtn.textContent = 'Видалити акаунт';
+        delBtn.addEventListener('click', () => deleteUser(profile.id, profile.nick, card));
+        actions.appendChild(delBtn);
+    }
 
     card.appendChild(head);
-    card.appendChild(grid);
+    if (fullAdmin) card.appendChild(grid);
     card.appendChild(actions);
     return card;
+}
+
+async function adminExportProfile(userId, nick, cardEl) {
+    cardEl?.classList.add('admin-user-busy');
+    try {
+        await exportProfileData(userId, nick);
+        showToast(`Експорт «${nick}» готовий`);
+    } catch (error) {
+        showToast('Помилка експорту: ' + (error?.message || error));
+    } finally {
+        cardEl?.classList.remove('admin-user-busy');
+    }
+}
+
+async function adminResetProfile(userId, nick, cardEl) {
+    if (!confirm(`Скинути журнал і налаштування профілю «${nick}» до чистого стану? Дія незворотна.`)) return;
+
+    cardEl?.classList.add('admin-user-busy');
+    try {
+        await resetProfileData(userId, nick);
+        showToast(`Профіль «${nick}» очищено`);
+        if (window.renderView) window.renderView();
+        if (window.refreshStatsView) window.refreshStatsView();
+    } catch (error) {
+        showToast('Помилка очищення: ' + (error?.message || error));
+    } finally {
+        cardEl?.classList.remove('admin-user-busy');
+    }
 }
 
 async function updateUserRole(userId, newRole, selectEl) {
