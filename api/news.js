@@ -21,11 +21,19 @@ export default async function handler(req, res) {
     if (!authResult.ok) return res.status(authResult.status).json({ message: authResult.message });
 
     const apiKey = process.env.FINNHUB_API_KEY;
-    if (!apiKey) return res.status(500).json({ message: 'FINNHUB_API_KEY not configured on server' });
 
     const tickers = parseTickers(req.query?.tickers);
     const fromTs = parseUnixSeconds(req.query?.fromTs);
     const toTs = parseUnixSeconds(req.query?.toTs);
+    if (!apiKey) {
+        return res.status(200).json(createDegradedPayload({
+            tickers,
+            fromTs,
+            toTs,
+            reason: 'FINNHUB_API_KEY not configured on server',
+        }));
+    }
+
     const cacheKey = `finnhub:${tickers.join(',') || 'market'}:${fromTs || ''}:${toTs || ''}`;
     const cached = cache.get(cacheKey);
     if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
@@ -59,8 +67,27 @@ export default async function handler(req, res) {
         cache.set(cacheKey, { ts: Date.now(), payload });
         return res.status(200).json(payload);
     } catch (error) {
-        return res.status(502).json({ message: error.message || 'News fetch failed' });
+        const payload = createDegradedPayload({
+            tickers,
+            fromTs,
+            toTs,
+            reason: error.message || 'News fetch failed',
+        });
+        cache.set(cacheKey, { ts: Date.now(), payload });
+        return res.status(200).json(payload);
     }
+}
+
+function createDegradedPayload({ tickers = [], fromTs = null, toTs = null, reason = '' } = {}) {
+    return {
+        provider: 'finnhub',
+        tickers,
+        newsWindow: fromTs && toTs ? { fromTs, toTs, matched: 0 } : null,
+        items: [],
+        degraded: true,
+        reason,
+        updatedAt: new Date().toISOString(),
+    };
 }
 
 function getAllowedOrigins() {

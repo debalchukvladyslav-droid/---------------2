@@ -327,6 +327,13 @@ function renderTickerNews(payload) {
     const tickers = Array.isArray(payload?.tickers) ? payload.tickers : [];
 
     if (!items.length) {
+        if (payload?.degraded) {
+            const reason = String(payload.reason || '').includes('FINNHUB_API_KEY')
+                ? 'додайте FINNHUB_API_KEY у Vercel Environment Variables і зробіть Redeploy'
+                : (payload.reason || 'провайдер новин тимчасово недоступний');
+            setTickerHTML(`Live news тимчасово недоступні: ${sanitizeHTML(reason)}`);
+            return;
+        }
         const scope = tickers.length ? `по ${sanitizeHTML(tickers.join(', '))}` : 'по ринку';
         setTickerHTML(`Немає свіжих новин ${scope}<span class="news-ticker-sep">•</span>Імпортуйте угоди, щоб стрічка брала ваші тикери`);
         return;

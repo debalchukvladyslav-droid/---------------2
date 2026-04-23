@@ -8,7 +8,7 @@ import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activat
 import { loadTeams, openTeamManager, createNewTeam, moveTrader, deleteTeam, deleteTraderProfile, renderTeamSidebar, switchUser } from './teams.js';
 import { saveToLocal, saveJournalData, markJournalDayDirty, initializeApp, exportData, importData, loadMonth, resolveViewedUserId, setCurrentViewedUserId,
          uploadBackground, setActiveBackground, deleteBackground, loadBackgroundGallery } from './storage.js';
-import { applyTheme, saveThemeSettings, switchTab, toggleMobileSidebar, switchMainTab, scrollMainTabs, toggleMoreTabs, toggleMobileMoreMenu, closeMobileMoreMenu } from './ui.js';
+import { applyTheme, saveThemeSettings, switchTab, toggleMobileSidebar, switchMainTab, scrollMainTabs, toggleMoreTabs, toggleMobileMoreMenu, closeMobileMoreMenu, bindMainTabRoutes, syncMainTabFromRoute } from './ui.js';
 import { shiftDate, selectDateFromInput, saveEntry, renderView, selectDate, updateAutoFlags, initSelectors, renderSidebarTradesList } from './calendar.js';
 import { toggleStatsDropdown, toggleTree, toggleStatsFilter, refreshStatsView, closeStatsDropdown, renderStatsSourceSelector, selectStatsSource, renderTradeTypeSelector, selectTradeTypeFilter, toggleStatsEquityMode } from './stats.js';
 import { renderErrorsList, addNewErrorType, deleteErrorType, renderChecklistDisplay, renderSettingsChecklist, addNewChecklistItem, deleteChecklistItem, saveChecklist, renderSidebarSliders, renderSettingsSliders, addNewSliderItem, deleteSliderItem, saveSlidersSettings, renderSettingsTradeTypes, addNewTradeType, deleteTradeType, saveTradeTypes, renderMyTradeTypes, addMyTradeType, deleteMyTradeType, saveMyTradeTypes, renderSettingsSituations, addPlaybookSituation, deletePlaybookSituation, savePlaybookSituations } from './settings.js';
@@ -100,6 +100,7 @@ window.scrollMainTabs = scrollMainTabs;
 window.toggleMoreTabs = toggleMoreTabs;
 window.toggleMobileMoreMenu = toggleMobileMoreMenu;
 window.closeMobileMoreMenu = closeMobileMoreMenu;
+bindMainTabRoutes();
 window.shiftDate = shiftDate;
 window.selectDateFromInput = selectDateFromInput;
 window.saveEntry = saveEntry;
@@ -712,6 +713,7 @@ async function bootApp(user) {
         if (window.renderSettingsTradeTypes) window.renderSettingsTradeTypes();
         if (window.renderSettingsSituations) window.renderSettingsSituations();
         if (window.applyAccessRights) window.applyAccessRights();
+        syncMainTabFromRoute();
         if (window.loadAIChatHistory) window.loadAIChatHistory();
         if (window.renderDashboardNews) void window.renderDashboardNews();
         cleanupUnusedAIRequests();

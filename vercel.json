@@ -1,4 +1,23 @@
 {
+  "rewrites": [
+    { "source": "/dashboard", "destination": "/index.html" },
+    { "source": "/calendar", "destination": "/index.html" },
+    { "source": "/stats", "destination": "/index.html" },
+    { "source": "/trades", "destination": "/index.html" },
+    { "source": "/datagrid", "destination": "/index.html" },
+    { "source": "/trades-table", "destination": "/index.html" },
+    { "source": "/table", "destination": "/index.html" },
+    { "source": "/import", "destination": "/index.html" },
+    { "source": "/sheet-import", "destination": "/index.html" },
+    { "source": "/screen", "destination": "/index.html" },
+    { "source": "/screens", "destination": "/index.html" },
+    { "source": "/ai", "destination": "/index.html" },
+    { "source": "/mentor-review", "destination": "/index.html" },
+    { "source": "/playbook", "destination": "/index.html" },
+    { "source": "/learn", "destination": "/index.html" },
+    { "source": "/settings", "destination": "/index.html" },
+    { "source": "/admin", "destination": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/(.*)",

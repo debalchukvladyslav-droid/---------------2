@@ -200,6 +200,13 @@ function serveStatic(req, res) {
 
     fs.stat(filePath, (err, st) => {
         if (err || !st.isFile()) {
+            if (!path.extname(pathname)) {
+                const indexPath = path.join(ROOT, 'index.html');
+                const stream = fs.createReadStream(indexPath);
+                res.writeHead(200, { 'Content-Type': MIME['.html'] });
+                stream.pipe(res);
+                return;
+            }
             res.writeHead(404);
             res.end('Not found');
             return;

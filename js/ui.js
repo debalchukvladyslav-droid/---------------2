@@ -386,7 +386,67 @@ const TAB_TITLES = {
     admin: 'Адмін-панель',
 };
 
-export function switchMainTab(tab) {
+const TAB_ROUTES = {
+    dash: '/',
+    calendar: '/calendar',
+    stats: '/stats',
+    trades: '/trades',
+    datagrid: '/datagrid',
+    table: '/import',
+    screens: '/screen',
+    ai: '/ai',
+    'mentor-review': '/mentor-review',
+    playbook: '/playbook',
+    learn: '/learn',
+    settings: '/settings',
+    admin: '/admin',
+};
+
+const ROUTE_TABS = {
+    '/': 'dash',
+    '/dashboard': 'dash',
+    '/calendar': 'calendar',
+    '/stats': 'stats',
+    '/trades': 'trades',
+    '/datagrid': 'datagrid',
+    '/trades-table': 'datagrid',
+    '/table': 'table',
+    '/import': 'table',
+    '/sheet-import': 'table',
+    '/screen': 'screens',
+    '/screens': 'screens',
+    '/ai': 'ai',
+    '/mentor-review': 'mentor-review',
+    '/playbook': 'playbook',
+    '/learn': 'learn',
+    '/settings': 'settings',
+    '/admin': 'admin',
+};
+
+function normalizeRoutePath(pathname = '/') {
+    const clean = String(pathname || '/').replace(/\/+$/, '') || '/';
+    return clean.toLowerCase();
+}
+
+function getTabFromRoute() {
+    return ROUTE_TABS[normalizeRoutePath(window.location.pathname)] || 'dash';
+}
+
+function updateRouteForTab(tab, mode = 'push') {
+    if (!window.history?.pushState) return;
+    const route = TAB_ROUTES[tab] || '/';
+    if (normalizeRoutePath(window.location.pathname) === normalizeRoutePath(route)) return;
+    const state = { tab };
+    if (mode === 'replace') {
+        window.history.replaceState(state, '', route);
+    } else {
+        window.history.pushState(state, '', route);
+    }
+}
+
+export function switchMainTab(tab, options = {}) {
+    if (!document.getElementById('view-' + tab)) tab = 'dash';
+    if (options.updateRoute !== false) updateRouteForTab(tab, options.historyMode);
     // Очищаємо старі активні стани
     document.querySelectorAll('.main-tab-btn, .more-tab-item, .sidebar-nav-item').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.view-content').forEach(v => {
@@ -459,6 +519,18 @@ export function switchMainTab(tab) {
     if (tab === 'mentor-review' && window.refreshMentorReviewQueue) void window.refreshMentorReviewQueue();
     let sosBtn = document.getElementById('sos-btn');
     if (sosBtn) sosBtn.style.display = tab === 'dash' ? 'flex' : 'none';
+}
+
+export function syncMainTabFromRoute() {
+    const tab = getTabFromRoute();
+    switchMainTab(tab, { updateRoute: false });
+    updateRouteForTab(tab, 'replace');
+}
+
+export function bindMainTabRoutes() {
+    window.addEventListener('popstate', () => {
+        switchMainTab(getTabFromRoute(), { updateRoute: false });
+    });
 }
 
 export function scrollMainTabs(offset) {
