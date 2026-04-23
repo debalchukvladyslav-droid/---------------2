@@ -184,6 +184,14 @@ async function fetchDashboardNews(force = false) {
     if (response.status === 404) {
         response = await fetch(`${NEWS_PROXY_FALLBACK}?${qs.toString()}`, { headers });
     }
+
+    // Backend fallback: if scoped request fails server-side, retry plain feed.
+    if (!response.ok && response.status >= 500 && qs.toString()) {
+        response = await fetch('/api/news', { headers });
+        if (response.status === 404) {
+            response = await fetch(NEWS_PROXY_FALLBACK, { headers });
+        }
+    }
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data?.message || `News API error ${response.status}`);
 
