@@ -1,0 +1,134 @@
+<div id="form-sidebar-backdrop" class="form-sidebar-backdrop" data-action="right-sidebar-toggle"></div>
+<div class="sidebar collapsed" id="form-sidebar">
+    <div class="sidebar-panel-head">
+        <h3 class="sidebar-panel-title">Форма дня</h3>
+        <button class="icon-button-plain" data-action="right-sidebar-toggle">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+    </div>
+    
+    <div class="header-actions">
+        <button class="date-nav-btn" data-action="date-shift" data-offset="-1" title="Попередній день">❮</button>
+        <span class="date-display" id="display-date" role="button" tabindex="0" data-action="date-picker" title="Вибрати дату">Сьогодні</span>
+        <input type="date" id="trade-date" class="trade-date" data-action="date-select">
+        <button class="date-nav-btn" data-action="date-shift" data-offset="1" title="Наступний день">❯</button>
+    </div>
+    
+    <div class="tabs">
+        <button type="button" class="tab-btn active" data-tab="tab-profit">Профіт</button>
+        <button type="button" class="tab-btn" data-tab="tab-mind">Думка</button>
+        <button type="button" class="tab-btn" data-tab="tab-errors">Помилки</button>
+        <button type="button" class="tab-btn" data-tab="tab-trades">Угоди</button>
+        <button type="button" class="tab-btn" data-tab="tab-session">🎯 Сесія</button>
+    </div>
+
+    <div id="tab-profit" class="tab-content active">
+        <div class="sidebar-form-row">
+            <div class="form-group flex-1-2">
+                <label>Net PnL ($)</label>
+                <input type="number" id="trade-pnl" step="0.01" placeholder="Чистий">
+            </div>
+            <div class="form-group flex-1">
+                <label>Gross ($)</label>
+                <input type="number" id="trade-gross" step="0.01" placeholder="Брудний">
+            </div>
+        </div>
+        <div class="sidebar-form-row">
+            <div class="form-group flex-1">
+                <label>Комісії ($)</label>
+                <input type="number" id="trade-comm" step="0.01">
+            </div>
+            <div class="form-group flex-1">
+                <label>Локейти</label>
+                <input type="number" id="trade-locates" step="0.01">
+            </div>
+            <div class="form-group flex-1">
+                <label>КФ</label>
+                <input type="number" id="trade-kf" step="0.01">
+            </div>
+        </div>
+        
+        <div id="trade-types-container" class="trade-types-container"></div>
+        
+        <label class="checklist-label">Відмітки дня (Чекліст):</label>
+        <div id="sidebar-checklist-container" class="sidebar-checklist-container"></div>
+    </div>
+    
+    <div id="tab-mind" class="tab-content">
+        <label class="state-label">Стан перед торгівлею:</label>
+        <div id="sliders-container" class="sliders-container"></div>
+        
+        <div class="form-group">
+            <label>Ваші думки та розбір ситуацій</label>
+            <textarea id="trade-notes" rows="6" placeholder="Опишіть, як пройшов день..."></textarea>
+        </div>
+        
+        <div id="mentor-comment-block" class="mentor-comment-block">
+            <label class="mentor-label">👑 Коментар Наставника:</label>
+            <textarea id="mentor-notes" class="mentor-notes" placeholder="Ментор ще не залишив коментар..." disabled></textarea>
+            <button id="btn-save-mentor" class="btn-primary mentor-save" data-action="mentor-comment-save">✓ Зберегти коментар</button>
+        </div>
+        
+        <div id="private-note-container" class="private-note-container">
+            <label class="private-label">🔒 Моя приватна нотатка (про цього трейдера):</label>
+            <textarea id="private-user-note" class="private-note" rows="3" placeholder="Ваші думки або аналіз чужих помилок (ніхто крім вас цього не побачить)..."></textarea>
+            <button class="btn-primary private-save" data-action="private-note-save">💾 Зберегти для себе</button>
+        </div>
+        
+        <button class="btn-ai" id="ai-btn" data-action="ai-advice">🤖 Отримати пораду від Gemini AI</button>
+        <div id="ai-response" class="ai-response-box"></div>
+    </div>
+    
+    <div id="tab-errors" class="tab-content">
+        <label>Додати нову помилку</label>
+        <div class="error-add-row">
+            <input type="text" id="new-error-input" placeholder="Назва помилки...">
+            <button class="btn-secondary error-add-btn" data-action="error-type-add">+</button>
+        </div>
+        <label>Список помилок (відмітьте, якщо порушили)</label>
+        <div id="errors-list-container" class="errors-list-container"></div>
+    </div>
+
+    <div id="tab-trades" class="tab-content">
+        <div id="trades-list-container" class="trades-list-container"></div>
+        <div id="trades-empty" class="trades-empty">
+            Немає угод за цей день.<br>Імпортуйте Fondexx trades звіт.
+        </div>
+    </div>
+
+    <div id="tab-session" class="tab-content">
+        <div class="form-group">
+            <label>🎯 Ціль на сьогодні</label>
+            <input type="text" id="session-goal" placeholder="Напр. Торгувати тільки за планом, макс 2 угоди">
+        </div>
+        <div class="form-group">
+            <label>📝 План на сесію</label>
+            <textarea id="session-plan" rows="3" placeholder="Які сетапи торгуєш, які умови ринку потрібні..."></textarea>
+        </div>
+        <div class="form-group">
+            <label>📚 Сетапи з плейбуку</label>
+            <div id="session-playbook-checks" class="session-playbook-checks"></div>
+        </div>
+        <div class="form-group">
+            <label>💪 Загальна готовність</label>
+            <div class="readiness-labels">
+                <span>🔴 Не готовий</span>
+                <span id="session-readiness-val" class="readiness-val">5/10</span>
+                <span>🟢 Готовий</span>
+            </div>
+            <input type="range" min="1" max="10" value="5" id="session-readiness" class="discipline-slider session-readiness" data-output="session-readiness-val" data-suffix="/10">
+        </div>
+        <button class="btn-ai" data-action="session-readiness-check">🤖 AI: Чи готовий торгувати?</button>
+        <div id="session-ai-result" class="session-ai-result"></div>
+    </div>
+
+    <button type="button" id="btn-save-day" class="btn-primary save-day-btn" data-action="day-save">
+        <svg class="inline-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Зберегти день
+    </button>
+    
+    <input type="file" id="file-input" class="file-input-hidden" accept=".json" data-import="json">
+    <input type="file" id="csv-input" class="file-input-hidden" accept=".xlsx, .xls, .csv" data-import="fondexx" multiple>
+    <input type="file" id="trades-input" class="file-input-hidden" accept=".xlsx, .xls, .csv" data-import="fondexx-trades" multiple>
+    <input type="file" id="ppro-input" class="file-input-hidden" accept=".xlsx, .xls, .csv" data-import="ppro" multiple>
+</div>

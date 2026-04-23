@@ -1,4 +1,5 @@
 import { showToast } from './utils.js';
+import { loadPartials } from './partials.js';
 
 const MAX_IMPORT_SIZE_MB = 35;
 let dayFormDirty = false;
@@ -367,7 +368,8 @@ function bindDeclarativeActions() {
     });
 }
 
-function initEnhancements() {
+async function initEnhancements() {
+    await loadPartials();
     setExternalLinkDefaults();
     enhanceIconButtons();
     guardLargeImports();

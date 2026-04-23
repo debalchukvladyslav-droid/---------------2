@@ -32,7 +32,9 @@ import { showToast } from './utils.js';
 import { connectGoogleDrive, syncDriveScreenshots, updateDriveUI, disconnectGoogleDrive, startDriveAutoSync, tryRestoreDriveToken } from './drive.js';
 import { initPlaybookChart } from './playbook_chart.js';
 import { renderDashboardNews, refreshDashboardNews } from './news.js';
+import { loadPartials } from './partials.js';
 
+await loadPartials();
 
 // 2. ПРОКИДАННЯ ФУНКЦІЙ ДЛЯ HTML (window)
 window.toggleRightSidebar = function() {

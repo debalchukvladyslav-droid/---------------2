@@ -1,0 +1,50 @@
+<div id="auth-overlay" class="auth-overlay">
+    <div class="auth-card" role="dialog" aria-labelledby="auth-title" aria-describedby="auth-subtitle" aria-modal="true">
+        <h1 id="auth-title" class="auth-title">Trading Journal</h1>
+        <p id="auth-subtitle" class="auth-subtitle">Вхід у систему</p>
+        
+        <input type="text" id="auth-nick" class="auth-input" placeholder="Нікнейм або email" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+        <input type="password" id="auth-pass" class="auth-input" placeholder="Пароль (мін. 6 симв.)" autocomplete="current-password" minlength="6" required>
+
+        <div id="register-fields" class="register-fields">
+            <input type="email" id="auth-email" class="auth-input" placeholder="Реальний Email (для бази)" autocomplete="email" autocapitalize="none" spellcheck="false">
+            <input type="text" id="auth-fname" class="auth-input" placeholder="Ім'я" autocomplete="given-name">
+            <input type="text" id="auth-lname" class="auth-input" placeholder="Прізвище" autocomplete="family-name">
+            <select id="auth-team" class="auth-input">
+                <option value="" disabled selected>Оберіть свій кущ...</option>
+            </select>
+        </div>
+
+        <div id="auth-error" class="auth-error" role="alert" aria-live="polite">Помилка</div>
+        <button class="btn-primary" id="btn-submit" data-action="auth-submit">Увійти</button>
+        <button type="button" class="auth-input auth-telegram-btn" id="btn-auth-telegram" data-action="auth-telegram">📱 Увійти через Telegram</button>
+        
+        <div class="auth-links">
+            <span id="auth-switch-text">Ще немає акаунта?</span> 
+            <span class="auth-link" id="auth-mode-toggle" role="button" tabindex="0" data-action="auth-toggle-mode">Створити</span>
+        </div>
+        <div id="forgot-link" class="auth-forgot">
+            <span class="auth-link" role="button" tabindex="0" data-action="reset-step" data-step="1">Забули пароль?</span>
+        </div>
+
+        <div id="reset-step-1" class="reset-step">
+            <p class="reset-text">Введіть нікнейм та пошту акаунту — надішлемо посилання для скидання паролю.</p>
+            <input type="text" id="reset-nick" class="auth-input" placeholder="Нікнейм" autocomplete="username" autocapitalize="none" spellcheck="false">
+            <input type="email" id="reset-email" class="auth-input" placeholder="Пошта акаунту" autocomplete="email" autocapitalize="none" spellcheck="false">
+            <div id="reset-error" class="auth-error" role="alert" aria-live="polite"></div>
+            <button class="btn-primary" data-action="reset-send">📨 Надіслати лист</button>
+            <div class="reset-back"><span class="auth-link" role="button" tabindex="0" data-action="reset-step" data-step="0">← Назад</span></div>
+        </div>
+        <div id="reset-step-2" class="reset-step">
+            <p class="reset-text">Введіть 6-значний код з листа.</p>
+            <input type="text" id="reset-code" class="auth-input reset-code" placeholder="000000" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code">
+            <div id="reset-error-2" class="auth-error" role="alert" aria-live="polite"></div>
+            <button class="btn-primary" data-action="reset-verify">✅ Підтвердити код</button>
+            <div class="reset-actions">
+                <span class="auth-link" role="button" tabindex="0" data-action="reset-step" data-step="1">← Назад</span>
+                <span class="auth-link" role="button" tabindex="0" data-action="reset-send">Надіслати ще раз</span>
+            </div>
+        </div>
+        <div id="reset-step-3"></div>
+    </div>
+</div>
