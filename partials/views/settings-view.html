@@ -1,0 +1,173 @@
+<div id="view-settings" class="view-content">
+    <div class="panel theme-settings-panel">
+        <h3 class="panel-title">🎨 Візуал та Теми</h3>
+        
+        <div class="theme-section">
+            <label class="theme-section-label">Колірна тема</label>
+            <div class="theme-cards" role="group">
+                <label class="theme-card" data-theme="dark">
+                    <input type="radio" name="theme" value="dark" id="theme-dark">
+                    <span class="theme-card-preview theme-preview-dark"></span>
+                    <span class="theme-card-name">Темна</span>
+                </label>
+                <label class="theme-card" data-theme="light">
+                    <input type="radio" name="theme" value="light" id="theme-light">
+                    <span class="theme-card-preview theme-preview-light"></span>
+                    <span class="theme-card-name">Світла</span>
+                </label>
+                <label class="theme-card" data-theme="matrix">
+                    <input type="radio" name="theme" value="matrix" id="theme-matrix">
+                    <span class="theme-card-preview theme-preview-matrix"></span>
+                    <span class="theme-card-name">Термінал</span>
+                </label>
+                <label class="theme-card" data-theme="dracula">
+                    <input type="radio" name="theme" value="dracula" id="theme-dracula">
+                    <span class="theme-card-preview theme-preview-dracula"></span>
+                    <span class="theme-card-name">Дракула</span>
+                </label>
+                <label class="theme-card" data-theme="custom">
+                    <input type="radio" name="theme" value="custom" id="theme-custom">
+                    <span class="theme-card-preview theme-preview-custom">🎨</span>
+                    <span class="theme-card-name">Своя</span>
+                </label>
+            </div>
+        </div>
+        
+        <div id="custom-theme-block" class="custom-theme-block">
+            <p class="custom-theme-hint">Палітра своєї теми — оберіть кольори нижче; зміни застосовуються одразу, натисніть «Зберегти стиль», щоб зберегти.</p>
+            <div class="theme-color-grid">
+                <div class="theme-color-item">
+                    <label>Фон</label>
+                    <div class="color-input-wrapper"><input type="color" id="ct-bg-main" value="#0f172a"></div>
+                </div>
+                <div class="theme-color-item">
+                    <label>Панелі</label>
+                    <div class="color-input-wrapper"><input type="color" id="ct-bg-panel" value="#1e293b"></div>
+                </div>
+                <div class="theme-color-item">
+                    <label>Текст</label>
+                    <div class="color-input-wrapper"><input type="color" id="ct-text-main" value="#f8fafc"></div>
+                </div>
+                <div class="theme-color-item">
+                    <label>Акцент</label>
+                    <div class="color-input-wrapper"><input type="color" id="ct-accent" value="#3b82f6"></div>
+                </div>
+                <div class="theme-color-item">
+                    <label>Плюс</label>
+                    <div class="color-input-wrapper"><input type="color" id="ct-profit" value="#10b981"></div>
+                </div>
+                <div class="theme-color-item">
+                    <label>Мінус</label>
+                    <div class="color-input-wrapper"><input type="color" id="ct-loss" value="#ef4444"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="theme-section">
+            <label class="theme-section-label">Шрифт</label>
+            <div class="font-pills">
+                <label class="font-pill"><input type="radio" name="font" value="inter" id="font-inter"><span>Inter</span></label>
+                <label class="font-pill"><input type="radio" name="font" value="roboto" id="font-roboto"><span>Roboto</span></label>
+                <label class="font-pill"><input type="radio" name="font" value="montserrat" id="font-montserrat"><span>Montserrat</span></label>
+                <label class="font-pill"><input type="radio" name="font" value="playfair" id="font-playfair"><span>Playfair</span></label>
+                <label class="font-pill"><input type="radio" name="font" value="mono" id="font-mono"><span>Mono</span></label>
+            </div>
+        </div>
+        
+        <button class="btn-primary btn-save-theme" data-action="theme-save">Зберегти стиль</button>
+    </div>
+
+    <div class="panel">
+        <h3 class="settings-title">☁️ Google Drive</h3>
+        <p class="settings-copy">Підключіть папку з Google Drive для автоматичної синхронізації скріншотів.</p>
+        <div class="settings-row">
+            <button class="btn-secondary btn-auto" id="drive-connect-btn" data-action="drive-connect">🔗 Підключити Google Drive</button>
+            <button class="btn-secondary btn-auto drive-disconnect-btn initially-hidden" id="drive-disconnect-btn" data-action="drive-disconnect">🔓 Вийти</button>
+            <span id="drive-folder-info" class="drive-folder-info"></span>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3 class="settings-title">🛑 Налаштування Дейлосу</h3>
+        <p class="settings-copy">Встановіть ліміт втрат. Він буде застосований до місяця, який зараз відкритий у календарі (<span id="settings-current-month-label" class="settings-month-label"></span>).</p>
+        <div class="form-group settings-narrow">
+            <label>Ліміт втрат на день ($)</label>
+            <input type="number" id="setting-dayloss-limit" step="1" placeholder="напр. -100">
+        </div>
+        <button class="btn-primary btn-auto" data-action="dayloss-save">💾 Зберегти для цього місяця</button>
+    </div>
+
+    <div class="panel">
+        <h3 class="settings-title">3. Візуальне налаштування OCR (Авто-тікери)</h3>
+        <p class="muted-copy">Крутіть коліщатко, щоб наблизити картинку до курсору. Виділіть зону лівою кнопкою. Перетягуйте зображення правою кнопкою миші.</p>
+        <div id="ocr-setup-container">
+            <div id="ocr-zoom-wrapper">
+                <img id="ocr-setup-img" src="" alt="Завантаження...">
+                <div id="ocr-selection-box"></div>
+            </div>
+        </div>
+        <div id="ocr-setup-status" class="settings-status"></div>
+        <button class="btn-primary btn-auto" data-action="ocr-save">💾 Зберегти виділену зону та Оновити скріншоти</button>
+    </div>
+
+    <div class="panel">
+        <h3 class="settings-title">4. Щоденний Чекліст (Відмітки)</h3>
+        <p class="settings-copy-sm">Рекорди та Дейлоси тепер визначаються автоматично. Створіть свої унікальні правила.</p>
+        <div id="settings-checklist-list" class="settings-list"></div>
+        <div class="settings-actions">
+            <button class="btn-secondary btn-auto" data-action="settings-checklist-add">+ Додати новий пункт</button>
+            <button class="btn-primary btn-auto" data-action="settings-checklist-save">💾 Зберегти чекліст</button>
+        </div>
+    </div>
+    
+    <div class="panel">
+        <h3 class="settings-title">5. Трекінг Стану (Повзунки 1-10)</h3>
+        <div id="settings-sliders-list" class="settings-list"></div>
+        <div class="settings-actions">
+            <button class="btn-secondary btn-auto" data-action="settings-slider-add">+ Додати шкалу</button>
+            <button class="btn-primary btn-auto" data-action="settings-slider-save">💾 Зберегти шкали</button>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3 class="settings-title">6. Мої Типи Трейдів</h3>
+        <div id="my-trade-types-list" class="settings-list"></div>
+        <div class="settings-actions">
+            <button class="btn-secondary btn-auto" data-action="my-trade-type-add">+ Додати тип</button>
+            <button class="btn-primary btn-auto" data-action="my-trade-type-save">💾 Зберегти типи</button>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3 class="settings-title">7. Конструктор Ситуацій Плейбуку</h3>
+        <p class="settings-copy-sm">Створіть ситуації (напр. "Відкриття ринку", "Пробій рівня") — потім призначайте їх сетапам у Плейбуку. AI враховуватиме це при аналізі.</p>
+        <div id="settings-situations-list" class="settings-list"></div>
+        <div class="settings-actions">
+            <button class="btn-secondary btn-auto" data-action="playbook-situation-add">+ Додати ситуацію</button>
+            <button class="btn-primary btn-auto" data-action="playbook-situation-save">💾 Зберегти ситуації</button>
+        </div>
+    </div>
+
+    <div class="panel mentor-panel initially-hidden" id="mentor-trade-types-panel">
+        <h3 class="settings-title settings-title-gold">👑 Типи трейдів (Тільки Ментор)</h3>
+        <div id="settings-trade-types-list" class="settings-list"></div>
+        <div class="settings-actions">
+            <button class="btn-secondary btn-auto" data-action="trade-type-add">+ Додати тип</button>
+            <button class="btn-primary btn-auto mentor-save-btn" data-action="trade-type-save">💾 Зберегти типи</button>
+        </div>
+    </div>
+
+    <div class="settings-block settings-block-separated">
+        <div class="panel panel-spaced">
+            <h3 class="settings-title settings-title-spaced">💾 Імпорт / Експорт</h3>
+            <div class="import-export-grid">
+                <button class="btn-secondary flex-fill" data-action="export-data">💾 Експорт БД</button>
+                <button class="btn-secondary flex-fill" data-action="file-picker" data-target="file-input">📂 Імпорт БД</button>
+                <button class="btn-secondary flex-fill import-fondexx-btn" data-action="file-picker" data-target="csv-input">📊 Fondexx</button>
+                <button class="btn-secondary flex-fill import-trades-btn" data-action="file-picker" data-target="trades-input">📋 Trades</button>
+                <button class="btn-secondary flex-fill import-ppro-btn" data-action="file-picker" data-target="ppro-input">📊 PPRO</button>
+            </div>
+        </div>
+        <button class="btn-primary logout-danger-btn" data-action="logout">🚪 Вийти з акаунту</button>
+    </div>
+</div>

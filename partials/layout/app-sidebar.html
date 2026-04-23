@@ -1,0 +1,130 @@
+﻿
+    <!-- Нове ліве бокове меню -->
+    <aside class="app-sidebar">
+        <!-- Logo -->
+        <div class="sidebar-brand">
+            <div class="sidebar-brand-mark">
+                <span class="sidebar-brand-initials">TJ</span>
+            </div>
+            <span class="brand-text sidebar-brand-text">TJ Pro</span>
+        </div>
+
+        <nav class="sidebar-nav">
+            <button class="sidebar-nav-item active" data-tab="dash">
+                <span class="ti-icon ti-chart-bar"></span>
+                <span class="nav-label">Дашборд</span>
+            </button>
+            <button class="sidebar-nav-item" data-tab="calendar">
+                <span class="ti-icon ti-calendar"></span>
+                <span class="nav-label">Календар</span>
+            </button>
+            <button class="sidebar-nav-item" data-tab="stats">
+                <span class="ti-icon ti-chart-line"></span>
+                <span class="nav-label">Статистика</span>
+            </button>
+            <button class="sidebar-nav-item" data-tab="trades">
+                <span class="ti-icon ti-list-check"></span>
+                <span class="nav-label">Угоди</span>
+            </button>
+            <button class="sidebar-nav-item" data-tab="datagrid" title="Таблиця угод — горизонтальний перегляд">
+                <span class="ti-icon ti-table"></span>
+                <span class="nav-label">Таблиця Угод</span>
+            </button>
+            <button class="sidebar-nav-item" data-tab="table" title="Мапінг колонок Google Sheets">
+                <span class="ti-icon ti-columns"></span>
+                <span class="nav-label">Імпорт Sheets</span>
+            </button>
+            <button class="sidebar-nav-item" data-tab="screens">
+                <span class="ti-icon ti-image"></span>
+                <span class="nav-label">Скріншоти</span>
+            </button>
+            <button class="sidebar-nav-item" data-tab="ai">
+                <span class="ti-icon ti-brain"></span>
+                <span class="nav-label">AI Ментор</span>
+            </button>
+            <button type="button" class="sidebar-nav-item mentor-review-nav-item initially-hidden" data-tab="mentor-review" title="Черга днів для рев'ю">
+                <span class="ti-icon ti-inbox"></span>
+                <span class="nav-label">Черга рев'ю</span>
+                <span class="mentor-review-nav-badge" hidden aria-label="Кількість у черзі">0</span>
+            </button>
+            <div class="nav-divider"></div>
+            <button class="sidebar-nav-item" data-tab="playbook">
+                <span class="ti-icon ti-book"></span>
+                <span class="nav-label">Плейбук</span>
+            </button>
+            <button class="sidebar-nav-item" data-tab="learn">
+                <span class="ti-icon ti-graduation"></span>
+                <span class="nav-label">Навчання</span>
+            </button>
+            <button class="sidebar-nav-item" data-tab="settings">
+                <span class="ti-icon ti-settings"></span>
+                <span class="nav-label">Налаштування</span>
+            </button>
+            <button class="sidebar-nav-item admin-nav-item initially-hidden" data-tab="admin">
+                <span class="ti-icon ti-shield"></span>
+                <span class="nav-label">Адмін</span>
+            </button>
+        </nav>
+
+        <div class="sidebar-account-wrap" id="sidebar-account">
+            <button type="button" class="sidebar-account-trigger" id="sidebar-account-trigger" aria-expanded="false" aria-controls="sidebar-account-dropdown">
+                <span class="sidebar-account-avatar" id="sidebar-account-avatar">?</span>
+                <span class="sidebar-account-meta">
+                    <span class="sidebar-account-name" id="sidebar-account-name">Профіль</span>
+                    <span class="sidebar-account-team" id="sidebar-account-team"></span>
+                    <span class="sidebar-account-sub" id="sidebar-account-sub"></span>
+                </span>
+                <span class="sidebar-account-chevron" aria-hidden="true">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                </span>
+            </button>
+            <div class="sidebar-account-dropdown" id="sidebar-account-dropdown" hidden>
+                <div class="sidebar-pf-section">
+                    <div class="sidebar-pf-section-title">Акаунт</div>
+                    <div class="sidebar-pf-label">Логін (нік)</div>
+                    <div class="sidebar-pf-readonly" id="sidebar-pf-nick">—</div>
+                    <div class="sidebar-pf-label">Кущ</div>
+                    <div class="sidebar-pf-readonly" id="sidebar-pf-team-display">—</div>
+                    <p class="sidebar-pf-mini-hint">Зміну куща та ролі виконує адміністратор у вкладці «Адмін».</p>
+                </div>
+                <div class="sidebar-pf-section">
+                    <div class="sidebar-pf-section-title">Ім’я для команди</div>
+                    <div class="sidebar-pf-label">Ім'я</div>
+                    <input type="text" id="sidebar-pf-fname" class="sidebar-pf-input" autocomplete="given-name" placeholder="Ім'я">
+                    <div class="sidebar-pf-label">Прізвище</div>
+                    <input type="text" id="sidebar-pf-lname" class="sidebar-pf-input" autocomplete="family-name" placeholder="Прізвище">
+                </div>
+                <div class="sidebar-pf-section">
+                    <div class="sidebar-pf-section-title">Аватар</div>
+                    <p class="sidebar-pf-hint">Емодзі або посилання на зображення (https…). Бачать у панелі «Команда».</p>
+                    <input type="hidden" id="sidebar-pf-emoji" value="">
+                    <div class="sidebar-pf-emoji-grid" id="sidebar-pf-emoji-grid">
+                        <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F600;" title="Смайл">&#x1F600;</button>
+                        <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F98A;" title="Лис">&#x1F98A;</button>
+                        <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F43B;" title="Ведмідь">&#x1F43B;</button>
+                        <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F981;" title="Лев">&#x1F981;</button>
+                        <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F43C;" title="Панда">&#x1F43C;</button>
+                        <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F3AF;" title="Ціль">&#x1F3AF;</button>
+                        <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F4C8;" title="Графік">&#x1F4C8;</button>
+                        <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x26A1;" title="Блискавка">&#x26A1;</button>
+                        <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F525;" title="Вогонь">&#x1F525;</button>
+                        <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F48E;" title="Діамант">&#x1F48E;</button>
+                        <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F680;" title="Ракета">&#x1F680;</button>
+                    </div>
+                    <input type="url" id="sidebar-pf-avatar-url" class="sidebar-pf-url sidebar-pf-input" placeholder="https://… зображення аватара" autocomplete="off">
+                    <button type="button" class="btn-secondary sidebar-pf-clear-avatar" id="sidebar-pf-avatar-clear">Скинути іконку (ініціали)</button>
+                </div>
+                <button type="button" class="btn-primary sidebar-pf-save" id="sidebar-pf-save">Зберегти зміни</button>
+            </div>
+        </div>
+
+        <!-- Collapse button -->
+        <div class="sidebar-footer-collapse">
+            <button type="button" data-action="left-sidebar-toggle" class="sidebar-nav-item sidebar-nav-item-collapse sidebar-collapse-btn">
+                <span class="sidebar-collapse-icon" aria-hidden="true">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 19l-7-7 7-7"/><path d="M18 19l-7-7 7-7"/></svg>
+                </span>
+                <span class="nav-label nav-label-offset">Згорнути</span>
+            </button>
+        </div>
+    </aside>

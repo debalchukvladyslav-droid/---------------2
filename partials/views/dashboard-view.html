@@ -1,0 +1,104 @@
+﻿        <div id="view-dash" class="view-content active">
+
+            <div class="dash-calendar-strip" aria-label="Серія перемог">
+                <div class="dash-calendar-strip-inner dash-calendar-strip-inner--end">
+                    <div id="winstreak-counter" class="winstreak-counter initially-hidden">
+                        <span class="winstreak-lbl">Стрік</span>
+                        <span id="winstreak-val" class="winstreak-val">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- NEWS TICKER -->
+            <div class="news-ticker-bar">
+                <span class="news-ticker-label">Live</span>
+                <div class="news-ticker-scroll">
+                    <span class="news-ticker-text" id="news-ticker-text">
+                        Підключіть News Feed у налаштуваннях &nbsp;•&nbsp; 
+                        S&amp;P 500 — підключіть API &nbsp;•&nbsp; 
+                        NASDAQ — підключіть API &nbsp;•&nbsp; 
+                        Цей блок буде живий після підключення даних
+                    </span>
+                </div>
+            </div>
+
+            <!-- TOP STATS CARDS -->
+            <div class="stats-grid-pro" id="stats-cards-pro">
+                <div class="stat-card-pro">
+                    <div class="stat-card-pro-top">
+                        <div class="stat-card-pro-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                        </div>
+                        <span class="stat-card-pro-badge" id="badge-pnl"></span>
+                    </div>
+                    <p class="stat-card-pro-label">P&amp;L за місяць</p>
+                    <p class="stat-card-pro-value" id="pro-total-pnl">$0.00</p>
+                </div>
+                <div class="stat-card-pro">
+                    <div class="stat-card-pro-top">
+                        <div class="stat-card-pro-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        </div>
+                        <span class="stat-card-pro-badge neutral" id="badge-winrate"></span>
+                    </div>
+                    <p class="stat-card-pro-label">Вінрейт (місяць)</p>
+                    <p class="stat-card-pro-value" id="pro-winrate">0%</p>
+                </div>
+                <div class="stat-card-pro">
+                    <div class="stat-card-pro-top">
+                        <div class="stat-card-pro-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                        </div>
+                        <span class="stat-card-pro-badge neutral" id="badge-trades"></span>
+                    </div>
+                    <p class="stat-card-pro-label">Угод у місяці</p>
+                    <p class="stat-card-pro-value" id="pro-total-trades">0</p>
+                </div>
+                <div class="stat-card-pro">
+                    <div class="stat-card-pro-top">
+                        <div class="stat-card-pro-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                        </div>
+                        <span class="stat-card-pro-badge neutral" id="badge-pf"></span>
+                    </div>
+                    <p class="stat-card-pro-label">Profit Factor (місяць)</p>
+                    <p class="stat-card-pro-value" id="pro-pf">0.00</p>
+                </div>
+            </div>
+
+            <!-- 2-COLUMN LAYOUT -->
+            <div class="dash-3col">
+
+                <!-- COL 1: міні-крива кумулятивного PnL за поточний місяць -->
+                <div class="dash-col dash-col-main">
+                    <div class="panel dash-mini-equity-panel">
+                        <div class="dash-mini-equity-head">
+                            <h3 class="dash-mini-equity-title">Дохідність місяця</h3>
+                            <button type="button" class="btn-secondary dash-open-calendar-tab-btn rr-exempt-access" data-tab="calendar" title="Повний календар">Календар</button>
+                        </div>
+                        <p class="dash-mini-equity-sub">Кумулятивний PnL по торгових днях поточного місяця</p>
+                        <div class="dash-mini-equity-stats" aria-label="Відкат кривої дохідності">
+                            <div class="dash-mini-equity-stat dash-mini-equity-stat--compact">
+                                <span>Відкат</span>
+                                <strong id="dash-equity-drawdown">$0.00</strong>
+                            </div>
+                        </div>
+                        <div class="dash-mini-equity-chart-wrap">
+                            <canvas id="dash-mini-equity-chart" aria-label="Графік PnL за місяць"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- COL 2: Recent trades -->
+                <div class="dash-col dash-col-recent">
+                <div class="recent-trades-panel recent-trades-flex" id="recent-trades-panel">
+                        <div class="recent-trades-header">
+                            <h3>Останні угоди</h3>
+                            <button class="recent-trades-link" data-tab="trades">Всі →</button>
+                        </div>
+                        <div id="recent-trades-list" class="recent-trades-list"></div>
+                    </div>
+                </div>
+            </div><!-- /dash-3col -->
+
+        </div><!-- /view-dash -->

@@ -1,0 +1,25 @@
+<div id="view-ai" class="view-content">
+    <div class="ai-workspace">
+        <div class="ai-tab-row">
+            <button class="btn-primary btn-flex-1" id="btn-ai-chat" data-action="ai-tab" data-ai-tab="chat">💬 Чат з AI</button>
+            <button class="btn-secondary btn-flex-1" id="btn-ai-saved" data-action="ai-tab" data-ai-tab="saved">💾 Збережене</button>
+        </div>
+
+        <div id="ai-chat-section" class="ai-section">
+            <div id="data-chat-box" class="data-chat-box">
+                <div class="chat-msg ai-msg chat-msg-accent">
+                    <strong>📊 AI Аналітик:</strong><br>Привіт! Я проаналізую твої угоди. Що тебе цікавить?
+                </div>
+            </div>
+            <div class="data-chat-row">
+                <input type="text" id="data-chat-input" class="data-chat-input" placeholder="Напишіть ваш запит до бази..." data-action="data-chat-input">
+                <button class="btn-primary data-chat-send" data-action="data-chat-send">Відправити</button>
+            </div>
+        </div>
+
+        <div id="ai-saved-section" class="ai-saved-section initially-hidden">
+            <h3 class="ai-saved-title">💾 Збережені аналізи</h3>
+            <div id="ai-saved-list" class="ai-saved-list"></div>
+        </div>
+    </div>
+</div>

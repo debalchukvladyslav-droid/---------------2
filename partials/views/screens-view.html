@@ -1,0 +1,62 @@
+﻿        <div id="view-screens" class="view-content">
+            <div class="panel">
+                <div class="screens-panel-head">
+                    <h3 class="panel-title-accent" id="unassigned-title">
+                        Нерозподілені скріншоти: 
+                        <span class="muted-inline-note">(або вставте картинку через Ctrl+V)</span>
+                    </h3>
+                    <div class="inline-flex-row">
+                        <span id="drive-sync-status" class="muted-status"></span>
+                        <button class="btn-secondary btn-auto" data-action="tag-search-toggle">🔍 Пошук по тегах</button>
+                        <button class="btn-secondary btn-auto" data-action="leader-screens">🏆 Лідер дня</button>
+                    </div>
+                </div>
+
+                <!-- Панель пошуку -->
+                <div id="tag-search-panel" class="tag-search-panel">
+                    <div class="tag-search-grid">
+                        <div class="tag-search-field">
+                            <label class="tag-search-label">Тег</label>
+                            <input type="text" id="tag-search-input" class="tag-search-input" placeholder="напр. пробій" data-action="tag-search-input">
+                            <div id="tag-search-suggestions" class="tag-suggestions"></div>
+                        </div>
+                        <div>
+                            <label class="tag-search-label">Від</label>
+                            <input type="date" id="tag-search-from" class="tag-search-date">
+                        </div>
+                        <div>
+                            <label class="tag-search-label">До</label>
+                            <input type="date" id="tag-search-to" class="tag-search-date">
+                        </div>
+                        <div>
+                            <label class="tag-search-label">Ліміт</label>
+                            <select id="tag-search-limit" class="tag-search-limit">
+                                <option value="10">10</option>
+                                <option value="20">20</option>
+                                <option value="50" selected>50</option>
+                                <option value="100">100</option>
+                                <option value="200">200</option>
+                            </select>
+                        </div>
+                        <button class="btn-primary btn-auto" data-action="tag-search-run">🔍 Знайти</button>
+                        <button class="btn-secondary btn-auto" data-action="tag-search-clear">✕ Скинути</button>
+                    </div>
+                    <div id="tag-search-results" class="tag-search-results"></div>
+                </div>
+
+                <div class="unassigned-gallery" id="unassigned-container"></div>
+            </div>
+
+            <div class="panel rr-screens-panel" id="screens-review-requests">
+                <h3 class="review-request-title">Запит розбору до ментора куща</h3>
+                <p class="review-request-text">Після натискання кнопка стає активною, поки ментор не прийме запит. Загальний розбір дня — у вкладці «Календар». Тут — прибутковість і окремі скріни.</p>
+                <div class="flex-wrap-row">
+                    <button type="button" id="rr-btn-calendar-profit" class="btn-secondary rr-toggle-btn rr-exempt-access" data-action="review-request" data-review-type="calendar_profit">Розбір прибутковості / календар</button>
+                </div>
+            </div>
+            
+            <div class="panel panel-flex-grow">
+                <h3 class="detail-title">Детальний розбір сетапів за: <span id="big-screen-date" class="text-accent"></span></h3>
+                <div id="assigned-container"></div>
+            </div>
+        </div>

@@ -1,0 +1,109 @@
+﻿        <div id="view-stats" class="view-content">
+            <!-- Горизонтальна панель фільтрів -->
+            <div class="stats-filters-bar">
+                <div id="stats-source-dropdown-wrap" class="stats-bar-item">
+                    <button id="stats-source-trigger" class="stats-bar-trigger" data-action="stats-dropdown" data-dropdown="source">
+                        <span class="stats-bar-label">Джерело</span>
+                        <span id="stats-source-trigger-label" class="stats-bar-value">Мій профіль</span>
+                        <span class="stats-dropdown-caret">▼</span>
+                    </button>
+                    <div id="stats-source-panel" class="stats-bar-dropdown initially-hidden">
+                        <div id="stats-source-container" class="dropdown-scroll-lg"></div>
+                    </div>
+                </div>
+
+                <div class="stats-bar-item">
+                    <button id="stats-tradetype-trigger" class="stats-bar-trigger" data-action="stats-dropdown" data-dropdown="tradetype">
+                        <span class="stats-bar-label">Тип трейду</span>
+                        <span id="stats-tradetype-trigger-label" class="stats-bar-value">Всі типи</span>
+                        <span class="stats-dropdown-caret">▼</span>
+                    </button>
+                    <div id="stats-tradetype-panel" class="stats-bar-dropdown initially-hidden">
+                        <div id="stats-tradetype-container" class="dropdown-scroll-md"></div>
+                    </div>
+                </div>
+
+                <div class="stats-bar-item">
+                    <button id="stats-period-trigger" class="stats-bar-trigger" data-action="stats-dropdown" data-dropdown="period">
+                        <span class="stats-bar-label">Період</span>
+                        <span id="stats-period-trigger-label" class="stats-bar-value">За весь час</span>
+                        <span class="stats-dropdown-caret">▼</span>
+                    </button>
+                    <div id="stats-period-panel" class="stats-bar-dropdown initially-hidden">
+                        <div class="stats-dropdown-hint">Клікайте для множинного вибору.</div>
+                        <div id="stats-tree-container" class="dropdown-scroll-lg"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stats-layout">
+                <div class="stats-main-panel">
+                    <div class="stats-grid">
+                        <div class="stat-card stat-card-full">
+                            <div class="label">Загальний Профіт</div>
+                            <div class="value stat-total-value" id="stat-total-pnl">0$</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Winrate (Вінрейт)</div>
+                            <div class="value text-accent" id="stat-winrate">0%</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Profit Factor</div>
+                            <div class="value text-gold" id="stat-pf">0.00</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Середній Плюс</div>
+                            <div class="value text-profit" id="stat-avg-win">0$</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Середній Мінус</div>
+                            <div class="value text-loss" id="stat-avg-loss">0$</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Найкращий День</div>
+                            <div class="value text-profit" id="stat-best">0$</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Найгірший День</div>
+                            <div class="value text-loss" id="stat-worst">0$</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Загальні Комісії</div>
+                            <div class="value text-main" id="stat-comm">0$</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Загальні Локейти</div>
+                            <div class="value text-main" id="stat-locates">0$</div>
+                        </div>
+                    </div>
+                    
+                    <div class="panel stats-equity-panel">
+                        <div class="stats-equity-head">
+                            <h3 class="stats-equity-title">📈 Крива дохідності (<span id="stats-period-label">За весь час</span>)</h3>
+                            <label class="stats-equity-mode-toggle">
+                                <input type="checkbox" id="stats-equity-advanced-toggle" data-action="stats-equity-mode">
+                                <span>Режим Аналізу</span>
+                            </label>
+                        </div>
+                        <div class="chart-container chart-fixed-250"><canvas id="pnlChart"></canvas></div>
+                    </div>
+
+                    <div class="stats-charts-row">
+                        <div class="panel stats-chart-panel-wide">
+                            <h3 class="stats-chart-title">📊 PnL за днями тижня</h3>
+                            <div class="chart-container chart-fixed-250"><canvas id="daysChart"></canvas></div>
+                        </div>
+                        <div class="panel stats-chart-panel">
+                            <h3 class="stats-chart-title">🍕 Співвідношення днів</h3>
+                            <div class="chart-container chart-fixed-250 chart-centered"><canvas id="winLossChart"></canvas></div>
+                        </div>
+                    </div>
+
+                    <div class="panel mistake-chart-panel initially-hidden" id="mistake-chart-panel">
+                        <h3 class="stats-chart-title">⚠️ Аналіз помилок — що коштувало найдорожче</h3>
+                        <p class="mistake-note">PnL розподілено рівномірно між усіма помилками дня. Показані лише дні з відміченими помилками.</p>
+                        <div class="chart-container mistake-chart"><canvas id="mistakeChart"></canvas></div>
+                    </div>
+                </div>
+            </div>
+        </div>
