@@ -404,7 +404,7 @@ export async function runOCR(encodedPath, force = false) {
         for (const zone of zones) {
             const canvas = makeOCRCanvas(imgObj, zone, 3);
 
-            const { data } = await Tesseract.recognize(canvas.toDataURL('image/png'), 'eng', {
+            const { data } = await Tesseract.recognize(canvas, 'eng', {
                 tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ ',
                 tessedit_pageseg_mode: '6',
             });

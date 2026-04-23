@@ -5,6 +5,7 @@ import { loadTradeDays } from './storage.js';
 
 const CLIENT_CACHE_TTL_MS = 2 * 60 * 1000;
 const NEWS_CACHE_VERSION = 'uk-v2';
+const NEWS_PROXY_FALLBACK = 'https://traderjournal-six.vercel.app/api/news';
 let _newsCache = { key: '', ts: 0, payload: null };
 let _newsPromise = null;
 
@@ -172,9 +173,17 @@ async function fetchDashboardNews(force = false) {
         qs.set('fromTs', String(newsContext.fromTs));
         qs.set('toTs', String(newsContext.toTs));
     }
-    const response = await fetch(`/api/news?${qs.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` },
-    });
+    const requestPath = `/api/news?${qs.toString()}`;
+    const headers = { Authorization: `Bearer ${token}` };
+    const isLocalHost = location.hostname === '127.0.0.1' || location.hostname === 'localhost';
+    if (isLocalHost) {
+        throw new Error('News API недоступний на localhost (CORS). Відкрийте застосунок на production-домені.');
+    }
+
+    let response = await fetch(requestPath, { headers });
+    if (response.status === 404) {
+        response = await fetch(`${NEWS_PROXY_FALLBACK}?${qs.toString()}`, { headers });
+    }
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data?.message || `News API error ${response.status}`);
 
