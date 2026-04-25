@@ -186,8 +186,18 @@ export async function renderUnassignedUI() {
         imgEl.src = '';
         imgEl.dataset.path = encodedPath;
         imgEl.title = 'Клікніть, щоб збільшити';
+        imgEl.loading = 'lazy';
         zoomWrapper.appendChild(badge);
         zoomWrapper.appendChild(imgEl);
+
+        const quickActions = document.createElement('div');
+        quickActions.className = 'screen-card-actions screen-card-actions--single';
+        const aiBtn = document.createElement('button');
+        aiBtn.type = 'button';
+        aiBtn.className = 'btn-ai screen-card-main-action';
+        aiBtn.textContent = 'AI Аналіз';
+        aiBtn.addEventListener('click', () => window.analyzeChart?.(encodedPath, cleanId));
+        quickActions.appendChild(aiBtn);
 
         const btns = document.createElement('div');
         btns.className = 'assign-btns';
@@ -205,6 +215,7 @@ export async function renderUnassignedUI() {
         btns.appendChild(delBtn);
 
         item.appendChild(zoomWrapper);
+        item.appendChild(quickActions);
         item.appendChild(btns);
         container.appendChild(item);
 
@@ -285,33 +296,34 @@ export async function renderAssignedScreens() {
             badge.className = 'ticker-badge'; badge.id = cleanId;
             const imgEl = document.createElement('img');
             imgEl.src = src; imgEl.title = 'Клікніть, щоб збільшити';
+            imgEl.loading = 'lazy';
             imgEl.addEventListener('click', () => openZoom(src));
             zoomWrap.appendChild(badge); zoomWrap.appendChild(imgEl);
 
             // Action buttons
             const actRow = document.createElement('div');
-            actRow.style.cssText = 'display:flex;flex-wrap:wrap;justify-content:flex-start;align-items:center;gap:10px;margin-top:15px;';
+            actRow.className = 'screen-card-actions';
             const aiBtn = document.createElement('button');
-            aiBtn.className = 'btn-ai'; aiBtn.style.cssText = 'width:auto;margin:0;padding:8px 15px;';
+            aiBtn.className = 'btn-ai screen-card-main-action';
             aiBtn.textContent = '👁️ AI Аналіз графіку';
             aiBtn.addEventListener('click', () => window.analyzeChart?.(encodedPath, cleanId));
             const rrBtn = document.createElement('button');
             rrBtn.type = 'button';
-            rrBtn.className = 'btn-secondary rr-screen-btn rr-toggle-btn rr-exempt-access';
+            rrBtn.className = 'btn-secondary screen-card-action rr-screen-btn rr-toggle-btn rr-exempt-access';
             rrBtn.setAttribute('data-screen-path', encodedPath);
             rrBtn.textContent = '📩 Запит розбору';
             rrBtn.addEventListener('click', () => window.submitReviewRequest?.('screen_item', encodedPath));
             const retBtn = document.createElement('button');
-            retBtn.className = 'btn-secondary rr-exempt-access'; retBtn.style.width = 'auto';
+            retBtn.className = 'btn-secondary screen-card-action rr-exempt-access';
             retBtn.textContent = '↩️ Повернути наверх';
             retBtn.addEventListener('click', () => removeAssignedImage(encodedPath, cat.id));
             actRow.appendChild(aiBtn); actRow.appendChild(rrBtn); actRow.appendChild(retBtn);
 
             // Discipline slider
             const discWrap = document.createElement('div');
-            discWrap.style.marginTop = '12px';
+            discWrap.className = 'screen-discipline';
             const discLabels = document.createElement('div');
-            discLabels.style.cssText = 'display:flex;justify-content:space-between;font-size:0.8rem;color:var(--text-muted);margin-bottom:4px;';
+            discLabels.className = 'screen-discipline-labels';
             const lLeft = document.createElement('span'); lLeft.style.color = 'var(--profit)'; lLeft.textContent = '✅ Системний';
             const lMid = document.createElement('span'); lMid.style.cssText = `color:${discColor};font-weight:bold;`; lMid.textContent = `${discipline}/10`;
             const lRight = document.createElement('span'); lRight.style.color = 'var(--loss)'; lRight.textContent = '🔥 Емоційний';
@@ -348,7 +360,7 @@ export async function renderAssignedScreens() {
                 tagInput.parentElement.querySelector('.tag-suggestions')?.style.setProperty('display', 'none');
             }, 150));
             const tagAddBtn = document.createElement('button');
-            tagAddBtn.className = 'btn-secondary'; tagAddBtn.style.cssText = 'width:auto;padding:4px 10px;margin:0;';
+            tagAddBtn.className = 'btn-secondary screen-tag-add-btn';
             tagAddBtn.textContent = '+';
             tagAddBtn.addEventListener('click', () => window.addScreenTag?.(encodedPath, tagInput));
             tagInputRow.appendChild(tagInput); tagInputRow.appendChild(tagAddBtn);

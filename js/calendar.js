@@ -61,11 +61,7 @@ export function getWinstreak() {
     let streak = 0;
     for (let d of sortedDates) {
         let pnl = parseFloat(state.appData.journal[d].pnl);
-        let [y, m, day] = d.split('-');
-        let dl = getDaylossForMonth(y, parseInt(m) - 1);
-        let halfDl = dl / 2;
-
-        if (pnl <= halfDl) streak = 0; 
+        if (pnl < 0) streak = 0;
         else if (pnl > 0) streak++; 
     }
     return streak;
@@ -86,10 +82,7 @@ export function getWinstreakForMonth(year, monthIndex) {
     let streak = 0;
     for (let d of sortedDates) {
         let pnl = parseFloat(state.appData.journal[d].pnl);
-        let [y, m] = d.split('-');
-        let dl = getDaylossForMonth(y, parseInt(m, 10) - 1);
-        let halfDl = dl / 2;
-        if (pnl <= halfDl) streak = 0;
+        if (pnl < 0) streak = 0;
         else if (pnl > 0) streak++;
     }
     return streak;

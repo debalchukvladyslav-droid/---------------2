@@ -167,6 +167,9 @@ export async function refreshSidebarAccount() {
     const hiddenEmoji = document.getElementById('sidebar-pf-emoji');
     if (fn) fn.value = p.first_name || '';
     if (ln) ln.value = p.last_name || '';
+    if (document.getElementById('view-dash')?.classList.contains('active')) {
+        window.refreshCurrentMainTitle?.();
+    }
     if (urlInp) urlInp.value = st.avatar_url || '';
     const em = st.avatar_emoji || '';
     if (hiddenEmoji) hiddenEmoji.value = em;

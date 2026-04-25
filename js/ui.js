@@ -2,8 +2,18 @@
 import { state } from './state.js';
 import { saveToLocal } from './storage.js';
 import { showToast, showConfirm } from './utils.js';
+import { refreshDashMiniEquityChartTheme } from './dash_mini_chart.js';
 
 let isThemeUIInitialized = false;
+let selectedDashGreetingIndex = null;
+
+const DASH_GREETINGS = [
+    { render: (name) => `Вітаю, ${name}` },
+    { render: (name) => `Радий бачити, ${name}` },
+    { render: (name) => `Готові до роботи, ${name}` },
+    { render: (name) => `Гарного торгового дня, ${name}`, beforeHour: 14 },
+    { render: (name) => `Плануємо спокійно, ${name}` },
+];
 
 const THEME_PRESETS = {
     dark: {
@@ -313,8 +323,7 @@ export function applyTheme(forceSync = false) {
             Chart.defaults.borderColor = gridColor;
             const statsView = document.getElementById('view-stats');
             if (statsView?.classList.contains('active') && window.refreshStatsView) window.refreshStatsView();
-            const dashView = document.getElementById('view-dash');
-            if (dashView?.classList.contains('active') && window.renderView) window.renderView();
+            refreshDashMiniEquityChartTheme();
         }
     }, 50); 
 }
@@ -371,7 +380,7 @@ export function toggleMobileSidebar(forceState) {
 }
 
 const TAB_TITLES = {
-    dash: 'Дашборд',
+    dash: 'Головна',
     calendar: 'Календар',
     stats: 'Статистика',
     trades: 'Угоди',
@@ -401,6 +410,42 @@ const TAB_ROUTES = {
     settings: '/settings',
     admin: '/admin',
 };
+
+function getDashboardGreetingName() {
+    const profileFirstName = document.getElementById('sidebar-pf-fname')?.value?.trim();
+    if (profileFirstName) return profileFirstName;
+
+    const sidebarName = document.getElementById('sidebar-account-name')?.textContent?.trim();
+    if (sidebarName && sidebarName !== 'Профіль' && sidebarName !== '—') {
+        return sidebarName.split(/\s+/)[0];
+    }
+
+    const nick = state.USER_DOC_NAME ? state.USER_DOC_NAME.replace(/_stats$/, '').trim() : '';
+    return nick || 'трейдере';
+}
+
+function getDashboardGreetingTitle() {
+    if (!DASH_GREETINGS.length) return TAB_TITLES.dash;
+    if (selectedDashGreetingIndex === null) {
+        const hour = new Date().getHours();
+        const available = DASH_GREETINGS
+            .map((greeting, index) => ({ greeting, index }))
+            .filter(({ greeting }) => greeting.beforeHour === undefined || hour < greeting.beforeHour);
+        const pool = available.length ? available : DASH_GREETINGS.map((greeting, index) => ({ greeting, index }));
+        selectedDashGreetingIndex = pool[Math.floor(Math.random() * pool.length)].index;
+    }
+    return DASH_GREETINGS[selectedDashGreetingIndex].render(getDashboardGreetingName());
+}
+
+export function refreshCurrentMainTitle() {
+    const activeView = document.querySelector('.view-content.active');
+    const tab = activeView?.id?.replace(/^view-/, '') || 'dash';
+    const title = tab === 'dash' ? getDashboardGreetingTitle() : (TAB_TITLES[tab] || '');
+    const pageTitleEl = document.getElementById('page-title');
+    const mobileTitleEl = document.getElementById('mobile-section-title');
+    if (pageTitleEl) pageTitleEl.textContent = title;
+    if (mobileTitleEl) mobileTitleEl.textContent = title;
+}
 
 const ROUTE_TABS = {
     '/': 'dash',
@@ -482,11 +527,7 @@ export function switchMainTab(tab, options = {}) {
     if (moreBtn) moreBtn.classList.toggle('more-open', moreTabIds.includes(tab));
 
     // Оновлюємо заголовки
-    const pageTitleEl = document.getElementById('page-title');
-    const mobileTitleEl = document.getElementById('mobile-section-title');
-    const title = TAB_TITLES[tab] || '';
-    if (pageTitleEl) pageTitleEl.textContent = title;
-    if (mobileTitleEl) mobileTitleEl.textContent = title;
+    refreshCurrentMainTitle();
 
     if (tab === 'stats' && window.refreshStatsView) {
         // Скидаємо all-time фільтр при поверненні на вкладку — щоб не тригерило важке завантаження

@@ -2,6 +2,7 @@
 import { state } from './state.js';
 
 let _miniChart = null;
+let _lastMiniChartArgs = null;
 
 const equityLastPointPlugin = {
     id: 'equityLastPoint',
@@ -283,6 +284,7 @@ function mixColor(a, b, t) {
 export function updateDashMiniEquityChart(year, monthIndex) {
     const canvas = document.getElementById('dash-mini-equity-chart');
     if (!canvas || typeof Chart === 'undefined') return;
+    _lastMiniChartArgs = { year, monthIndex };
 
     const mk = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
     const prefix = `${mk}-`;
@@ -482,4 +484,15 @@ export function updateDashMiniEquityChart(year, monthIndex) {
             },
         },
     });
+}
+
+export function refreshDashMiniEquityChartTheme() {
+    const canvas = document.getElementById('dash-mini-equity-chart');
+    if (!canvas || typeof Chart === 'undefined') return;
+
+    const args = _lastMiniChartArgs || {
+        year: state.todayObj.getFullYear(),
+        monthIndex: state.todayObj.getMonth(),
+    };
+    updateDashMiniEquityChart(args.year, args.monthIndex);
 }

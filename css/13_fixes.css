@@ -1508,6 +1508,21 @@
     margin-left: auto;
     min-width: 0;
 }
+.calendar-winstreak {
+    min-height: 26px;
+    padding: 3px 8px;
+    border-radius: 7px;
+    gap: 4px;
+    font-size: 0.72rem;
+    background: color-mix(in srgb, var(--gold) 10%, transparent);
+    border-color: color-mix(in srgb, var(--gold) 24%, var(--border));
+}
+.calendar-winstreak .winstreak-lbl {
+    font-size: 0.56rem;
+}
+.calendar-winstreak .winstreak-val {
+    font-size: 0.78rem;
+}
 .cal-period-field {
     display: inline-flex;
     flex-direction: row;
