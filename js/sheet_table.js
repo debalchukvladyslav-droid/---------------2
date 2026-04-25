@@ -782,7 +782,11 @@ async function executeSyncWithCfg(cfg, options = {}) {
 
         if (window.updateAutoFlags) window.updateAutoFlags();
         if (window.renderView) window.renderView();
-        if (window.renderTradesDatagrid) window.renderTradesDatagrid();
+        if (window.requestTradesDatagridRefresh) {
+            window.requestTradesDatagridRefresh();
+        } else if (document.getElementById('view-datagrid')?.classList.contains('active') && window.renderTradesDatagrid) {
+            window.renderTradesDatagrid();
+        }
         const viewStats = document.getElementById('view-stats');
         if (viewStats && viewStats.classList.contains('active') && window.refreshStatsView) {
             window.refreshStatsView();

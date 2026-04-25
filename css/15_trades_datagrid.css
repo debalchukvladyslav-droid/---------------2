@@ -24,6 +24,26 @@
     line-height: 1.45;
 }
 
+.datagrid-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.datagrid-summary {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.datagrid-load-more {
+    width: auto;
+    margin: 0;
+    flex-shrink: 0;
+}
+
 .datagrid-container {
     width: 100%;
     overflow-x: auto;
@@ -167,4 +187,14 @@
     text-align: center;
     color: var(--text-muted);
     font-size: 0.9rem;
+}
+
+@media (max-width: 720px) {
+    .datagrid-toolbar {
+        align-items: stretch;
+    }
+
+    .datagrid-load-more {
+        width: 100%;
+    }
 }

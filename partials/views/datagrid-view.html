@@ -2,6 +2,10 @@
             <div class="datagrid-view-inner">
                 <h2 class="datagrid-view-title">Таблиця угод</h2>
                 <p class="datagrid-view-sub">Статистика в одному рядку на угоду; групи за календарною датою. Джерело: імпорт Fondexx; додаткові колонки заповнюються з об’єкта trade.sheet після синхронізації з Google Sheets.</p>
+                <div class="datagrid-toolbar">
+                    <p id="datagrid-summary" class="datagrid-summary">Завантаження…</p>
+                    <button type="button" id="datagrid-load-more" class="btn-secondary datagrid-load-more" hidden>Показати ще</button>
+                </div>
                 <div class="datagrid-container">
                     <table class="trades-datagrid">
                         <thead>
