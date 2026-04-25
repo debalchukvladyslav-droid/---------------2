@@ -299,11 +299,13 @@ body[data-theme="light"] .btn-google-signin {
 }
 
 .sheet-grid-picker__preview {
-    overflow: auto;
+    overflow-x: auto;
+    overflow-y: auto;
     border: 1px solid var(--border);
     border-radius: 10px;
     background: var(--bg-panel);
-    max-height: 420px;
+    max-height: 520px;
+    scrollbar-gutter: stable both-edges;
 }
 
 .sheet-grid-picker__empty {
@@ -313,10 +315,10 @@ body[data-theme="light"] .btn-google-signin {
 }
 
 .sheet-grid {
-    width: 100%;
+    width: max-content;
+    min-width: 100%;
     border-collapse: separate;
     border-spacing: 0;
-    min-width: 700px;
     table-layout: fixed;
 }
 
@@ -359,7 +361,7 @@ body[data-theme="light"] .btn-google-signin {
 
 .sheet-grid__cell {
     position: relative;
-    min-width: 92px;
+    min-width: 120px;
     height: 34px;
     padding: 7px 9px;
     font-size: 0.78rem;

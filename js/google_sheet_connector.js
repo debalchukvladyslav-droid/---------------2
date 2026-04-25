@@ -274,7 +274,7 @@ export async function fetchSpreadsheetData(fileId) {
             }),
             gapi.client.sheets.spreadsheets.values.get({
                 spreadsheetId: fileId,
-                range: 'A1:ZZ40',
+                range: 'A1:ZZ300',
             }),
         ]);
         const range = headersResponse.result;
