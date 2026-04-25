@@ -43,8 +43,24 @@
                     <div id="sheet-smart-mapping" class="sheet-smart-mapping" hidden>
                         <div class="sheet-smart-head">
                             <h3 class="sheet-smart-title">Мапінг колонок</h3>
-                            <p class="sheet-smart-sub">Перший рядок (A1…) — підписи для мапінгу. Угоди читаються з рядка 6: у колонці «Дата» з’являється день — усі нижчі рядки з тікером у колонці «Тікер» йдуть у цей день; для кожного тікера імпортується весь рядок (наприклад B8 = USEG → рядок 8).</p>
+                            <p class="sheet-smart-sub">Перший рядок (A1…) — підписи для мапінгу. Старт імпорту береться з вибраної клітинки: якщо для «Дата» обрати A8, таблиця читається з 8-го рядка; усі нижчі рядки з тікером у колонці «Тікер» йдуть у цей день.</p>
                         </div>
+
+                        <section class="sheet-grid-picker" aria-labelledby="sheet-grid-picker-title">
+                            <div class="sheet-grid-picker__head">
+                                <div>
+                                    <h4 id="sheet-grid-picker-title" class="sheet-grid-picker__title">Вибір з таблиці</h4>
+                                    <p class="sheet-grid-picker__hint">Оберіть поле нижче, потім наведіть або клікніть по клітинці. Наприклад, клік по <strong>A8</strong> для «Дата» вибере колонку <strong>A</strong> і почне рахувати рядки з <strong>8</strong>.</p>
+                                </div>
+                                <div class="sheet-grid-picker__meta">
+                                    <span class="sheet-grid-picker__badge">Активне поле: <strong id="sheet-grid-picker-active">Дата</strong></span>
+                                    <span class="sheet-grid-picker__badge">Старт імпорту: <strong id="sheet-grid-picker-start-row">6</strong></span>
+                                </div>
+                            </div>
+                            <div id="sheet-grid-picker-preview" class="sheet-grid-picker__preview">
+                                <div class="sheet-grid-picker__empty">Після вибору таблиці тут з’явиться інтерактивне прев’ю.</div>
+                            </div>
+                        </section>
 
                         <form id="sheet-smart-form" class="sheet-smart-form" data-action="sheet-mapping-form">
                             <div class="sheet-smart-row" data-smart-field="date">

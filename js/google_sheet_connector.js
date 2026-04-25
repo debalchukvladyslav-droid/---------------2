@@ -7,6 +7,8 @@
 import { showToast } from './utils.js';
 import {
     populateSheetMappingFromHeaders,
+    setSheetPreviewData,
+    clearSheetPreviewData,
     syncSheetWorkspaceVisibility,
     setGoogleAccountEmail,
     rememberSpreadsheet,
@@ -96,6 +98,7 @@ function invalidateStoredGoogleOAuth() {
     }
     sessionStorage.removeItem('sheet_google_connected');
     clearGoogleSheetSession();
+    clearSheetPreviewData();
     setGoogleAccountEmail('—');
     syncSheetWorkspaceVisibility();
 }
@@ -264,13 +267,21 @@ export async function fetchSpreadsheetData(fileId) {
     applyAccessTokenToGapiClient(token);
 
     try {
-        const response = await gapi.client.sheets.spreadsheets.values.get({
-            spreadsheetId: fileId,
-            range: 'A1:ZZ1',
-        });
-        const range = response.result;
+        const [headersResponse, previewResponse] = await Promise.all([
+            gapi.client.sheets.spreadsheets.values.get({
+                spreadsheetId: fileId,
+                range: 'A1:ZZ1',
+            }),
+            gapi.client.sheets.spreadsheets.values.get({
+                spreadsheetId: fileId,
+                range: 'A1:ZZ40',
+            }),
+        ]);
+        const range = headersResponse.result;
         const row = range.values && range.values.length > 0 ? range.values[0] : [];
+        const previewRows = previewResponse.result?.values || [];
         populateSheetMappingFromHeaders(row);
+        setSheetPreviewData(previewRows);
         return row;
     } catch (err) {
         console.error('Помилка отримання заголовків:', err);
@@ -320,6 +331,7 @@ export async function googleSheetsLogout() {
         gapi.client.setToken(null);
     }
     clearGoogleSheetSession();
+    clearSheetPreviewData();
     setGoogleAccountEmail('—');
     syncSheetWorkspaceVisibility();
     showToast('Вийшли з Google.');

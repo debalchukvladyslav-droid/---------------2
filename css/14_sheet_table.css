@@ -244,6 +244,167 @@ body[data-theme="light"] .btn-google-signin {
     color: var(--text-muted);
 }
 
+.sheet-grid-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md, 10px);
+    background: var(--bg-main);
+}
+
+.sheet-grid-picker__head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.sheet-grid-picker__title {
+    margin: 0 0 4px;
+    font-size: 0.92rem;
+    font-weight: 650;
+    color: var(--text-main);
+}
+
+.sheet-grid-picker__hint {
+    margin: 0;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--text-muted);
+}
+
+.sheet-grid-picker__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.sheet-grid-picker__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--bg-panel);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.sheet-grid-picker__badge strong {
+    color: var(--text-main);
+}
+
+.sheet-grid-picker__preview {
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg-panel);
+    max-height: 420px;
+}
+
+.sheet-grid-picker__empty {
+    padding: 18px;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+.sheet-grid {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    min-width: 700px;
+    table-layout: fixed;
+}
+
+.sheet-grid th,
+.sheet-grid td {
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding: 0;
+}
+
+.sheet-grid thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--bg-main);
+}
+
+.sheet-grid__corner,
+.sheet-grid__row-head,
+.sheet-grid__col-head {
+    font-size: 0.74rem;
+    font-weight: 650;
+    text-align: center;
+    color: var(--text-muted);
+    background: var(--bg-main);
+}
+
+.sheet-grid__corner {
+    width: 48px;
+    min-width: 48px;
+}
+
+.sheet-grid__row-head {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    width: 48px;
+    min-width: 48px;
+}
+
+.sheet-grid__cell {
+    position: relative;
+    min-width: 92px;
+    height: 34px;
+    padding: 7px 9px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-main);
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+
+.sheet-grid__cell:hover {
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.sheet-grid__cell.is-hover-range {
+    background: color-mix(in srgb, var(--accent) 11%, transparent);
+}
+
+.sheet-grid__cell.is-selected-range {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.sheet-grid__cell.is-selected-start {
+    box-shadow: inset 0 0 0 2px var(--accent);
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.sheet-grid__col-head.is-hover-range,
+.sheet-grid__col-head.is-selected-range,
+.sheet-grid__row-head.is-selected-start {
+    color: var(--text-main);
+    background: color-mix(in srgb, var(--accent) 10%, var(--bg-main));
+}
+
+.sheet-smart-row.is-grid-active {
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.sheet-smart-row.is-grid-active .sheet-input-group {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 .sheet-smart-form {
     display: flex;
     flex-direction: column;
@@ -452,6 +613,15 @@ body[data-theme="light"] .btn-google-signin {
 }
 
 @media (max-width: 560px) {
+    .sheet-grid-picker__meta {
+        width: 100%;
+    }
+
+    .sheet-grid-picker__badge {
+        width: 100%;
+        justify-content: space-between;
+    }
+
     .sheet-smart-row {
         flex-direction: column;
         align-items: stretch;

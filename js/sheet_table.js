@@ -1,6 +1,7 @@
 // === js/sheet_table.js — Google Sheets UI + мапінг (стани, збереження) ===
 //
-// Угоди з таблиці: з рядка 6 (A6, B6…). У колонці «Дата» зустрічається день — запам’ятовуємо
+// Угоди з таблиці: зі стартового рядка (типово 6, або з вибраної клітинки на preview, напр. A8/B8).
+// У колонці «Дата» зустрічається день — запам’ятовуємо
 // активну дату для всіх нижніх рядків; у колонці «Тікер» непорожня клітинка (напр. B8 = USEG)
 // означає угоду: читаємо весь рядок 8 і пишемо в журнал.
 
@@ -92,6 +93,11 @@ const PRESET_FALLBACK = ['Date', 'Ticker', 'Symbol', 'Profit/Loss', 'Notes'];
 let _dynamicHeaders = [];
 /** Пари літера колонки ↔ текст заголовка з рядка A1:Z1 (value у select = літера). */
 let _dynamicColumnChoices = [];
+let _sheetPreviewRows = [];
+let _sheetPreviewHoverRef = null;
+let _sheetPreviewActiveField = 'date';
+let _sheetSmartAnchors = {};
+let _sheetGridBindingsReady = false;
 
 function el(id) {
     return document.getElementById(id);
@@ -123,6 +129,184 @@ function indexToColumnLetter(index) {
         n = Math.floor((n - 1) / 26);
     }
     return result;
+}
+
+function parseCellReference(raw) {
+    const v = String(raw || '').trim().toUpperCase();
+    const m = /^([A-Z]{1,3})(\d+)$/.exec(v);
+    if (!m) return null;
+    return {
+        ref: `${m[1]}${Number(m[2])}`,
+        letter: m[1],
+        row: Number(m[2]),
+        colIndex: columnLetterToIndex(m[1]),
+    };
+}
+
+function getStoredAnchorForField(field) {
+    const raw = _sheetSmartAnchors?.[field];
+    const parsed = parseCellReference(raw);
+    return parsed ? parsed.ref : '';
+}
+
+function deriveSheetStartRow(anchors = _sheetSmartAnchors, fallback = SHEET_DATA_FIRST_ROW) {
+    const preferred = ['date', 'symbol']
+        .map((key) => parseCellReference(anchors?.[key]))
+        .filter(Boolean)
+        .map((cell) => cell.row);
+    if (preferred.length) return Math.min(...preferred);
+
+    const anyRows = Object.values(anchors || {})
+        .map((value) => parseCellReference(value))
+        .filter(Boolean)
+        .map((cell) => cell.row);
+    return anyRows.length ? Math.min(...anyRows) : fallback;
+}
+
+function smartFieldLabel(field) {
+    const row = document.querySelector(`[data-smart-field="${field}"] .sheet-smart-row__label`);
+    return row?.textContent?.trim() || field || '—';
+}
+
+function updateGridPickerMeta() {
+    const activeEl = el('sheet-grid-picker-active');
+    const startRowEl = el('sheet-grid-picker-start-row');
+    if (activeEl) activeEl.textContent = smartFieldLabel(_sheetPreviewActiveField);
+    if (startRowEl) startRowEl.textContent = String(deriveSheetStartRow());
+}
+
+function syncActiveGridFieldUi() {
+    document.querySelectorAll('.sheet-smart-row[data-smart-field]').forEach((row) => {
+        row.classList.toggle('is-grid-active', row.dataset.smartField === _sheetPreviewActiveField);
+    });
+    updateGridPickerMeta();
+    refreshSheetGridSelectionClasses();
+}
+
+function setActiveGridField(field) {
+    if (!field) return;
+    _sheetPreviewActiveField = field;
+    syncActiveGridFieldUi();
+}
+
+function setSmartAnchor(field, ref) {
+    if (!field) return;
+    const parsed = parseCellReference(ref);
+    if (parsed) _sheetSmartAnchors[field] = parsed.ref;
+    else delete _sheetSmartAnchors[field];
+    updateGridPickerMeta();
+    refreshSheetGridSelectionClasses();
+}
+
+export function clearSheetPreviewData() {
+    _sheetPreviewRows = [];
+    _sheetPreviewHoverRef = null;
+    const preview = el('sheet-grid-picker-preview');
+    if (preview) {
+        preview.innerHTML = '<div class="sheet-grid-picker__empty">Після вибору таблиці тут з’явиться інтерактивне прев’ю.</div>';
+    }
+    updateGridPickerMeta();
+}
+
+function buildSheetGridPreview() {
+    const preview = el('sheet-grid-picker-preview');
+    if (!preview) return;
+    if (!_sheetPreviewRows.length) {
+        clearSheetPreviewData();
+        return;
+    }
+
+    const table = document.createElement('table');
+    table.className = 'sheet-grid';
+
+    const thead = document.createElement('thead');
+    const headRow = document.createElement('tr');
+    const corner = document.createElement('th');
+    corner.className = 'sheet-grid__corner';
+    corner.textContent = '';
+    headRow.appendChild(corner);
+
+    const maxCols = Math.max(..._sheetPreviewRows.map((row) => row.length), 0);
+    for (let colIndex = 0; colIndex < maxCols; colIndex++) {
+        const th = document.createElement('th');
+        th.className = 'sheet-grid__col-head';
+        th.dataset.colLetter = indexToColumnLetter(colIndex);
+        th.textContent = indexToColumnLetter(colIndex);
+        headRow.appendChild(th);
+    }
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    _sheetPreviewRows.forEach((row, rowIndex) => {
+        const tr = document.createElement('tr');
+        const excelRow = rowIndex + 1;
+
+        const th = document.createElement('th');
+        th.className = 'sheet-grid__row-head';
+        th.dataset.rowNumber = String(excelRow);
+        th.textContent = String(excelRow);
+        tr.appendChild(th);
+
+        for (let colIndex = 0; colIndex < maxCols; colIndex++) {
+            const letter = indexToColumnLetter(colIndex);
+            const cell = document.createElement('td');
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'sheet-grid__cell';
+            btn.dataset.colLetter = letter;
+            btn.dataset.rowNumber = String(excelRow);
+            btn.dataset.cellRef = `${letter}${excelRow}`;
+            btn.textContent = row[colIndex] != null ? String(row[colIndex]) : '';
+            btn.title = `${letter}${excelRow}`;
+            cell.appendChild(btn);
+            tr.appendChild(cell);
+        }
+        tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    preview.innerHTML = '';
+    preview.appendChild(table);
+    refreshSheetGridSelectionClasses();
+}
+
+function refreshSheetGridSelectionClasses() {
+    const preview = el('sheet-grid-picker-preview');
+    if (!preview) return;
+    const selected = parseCellReference(getStoredAnchorForField(_sheetPreviewActiveField));
+    const hover = parseCellReference(_sheetPreviewHoverRef);
+
+    preview.querySelectorAll('.is-hover-range, .is-selected-range, .is-selected-start').forEach((node) => {
+        node.classList.remove('is-hover-range', 'is-selected-range', 'is-selected-start');
+    });
+
+    preview.querySelectorAll('.sheet-grid__col-head').forEach((node) => {
+        const colLetter = node.dataset.colLetter || '';
+        if (hover && colLetter === hover.letter) node.classList.add('is-hover-range');
+        if (selected && colLetter === selected.letter) node.classList.add('is-selected-range');
+    });
+
+    preview.querySelectorAll('.sheet-grid__row-head').forEach((node) => {
+        const rowNumber = Number(node.dataset.rowNumber || 0);
+        if (selected && rowNumber === selected.row) node.classList.add('is-selected-start');
+    });
+
+    preview.querySelectorAll('.sheet-grid__cell').forEach((node) => {
+        const colLetter = node.dataset.colLetter || '';
+        const rowNumber = Number(node.dataset.rowNumber || 0);
+        if (hover && colLetter === hover.letter && rowNumber >= hover.row) node.classList.add('is-hover-range');
+        if (selected && colLetter === selected.letter && rowNumber >= selected.row) {
+            node.classList.add('is-selected-range');
+            if (rowNumber === selected.row) node.classList.add('is-selected-start');
+        }
+    });
+}
+
+export function setSheetPreviewData(rows) {
+    _sheetPreviewRows = Array.isArray(rows) ? rows : [];
+    _sheetPreviewHoverRef = null;
+    buildSheetGridPreview();
 }
 
 /**
@@ -181,6 +365,7 @@ export function populateSheetMappingFromHeaders(headers) {
         if (en) en.checked = !!cfg.autoSync.enabled;
         if (iv) iv.value = String(clampSheetIntervalMin(cfg.autoSync.intervalMinutes));
     }
+    syncActiveGridFieldUi();
 }
 
 /** Аліас назви з ТЗ. */
@@ -362,11 +547,11 @@ function isLikelyTicker(v) {
 }
 
 /**
- * @param {string[][]} values — рядки з API, перший рядок = Excel-рядок 6
+ * @param {string[][]} values — рядки з API, перший рядок = Excel-рядок startRow
  * @param {Record<string, string>} smartColumns
  * @param {string} spreadsheetId
  */
-function parseSheetGridToTrades(values, smartColumns, spreadsheetId) {
+function parseSheetGridToTrades(values, smartColumns, spreadsheetId, startRow = SHEET_DATA_FIRST_ROW) {
     const dateIdx = smartValueToColumnIndex(smartColumns.date || '');
     const symIdx = smartValueToColumnIndex(smartColumns.symbol || '');
     const profitIdx = smartValueToColumnIndex(smartColumns.profit || '');
@@ -399,7 +584,7 @@ function parseSheetGridToTrades(values, smartColumns, spreadsheetId) {
 
     for (let i = 0; i < values.length; i++) {
         const row = values[i] || [];
-        const excelRow = SHEET_DATA_FIRST_ROW + i;
+        const excelRow = startRow + i;
 
         const dateRaw = getCell(row, dateIdx);
         const parsedDate = sheetsCellToIsoDate(dateRaw);
@@ -541,6 +726,7 @@ async function executeSyncWithCfg(cfg, options = {}) {
     }
 
     const smart = cfg.smartColumns || {};
+    const startRow = Math.max(1, Number(cfg.dataStartRow) || deriveSheetStartRow(cfg.smartAnchors || {}, SHEET_DATA_FIRST_ROW));
     const dateIdx = smartValueToColumnIndex(smart.date || '');
     const symIdx = smartValueToColumnIndex(smart.symbol || '');
     if (dateIdx < 0 || symIdx < 0) {
@@ -559,8 +745,8 @@ async function executeSyncWithCfg(cfg, options = {}) {
 
     try {
         const mod = await import('./google_sheet_connector.js');
-        const values = await mod.fetchSpreadsheetValuesRange(spreadsheetId, 'A6:ZZ2000');
-        const { outByDay, dateAnchors, stats } = parseSheetGridToTrades(values, smart, spreadsheetId);
+        const values = await mod.fetchSpreadsheetValuesRange(spreadsheetId, `A${startRow}:ZZ2000`);
+        const { outByDay, dateAnchors, stats } = parseSheetGridToTrades(values, smart, spreadsheetId, startRow);
 
         if (!quiet) {
             console.group('[Google Sheets] Синхронізація');
@@ -581,16 +767,16 @@ async function executeSyncWithCfg(cfg, options = {}) {
         if (!quiet) {
             if (stats.tradeCount > 0) {
                 console.log(
-                    `[Google Sheets] Імпортовано у журнал: ${stats.tradeCount} угод у ${stats.dayCount} днях (рядки з ${SHEET_DATA_FIRST_ROW}).`,
+                    `[Google Sheets] Імпортовано у журнал: ${stats.tradeCount} угод у ${stats.dayCount} днях (рядки з ${startRow}).`,
                 );
                 showToast(`Синхронізовано: ${stats.tradeCount} угод у ${stats.dayCount} днях.`);
             } else {
                 console.warn(
-                    '[Google Sheets] Угод не знайдено: перевірте дати в колонці дати та тікери з рядка ' +
-                        SHEET_DATA_FIRST_ROW +
+                        '[Google Sheets] Угод не знайдено: перевірте дати в колонці дати та тікери з рядка ' +
+                        startRow +
                         ' (активна дата має бути вище рядка з тікером).',
                 );
-                showToast('Угод у діапазоні не знайдено — перевірте колонки та рядок 6+.');
+                showToast(`Угод у діапазоні не знайдено — перевірте колонки та рядок ${startRow}+.`);
             }
         }
 
@@ -684,6 +870,51 @@ function setSmartRowValue(key, value, preferManual) {
     }
 }
 
+function bindSheetGridPicker() {
+    if (_sheetGridBindingsReady) return;
+    _sheetGridBindingsReady = true;
+
+    document.addEventListener('click', (event) => {
+        const row = event.target?.closest?.('.sheet-smart-row[data-smart-field]');
+        if (row) {
+            setActiveGridField(row.dataset.smartField || 'date');
+            return;
+        }
+
+        const cell = event.target?.closest?.('.sheet-grid__cell');
+        if (!cell) return;
+        const field = _sheetPreviewActiveField || 'date';
+        const colLetter = cell.dataset.colLetter || '';
+        const rowNumber = Number(cell.dataset.rowNumber || 0);
+        if (!colLetter || !rowNumber) return;
+
+        setSmartRowValue(field, colLetter, false);
+        setSmartAnchor(field, `${colLetter}${rowNumber}`);
+    });
+
+    document.addEventListener('focusin', (event) => {
+        const row = event.target?.closest?.('.sheet-smart-row[data-smart-field]');
+        if (!row) return;
+        setActiveGridField(row.dataset.smartField || 'date');
+    });
+
+    document.addEventListener('mouseover', (event) => {
+        const cell = event.target?.closest?.('.sheet-grid__cell');
+        if (!cell) return;
+        _sheetPreviewHoverRef = cell.dataset.cellRef || null;
+        refreshSheetGridSelectionClasses();
+    });
+
+    document.addEventListener('mouseout', (event) => {
+        const cell = event.target?.closest?.('.sheet-grid__cell');
+        if (!cell) return;
+        const related = event.relatedTarget;
+        if (related?.closest?.('#sheet-grid-picker-preview')) return;
+        _sheetPreviewHoverRef = null;
+        refreshSheetGridSelectionClasses();
+    });
+}
+
 function readStoredConfig() {
     try {
         const raw = localStorage.getItem(LS_KEY);
@@ -696,7 +927,12 @@ function readStoredConfig() {
 }
 
 function applyConfigToForm(cfg) {
-    if (!cfg) return;
+    _sheetSmartAnchors = cfg?.smartAnchors && typeof cfg.smartAnchors === 'object' ? { ...cfg.smartAnchors } : {};
+    if (!cfg) {
+        updateGridPickerMeta();
+        syncActiveGridFieldUi();
+        return;
+    }
 
     if (cfg.smartColumns && typeof cfg.smartColumns === 'object') {
         SMART_KEYS.forEach((k) => {
@@ -710,12 +946,7 @@ function applyConfigToForm(cfg) {
         if (en) en.checked = !!cfg.autoSync.enabled;
         if (iv) iv.value = String(clampSheetIntervalMin(cfg.autoSync.intervalMinutes));
     }
-
-    if (cfg.smartColumns && typeof cfg.smartColumns === 'object') {
-        return;
-    }
-
-    if (cfg.columns && typeof cfg.columns === 'object') {
+    if (!(cfg.smartColumns && typeof cfg.smartColumns === 'object') && cfg.columns && typeof cfg.columns === 'object') {
         const c = cfg.columns;
         setSmartRowValue('date', c.date || '', true);
         setSmartRowValue('symbol', c.symbol || '', true);
@@ -725,11 +956,15 @@ function applyConfigToForm(cfg) {
         const ex = Array.isArray(c.exceptions) ? c.exceptions.join(', ') : (c.exceptions || '');
         setSmartRowValue('exceptions', ex, true);
     }
+
+    updateGridPickerMeta();
+    syncActiveGridFieldUi();
 }
 
 let _sheetFormHydratedFromStorage = false;
 
 export function initSheetTableView() {
+    bindSheetGridPicker();
     syncSheetWorkspaceVisibility();
     const needHydrate = !_sheetFormHydratedFromStorage;
     if (needHydrate) {
@@ -770,6 +1005,8 @@ function collectFormConfig() {
         selectedFileName: title,
         sheetHeaders: _dynamicHeaders,
         smartColumns,
+        smartAnchors: { ..._sheetSmartAnchors },
+        dataStartRow: deriveSheetStartRow(),
         autoSync,
     };
 }
