@@ -51,6 +51,9 @@ export const state = {
     pnlChartInstance: null,
     daysChartInstance: null,
     winLossChartInstance: null,
+    comparePnlChartInstance: null,
+    compareDaysChartInstance: null,
+    compareWinLossChartInstance: null,
     mistakeChartInstance: null,
     
     // OCR
@@ -78,6 +81,16 @@ export const state = {
     activeStatsDropdown: null,
     activeTradeTypeFilter: null,
     statsEquityAdvancedMode: false,
+    statsCompareMode: false,
+    statsCompareScale: 'year',
+    statsCompareA: '',
+    statsCompareB: '',
+    statsComparePeriodKey: '',
+    statsCompareFilters: [],
+    statsCompareSourceSelection: { type: 'current', key: '' },
+    statsCompareTradeTypeFilter: null,
+    statsCompareContext: { journal: {}, label: 'Мій профіль', tradeTypes: [] },
+    statsCompareEquityAdvancedMode: false,
     autoFlagsCache: { records: new Set(), absoluteRecord: null }
 };
 

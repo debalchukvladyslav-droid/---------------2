@@ -28,7 +28,14 @@ function _cacheSet(key, journal) {
 // so the next stats open re-fetches fresh data for that user only.
 export function clearStatsCache(docName) {
     for (const key of _statsCache.keys()) {
-        if (key.startsWith(`${docName}|`)) _statsCache.delete(key);
+        if (
+            key.startsWith(`${docName}|`)
+            || key.startsWith('__all__')
+            || key.startsWith('__team__')
+            || key.startsWith('__compare_')
+        ) {
+            _statsCache.delete(key);
+        }
     }
 }
 
@@ -303,10 +310,32 @@ export async function getStatsDocData(docName, filters, userId = null) {
     }
 }
 
-function getStatsSourceButtonClass(type, key) {
-    const sel = state.statsSourceSelection;
+function getStatsSourceButtonClass(type, key, selection = state.statsSourceSelection) {
+    const sel = selection || state.statsSourceSelection;
     if (sel.type === type && String(sel.key) === String(key)) return 'stats-source-btn active';
     return 'stats-source-btn';
+}
+
+function getStatsSourceOptionsHtml(selection = state.statsSourceSelection, dataPrefix = '') {
+    const typeAttr = dataPrefix ? `data-${dataPrefix}-stats-source-type` : 'data-stats-source-type';
+    const keyAttr = dataPrefix ? `data-${dataPrefix}-stats-source-key` : 'data-stats-source-key';
+    let currentKey = state.CURRENT_VIEWED_USER || state.USER_DOC_NAME || '';
+    let html = `<button class="${getStatsSourceButtonClass('current', currentKey, selection)}" ${typeAttr}="current" ${keyAttr}="${escapeHtml(currentKey)}">🏠 Мій профіль</button>`;
+
+    html += `<button class="${getStatsSourceButtonClass('all', '', selection)}" ${typeAttr}="all" ${keyAttr}="">🌍 Всі трейдери разом</button>`;
+
+    Object.keys(state.TEAM_GROUPS || {}).sort((a, b) => a.localeCompare(b, 'uk')).forEach(groupName => {
+        html += `<div class="stats-group-title">${escapeHtml(groupName)}</div>`;
+        html += `<button class="${getStatsSourceButtonClass('team', groupName, selection)}" ${typeAttr}="team" ${keyAttr}="${escapeHtml(groupName)}">📚 Весь кущ</button>`;
+        (state.TEAM_GROUPS[groupName] || []).slice().sort((a, b) => String(a).localeCompare(String(b), 'uk')).forEach(nick => {
+            let cleanNick = (nick.includes('(') && nick.includes(')')) ? nick.split('(')[1].replace(')', '').trim() : nick;
+            // Не показуємо себе в списку
+            if (`${cleanNick}_stats` === state.USER_DOC_NAME) return;
+            html += `<button class="${getStatsSourceButtonClass('trader', cleanNick, selection)}" ${typeAttr}="trader" ${keyAttr}="${escapeHtml(cleanNick || nick)}">👤 ${escapeHtml(nick)}</button>`;
+        });
+    });
+
+    return html;
 }
 
 export function renderStatsSourceSelector() {
@@ -317,23 +346,7 @@ export function renderStatsSourceSelector() {
 
     triggerLabel.innerText = getStatsSelectionLabel(state.statsSourceSelection.type, state.statsSourceSelection.key);
 
-    let currentKey = state.CURRENT_VIEWED_USER || state.USER_DOC_NAME || '';
-    let html = `<button class="${getStatsSourceButtonClass('current', currentKey)}" data-stats-source-type="current" data-stats-source-key="${escapeHtml(currentKey)}">🏠 Мій профіль</button>`;
-
-    html += `<button class="${getStatsSourceButtonClass('all', '')}" data-stats-source-type="all" data-stats-source-key="">🌍 Всі трейдери разом</button>`;
-
-    Object.keys(state.TEAM_GROUPS || {}).sort((a, b) => a.localeCompare(b, 'uk')).forEach(groupName => {
-        html += `<div class="stats-group-title">${escapeHtml(groupName)}</div>`;
-        html += `<button class="${getStatsSourceButtonClass('team', groupName)}" data-stats-source-type="team" data-stats-source-key="${escapeHtml(groupName)}">📚 Весь кущ</button>`;
-        (state.TEAM_GROUPS[groupName] || []).slice().sort((a, b) => String(a).localeCompare(String(b), 'uk')).forEach(nick => {
-            let cleanNick = (nick.includes('(') && nick.includes(')')) ? nick.split('(')[1].replace(')', '').trim() : nick;
-            // Не показуємо себе в списку
-            if (`${cleanNick}_stats` === state.USER_DOC_NAME) return;
-            html += `<button class="${getStatsSourceButtonClass('trader', cleanNick)}" data-stats-source-type="trader" data-stats-source-key="${escapeHtml(cleanNick || nick)}">👤 ${escapeHtml(nick)}</button>`;
-        });
-    });
-
-    container.innerHTML = html;
+    container.innerHTML = getStatsSourceOptionsHtml(state.statsSourceSelection);
     if (!container.dataset.statsSourceBound) {
         container.dataset.statsSourceBound = 'true';
         container.addEventListener('click', (event) => {
@@ -432,8 +445,162 @@ export function selectTradeTypeFilter(type) {
     renderStatsTab();
 }
 
-export function toggleStatsEquityMode(enabled) {
+function extractTradeTypesFromJournal(journal) {
+    const seen = new Set();
+    for (const dateStr in journal || {}) {
+        const entry = journal[dateStr];
+        if (entry?.tradeTypesData) Object.keys(entry.tradeTypesData).forEach(type => seen.add(type));
+    }
+    return Array.from(seen).sort((a, b) => a.localeCompare(b, 'uk'));
+}
+
+function normalizeCompareSourceSelection() {
+    if (!state.statsCompareSourceSelection?.type) {
+        state.statsCompareSourceSelection = {
+            type: state.statsSourceSelection?.type || 'current',
+            key: state.statsSourceSelection?.key || state.CURRENT_VIEWED_USER || state.USER_DOC_NAME || ''
+        };
+    }
+}
+
+async function loadCompareStatsContext(selection = state.statsCompareSourceSelection) {
+    const sel = selection || { type: 'current', key: state.CURRENT_VIEWED_USER || state.USER_DOC_NAME || '' };
+    const currentUserId = getCurrentViewedUserId() || await resolveViewedUserId(state.CURRENT_VIEWED_USER);
+    let journal = {};
+    let tradeTypes = [];
+
+    try {
+        if (sel.type === 'current') {
+            await loadAllMonths(state.CURRENT_VIEWED_USER, currentUserId);
+            journal = state.appData.journal || {};
+            tradeTypes = state.appData.tradeTypes || extractTradeTypesFromJournal(journal);
+        } else if (sel.type === 'all') {
+            const allNicks = [];
+            for (const group in state.TEAM_GROUPS || {}) {
+                for (const trader of state.TEAM_GROUPS[group] || []) {
+                    const nick = (trader.includes('(') && trader.includes(')')) ? trader.split('(')[1].replace(')', '').trim() : trader;
+                    if (!allNicks.includes(nick)) allNicks.push(nick);
+                }
+            }
+            const cacheKey = '__compare_all__|all-time';
+            const cached = _cacheGet(cacheKey);
+            if (cached) {
+                journal = cached;
+            } else {
+                const journals = await Promise.all(allNicks.map(async (nick) => {
+                    const k = `${nick}_stats|all-time`;
+                    const c = _cacheGet(k);
+                    if (c) return { journal: c };
+                    const j = {};
+                    const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
+                    (snap.docs || []).forEach(d => { Object.assign(j, d.data()); });
+                    _cacheSet(k, j);
+                    return { journal: j };
+                }));
+                journal = mergeJournals(journals);
+                _cacheSet(cacheKey, journal);
+            }
+            tradeTypes = extractTradeTypesFromJournal(journal);
+        } else if (sel.type === 'team' && state.TEAM_GROUPS?.[sel.key]) {
+            const cacheKey = `__compare_team__${sel.key}|all-time`;
+            const cached = _cacheGet(cacheKey);
+            if (cached) {
+                journal = cached;
+            } else {
+                const journals = await Promise.all((state.TEAM_GROUPS[sel.key] || []).map(async (trader) => {
+                    const nick = (trader.includes('(') && trader.includes(')')) ? trader.split('(')[1].replace(')', '').trim() : trader;
+                    const k = `${nick}_stats|all-time`;
+                    const c = _cacheGet(k);
+                    if (c) return { journal: c };
+                    const j = {};
+                    const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
+                    (snap.docs || []).forEach(d => { Object.assign(j, d.data()); });
+                    _cacheSet(k, j);
+                    return { journal: j };
+                }));
+                journal = mergeJournals(journals);
+                _cacheSet(cacheKey, journal);
+            }
+            tradeTypes = extractTradeTypesFromJournal(journal);
+        } else if (sel.type === 'trader') {
+            const nick = (sel.key.includes('(') && sel.key.includes(')')) ? sel.key.split('(')[1].replace(')', '').trim() : sel.key;
+            const cacheKey = `${nick}_stats|all-time`;
+            const cached = _cacheGet(cacheKey);
+            if (cached) {
+                journal = cached;
+            } else {
+                const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
+                (snap.docs || []).forEach(d => { Object.assign(journal, d.data()); });
+                _cacheSet(cacheKey, journal);
+            }
+            tradeTypes = extractTradeTypesFromJournal(journal);
+        }
+    } catch (error) {
+        console.error('loadCompareStatsContext error:', error);
+    }
+
+    state.statsCompareContext = {
+        label: getStatsSelectionLabel(sel.type, sel.key),
+        journal,
+        tradeTypes
+    };
+    if (state.statsCompareTradeTypeFilter && !tradeTypes.includes(state.statsCompareTradeTypeFilter)) {
+        state.statsCompareTradeTypeFilter = null;
+    }
+}
+
+async function selectStatsCompareSource(type, key) {
+    state.statsCompareSourceSelection = { type, key: typeof key === 'string' ? key : '' };
+    state.statsCompareTradeTypeFilter = null;
+    state.statsComparePeriodKey = '';
+    state.statsCompareFilters = [];
+    await loadCompareStatsContext(state.statsCompareSourceSelection);
+    renderStatsTab();
+}
+
+function selectStatsCompareTradeType(type) {
+    state.statsCompareTradeTypeFilter = type || null;
+    state.statsComparePeriodKey = '';
+    state.statsCompareFilters = [];
+    renderStatsTab();
+}
+
+function setCompareDropdownState(type, isOpen) {
+    const map = {
+        source: 'compareSource',
+        tradetype: 'compareTradeType',
+        period: 'comparePeriod',
+    };
+    setStatsDropdownState(map[type] || type, isOpen);
+}
+
+export function toggleStatsEquityMode(enabled, target = 'main') {
+    if (target === 'compare') {
+        state.statsCompareEquityAdvancedMode = !!enabled;
+        renderStatsTab();
+        return;
+    }
     state.statsEquityAdvancedMode = !!enabled;
+    renderStatsTab();
+}
+
+export async function toggleStatsCompareMode(forceOpen = null) {
+    state.statsCompareMode = forceOpen === null ? !state.statsCompareMode : !!forceOpen;
+    if (state.statsCompareMode) {
+        state.statsCompareSourceSelection = {
+            type: state.statsSourceSelection?.type || 'current',
+            key: state.statsSourceSelection?.key || state.CURRENT_VIEWED_USER || state.USER_DOC_NAME || ''
+        };
+        state.statsCompareTradeTypeFilter = state.activeTradeTypeFilter || null;
+        state.statsComparePeriodKey = '';
+        state.statsCompareFilters = (state.activeFilters || []).map(filter => ({ ...filter }));
+        await loadCompareStatsContext(state.statsCompareSourceSelection);
+    }
+    renderStatsTab();
+}
+
+export function closeStatsCompareMode() {
+    state.statsCompareMode = false;
     renderStatsTab();
 }
 
@@ -442,6 +609,9 @@ const _DROPDOWN_IDS = {
     source:    ['stats-source-panel',    'stats-source-trigger'],
     period:    ['stats-period-panel',    'stats-period-trigger'],
     tradetype: ['stats-tradetype-panel', 'stats-tradetype-trigger'],
+    compareSource: ['stats-compare-source-panel', 'stats-compare-source-trigger'],
+    comparePeriod: ['stats-compare-period-panel', 'stats-compare-period-trigger'],
+    compareTradeType: ['stats-compare-tradetype-panel', 'stats-compare-tradetype-trigger'],
 };
 
 export function setStatsDropdownState(type, isOpen) {
@@ -454,6 +624,7 @@ export function setStatsDropdownState(type, isOpen) {
     // .stats-bar-trigger.open rule fires correctly.
     panel.classList.toggle('open', isOpen);
     panel.style.display = isOpen ? 'block' : 'none';
+    panel.classList.toggle('initially-hidden', !isOpen);
     trigger.classList.toggle('open', isOpen);
 }
 
@@ -529,10 +700,17 @@ function mergeJournals(journals) {
         for (let d in j.journal) {
             let entry = j.journal[d];
             if (entry.pnl === null || entry.pnl === undefined || entry.pnl === '') continue;
-            if (!merged[d]) merged[d] = { pnl: 0, commissions: 0, locates: 0 };
+            if (!merged[d]) merged[d] = { pnl: 0, commissions: 0, locates: 0, tradeTypesData: {} };
+            const costs = getEntryCosts(entry);
             merged[d].pnl = (parseFloat(merged[d].pnl) || 0) + (parseFloat(entry.pnl) || 0);
-            merged[d].commissions = (parseFloat(merged[d].commissions) || 0) + (parseFloat(entry.commissions) || 0);
-            merged[d].locates = (parseFloat(merged[d].locates) || 0) + (parseFloat(entry.locates) || 0);
+            merged[d].commissions = (parseFloat(merged[d].commissions) || 0) + costs.commissions;
+            merged[d].locates = (parseFloat(merged[d].locates) || 0) + costs.locates;
+            Object.entries(entry.tradeTypesData || {}).forEach(([type, typeData]) => {
+                const typePnl = parseFloat(typeData?.pnl);
+                if (!Number.isFinite(typePnl)) return;
+                if (!merged[d].tradeTypesData[type]) merged[d].tradeTypesData[type] = { pnl: 0 };
+                merged[d].tradeTypesData[type].pnl = (parseFloat(merged[d].tradeTypesData[type].pnl) || 0) + typePnl;
+            });
         }
     }
     return merged;
@@ -1208,8 +1386,9 @@ export function buildStatsTree() {
     // для інших — з поточного контексту журналу
     const sel = state.statsSourceSelection;
     let tree = {};
+    const includeKnownEmptyMonths = false;
 
-    if (sel.type === 'current' && state._availableMonthKeys && state._availableMonthKeys.size > 0) {
+    if (includeKnownEmptyMonths && sel.type === 'current' && state._availableMonthKeys && state._availableMonthKeys.size > 0) {
         // Будуємо дерево зі списку місяців (без даних) — повна навігація
         for (const mk of state._availableMonthKeys) {
             const [y, m] = mk.split('-').map(Number);
@@ -1301,6 +1480,830 @@ function fmtMoneyAbs(val) {
         : parseFloat(abs.toFixed(2)).toString()) + '$';
 }
 
+function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+}
+
+function statsDeltaClass(value) {
+    return value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral';
+}
+
+function getEntryPeriodKey(entry, scale = 'year') {
+    const year = entry.dateObj.getFullYear();
+    const month = String(entry.dateObj.getMonth() + 1).padStart(2, '0');
+    if (scale === 'week') return `${year}-${month}-W${getWeekOfMonth(entry.dateObj)}`;
+    if (scale === 'month') return `${year}-${month}`;
+    return String(year);
+}
+
+function getCompareOptionLabel(key, scale) {
+    if (scale === 'week') {
+        const [year, month, week] = key.split('-');
+        return `${year}-${month} · ${week.replace('W', 'Тиждень ')}`;
+    }
+    if (scale === 'month') return key;
+    return `${key} рік`;
+}
+
+function getCompareOptions(entries, scale = 'year') {
+    const keys = new Set();
+    entries.forEach((entry) => {
+        keys.add(getEntryPeriodKey(entry, scale));
+    });
+    return [...keys]
+        .sort((a, b) => b.localeCompare(a, 'uk', { numeric: true }))
+        .map((key) => ({ key, label: getCompareOptionLabel(key, scale), scale }));
+}
+
+function summarizeCompareEntries(entries) {
+    let pnl = 0;
+    let wins = 0;
+    let losses = 0;
+    let grossProfit = 0;
+    let grossLoss = 0;
+    entries.forEach((entry) => {
+        const value = Number(entry.pnl) || 0;
+        pnl += value;
+        if (value > 0) {
+            wins++;
+            grossProfit += value;
+        } else if (value < 0) {
+            losses++;
+            grossLoss += Math.abs(value);
+        }
+    });
+    const days = entries.length;
+    return {
+        days,
+        pnl,
+        winrate: days ? (wins / days) * 100 : 0,
+        pf: grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0),
+        avgDay: days ? pnl / days : 0,
+    };
+}
+
+function percentChange(from, to) {
+    if (!Number.isFinite(from) || !Number.isFinite(to)) return null;
+    if (Math.abs(from) < 0.000001) return Math.abs(to) < 0.000001 ? 0 : null;
+    return ((to - from) / Math.abs(from)) * 100;
+}
+
+function fmtPercentChange(value) {
+    if (value === null || !Number.isFinite(value)) return 'new';
+    const prefix = value > 0 ? '+' : '';
+    return `${prefix}${value.toFixed(1)}%`;
+}
+
+function fmtPlainNumber(value) {
+    if (value === Infinity) return '∞';
+    if (!Number.isFinite(value)) return '—';
+    return value.toFixed(2);
+}
+
+function getEntryCosts(entryData = {}) {
+    const directCommissions = parseFloat(entryData.commissions);
+    const directLocates = parseFloat(entryData.locates);
+    const sourceCommissions = (parseFloat(entryData.fondexx?.comm) || 0) + (parseFloat(entryData.ppro?.comm) || 0);
+    const sourceLocates = (parseFloat(entryData.fondexx?.locates) || 0) + (parseFloat(entryData.ppro?.locates) || 0);
+    return {
+        commissions: Number.isFinite(directCommissions) && directCommissions !== 0 ? directCommissions : sourceCommissions,
+        locates: Number.isFinite(directLocates) && directLocates !== 0 ? directLocates : sourceLocates,
+    };
+}
+
+function renderCompareMetricCard({ title, a, b, deltaValue, aClass = '', bClass = '', changeType = 'percent' }) {
+    const directionClass = statsDeltaClass(deltaValue || 0);
+    const icon = deltaValue > 0 ? '▲' : deltaValue < 0 ? '▼' : '•';
+    const deltaLabel = changeType === 'raw'
+        ? `${deltaValue >= 0 ? '+' : ''}${deltaValue}`
+        : fmtPercentChange(deltaValue);
+    return `
+        <div class="stats-compare-metric">
+            <div class="stats-compare-metric-top">
+                <span>${escapeHtml(title)}</span>
+                <strong class="stats-compare-change ${directionClass}"><b>${icon}</b>${escapeHtml(deltaLabel)}</strong>
+            </div>
+            <div class="stats-compare-metric-values">
+                <span class="${aClass}">${escapeHtml(a)}</span>
+                <span class="${bClass}">${escapeHtml(b)}</span>
+            </div>
+        </div>
+    `;
+}
+
+function getStatsScaleFromFilters(filters) {
+    const scoped = (filters || []).filter(f => ['year', 'month', 'week'].includes(f.type));
+    if (!scoped.length) return 'month';
+    return scoped[0].type;
+}
+
+function filterEntriesByStatsFilters(entries, filters) {
+    const isAllTime = (filters || []).some(f => f.type === 'all-time');
+    if (isAllTime) return entries.slice();
+    if (!filters || filters.length === 0) {
+        const defaultMonths = _monthKeysForFilters([]);
+        return entries.filter(entry => defaultMonths.has(`${entry.dateObj.getFullYear()}-${String(entry.dateObj.getMonth() + 1).padStart(2, '0')}`));
+    }
+    return entries.filter((entry) => {
+        return filters.some((filter) => {
+            if (filter.type === 'year') return entry.dateObj.getFullYear() == filter.val;
+            if (filter.type === 'month') {
+                const parts = String(filter.val).split('-');
+                return entry.dateObj.getFullYear() == parts[0] && entry.dateObj.getMonth() == parts[1];
+            }
+            if (filter.type === 'week') {
+                const parts = String(filter.val).split('-');
+                return entry.dateObj.getFullYear() == parts[0] && entry.dateObj.getMonth() == parts[1] && getWeekOfMonth(entry.dateObj) == parts[2];
+            }
+            return false;
+        });
+    });
+}
+
+function buildStatsEntriesFromJournal(journal, tradeTypeFilter = null) {
+    const entries = [];
+    for (let dateStr in journal || {}) {
+        const data = journal[dateStr];
+        if (!dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) continue;
+        let pnl;
+        if (tradeTypeFilter) {
+            const typeData = data.tradeTypesData && data.tradeTypesData[tradeTypeFilter];
+            if (!typeData || typeData.pnl === '' || typeData.pnl === undefined || typeData.pnl === null) continue;
+            pnl = parseFloat(typeData.pnl);
+        } else {
+            if (data.pnl === null || data.pnl === undefined || data.pnl === '') continue;
+            pnl = parseFloat(data.pnl);
+        }
+        if (!Number.isNaN(pnl)) {
+            const parts = dateStr.split('-');
+            entries.push({ dateStr, dateObj: new Date(parts[0], parts[1] - 1, parts[2]), pnl, data });
+        }
+    }
+    entries.sort((a, b) => a.dateObj - b.dateObj);
+    return entries;
+}
+
+function getStatsPeriodLabel(filters, emptyLabel = 'За весь час') {
+    if (!filters || filters.length === 0) return emptyLabel;
+    if (filters.some(filter => filter.type === 'all-time')) return 'За весь час';
+    const labels = filters.map(filter => filter.label).join(', ');
+    return labels.length > 36 ? labels.substring(0, 33) + '...' : labels;
+}
+
+function buildStatsPeriodTreeHtml(entries, filters, datasetPrefix = 'stats') {
+    const tree = {};
+    const monthsNames = ["Січень", "Лютий", "Березень", "Квітень", "Травень", "Червень", "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень"];
+    entries.forEach((entry) => {
+        const y = entry.dateObj.getFullYear();
+        const m = entry.dateObj.getMonth();
+        const w = getWeekOfMonth(entry.dateObj);
+        if (!tree[y]) tree[y] = {};
+        if (!tree[y][m]) tree[y][m] = new Set();
+        tree[y][m].add(w);
+    });
+
+    const typeAttr = `data-${datasetPrefix}-filter-type`;
+    const valueAttr = `data-${datasetPrefix}-filter-value`;
+    const labelAttr = `data-${datasetPrefix}-filter-label`;
+    const isAllTimeActive = filters.some(filter => filter.type === 'all-time');
+    let html = `<div class="tree-item tree-root ${isAllTimeActive ? 'active-filter' : ''}"><span class="tree-toggle" style="opacity: 0;"></span><span class="tree-label" ${typeAttr}="all" ${valueAttr}="" ${labelAttr}="За весь час">🌍 За весь час</span></div>`;
+    html += `<ul class="tree-nav">`;
+    Object.keys(tree).sort((a, b) => b - a).forEach((y) => {
+        const isYActive = filters.some(filter => filter.type === 'year' && filter.val == y) ? 'active-filter' : '';
+        html += `<li><div class="tree-item ${isYActive}"><span class="tree-toggle" data-tree-toggle>▼</span><span class="tree-label" ${typeAttr}="year" ${valueAttr}="${y}" ${labelAttr}="${y} рік">${y}</span></div><ul>`;
+        Object.keys(tree[y]).map(Number).sort((a, b) => b - a).forEach((m) => {
+            const monthValue = `${y}-${m}`;
+            const isMActive = filters.some(filter => filter.type === 'month' && filter.val === monthValue) ? 'active-filter' : '';
+            html += `<li><div class="tree-item ${isMActive}"><span class="tree-toggle" data-tree-toggle>▼</span><span class="tree-label" ${typeAttr}="month" ${valueAttr}="${monthValue}" ${labelAttr}="${escapeHtml(monthsNames[m])} ${y}">${escapeHtml(monthsNames[m])}</span></div><ul>`;
+            Array.from(tree[y][m]).sort((a, b) => a - b).forEach((w) => {
+                const weekValue = `${y}-${m}-${w}`;
+                const isWActive = filters.some(filter => filter.type === 'week' && filter.val === weekValue) ? 'active-filter' : '';
+                html += `<li><div class="tree-item ${isWActive}"><span class="tree-toggle" style="opacity: 0;"></span><span class="tree-label" ${typeAttr}="week" ${valueAttr}="${weekValue}" ${labelAttr}="${escapeHtml(monthsNames[m])}, Тиждень ${w}">Тиждень ${w}</span></div></li>`;
+            });
+            html += `</ul></li>`;
+        });
+        html += `</ul></li>`;
+    });
+    html += `</ul>`;
+    return html;
+}
+
+function toggleStatsCompareFilter(type, val, labelName) {
+    const filters = state.statsCompareFilters || [];
+    if (type === 'all') {
+        state.statsCompareFilters = filters.some(filter => filter.type === 'all-time')
+            ? []
+            : [{ type: 'all-time', val: 'all', label: 'За весь час' }];
+        renderStatsTab();
+        return;
+    }
+
+    let nextFilters = filters.filter(filter => filter.type !== 'all-time');
+    if (nextFilters.some(filter => filter.type !== type)) nextFilters = [];
+    const index = nextFilters.findIndex(filter => filter.type === type && filter.val === val);
+    if (index > -1) {
+        nextFilters.splice(index, 1);
+    } else {
+        nextFilters.push({ type, val, label: labelName });
+    }
+    state.statsCompareFilters = nextFilters;
+    renderStatsTab();
+}
+
+function buildComparePaneSummary(entries) {
+    let winDays = 0, lossDays = 0, beDays = 0;
+    let grossProfit = 0, grossLoss = 0;
+    let bestDay = 0, worstDay = 0;
+    let totalComm = 0, totalLocates = 0;
+    let dayTotals = [0, 0, 0, 0, 0];
+    let periodCumData = [];
+    let periodLabels = [];
+    let periodSum = 0;
+    const monthsNamesShort = ["Січ", "Лют", "Бер", "Кві", "Тра", "Чер", "Лип", "Сер", "Вер", "Жов", "Лис", "Гру"];
+
+    entries.forEach((entry) => {
+        const pnl = Number(entry.pnl) || 0;
+        const entryData = entry.data || {};
+        const costs = getEntryCosts(entryData);
+        totalComm += costs.commissions;
+        totalLocates += costs.locates;
+        periodSum += pnl;
+        periodCumData.push(parseFloat(periodSum.toFixed(2)));
+        periodLabels.push(`${entry.dateObj.getDate()} ${monthsNamesShort[entry.dateObj.getMonth()]}`);
+        const day = entry.dateObj.getDay();
+        if (day >= 1 && day <= 5) dayTotals[day - 1] += pnl;
+        if (pnl > 0) { winDays++; grossProfit += pnl; if (pnl > bestDay) bestDay = pnl; }
+        else if (pnl < 0) { lossDays++; grossLoss += Math.abs(pnl); if (pnl < worstDay) worstDay = pnl; }
+        else { beDays++; }
+    });
+
+    const totalDays = winDays + lossDays + beDays;
+    const totalPnl = parseFloat((grossProfit - grossLoss).toFixed(2));
+    return {
+        totalPnl,
+        winrate: totalDays ? (winDays / totalDays) * 100 : 0,
+        pf: grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0),
+        avgWin: winDays ? grossProfit / winDays : 0,
+        avgLoss: lossDays ? grossLoss / lossDays : 0,
+        bestDay,
+        worstDay,
+        totalDays,
+        winDays,
+        lossDays,
+        beDays,
+        totalComm,
+        totalLocates,
+        dayTotals,
+        periodLabels,
+        periodCumData,
+    };
+}
+
+function fmtSignedNumber(value) {
+    if (!Number.isFinite(value)) return '—';
+    const prefix = value > 0 ? '+' : '';
+    return `${prefix}${value.toFixed(1)}`;
+}
+
+function setCompareDelta(id, value, options = {}) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const config = typeof options === 'boolean' ? { type: options ? 'percent-points' : 'percent' } : options;
+    const directionValue = config.invert ? -(value || 0) : (value || 0);
+    const cls = statsDeltaClass(directionValue);
+    const icon = directionValue > 0 ? '▲' : directionValue < 0 ? '▼' : '•';
+    const type = config.type || 'percent';
+    const label = type === 'money'
+        ? fmtMoney(value || 0)
+        : type === 'number'
+            ? fmtSignedNumber(value || 0)
+            : type === 'percent-points'
+                ? `${fmtSignedNumber(value || 0)}%`
+                : fmtPercentChange(value);
+    el.className = `stats-compare-inline-delta ${cls}`;
+    el.textContent = `${icon} ${label}`;
+    const card = el.closest('.stat-card');
+    if (card) {
+        card.classList.remove('stats-compare-card-positive', 'stats-compare-card-negative');
+        if (cls === 'positive') card.classList.add('stats-compare-card-positive');
+        if (cls === 'negative') card.classList.add('stats-compare-card-negative');
+    }
+}
+
+function destroyCompareCharts() {
+    ['comparePnlChartInstance', 'compareDaysChartInstance', 'compareWinLossChartInstance'].forEach((key) => {
+        if (state[key]) {
+            state[key].destroy();
+            state[key] = null;
+        }
+    });
+}
+
+function renderCompareCharts(entries, summary, theme, advancedEquityMode = false) {
+    const pnlCanvas = document.getElementById('compare-pnlChart');
+    const daysCanvas = document.getElementById('compare-daysChart');
+    const pieCanvas = document.getElementById('compare-winLossChart');
+    if (!pnlCanvas || !daysCanvas || !pieCanvas) return;
+
+    destroyCompareCharts();
+    const equityAnalysis = buildStatsEquityAnalysis(entries, summary.periodCumData);
+    const longHorizon = !!equityAnalysis.longHorizon;
+    const peakEquity = Math.max(...equityAnalysis.rows.map(row => row.equity), 0);
+    const worstDrawdownAbs = Math.abs(equityAnalysis.worstDrawdown);
+    const advancedPointColors = equityAnalysis.rows.map((row, index) => {
+        if (index === equityAnalysis.rows.length - 1) return theme.orange;
+        if (row.equity === peakEquity && peakEquity > 0) return theme.profit;
+        if (longHorizon) return statsDrawdownColor(row.drawdown, equityAnalysis.worstDrawdown, theme);
+        if (row.pnl > 0 && (row.isNewHigh || row.positiveRun >= 2)) return theme.profit;
+        if (row.pnl > 0) return '#14b8a6';
+        if (row.drawdown < 0) return row.drawdownAbs >= worstDrawdownAbs * 0.6 ? theme.loss : theme.orange;
+        return statsDrawdownColor(row.drawdown, equityAnalysis.worstDrawdown, theme);
+    });
+    const advancedPointRadius = equityAnalysis.rows.map((row, index) => {
+        if (index === equityAnalysis.rows.length - 1) return 5;
+        if (row.equity === peakEquity && peakEquity > 0) return 4;
+        if (longHorizon) return 0;
+        if (row.isNewHigh) return 4;
+        if (row.pnl > 0) return 3;
+        if (row.drawdown < 0 && row.drawdownAbs >= worstDrawdownAbs * 0.6) return 3;
+        return summary.periodCumData.length > 70 ? 0 : 2;
+    });
+    pnlCanvas.$statsEquityZones = advancedEquityMode ? equityAnalysis.zones : [];
+    pnlCanvas.$statsEquityRows = advancedEquityMode ? equityAnalysis.rows : [];
+    pnlCanvas.$statsChartTheme = theme;
+    state.comparePnlChartInstance = new Chart(pnlCanvas.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: summary.periodLabels,
+            datasets: [
+            ...(advancedEquityMode ? [{
+                role: 'stats-equity-glow',
+                data: summary.periodCumData,
+                borderColor: (context) => {
+                    const area = context.chart.chartArea;
+                    if (!area) return statsColorWithAlpha(theme.profit, 0.18);
+                    return buildStatsDrawdownGradient(context.chart.ctx, area, equityAnalysis.rows, equityAnalysis.worstDrawdown, theme.isLight ? 0.16 : 0.22, theme);
+                },
+                borderWidth: theme.isLight ? 7 : 9,
+                pointRadius: 0,
+                pointHoverRadius: 0,
+                fill: false,
+                tension: 0.4,
+                borderCapStyle: 'round',
+                borderJoinStyle: 'round',
+                order: 2,
+            }] : []),
+            {
+                role: 'stats-equity-main',
+                data: summary.periodCumData,
+                borderColor: advancedEquityMode
+                    ? ((context) => {
+                        const area = context.chart.chartArea;
+                        if (!area) return theme.accent;
+                        return buildStatsDrawdownGradient(context.chart.ctx, area, equityAnalysis.rows, equityAnalysis.worstDrawdown, 1, theme);
+                    })
+                    : theme.accent,
+                backgroundColor: advancedEquityMode
+                    ? ((context) => {
+                        const area = context.chart.chartArea;
+                        if (!area) return statsColorWithAlpha(theme.accent, 0.16);
+                        return buildStatsDrawdownGradient(context.chart.ctx, area, equityAnalysis.rows, equityAnalysis.worstDrawdown, theme.isLight ? 0.1 : 0.15, theme);
+                    })
+                    : statsColorWithAlpha(theme.accent, 0.22),
+                borderWidth: advancedEquityMode ? 4 : 2,
+                pointRadius: advancedEquityMode ? advancedPointRadius : (summary.periodCumData.length > 60 ? 0 : 3),
+                pointBackgroundColor: advancedEquityMode ? advancedPointColors : theme.panel,
+                pointBorderColor: advancedEquityMode ? advancedPointColors : theme.accent,
+                pointHoverBackgroundColor: advancedEquityMode ? advancedPointColors : theme.accent,
+                pointHoverRadius: advancedEquityMode ? 7 : 5,
+                pointBorderWidth: advancedEquityMode ? 2 : 1,
+                fill: true,
+                tension: 0.4,
+                borderCapStyle: 'round',
+                borderJoinStyle: 'round',
+                order: 1,
+            }]
+        },
+        plugins: advancedEquityMode ? [statsEquityZonesPlugin, statsZeroLinePlugin, statsFinalPointPlugin, statsKeyLabelsPlugin] : [],
+        options: {
+            animation: {
+                duration: 800,
+                easing: 'easeInOutQuart',
+                x: { from: 0 }
+            },
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: theme.panel,
+                    borderColor: statsColorWithAlpha(theme.accent, theme.isLight ? 0.35 : 0.45),
+                    borderWidth: 1,
+                    titleColor: theme.text,
+                    bodyColor: theme.accent,
+                    padding: 10,
+                    filter: item => item.dataset.role === 'stats-equity-main',
+                    callbacks: {
+                        label: ctx => ' ' + fmtMoney(ctx.parsed.y),
+                        afterLabel: (ctx) => {
+                            if (!advancedEquityMode) return '';
+                            const row = equityAnalysis.rows[ctx.dataIndex];
+                            if (!row) return '';
+                            const stateLabel = row.isNewHigh
+                                ? 'Новий пік'
+                                : row.isRecovery
+                                    ? 'Відновлення'
+                                    : row.drawdown < 0
+                                        ? 'Глобальний відкат'
+                                        : 'Нейтрально';
+                            return [
+                                `День: ${fmtMoney(row.pnl)}`,
+                                `Відкат: ${fmtMoneyAbs(row.drawdown)}`,
+                                stateLabel,
+                            ];
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    grid: {
+                        color: advancedEquityMode
+                            ? ((context) => Number(context.tick.value) === 0 ? statsColorWithAlpha(theme.profit, 0.75) : theme.grid)
+                            : theme.grid,
+                        lineWidth: advancedEquityMode
+                            ? ((context) => Number(context.tick.value) === 0 ? 1.6 : 1)
+                            : 1,
+                    },
+                    ticks: { color: theme.muted, callback: v => fmtMoneyAbs(v) }
+                },
+                x: { grid: { display: false }, ticks: { color: theme.muted, maxTicksLimit: longHorizon ? 8 : 12 } }
+            }
+        }
+    });
+
+    daysCanvas.$statsGlowColor = theme.profit;
+    state.compareDaysChartInstance = new Chart(daysCanvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт'],
+            datasets: [{
+                data: summary.dayTotals.map(v => parseFloat(v.toFixed(2))),
+                backgroundColor: summary.dayTotals.map(v => v >= 0 ? statsColorWithAlpha(theme.profit, 0.82) : statsColorWithAlpha(theme.loss, 0.82)),
+                borderColor: summary.dayTotals.map(v => v >= 0 ? theme.profit : theme.loss),
+                borderWidth: 2,
+                borderRadius: 5,
+                borderSkipped: false,
+            }]
+        },
+        plugins: [statsBarGlowPlugin],
+        options: {
+            animation: {
+                duration: 850,
+                easing: 'easeOutQuart',
+                delay: (context) => context.type === 'data' ? context.dataIndex * 80 : 0,
+            },
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + fmtMoney(ctx.parsed.y) } } },
+            scales: {
+                y: { grid: { color: theme.grid }, ticks: { color: theme.muted, callback: v => fmtMoneyAbs(v) } },
+                x: { grid: { display: false }, ticks: { color: theme.muted } }
+            }
+        }
+    });
+
+    pieCanvas.$statsGlowColor = theme.profit;
+    state.compareWinLossChartInstance = new Chart(pieCanvas.getContext('2d'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Плюс', 'Мінус', 'Нуль'],
+            datasets: [{
+                data: [summary.winDays, summary.lossDays, summary.beDays],
+                backgroundColor: [theme.profit, theme.loss, '#94a3b8'].map(c => statsColorWithAlpha(c, 0.86)),
+                borderColor: [theme.panel, theme.panel, theme.panel],
+                borderWidth: 2,
+                hoverOffset: 8,
+            }]
+        },
+        plugins: [statsBarGlowPlugin],
+        options: {
+            animation: {
+                animateRotate: true,
+                animateScale: true,
+                duration: 900,
+                easing: 'easeOutQuart',
+            },
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom', labels: { color: theme.muted, boxWidth: 12, boxHeight: 12, padding: 10, font: { size: 11 } } },
+                tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed} дн.` } }
+            }
+        }
+    });
+}
+
+function renderStatsComparePanel(validEntries) {
+    const toggle = document.getElementById('stats-compare-toggle');
+    const shell = document.querySelector('.stats-compare-shell');
+    const pane = document.getElementById('stats-compare-pane');
+    if (!toggle || !pane || !shell) return;
+
+    toggle.setAttribute('aria-expanded', state.statsCompareMode ? 'true' : 'false');
+    toggle.setAttribute('aria-pressed', state.statsCompareMode ? 'true' : 'false');
+    toggle.classList.toggle('stats-compare-toggle--active', state.statsCompareMode);
+    shell.classList.toggle('stats-compare-shell--active', state.statsCompareMode);
+    pane.classList.toggle('initially-hidden', !state.statsCompareMode);
+    pane.setAttribute('aria-hidden', state.statsCompareMode ? 'false' : 'true');
+
+    if (!state.statsCompareMode) {
+        destroyCompareCharts();
+        return;
+    }
+
+    normalizeCompareSourceSelection();
+    if (!state.statsCompareContext?.journal || Object.keys(state.statsCompareContext.journal).length === 0) {
+        state.statsCompareContext = {
+            journal: state.currentStatsContext.journal || {},
+            label: getStatsSelectionLabel(state.statsCompareSourceSelection.type, state.statsCompareSourceSelection.key),
+            tradeTypes: state.currentStatsContext.tradeTypes || state.appData.tradeTypes || []
+        };
+    }
+
+    const sourceTrigger = document.getElementById('stats-compare-source-trigger');
+    const sourcePanel = document.getElementById('stats-compare-source-panel');
+    const sourceContainer = document.getElementById('stats-compare-source-container');
+    if (sourceContainer) {
+        sourceContainer.innerHTML = getStatsSourceOptionsHtml(state.statsCompareSourceSelection, 'compare');
+        if (!sourceContainer.dataset.compareSourceBound) {
+            sourceContainer.dataset.compareSourceBound = 'true';
+            sourceContainer.addEventListener('click', (event) => {
+                const button = event.target?.closest?.('[data-compare-stats-source-type]');
+                if (!button || !sourceContainer.contains(button)) return;
+                closeStatsDropdown('compareSource');
+                void selectStatsCompareSource(button.dataset.compareStatsSourceType, button.dataset.compareStatsSourceKey || '');
+            });
+        }
+    }
+    if (sourceTrigger && sourcePanel && !sourceTrigger.dataset.compareSourceBound) {
+        sourceTrigger.dataset.compareSourceBound = 'true';
+        sourceTrigger.addEventListener('click', () => {
+            const isOpen = !sourcePanel.classList.contains('open');
+            closeStatsDropdown();
+            setCompareDropdownState('source', isOpen);
+        });
+    }
+
+    const tradeTypes = state.statsCompareContext.tradeTypes || [];
+    if (state.statsCompareTradeTypeFilter && !tradeTypes.includes(state.statsCompareTradeTypeFilter)) {
+        state.statsCompareTradeTypeFilter = null;
+    }
+    const tradeTrigger = document.getElementById('stats-compare-tradetype-trigger');
+    const tradePanel = document.getElementById('stats-compare-tradetype-panel');
+    const tradeContainer = document.getElementById('stats-compare-tradetype-container');
+    if (tradeContainer) {
+        const currentTradeType = state.statsCompareTradeTypeFilter;
+        tradeContainer.innerHTML = [
+            `<button class="stats-source-btn${!currentTradeType ? ' active' : ''}" data-compare-trade-type-filter="">Всі типи</button>`,
+            ...tradeTypes.map(type => `<button class="stats-source-btn${currentTradeType === type ? ' active' : ''}" data-compare-trade-type-filter="${escapeHtml(type)}">${escapeHtml(type)}</button>`)
+        ].join('');
+        if (!tradeContainer.dataset.compareTradeTypeBound) {
+            tradeContainer.dataset.compareTradeTypeBound = 'true';
+            tradeContainer.addEventListener('click', (event) => {
+                const button = event.target?.closest?.('[data-compare-trade-type-filter]');
+                if (!button || !tradeContainer.contains(button)) return;
+                closeStatsDropdown('compareTradeType');
+                selectStatsCompareTradeType(button.dataset.compareTradeTypeFilter || null);
+            });
+        }
+    }
+    if (tradeTrigger && tradePanel && !tradeTrigger.dataset.compareTradeTypeBound) {
+        tradeTrigger.dataset.compareTradeTypeBound = 'true';
+        tradeTrigger.addEventListener('click', () => {
+            const isOpen = !tradePanel.classList.contains('open');
+            closeStatsDropdown();
+            setCompareDropdownState('tradetype', isOpen);
+        });
+    }
+
+    const compareValidEntries = buildStatsEntriesFromJournal(
+        state.statsCompareContext.journal || {},
+        state.statsCompareTradeTypeFilter
+    );
+    state.statsCompareScale = getStatsScaleFromFilters(state.statsCompareFilters);
+    const periodTrigger = document.getElementById('stats-compare-period-trigger');
+    const periodPanel = document.getElementById('stats-compare-period-panel');
+    const periodTree = document.getElementById('stats-compare-tree-container');
+    const periodLabel = document.getElementById('stats-compare-period-label');
+    const comparePeriodLabel = getStatsPeriodLabel(state.statsCompareFilters, '2 місяці');
+    setText('stats-compare-source-label', getStatsSelectionLabel(state.statsCompareSourceSelection.type, state.statsCompareSourceSelection.key));
+    setText('stats-compare-tradetype-label', state.statsCompareTradeTypeFilter || 'Всі типи');
+
+    if (periodLabel) periodLabel.textContent = comparePeriodLabel;
+    setText('compare-stats-period-title', comparePeriodLabel);
+    if (periodTree) {
+        periodTree.innerHTML = compareValidEntries.length
+            ? buildStatsPeriodTreeHtml(compareValidEntries, state.statsCompareFilters || [], 'compare-stats')
+            : '<div class="stats-empty-note">Немає періодів для цього джерела.</div>';
+        if (!periodTree.dataset.compareTreeBound) {
+            periodTree.dataset.compareTreeBound = 'true';
+            periodTree.addEventListener('click', (event) => {
+                const toggle = event.target?.closest?.('[data-tree-toggle]');
+                if (toggle && periodTree.contains(toggle)) {
+                    toggleTree(toggle);
+                    return;
+                }
+                const label = event.target?.closest?.('[data-compare-stats-filter-type]');
+                if (!label || !periodTree.contains(label)) return;
+                const type = label.dataset.compareStatsFilterType;
+                const raw = label.dataset.compareStatsFilterValue || '';
+                const value = type === 'year' ? Number(raw) : raw || null;
+                toggleStatsCompareFilter(type, value, label.dataset.compareStatsFilterLabel || label.textContent || '');
+            });
+        }
+    }
+    if (periodTrigger && periodPanel && !periodTrigger.dataset.comparePeriodBound) {
+        periodTrigger.dataset.comparePeriodBound = 'true';
+        periodTrigger.addEventListener('click', () => {
+            const isOpen = !periodPanel.classList.contains('open');
+            closeStatsDropdown();
+            setCompareDropdownState('period', isOpen);
+        });
+    }
+
+    const baseEntries = filterEntriesByStatsFilters(validEntries, state.activeFilters);
+    const compareEntries = filterEntriesByStatsFilters(compareValidEntries, state.statsCompareFilters || []);
+    const base = buildComparePaneSummary(baseEntries);
+    const compare = buildComparePaneSummary(compareEntries);
+    const pfDelta = compare.pf - base.pf;
+
+    const cssGreen = getComputedStyle(document.documentElement).getPropertyValue('--profit').trim() || '#10b981';
+    const cssRed = getComputedStyle(document.documentElement).getPropertyValue('--loss').trim() || '#ef4444';
+    const cssGold = getComputedStyle(document.documentElement).getPropertyValue('--gold').trim() || '#eab308';
+    const cssText = getComputedStyle(document.documentElement).getPropertyValue('--text-main').trim() || '#f8fafc';
+    const cssAccent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#3b82f6';
+    const cssBgPanel = getComputedStyle(document.documentElement).getPropertyValue('--bg-panel').trim() || '#1e293b';
+    const theme = buildStatsChartTheme(cssGreen, cssRed, cssAccent, cssBgPanel, cssText);
+    theme.profit = cssGreen;
+    theme.loss = cssRed;
+    theme.accent = cssAccent;
+    theme.panel = cssBgPanel;
+    theme.orange = theme.orange || '#f97316';
+
+    const baseEquity = buildStatsEquityAnalysis(baseEntries, base.periodCumData);
+    const compareEquity = buildStatsEquityAnalysis(compareEntries, compare.periodCumData);
+    const compareAdvancedToggle = document.getElementById('compare-stats-equity-advanced-toggle');
+    if (compareAdvancedToggle) compareAdvancedToggle.checked = !!state.statsCompareEquityAdvancedMode;
+    setText('compare-stat-total-pnl', fmtMoney(compare.totalPnl));
+    setText('compare-stat-winrate', `${compare.winrate.toFixed(1)}%`);
+    setText('compare-stat-pf', fmtPlainNumber(compare.pf));
+    setText('compare-stat-avg-win', fmtMoney(compare.avgWin));
+    setText('compare-stat-avg-loss', compare.lossDays > 0 ? '-' + fmtMoneyAbs(compare.avgLoss) : fmtMoney(0));
+    setText('compare-stat-best', fmtMoney(compare.bestDay));
+    setText('compare-stat-worst', fmtMoney(compare.worstDay));
+    setText('compare-stat-trade-days', String(compare.totalDays));
+    setText('compare-stat-max-dd', fmtMoneyAbs(compareEquity.worstDrawdown || 0));
+    setText('compare-stat-comm', fmtMoneyAbs(compare.totalComm || 0));
+    setText('compare-stat-locates', fmtMoneyAbs(compare.totalLocates || 0));
+
+    const compareCommEl = document.getElementById('compare-stat-comm');
+    const compareLocatesEl = document.getElementById('compare-stat-locates');
+    if (state.statsCompareTradeTypeFilter) {
+        if (compareCommEl) compareCommEl.closest('.stat-card').style.display = 'none';
+        if (compareLocatesEl) compareLocatesEl.closest('.stat-card').style.display = 'none';
+    } else {
+        if (compareCommEl) compareCommEl.closest('.stat-card').style.display = '';
+        if (compareLocatesEl) compareLocatesEl.closest('.stat-card').style.display = '';
+    }
+
+    const totalPnlEl = document.getElementById('compare-stat-total-pnl');
+    if (totalPnlEl) totalPnlEl.style.color = compare.totalPnl >= 0 ? cssGreen : cssRed;
+    const comparePfEl = document.getElementById('compare-stat-pf');
+    if (comparePfEl) comparePfEl.style.color = compare.pf > 1.5 ? cssGreen : compare.pf < 1 ? cssRed : cssGold;
+
+    setCompareDelta('compare-delta-total-pnl', compare.totalPnl - base.totalPnl, { type: 'money' });
+    setCompareDelta('compare-delta-winrate', compare.winrate - base.winrate, { type: 'percent-points' });
+    setCompareDelta('compare-delta-pf', Number.isFinite(pfDelta) ? pfDelta : 0, { type: 'number' });
+    setCompareDelta('compare-delta-avg-win', compare.avgWin - base.avgWin, { type: 'money' });
+    setCompareDelta('compare-delta-avg-loss', compare.avgLoss - base.avgLoss, { type: 'money', invert: true });
+    setCompareDelta('compare-delta-best', compare.bestDay - base.bestDay, { type: 'money' });
+    setCompareDelta('compare-delta-worst', compare.worstDay - base.worstDay, { type: 'money' });
+    setCompareDelta('compare-delta-trade-days', compare.totalDays - base.totalDays, { type: 'number' });
+    setCompareDelta('compare-delta-max-dd', Math.abs(compareEquity.worstDrawdown || 0) - Math.abs(baseEquity.worstDrawdown || 0), { type: 'money', invert: true });
+    setCompareDelta('compare-delta-comm', (compare.totalComm || 0) - (base.totalComm || 0), { type: 'money', invert: true });
+    setCompareDelta('compare-delta-locates', (compare.totalLocates || 0) - (base.totalLocates || 0), { type: 'money', invert: true });
+    renderCompareCharts(compareEntries, compare, theme, !!state.statsCompareEquityAdvancedMode);
+}
+
+function renderStatsInsights({
+    filteredEntries,
+    dayTotals,
+    winRate,
+    profitFactor,
+    avgWin,
+    avgLoss,
+    totalPnl,
+    equityAnalysis,
+}) {
+    const insightsEl = document.getElementById('stats-insights-list');
+    if (!insightsEl) return;
+
+    const pfNumber = profitFactor === '∞' || profitFactor === 'в€ћ' ? Infinity : parseFloat(profitFactor);
+    const winRateNumber = parseFloat(winRate) || 0;
+    const avgWinNumber = parseFloat(avgWin) || 0;
+    const avgLossNumber = parseFloat(avgLoss) || 0;
+    const insights = [];
+    const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт'];
+    const pnlValues = filteredEntries.map(entry => Number(entry.pnl) || 0);
+    const lastFive = pnlValues.slice(-5);
+    const prevFive = pnlValues.slice(-10, -5);
+    const lastFivePnl = lastFive.reduce((sum, pnl) => sum + pnl, 0);
+    const prevFivePnl = prevFive.reduce((sum, pnl) => sum + pnl, 0);
+    const maxDayAbs = Math.max(...pnlValues.map(value => Math.abs(value)), 0);
+    const avgAbsDay = pnlValues.reduce((sum, value) => sum + Math.abs(value), 0) / Math.max(1, pnlValues.length);
+    const lastEquity = equityAnalysis?.rows?.at?.(-1)?.equity || 0;
+    const peakEquity = Math.max(...(equityAnalysis?.rows || []).map(row => row.equity), 0);
+
+    let currentWinStreak = 0;
+    let currentLossStreak = 0;
+    let maxWinStreak = 0;
+    let maxLossStreak = 0;
+    filteredEntries.forEach((entry) => {
+        const pnl = Number(entry.pnl) || 0;
+        if (pnl > 0) {
+            currentWinStreak += 1;
+            currentLossStreak = 0;
+        } else if (pnl < 0) {
+            currentLossStreak += 1;
+            currentWinStreak = 0;
+        } else {
+            currentWinStreak = 0;
+            currentLossStreak = 0;
+        }
+        maxWinStreak = Math.max(maxWinStreak, currentWinStreak);
+        maxLossStreak = Math.max(maxLossStreak, currentLossStreak);
+    });
+
+    if (!filteredEntries.length) {
+        insightsEl.innerHTML = '<div class="stats-empty-note">Немає даних для поточного фільтра.</div>';
+        return;
+    }
+
+    if (filteredEntries.length < 5) {
+        insights.push({ tone: 'warn', text: 'Вибірка мала: висновки можуть сильно змінитись після кількох нових днів.' });
+    }
+
+    if (Number.isFinite(pfNumber) && pfNumber < 1) insights.push({ tone: 'bad', text: 'Profit Factor нижче 1.00: збитки переважають прибуток.' });
+    else if (pfNumber >= 1.5) insights.push({ tone: 'good', text: 'Profit Factor вище 1.50: система має здоровий запас.' });
+    else insights.push({ tone: 'warn', text: 'Profit Factor у нейтральній зоні: варто підсилити якість входів.' });
+
+    if (avgLossNumber > avgWinNumber && avgWinNumber > 0) {
+        insights.push({ tone: 'bad', text: `Середній мінус більший за середній плюс у ${(avgLossNumber / avgWinNumber).toFixed(1)}x.` });
+    } else if (avgWinNumber > 0 && avgLossNumber > 0) {
+        insights.push({ tone: 'good', text: `Середній плюс перекриває мінус у ${(avgWinNumber / avgLossNumber).toFixed(1)}x.` });
+    }
+
+    if (winRateNumber < 45 && totalPnl < 0) insights.push({ tone: 'bad', text: 'Winrate і PnL одночасно слабкі: потрібен фільтр сетапів.' });
+    if (Math.abs(equityAnalysis?.worstDrawdown || 0) > Math.abs(totalPnl) && totalPnl > 0) {
+        insights.push({ tone: 'warn', text: 'Max drawdown більший за поточний профіт: результат нестабільний.' });
+    }
+
+    if (lastFive.length >= 3) {
+        const tone = lastFivePnl > prevFivePnl ? 'good' : lastFivePnl < 0 ? 'bad' : 'warn';
+        insights.push({ tone, text: `Останні ${lastFive.length} дн.: ${fmtMoney(lastFivePnl)}${prevFive.length ? ` проти ${fmtMoney(prevFivePnl)} перед цим` : ''}.` });
+    }
+
+    if (maxLossStreak >= 3) insights.push({ tone: 'bad', text: `Максимальна серія мінусів: ${maxLossStreak} дн. Варто перевірити stop-rule після 2 збитків.` });
+    else if (maxWinStreak >= 3) insights.push({ tone: 'good', text: `Найкраща серія плюсів: ${maxWinStreak} дн. Є періоди стабільного виконання.` });
+
+    if (Array.isArray(dayTotals) && dayTotals.length) {
+        const bestIdx = dayTotals.reduce((best, value, index) => value > dayTotals[best] ? index : best, 0);
+        const worstIdx = dayTotals.reduce((worst, value, index) => value < dayTotals[worst] ? index : worst, 0);
+        if (dayTotals[bestIdx] > 0) insights.push({ tone: 'good', text: `Найсильніший день тижня: ${dayNames[bestIdx]} (${fmtMoney(dayTotals[bestIdx])}).` });
+        if (dayTotals[worstIdx] < 0) insights.push({ tone: 'bad', text: `Найслабший день тижня: ${dayNames[worstIdx]} (${fmtMoney(dayTotals[worstIdx])}). Можливо, там потрібен жорсткіший фільтр.` });
+    }
+
+    if (avgAbsDay > 0 && maxDayAbs > avgAbsDay * 3 && filteredEntries.length >= 8) {
+        insights.push({ tone: 'warn', text: `Результат сильно залежить від одного великого дня (${fmtMoneyAbs(maxDayAbs)}). Перевір стабільність без нього.` });
+    }
+
+    if (peakEquity > 0) {
+        const distanceFromHigh = peakEquity - lastEquity;
+        if (distanceFromHigh <= peakEquity * 0.05) insights.push({ tone: 'good', text: 'Equity близько до максимуму: поточний режим працює без глибокої просадки.' });
+        else if (distanceFromHigh > Math.abs(equityAnalysis?.worstDrawdown || 0) * 0.6) insights.push({ tone: 'warn', text: `До equity high ще ${fmtMoneyAbs(distanceFromHigh)}: зараз важлива якість відновлення.` });
+    }
+
+    insightsEl.innerHTML = insights.slice(0, 6).map(item => `
+        <div class="stats-insight stats-insight--${item.tone}">
+            <span class="stats-insight-dot"></span>
+            <span>${escapeHtml(item.text)}</span>
+        </div>
+    `).join('');
+}
+
 export function renderStatsTab() {
     let statsJournal = state.currentStatsContext.journal || {};
     const ttFilter = state.activeTradeTypeFilter;
@@ -1325,6 +2328,7 @@ export function renderStatsTab() {
         }
     }
     validEntries.sort((a, b) => a.dateObj - b.dateObj);
+    renderStatsComparePanel(validEntries);
     
     let cssGreen = getComputedStyle(document.documentElement).getPropertyValue('--profit').trim() || '#10b981';
     let cssRed = getComputedStyle(document.documentElement).getPropertyValue('--loss').trim() || '#ef4444';
@@ -1365,8 +2369,9 @@ export function renderStatsTab() {
         let pnl = e.pnl;
         let entryData = e.data || statsJournal[e.dateStr] || {};
         if (!ttFilter) {
-            totalComm += parseFloat(entryData.commissions) || 0;
-            totalLocates += parseFloat(entryData.locates) || 0;
+            const costs = getEntryCosts(entryData);
+            totalComm += costs.commissions;
+            totalLocates += costs.locates;
         }
         
         periodSum += pnl; periodCumData.push(parseFloat(periodSum.toFixed(2)));
@@ -1380,6 +2385,7 @@ export function renderStatsTab() {
     let profitFactor = grossLoss > 0 ? (grossProfit / grossLoss).toFixed(2) : (grossProfit > 0 ? '∞' : '0.00');
     let avgWin = winDays > 0 ? (grossProfit / winDays).toFixed(2) : '0.00';
     let avgLoss = lossDays > 0 ? (grossLoss / lossDays).toFixed(2) : '0.00';
+    const totalPnl = parseFloat((grossProfit - grossLoss).toFixed(2));
     
     document.getElementById('stat-winrate').innerText = `${winRate}%`;
     document.getElementById('stat-pf').innerText = profitFactor;
@@ -1387,6 +2393,7 @@ export function renderStatsTab() {
     document.getElementById('stat-avg-loss').innerText = lossDays > 0 ? '-' + fmtMoneyAbs(parseFloat(avgLoss)) : fmtMoney(0);
     document.getElementById('stat-best').innerText = fmtMoney(bestDay);
     document.getElementById('stat-worst').innerText = fmtMoney(worstDay);
+    setText('stat-trade-days', String(totalDays));
     let stComm = document.getElementById('stat-comm'); 
     let stLoc = document.getElementById('stat-locates');
     if (ttFilter) {
@@ -1399,7 +2406,6 @@ export function renderStatsTab() {
 
     const totalPnlEl = document.getElementById('stat-total-pnl');
     if (totalPnlEl) {
-        const totalPnl = parseFloat((grossProfit - grossLoss).toFixed(2));
         if (isAllTime) {
             totalPnlEl.innerText = (ttFilter ? `[${ttFilter}] ` : '') + fmtMoney(totalPnl);
             totalPnlEl.style.color = totalPnl >= 0 ? cssGreen : cssRed;
@@ -1418,6 +2424,17 @@ export function renderStatsTab() {
 
     const statsChartTheme = buildStatsChartTheme(cssGreen, cssRed, cssAccent, cssBgPanel, cssText);
     const equityAnalysis = buildStatsEquityAnalysis(filteredEntries, periodCumData);
+    setText('stat-max-dd', fmtMoneyAbs(equityAnalysis.worstDrawdown || 0));
+    renderStatsInsights({
+        filteredEntries,
+        dayTotals,
+        winRate,
+        profitFactor,
+        avgWin,
+        avgLoss,
+        totalPnl,
+        equityAnalysis,
+    });
     const longHorizon = !!equityAnalysis.longHorizon;
     const worstDrawdownAbs = Math.abs(equityAnalysis.worstDrawdown);
     const peakEquity = Math.max(...equityAnalysis.rows.map(row => row.equity), 0);

@@ -160,6 +160,8 @@ function activateAction(action, trigger, event = null) {
         'dayloss-save': () => window.saveDaylossSetting?.(),
         'ocr-save': () => window.saveVisualOCRSettings?.(),
         'stats-dropdown': () => window.toggleStatsDropdown?.(trigger?.dataset?.dropdown || ''),
+        'stats-compare-toggle': () => window.toggleStatsCompareMode?.(),
+        'stats-compare-close': () => window.closeStatsCompareMode?.(),
         'review-request': () => window.submitReviewRequest?.(trigger?.dataset?.reviewType || ''),
         'ai-tab': () => window.switchAITab?.(trigger?.dataset?.aiTab || 'chat'),
         'data-chat-send': () => window.sendDataChatMessage?.(),
@@ -326,7 +328,7 @@ function bindDeclarativeActions() {
             return;
         }
         if (target?.matches?.('[data-action="stats-equity-mode"]')) {
-            window.toggleStatsEquityMode?.(target.checked);
+            window.toggleStatsEquityMode?.(target.checked, target.id === 'compare-stats-equity-advanced-toggle' ? 'compare' : 'main');
             return;
         }
         if (target?.matches?.('[data-action="trade-date-symbol-select"]')) {

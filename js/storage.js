@@ -167,10 +167,17 @@ function journalRowToDayEntry(row) {
 }
 
 function journalRowToMonthEntry(row) {
+    const metrics = row?.daily_metrics && typeof row.daily_metrics === 'object' ? row.daily_metrics : {};
     return {
         ...normalizeDayEntry({
             pnl: row?.pnl ?? null,
-            gross_pnl: row?.gross_pnl ?? null
+            gross_pnl: row?.gross_pnl ?? null,
+            commissions: row?.commissions ?? null,
+            locates: row?.locates ?? null,
+            errors: metrics.errors || [],
+            tradeTypesData: metrics.tradeTypesData || {},
+            fondexx: metrics.fondexx,
+            ppro: metrics.ppro,
         }),
         id: row?.id ?? null,
         user_id: row?.user_id ?? null,
@@ -419,7 +426,7 @@ export async function loadMonth(nick, mk, userId = null) {
         const { start, end } = getMonthRange(mk);
         const { data, error } = await supabase
             .from('journal_days')
-            .select('id, user_id, trade_date, pnl, gross_pnl')
+            .select('id, user_id, trade_date, pnl, gross_pnl, commissions, locates, daily_metrics')
             .eq('user_id', targetUserId)
             .gte('trade_date', start)
             .lte('trade_date', end)
