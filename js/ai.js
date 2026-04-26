@@ -3,29 +3,11 @@ import { state } from './state.js';
 import { saveJournalData, saveToLocal, markJournalDayDirty } from './storage.js';
 import { getImgUrl, getStorageUrl } from './gallery.js';
 import { getGeminiKeys, callGemini, callGeminiViaProxy, callGeminiJSON, sleep } from './ai/client.js';
+import { sanitizeHTML, sanitizeRichHTML } from './sanitize.js';
 
 export { getGeminiKeys, callGemini, callGeminiViaProxy, callGeminiJSON, sleep };
 
-function sanitizeHTML(str) {
-    const div = document.createElement('div');
-    div.textContent = String(str ?? '');
-    return div.innerHTML;
-}
-
-function sanitizeAIHtml(html) {
-    const doc = new DOMParser().parseFromString(String(html ?? ''), 'text/html');
-    const allowed = document.createElement('div');
-    allowed.append(...doc.body.childNodes);
-    allowed.querySelectorAll('*').forEach(el => {
-        const tag = el.tagName.toLowerCase();
-        if (!['strong', 'em', 'br', 'b', 'i', 'ul', 'li', 'h3', 'h4'].includes(tag)) {
-            el.replaceWith(...el.childNodes);
-        } else {
-            [...el.attributes].forEach(attr => el.removeAttribute(attr.name));
-        }
-    });
-    return allowed.innerHTML;
-}
+const sanitizeAIHtml = sanitizeRichHTML;
 
 let sosChatHistory = []; 
 let dataChatHistory = [];

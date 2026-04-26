@@ -2,27 +2,13 @@ import { state } from './state.js';
 import { supabase } from './supabase.js';
 import { callGemini, getGeminiKeys } from './ai.js';
 import { loadTradeDays } from './storage.js';
+import { safeExternalUrl, sanitizeHTML } from './sanitize.js';
 
 const CLIENT_CACHE_TTL_MS = 2 * 60 * 1000;
 const NEWS_CACHE_VERSION = 'uk-v2';
 const NEWS_PROXY_FALLBACK = 'https://traderjournal-six.vercel.app/api/news';
 let _newsCache = { key: '', ts: 0, payload: null };
 let _newsPromise = null;
-
-function sanitizeHTML(str) {
-    const div = document.createElement('div');
-    div.textContent = String(str ?? '');
-    return div.innerHTML;
-}
-
-function safeExternalUrl(value) {
-    try {
-        const url = new URL(String(value || '').trim());
-        return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : '#';
-    } catch {
-        return '#';
-    }
-}
 
 function setTickerHTML(html) {
     const ticker = document.getElementById('news-ticker-text');

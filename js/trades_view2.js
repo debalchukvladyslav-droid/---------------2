@@ -93,6 +93,8 @@ export async function populateDateSelect() {
     if (dateToSelect) {
         sel.value = dateToSelect;
         renderPillNav(dateToSelect);
+    } else {
+        renderPillNav('');
     }
 }
 
@@ -126,7 +128,18 @@ function renderPillNav(dateStr) {
         const container   = document.getElementById('tradingview-widget');
         const bar         = document.getElementById('trade-info-bar');
         const wrapper     = document.getElementById('tv-widget-container');
-        if (placeholder) placeholder.style.display = 'flex';
+        if (placeholder) {
+            placeholder.style.display = 'flex';
+            placeholder.innerHTML = `
+                <div class="app-empty-state app-empty-state--chart">
+                    <div class="app-empty-state-title">Журнал угод порожній</div>
+                    <div class="app-empty-state-copy">Імпортуйте угоди з таблиці або заповніть день у календарі. Після цього тут зʼявиться графік конкретної угоди.</div>
+                    <div class="app-empty-state-actions">
+                        <button type="button" class="btn-secondary recent-trades-link" data-tab="calendar">Календар</button>
+                        <button type="button" class="btn-primary recent-trades-link" data-tab="table">Імпорт</button>
+                    </div>
+                </div>`;
+        }
         if (container)   { container.style.display = 'none'; container.innerHTML = ''; }
         if (bar)         { bar.innerHTML = ''; bar.style.display = 'none'; }
         if (lwChart)     { lwChart.remove(); lwChart = null; candleSeries = null; }

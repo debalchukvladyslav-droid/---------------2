@@ -395,6 +395,22 @@ const TAB_TITLES = {
     admin: 'Адмін-панель',
 };
 
+const NAV_TITLES = {
+    dash: 'Огляд',
+    calendar: 'Календар',
+    stats: 'Аналітика',
+    trades: 'Журнал',
+    datagrid: 'Таблиця',
+    table: 'Імпорт',
+    screens: 'Скріншоти',
+    ai: 'AI Ментор',
+    'mentor-review': 'Черга ревʼю',
+    playbook: 'Плейбук',
+    learn: 'Навчання',
+    settings: 'Налаштування',
+    admin: 'Адмін-панель',
+};
+
 const TAB_ROUTES = {
     dash: '/',
     calendar: '/calendar',
@@ -440,7 +456,7 @@ function getDashboardGreetingTitle() {
 export function refreshCurrentMainTitle() {
     const activeView = document.querySelector('.view-content.active');
     const tab = activeView?.id?.replace(/^view-/, '') || 'dash';
-    const title = tab === 'dash' ? getDashboardGreetingTitle() : (TAB_TITLES[tab] || '');
+    const title = tab === 'dash' ? getDashboardGreetingTitle() : (NAV_TITLES[tab] || TAB_TITLES[tab] || '');
     const pageTitleEl = document.getElementById('page-title');
     const mobileTitleEl = document.getElementById('mobile-section-title');
     if (pageTitleEl) pageTitleEl.textContent = title;

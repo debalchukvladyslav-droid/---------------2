@@ -15,6 +15,16 @@ function sanitizeHTML(str) {
     div.textContent = String(str ?? '');
     return div.innerHTML;
 }
+function getRecentTradesEmptyStateHtml() {
+    return `<div class="app-empty-state app-empty-state--compact">
+        <div class="app-empty-state-title">Угод за цей місяць ще немає</div>
+        <div class="app-empty-state-copy">Почніть із запису торгового дня або імпортуйте звіт, щоб тут зʼявилися останні угоди.</div>
+        <div class="app-empty-state-actions">
+            <button type="button" class="btn-secondary recent-trades-link" data-tab="calendar">Календар</button>
+            <button type="button" class="btn-primary recent-trades-link" data-tab="table">Імпорт</button>
+        </div>
+    </div>`;
+}
 
 function excerptTooltip(text, maxLen) {
     const t = String(text ?? '').trim().replace(/\s+/g, ' ');
@@ -159,8 +169,7 @@ export function updateDashboardWidgets(year, month) {
         const top = rows.slice(0, 12);
 
         if (top.length === 0) {
-            list.innerHTML =
-                '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:0.85rem;">Немає імпортованих угод у цьому місяці (Fondexx trades).</div>';
+            list.innerHTML = getRecentTradesEmptyStateHtml();
         } else {
             list.innerHTML = top
                 .map((r) => {

@@ -3,6 +3,7 @@ import { state } from './state.js';
 import { saveJournalData, markJournalDayDirty } from './storage.js';
 import { getDefaultDayEntry } from './data_utils.js';
 import { ensureXlsx } from './vendor_loader.js';
+import { ecnFeeColumnIndex } from './parser_utils.js';
 
 function showToast(text) {
     const t = document.createElement('div');
@@ -20,14 +21,6 @@ function canMutateJournalImports(event) {
         return false;
     }
     return true;
-}
-
-function ecnFeeColumnIndex(headers) {
-    const keys = ['Ecn Fee', 'ECN Fee', 'ECN', 'Ecn'];
-    for (const k of keys) {
-        if (headers[k] !== undefined) return headers[k];
-    }
-    return undefined;
 }
 
 /**

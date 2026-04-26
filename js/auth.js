@@ -2,6 +2,7 @@
 import { supabase, TELEGRAM_AUTH_FN, SUPABASE_ANON_KEY, TELEGRAM_LOGIN_RETURN_BASE } from './supabase.js';
 import { state } from './state.js';
 import { normalizeDayEntry } from './data_utils.js';
+import { canAccessMentorReviewQueueState, isMentorViewingOtherJournalState } from './access_control.js';
 
 const PROFILE_SUFFIX = '_stats';
 export const ACCOUNT_BLOCKED_MESSAGE = 'Акаунт заблоковано. Зверніться до адміна.';
@@ -675,11 +676,10 @@ export async function loadMentorStatusForAccount() {
 
 /** Ментор, адмін або mentor_enabled — доступ до черги рев’ю та перегляду команди. */
 export function canAccessMentorReviewQueue() {
-    return (
-        state.myRole === 'admin' ||
-        state.myRole === 'mentor' ||
-        state.IS_MENTOR_MODE === true
-    );
+    return canAccessMentorReviewQueueState({
+        myRole: state.myRole,
+        isMentorMode: state.IS_MENTOR_MODE,
+    });
 }
 
 export async function saveMentorStatusForAccount(enabled) {
@@ -704,12 +704,12 @@ export function updateMentorButtons() {
 
 /** Ментор переглядає журнал іншого трейдера — лише коментар ментора / приватні нотатки, без редагування дня. */
 export function isMentorViewingOtherJournal() {
-    return !!(
-        (state.IS_MENTOR_MODE || state.myRole === 'admin') &&
-        state.USER_DOC_NAME &&
-        state.CURRENT_VIEWED_USER &&
-        state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME
-    );
+    return isMentorViewingOtherJournalState({
+        myRole: state.myRole,
+        isMentorMode: state.IS_MENTOR_MODE,
+        userDocName: state.USER_DOC_NAME,
+        currentViewedUser: state.CURRENT_VIEWED_USER,
+    });
 }
 
 export function applyAccessRights() {

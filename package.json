@@ -1,8 +1,9 @@
 {
   "type": "module",
   "scripts": {
-    "check": "node --check js/partials.js && node --check js/ui.js && node --check js/main.js && node --check js/app_enhancements.js && node --check scripts/check-partials.mjs && npm run check:partials",
+    "check": "node --check js/partials.js && node --check js/ui.js && node --check js/main.js && node --check js/app_enhancements.js && node --check js/sanitize.js && node --check js/access_control.js && node --check js/parser_utils.js && node --check js/stats_math.js && node --check js/ai.js && node --check js/news.js && node --check scripts/check-partials.mjs && npm run check:partials && npm run test",
     "check:partials": "node scripts/check-partials.mjs",
+    "test": "node --test tests/*.test.mjs",
     "dev": "node dev-server.mjs",
     "dev:5500": "node dev-server.mjs --port 5500",
     "start": "node dev-server.mjs"
