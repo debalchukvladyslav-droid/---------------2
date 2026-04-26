@@ -2,7 +2,7 @@
 .grid.stretch-rows { grid-template-rows: auto; grid-auto-rows: 1fr; }
 .day-header { text-align: right; font-weight: 600; color: var(--text-muted); padding-bottom: 8px; font-size: 0.9rem; }
 
-/* FIX 2: week-label keeps a simple semi-transparent bg вЂ” no backdrop-filter */
+/* FIX 2: week-label keeps a simple semi-transparent bg - no backdrop-filter */
 #tooltip {
     display: none;
     position: fixed;
@@ -93,7 +93,7 @@
 
 .week-label.has-comment { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 
-/* FIX 2: day-cell вЂ” lightweight flat bg, no backdrop-filter, no color-mix */
+/* FIX 2: day-cell - lightweight flat bg, no backdrop-filter, no color-mix */
 .day-cell {
     background: color-mix(in srgb, var(--bg-panel) 50%, transparent);
     border: 1px solid var(--border);
@@ -178,4 +178,4 @@
 .chart-container { height: 200px; width: 100%; }
 .folder-setup { display: flex; gap: 10px; align-items: flex-end; }
 
-/* === РЎРљР Р†РќРЁРћРўР === */
+/* === СКРІНШОТИ === */

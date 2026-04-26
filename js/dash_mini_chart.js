@@ -1,5 +1,6 @@
 // === Міні-крива кумулятивного PnL на дашборді (поточний місяць) ===
 import { state } from './state.js';
+import { ensureChartJs } from './vendor_loader.js';
 
 let _miniChart = null;
 let _lastMiniChartArgs = null;
@@ -283,7 +284,13 @@ function mixColor(a, b, t) {
 
 export function updateDashMiniEquityChart(year, monthIndex) {
     const canvas = document.getElementById('dash-mini-equity-chart');
-    if (!canvas || typeof Chart === 'undefined') return;
+    if (!canvas) return;
+    if (typeof Chart === 'undefined') {
+        ensureChartJs()
+            .then(() => updateDashMiniEquityChart(year, monthIndex))
+            .catch((error) => console.warn('[Dashboard] Chart.js lazy-load failed:', error));
+        return;
+    }
     _lastMiniChartArgs = { year, monthIndex };
 
     const mk = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
@@ -488,7 +495,13 @@ export function updateDashMiniEquityChart(year, monthIndex) {
 
 export function refreshDashMiniEquityChartTheme() {
     const canvas = document.getElementById('dash-mini-equity-chart');
-    if (!canvas || typeof Chart === 'undefined') return;
+    if (!canvas) return;
+    if (typeof Chart === 'undefined') {
+        ensureChartJs()
+            .then(() => refreshDashMiniEquityChartTheme())
+            .catch((error) => console.warn('[Dashboard] Chart.js lazy-load failed:', error));
+        return;
+    }
 
     const args = _lastMiniChartArgs || {
         year: state.todayObj.getFullYear(),

@@ -1,6 +1,8 @@
 // === js/playbook_chart.js ===
 // Playbook Chart Constructor — вбудовується в редактор сетапу
 
+import { ensureLightweightCharts } from './vendor_loader.js';
+
 const instances = {}; // suffix -> { lwChart, candleSeries, ohlcData, selectedIdx, isDrawing, rawPath }
 
 function getInstance(s) {
@@ -157,10 +159,11 @@ function generateChart(suffix) {
     if (sec) sec.style.display = 'block';
 }
 
-function renderLWChart(suffix, data) {
+async function renderLWChart(suffix, data) {
     const inst = getInstance(suffix);
     const container = document.getElementById(`pbc-lw-container-${suffix}`);
     if (!container) return;
+    await ensureLightweightCharts();
     if (inst.lwChart) { inst.lwChart.remove(); inst.lwChart = null; inst.candleSeries = null; }
     const isDark = document.body.getAttribute('data-theme') !== 'light';
     inst.lwChart = LightweightCharts.createChart(container, {

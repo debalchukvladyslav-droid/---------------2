@@ -23,7 +23,7 @@
     #mobile-close-sidebar, #mobile-menu-btn, .mobile-only { display: flex !important; }
     .form-sidebar-backdrop.visible { display: block !important; }
 
-    /* Р’РµСЂС…РЅС–Р№ С…РµРґРµСЂ */
+    /* Верхній хедер */
     .mobile-tabs-wrapper {
         position: fixed; top: 0; left: 0; right: 0; z-index: 100;
         padding: max(10px, env(safe-area-inset-top)) 12px 10px;
@@ -141,10 +141,10 @@
         bottom: calc(56px + env(safe-area-inset-bottom)) !important;
     }
 
-    /* РљРѕРЅС‚РµРЅС‚ */
+    /* Контент */
 
 
-    /* Р”Р°С€Р±РѕСЂРґ С‚СѓР»Р±Р°СЂ вЂ” РєРѕРјРїР°РєС‚РЅРёР№ РЅР° РјРѕР±С–Р»СЊРЅРѕРјСѓ */
+    /* Дашборд тулбар - компактний на мобільному */
     .dash-calendar-strip {
         margin-bottom: 10px;
         padding: 8px 10px;
@@ -181,7 +181,7 @@
         font-size: 0.85rem;
     }
 
-    /* РЎС‚Р°С‚РёСЃС‚РёРєР° вЂ” РІРµСЂС‚РёРєР°Р»СЊРЅРѕ */
+    /* Статистика - вертикально */
     .stats-layout { flex-direction: column !important; gap: 14px !important; overflow: visible !important; height: auto !important; }
     .stats-main-panel { overflow: visible !important; }
     .stats-charts-row { flex-direction: column !important; gap: 14px !important; }
@@ -189,7 +189,7 @@
     .stats-bar-dropdown { position: static; margin-top: 8px; min-width: 0; }
     .stats-filters-bar { gap: 6px; }
 
-    /* AI РІРєР»Р°РґРєР° вЂ” РІРёСЃРѕС‚Р° Р°РІС‚Рѕ */
+    /* AI вкладка - висота авто */
     #view-ai > div { height: auto !important; min-height: 0; }
     #ai-chat-section { min-height: 60dvh; }
     #data-chat-box { min-height: 200px; max-height: 45dvh; overflow-y: auto; }

@@ -2,6 +2,7 @@
 import { state } from './state.js';
 import { saveJournalData, markJournalDayDirty } from './storage.js';
 import { getDefaultDayEntry } from './data_utils.js';
+import { ensureXlsx } from './vendor_loader.js';
 
 function showToast(text) {
     const t = document.createElement('div');
@@ -137,8 +138,9 @@ export function importFondexxReport(event) {
     if (!file) return;
     if (!canMutateJournalImports(event)) return;
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = async function(e) {
         try {
+            await ensureXlsx();
             let data = new Uint8Array(e.target.result);
             let workbook = XLSX.read(data, {type: 'array'});
             let sheetName = workbook.SheetNames[0];
@@ -279,8 +281,9 @@ export function importFondexxTrades(event) {
     if (!file) return;
     if (!canMutateJournalImports(event)) return;
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = async function(e) {
         try {
+            await ensureXlsx();
             let data = new Uint8Array(e.target.result);
             let workbook = XLSX.read(data, {type: 'array'});
             let sheetName = workbook.SheetNames[0];
@@ -369,8 +372,9 @@ export function importPPROReport(event) {
     if (!file) return;
     if (!canMutateJournalImports(event)) return;
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = async function(e) {
         try {
+            await ensureXlsx();
             let data = new Uint8Array(e.target.result);
             let workbook = XLSX.read(data, {type: 'array'});
             let sheetName = workbook.SheetNames[0];

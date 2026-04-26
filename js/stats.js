@@ -4,6 +4,7 @@ import { state } from './state.js';
 import { normalizeAppData, getDefaultAppData } from './data_utils.js';
 import { loadMonth, loadAllMonths, getCurrentViewedUserId, resolveViewedUserId } from './storage.js';
 import { escapeHtml } from './utils.js';
+import { ensureChartJs } from './vendor_loader.js';
 
 // ─── STATS CACHE ───────────────────────────────────────────────────────────────────────────────
 // Module-level Map survives filter switches and profile switches within the
@@ -927,6 +928,8 @@ export async function refreshStatsView() {
     if (window.renderTradeTypeSelector) window.renderTradeTypeSelector();
     buildStatsTree();
     updateStatsPeriodTriggerLabel();
+    if (loadingText) loadingText.textContent = 'Завантаження графіків...';
+    await ensureChartJs();
     renderStatsTab();
     if (overlay) overlay.style.display = 'none';
 }
@@ -2211,7 +2214,7 @@ function renderStatsInsights({
     const insightsEl = document.getElementById('stats-insights-list');
     if (!insightsEl) return;
 
-    const pfNumber = profitFactor === '∞' || profitFactor === 'в€ћ' ? Infinity : parseFloat(profitFactor);
+    const pfNumber = profitFactor === '∞' ? Infinity : parseFloat(profitFactor);
     const winRateNumber = parseFloat(winRate) || 0;
     const avgWinNumber = parseFloat(avgWin) || 0;
     const avgLossNumber = parseFloat(avgLoss) || 0;
@@ -2305,6 +2308,12 @@ function renderStatsInsights({
 }
 
 export function renderStatsTab() {
+    if (typeof Chart === 'undefined') {
+        ensureChartJs()
+            .then(() => renderStatsTab())
+            .catch((error) => console.warn('[Stats] Chart.js lazy-load failed:', error));
+        return;
+    }
     let statsJournal = state.currentStatsContext.journal || {};
     const ttFilter = state.activeTradeTypeFilter;
     const isAllTime = state.activeFilters.some(f => f.type === 'all-time');

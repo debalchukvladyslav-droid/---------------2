@@ -7,7 +7,7 @@ import { getDefaultDayEntry } from './data_utils.js';
 import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm, canAccessMentorReviewQueue, mentorAcceptReviewRequest, ensureAuthUserProfile, signInWithTelegram, maybeFinishTelegramClaim, rejectBlockedProfile } from './auth.js';
 import { loadTeams, openTeamManager, createNewTeam, moveTrader, deleteTeam, deleteTraderProfile, renderTeamSidebar, switchUser } from './teams.js';
 import { saveToLocal, saveJournalData, markJournalDayDirty, initializeApp, exportData, importData, loadMonth, resolveViewedUserId, setCurrentViewedUserId,
-         uploadBackground, setActiveBackground, deleteBackground, loadBackgroundGallery } from './storage.js';
+         loadBackgroundGallery } from './storage.js';
 import { applyTheme, saveThemeSettings, switchTab, toggleMobileSidebar, switchMainTab, scrollMainTabs, toggleMoreTabs, toggleMobileMoreMenu, closeMobileMoreMenu, bindMainTabRoutes, syncMainTabFromRoute, refreshCurrentMainTitle } from './ui.js';
 import { shiftDate, selectDateFromInput, saveEntry, renderView, selectDate, updateAutoFlags, initSelectors, renderSidebarTradesList } from './calendar.js';
 import { toggleStatsDropdown, toggleTree, toggleStatsFilter, refreshStatsView, closeStatsDropdown, renderStatsSourceSelector, selectStatsSource, renderTradeTypeSelector, selectTradeTypeFilter, toggleStatsEquityMode, toggleStatsCompareMode, closeStatsCompareMode } from './stats.js';
@@ -33,8 +33,12 @@ import { connectGoogleDrive, syncDriveScreenshots, updateDriveUI, disconnectGoog
 import { initPlaybookChart } from './playbook_chart.js';
 import { renderDashboardNews, refreshDashboardNews } from './news.js';
 import { loadPartials } from './partials.js';
+import { applyPersistedBackground, initBackgroundControls } from './backgrounds.js';
+import { initGlobalAppEvents } from './app_events.js';
 
 await loadPartials();
+initBackgroundControls();
+initGlobalAppEvents({ shiftDate, closeSOSModal });
 
 // 2. ПРОКИДАННЯ ФУНКЦІЙ ДЛЯ HTML (window)
 window.toggleRightSidebar = function() {
@@ -446,82 +450,6 @@ window.saveDaylossSetting = function() {
     });
 };
 
-// ─── Background helpers ───────────────────────────────────────────────────────
-
-async function _applyBackgroundUrl(url) {
-    let resolvedUrl = url;
-    try {
-        const { getSupabaseStorageUrl } = await import('./supabase_storage.js');
-        resolvedUrl = await getSupabaseStorageUrl(url);
-    } catch (e) {
-        console.warn('[BgPersist] Could not resolve storage URL:', e);
-    }
-    document.body.style.backgroundImage     = `url('${resolvedUrl}')`;
-    document.body.style.backgroundSize      = 'cover';
-    document.body.style.backgroundPosition  = 'center';
-    document.body.style.backgroundAttachment = 'fixed';
-}
-
-function _applyPersistedBackground() {
-    const url = state.appData?.activeBackground;
-    if (!url) return;
-    console.info('[BgPersist] Restoring background:', url);
-    _applyBackgroundUrl(url);
-}
-
-window._handleBgImageUpload = async function(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    event.target.value = '';
-
-    // Paint instantly via FileReader before upload completes.
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const dataUrl = e.target.result;
-        document.body.style.backgroundImage     = `url('${dataUrl}')`;
-        document.body.style.backgroundSize      = 'cover';
-        document.body.style.backgroundPosition  = 'center';
-        document.body.style.backgroundAttachment = 'fixed';
-    };
-    reader.readAsDataURL(file);
-
-    // Upload to Supabase Storage and persist the storage path.
-    try {
-        const downloadURL = await uploadBackground(file, state.USER_DOC_NAME);
-        console.info('[BgUpload] Persisted:', downloadURL);
-        // Swap data-URL for a fresh signed Supabase URL.
-        _applyBackgroundUrl(downloadURL);
-        loadBackgroundGallery();
-    } catch (err) {
-        console.error('[BgUpload] Storage upload failed:', err);
-    }
-};
-
-window._setActiveBackground = async function(url) {
-    try {
-        await setActiveBackground(url, state.USER_DOC_NAME);
-        _applyBackgroundUrl(url);
-        loadBackgroundGallery();
-    } catch (err) {
-        console.error('[BgGallery] setActive failed:', err);
-    }
-};
-
-window._deleteBackground = async function(url) {
-    try {
-        const wasActive = state.appData.activeBackground === url;
-        await deleteBackground(url, state.USER_DOC_NAME);
-        if (wasActive) {
-            document.body.style.backgroundImage = '';
-            document.body.style.backgroundSize = '';
-            document.body.style.backgroundPosition = '';
-            document.body.style.backgroundAttachment = '';
-        }
-        loadBackgroundGallery();
-    } catch (err) {
-        console.error('[BgGallery] delete failed:', err);
-    }
-};
 window.retryInitApp = function() { hideLoadingToast(); initializeApp(); };
 window._debugDay = () => console.log(state.appData.journal[state.selectedDateStr]);
 
@@ -532,44 +460,6 @@ function hideLoadingToast() {
 
 // 3. СИНХРОНІЗАЦІЯ БАЗИ
 function startLiveSync() {}
-
-// 4. СЛУХАЧІ ПОДІЙ
-document.addEventListener('click', function(e) {
-    // .stats-bar-item is the wrapper class used in index.html for every
-    // dropdown trigger+panel pair. Clicks inside any of them must NOT
-    // close the open dropdown — only outside clicks should.
-    if (!e.target.closest('.stats-bar-item')) {
-        if (window.closeStatsDropdown) window.closeStatsDropdown();
-    }
-});
-
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-        document.getElementById('image-preview').style.display = 'none';
-        closeSOSModal();
-        const nameModal = document.getElementById('name-modal');
-        if (nameModal) nameModal.style.display = 'none';
-        if (window.closeStatsDropdown) window.closeStatsDropdown();
-        if (document.getElementById('team-sidebar')?.classList.contains('open')) window.closeTeamSidebar();
-        return;
-    }
-    const tag = e.target.tagName;
-    const id = e.target.id;
-    if (e.key === 'Enter') {
-        if (id === 'auth-nick' || id === 'auth-pass' || id === 'auth-email') { handleAuth(); return; }
-        if (id === 'reset-nick') { if (window.sendResetCode) window.sendResetCode(); return; }
-        if (id === 'reset-code') { if (window.verifyResetCode) window.verifyResetCode(); return; }
-        if (id === 'reset-new-pass' || id === 'reset-confirm-pass') { if (window.applyNewPassword) window.applyNewPassword(); return; }
-        if (id === 'new-error-input') { if (window.addNewErrorType) window.addNewErrorType(); return; }
-        if (['trade-pnl','trade-gross','trade-comm','trade-locates','trade-kf'].includes(id)) { if (window.saveEntry) window.saveEntry(); return; }
-        if (id === 'new-team-name') { if (window.createNewTeam) window.createNewTeam(); return; }
-        if (id === 'modal-fname' || id === 'modal-lname') { if (window.saveProfileName) window.saveProfileName(); return; }
-        return;
-    }
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-    if (e.key === 'ArrowLeft') { shiftDate(-1); }
-    if (e.key === 'ArrowRight') { shiftDate(1); }
-});
 
 // 5. МОДАЛКА ІМ'Я/ПРІЗВИЩЕ
 window.saveProfileName = async function() {
@@ -727,7 +617,7 @@ async function bootApp(user) {
         if (window.renderDashboardNews) void window.renderDashboardNews();
         cleanupUnusedAIRequests();
 
-        _applyPersistedBackground();
+        applyPersistedBackground();
         loadBackgroundGallery();
     } catch (e) {
         console.error('[INIT] Помилка ініціалізації:', e);

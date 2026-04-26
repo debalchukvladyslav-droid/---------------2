@@ -471,7 +471,7 @@ export async function loadDayDetails(dateStr, userId = null) {
         const user = true;
         const userId = targetUserId;
         try {
-            if (!user || !userId) throw new Error('РќРµРјР°С” Р°РІС‚РѕСЂРёР·РѕРІР°РЅРѕРіРѕ РєРѕСЂРёСЃС‚СѓРІР°С‡Р° Supabase');
+            if (!user || !userId) throw new Error('Немає авторизованого користувача Supabase');
 
             const { data, error } = await supabase
                 .from('journal_days')

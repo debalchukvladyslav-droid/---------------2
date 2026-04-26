@@ -6,6 +6,7 @@ import { showToast } from './utils.js';
 import { uploadToSupabaseStorage } from './supabase_storage.js';
 import { buildScreenshotPath, buildScreenshotPathVariants } from './storage_paths.js';
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
+import { ensureGoogleApi, ensureGoogleIdentity } from './vendor_loader.js';
 
 const CLIENT_ID = '860755721651-eorsocc3iod2qnimc0qejch046vkeji6.apps.googleusercontent.com';
 const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
@@ -76,7 +77,7 @@ function loadScript(src) {
 
 async function initGapi() {
     if (_gapiInited) return;
-    await loadScript('https://apis.google.com/js/api.js');
+    await ensureGoogleApi();
     if (typeof gapi === 'undefined') throw new Error('Google API не завантажився.');
     await new Promise(resolve => gapi.load('client:picker', resolve));
     await gapi.client.init({ discoveryDocs: [] });
@@ -88,7 +89,7 @@ async function initGsi() {
     if (_tokenClient) return;
     if (_gsiIniting) return _gsiIniting;
     _gsiIniting = (async () => {
-        await loadScript('https://accounts.google.com/gsi/client');
+        await ensureGoogleIdentity();
         if (typeof google === 'undefined' || !google.accounts?.oauth2)
             throw new Error('Google Sign-In не завантажився.');
         _tokenClient = google.accounts.oauth2.initTokenClient({

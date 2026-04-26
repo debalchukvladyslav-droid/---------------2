@@ -14,6 +14,7 @@ import {
     rememberSpreadsheet,
     clearGoogleSheetSession,
 } from './sheet_table.js';
+import { ensureGoogleApi, ensureGoogleIdentity } from './vendor_loader.js';
 
 /** OAuth 2.0 Web client. */
 export const GOOGLE_SHEETS_CLIENT_ID =
@@ -62,7 +63,7 @@ async function ensureGapiClientAndPicker() {
     if (gapiClientReady) return;
     if (!gapiPickerLoading) {
         gapiPickerLoading = (async () => {
-            const gapi = await waitForGlobal('gapi');
+            const gapi = await ensureGoogleApi();
             await new Promise((resolve, reject) => {
                 try {
                     gapi.load('client:picker', resolve);
@@ -172,7 +173,7 @@ function onTokenSuccess(resp) {
 }
 
 function ensureTokenClient() {
-    return waitForGlobal('google').then(() => {
+    return ensureGoogleIdentity().then(() => {
         if (tokenClient) return;
         tokenClient = google.accounts.oauth2.initTokenClient({
             client_id: GOOGLE_SHEETS_CLIENT_ID,

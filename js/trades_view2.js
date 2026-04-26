@@ -6,6 +6,7 @@ import { sleep } from './ai.js';
 import { saveJournalData, markJournalDayDirty, loadTradeDays } from './storage.js';
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 import { findScreenshotsForTicker, openScreenshotForTrade } from './gallery.js';
+import { ensureLightweightCharts } from './vendor_loader.js';
 
 function sanitizeHTML(str) {
     const div = document.createElement('div');
@@ -38,7 +39,6 @@ function ensureLWCharts() {
 }
 
 export function initTradesView() {
-    ensureLWCharts();
     // Ховаємо кнопки доки не вибрано жодної угоди
     const wrapper = document.getElementById('tv-widget-container');
     if (wrapper) {
@@ -324,7 +324,7 @@ async function buildLWChart(symbol, dateStr, trades) {
     const old = document.getElementById('trade-overlay-list');
     if (old) old.remove();
 
-    await ensureLWCharts();
+    await ensureLightweightCharts();
 
     let candles = [];
     try {

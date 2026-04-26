@@ -2,6 +2,7 @@
 import { state } from './state.js';
 import { saveToLocal } from './storage.js';
 import { getImgUrl, getStorageUrl } from './gallery.js';
+import { ensureTesseract } from './vendor_loader.js';
 
 export function setupOCRDrawing() {
     let container = document.getElementById('ocr-setup-container'); 
@@ -380,7 +381,12 @@ function makeOCRCanvas(imgObj, zone, scale = 3) {
 }
 
 export async function runOCR(encodedPath, force = false) {
-    if (!window.Tesseract) return;
+    try {
+        await ensureTesseract();
+    } catch (error) {
+        console.warn('[OCR] Tesseract lazy-load failed:', error);
+        return;
+    }
     const safePath = decodeURIComponent(encodedPath);
     const existing = state.appData.tickers[safePath];
     if (!force && existing && existing !== '???' && existing !== '⏳') { updateBadgeUI(encodedPath, false); return; }
