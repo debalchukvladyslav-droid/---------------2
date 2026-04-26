@@ -494,33 +494,55 @@ body {
     z-index: 99990;
     padding: 16px;
     box-sizing: border-box;
-    background: rgba(0, 0, 0, 0.75);
+    background: color-mix(in srgb, #020617 78%, transparent);
+    backdrop-filter: blur(10px);
 }
 
 .session-modal-card {
     position: relative;
     width: 100%;
-    max-width: 480px;
-    max-height: 90vh;
+    max-width: 620px;
+    max-height: min(92vh, 760px);
     overflow-y: auto;
     box-sizing: border-box;
-    padding: 28px;
-    border: 1px solid var(--border);
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--border) 70%, var(--accent) 30%);
     border-radius: 8px;
-    background: var(--bg-panel);
+    background: color-mix(in srgb, var(--bg-panel) 94%, #020617);
+    box-shadow: 0 26px 80px rgba(0, 0, 0, 0.52);
+    scrollbar-gutter: stable;
 }
 
 .session-modal-head {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 18px 22px 14px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 80%, var(--accent) 20%);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent 48%);
+}
+
+.session-modal-title-block {
+    min-width: 0;
+}
+
+.session-modal-kicker {
+    margin-bottom: 3px;
+    color: var(--accent);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
 }
 
 .session-modal-title {
     margin: 0;
-    color: var(--accent);
-    font-size: 1.3rem;
+    color: var(--text-main);
+    font-family: var(--font-head);
+    font-size: 1.24rem;
+    font-weight: 760;
+    letter-spacing: 0;
 }
 
 .session-modal-date {
@@ -529,39 +551,193 @@ body {
     font-size: 0.85rem;
 }
 
-.session-playbook-checks {
+.session-modal-close {
     display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin-top: 4px;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 34px;
+    height: 34px;
+    border: 1px solid color-mix(in srgb, var(--border) 78%, var(--text-muted) 22%);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-main) 70%, transparent);
+    color: var(--text-muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 1.2rem;
+    line-height: 1;
+    transition: border-color 0.18s ease, color 0.18s ease, background 0.18s ease;
 }
 
-.session-readiness-head {
+.session-modal-close:hover {
+    border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+    background: color-mix(in srgb, var(--accent) 10%, var(--bg-main));
+    color: var(--text-main);
+}
+
+.session-modal-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(190px, 0.62fr);
+    gap: 10px;
+    padding: 14px 22px 0;
+}
+
+.session-field {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+    margin: 0;
+    padding: 12px;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, var(--accent) 18%);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-main) 62%, transparent);
+}
+
+.session-field-goal,
+.session-field-plan {
+    grid-column: 1;
+}
+
+.session-field-playbook {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-content: start;
+}
+
+.session-field-label {
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.09em;
+    line-height: 1.2;
+    text-transform: uppercase;
+}
+
+.session-field input,
+.session-field textarea {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    border: 1px solid color-mix(in srgb, var(--border) 86%, var(--accent) 14%);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-panel) 78%, #020617);
+    color: var(--text-main);
+    font: inherit;
+}
+
+.session-field input {
+    min-height: 38px;
+    padding: 8px 11px;
+}
+
+.session-field textarea {
+    min-height: 108px;
+    padding: 9px 11px;
+    line-height: 1.4;
+}
+
+.session-playbook-checks {
+    display: grid;
+    gap: 6px;
+    max-height: 194px;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+.session-playbook-checks label {
     display: flex;
-    justify-content: space-between;
-    margin-bottom: 4px;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    box-sizing: border-box;
+    padding: 7px 9px !important;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, var(--accent) 18%) !important;
+    border-radius: 8px !important;
+    background: color-mix(in srgb, var(--bg-panel) 70%, transparent) !important;
+    color: var(--text-main);
+    line-height: 1.25;
+}
+
+.session-playbook-checks input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+}
+
+.session-readiness-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 12px;
+    margin: 12px 22px 0;
+    padding: 12px 14px;
+    border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--accent) 7%, var(--bg-main));
+}
+
+.session-readiness-copy {
+    margin-top: 3px;
     color: var(--text-muted);
     font-size: 0.8rem;
+    line-height: 1.35;
 }
 
 .session-readiness-value {
+    align-self: start;
+    padding: 5px 9px;
+    border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
     color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 0.86rem;
     font-weight: 700;
 }
 
+.session-readiness-head {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+
 .range-full-accent {
+    grid-column: 1 / -1;
     width: 100%;
     accent-color: var(--accent);
 }
 
 .session-ai-check {
-    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(100% - 44px);
+    min-height: 38px;
+    margin: 12px 22px 0;
+    border: 1px solid color-mix(in srgb, #a78bfa 46%, var(--border));
+    border-radius: 8px;
+    background: color-mix(in srgb, #a78bfa 12%, var(--bg-panel));
+    color: color-mix(in srgb, #c4b5fd 88%, var(--text-main));
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.88rem;
+    font-weight: 800;
+    transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.session-ai-check:hover {
+    transform: translateY(-1px);
+    border-color: #a78bfa;
+    background: color-mix(in srgb, #a78bfa 17%, var(--bg-panel));
 }
 
 .session-ai-result {
-    margin-bottom: 14px;
-    padding: 12px;
+    margin: 10px 22px 0;
+    padding: 10px;
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
     border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-main) 72%, transparent);
     font-size: 0.9rem;
     line-height: 1.5;
 }
@@ -569,7 +745,14 @@ body {
 .session-modal-actions {
     display: flex;
     gap: 10px;
-    margin-top: 4px;
+    padding: 14px 22px 20px;
+}
+
+.session-modal-actions .btn-primary,
+.session-modal-actions .btn-secondary {
+    margin: 0;
+    border-radius: 8px;
+    font-weight: 800;
 }
 
 .sos-title {
@@ -1857,6 +2040,62 @@ body.is-offline [data-needs-network="true"] {
 @media (max-width: 720px) {
     .main-content {
         padding-bottom: max(74px, env(safe-area-inset-bottom));
+    }
+
+    .session-modal-overlay {
+        align-items: flex-end;
+        padding: 10px;
+    }
+
+    .session-modal-card {
+        max-height: calc(100dvh - 20px);
+        border-radius: 8px;
+    }
+
+    .session-modal-head {
+        padding: 15px 14px 11px;
+    }
+
+    .session-modal-title {
+        font-size: 1.04rem;
+    }
+
+    .session-modal-body {
+        grid-template-columns: 1fr;
+        padding: 12px 14px 0;
+    }
+
+    .session-field-goal,
+    .session-field-plan,
+    .session-field-playbook {
+        grid-column: 1;
+        grid-row: auto;
+    }
+
+    .session-field textarea {
+        min-height: 88px;
+    }
+
+    .session-playbook-checks {
+        max-height: 126px;
+    }
+
+    .session-readiness-card {
+        margin-inline: 14px;
+    }
+
+    .session-ai-check {
+        width: calc(100% - 28px);
+        margin-inline: 14px;
+    }
+
+    .session-ai-result {
+        margin-inline: 14px;
+    }
+
+    .session-modal-actions {
+        flex-direction: column;
+        padding: 12px 14px 15px;
     }
 
     .tabs {

@@ -12,41 +12,50 @@
 <div id="session-modal" class="app-modal-overlay session-modal-overlay">
     <div class="session-modal-card">
         <div class="session-modal-head">
-            <div>
-                <h2 class="session-modal-title">🎯 Підготовка до сесії</h2>
+            <div class="session-modal-title-block">
+                <div class="session-modal-kicker">Pre-market</div>
+                <h2 class="session-modal-title">Підготовка до сесії</h2>
                 <div id="session-modal-date" class="session-modal-date"></div>
             </div>
-            <button class="icon-button-plain" data-action="session-modal-snooze" title="Нагадати пізніше">✕</button>
+            <button class="session-modal-close" data-action="session-modal-snooze" title="Нагадати пізніше" aria-label="Закрити">×</button>
         </div>
 
-        <div class="form-group">
-            <label>🎯 Ціль на сьогодні</label>
-            <input type="text" id="sm-goal" placeholder="Напр. Торгувати тільки за планом, макс 2 угоди">
+        <div class="session-modal-body">
+            <label class="session-field session-field-goal">
+                <span class="session-field-label">Ціль дня</span>
+                <input type="text" id="sm-goal" placeholder="Торгувати тільки A+ сетапи, максимум 2 угоди">
+            </label>
+
+            <label class="session-field session-field-plan">
+                <span class="session-field-label">План сесії</span>
+                <textarea id="sm-plan" rows="4" placeholder="Які сетапи беру, де стоп, коли пропускаю ринок..."></textarea>
+            </label>
+
+            <section class="session-field session-field-playbook">
+                <div class="session-field-label">Сетапи з плейбуку</div>
+                <div id="sm-playbook-checks" class="session-playbook-checks"></div>
+            </section>
         </div>
-        <div class="form-group">
-            <label>📝 План на сесію</label>
-            <textarea id="sm-plan" rows="3" placeholder="Які сетапи торгуєш, які умови ринку потрібні..."></textarea>
-        </div>
-        <div class="form-group">
-            <label>📚 Сетапи з плейбуку</label>
-            <div id="sm-playbook-checks" class="session-playbook-checks"></div>
-        </div>
-        <div class="form-group">
-            <label>💪 Загальна готовність</label>
+
+        <div class="session-readiness-card">
+            <div>
+                <div class="session-field-label">Готовність</div>
+                <div class="session-readiness-copy">Оціни стан перед першим кліком.</div>
+            </div>
+            <span id="sm-readiness-val" class="session-readiness-value">5/10</span>
             <div class="session-readiness-head">
-                <span>🔴 Не готовий</span>
-                <span id="sm-readiness-val" class="session-readiness-value">5/10</span>
-                <span>🟢 Готовий</span>
+                <span>Не готовий</span>
+                <span>Готовий</span>
             </div>
             <input type="range" min="1" max="10" value="5" id="sm-readiness" class="discipline-slider range-full-accent" data-output="sm-readiness-val" data-suffix="/10">
         </div>
 
-        <button class="btn-ai session-ai-check" data-action="session-modal-check">🤖 AI: Чи готовий торгувати?</button>
+        <button class="session-ai-check" data-action="session-modal-check">AI перевірка готовності</button>
         <div id="sm-ai-result" class="session-ai-result"></div>
 
         <div class="session-modal-actions">
-            <button class="btn-primary btn-flex-2" data-action="session-modal-save">💾 Зберегти і почати</button>
-            <button class="btn-secondary btn-flex-1" data-action="session-modal-snooze">⏰ Пізніше</button>
+            <button class="btn-primary btn-flex-2" data-action="session-modal-save">Почати сесію</button>
+            <button class="btn-secondary btn-flex-1" data-action="session-modal-snooze">Пізніше</button>
         </div>
     </div>
 </div>
