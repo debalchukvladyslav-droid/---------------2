@@ -1,21 +1,28 @@
 // === js/supabase.js ===
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
-export const SUPABASE_URL = 'https://gijarvlerztfggxhuvow.supabase.co';
-export const SUPABASE_ANON_KEY = 'sb_publishable_4gU0201mMkinUqwH-4SkWA_eSoNqew6';
+const appConfig = window.TRADING_JOURNAL_CONFIG || {};
 
-/** Ім’я бота без @ (має збігатися з ботом для webhook). */
-export const TELEGRAM_BOT_USERNAME = 'traderjournalloginbot';
+function requiredConfig(name) {
+    const value = appConfig[name];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    throw new Error(`Missing ${name} in config.js. Copy config.example.js to config.js and fill it in.`);
+}
 
-/** Edge Function: після `supabase functions deploy telegram-auth` */
-export const TELEGRAM_AUTH_FN = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/telegram-auth`;
+export const SUPABASE_URL = requiredConfig('supabaseUrl').replace(/\/$/, '');
+export const SUPABASE_ANON_KEY = requiredConfig('supabaseAnonKey');
+
+/** Bot username without @. Must match the bot used by the Telegram webhook. */
+export const TELEGRAM_BOT_USERNAME = String(appConfig.telegramBotUsername || '').trim();
+
+/** Edge Function URL after `supabase functions deploy telegram-auth`. */
+export const TELEGRAM_AUTH_FN = `${SUPABASE_URL}/functions/v1/telegram-auth`;
 
 /**
- * Базовий URL для кнопки «Відкрити журнал» після Telegram.
- * Якщо порожньо — використовується поточний origin (локально буде 127.0.0.1).
- * Для тесту з Live Server задайте бойовий URL і на Edge secret TELEGRAM_ALLOWED_RETURN_ORIGINS з тим самим origin.
+ * Base URL for the "Open journal" button after Telegram login.
+ * Empty value falls back to the current browser origin.
  */
-export const TELEGRAM_LOGIN_RETURN_BASE = 'https://traderjournal-six.vercel.app';
+export const TELEGRAM_LOGIN_RETURN_BASE = String(appConfig.telegramLoginReturnBase || '').trim();
 
-// Ініціалізуємо єдину точку доступу до бази, авторизації та сховища
+// Single access point for database, auth, and storage.
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);

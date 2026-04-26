@@ -21,9 +21,25 @@ const portArg = portArgIndex >= 0 ? process.argv[portArgIndex + 1] : '';
 const PORT = Number(portArg || process.env.PORT) || 8787;
 
 /** Дубль js/supabase.js — для Node без імпорту CDN-модуля */
-const SUPABASE_URL = (process.env.SUPABASE_URL || 'https://gijarvlerztfggxhuvow.supabase.co').replace(/\/$/, '');
-const SUPABASE_ANON_KEY =
-    process.env.SUPABASE_ANON_KEY || 'sb_publishable_4gU0201mMkinUqwH-4SkWA_eSoNqew6';
+function readLocalClientConfig() {
+    try {
+        const source = fs.readFileSync(path.join(ROOT, 'config.js'), 'utf8');
+        const getString = (name) => {
+            const re = new RegExp(`${name}\\s*:\\s*(['"])(.*?)\\1`);
+            return source.match(re)?.[2] || '';
+        };
+        return {
+            supabaseUrl: getString('supabaseUrl'),
+            supabaseAnonKey: getString('supabaseAnonKey'),
+        };
+    } catch {
+        return {};
+    }
+}
+
+const localClientConfig = readLocalClientConfig();
+const SUPABASE_URL = (process.env.SUPABASE_URL || localClientConfig.supabaseUrl || '').replace(/\/$/, '');
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || localClientConfig.supabaseAnonKey || '';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';

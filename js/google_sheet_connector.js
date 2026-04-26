@@ -16,12 +16,21 @@ import {
 } from './sheet_table.js';
 import { ensureGoogleApi, ensureGoogleIdentity } from './vendor_loader.js';
 
+const appConfig = window.TRADING_JOURNAL_CONFIG || {};
+
+function requiredGoogleConfig(name) {
+    const value = appConfig[name];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    throw new Error(`Missing ${name} in config.js. Copy config.example.js to config.js and fill it in.`);
+}
+
 /** OAuth 2.0 Web client. */
-export const GOOGLE_SHEETS_CLIENT_ID =
-    '860755721651-lj7ds44epl45augj0og1nilq9f0ug9qg.apps.googleusercontent.com';
+export const GOOGLE_SHEETS_CLIENT_ID = requiredGoogleConfig('googleSheetsClientId');
 
 /** Browser API key (обмежте по referrer). */
-export const GOOGLE_SHEETS_API_KEY = 'AIzaSyBE0DPHpWquQkkW0Kds_Zpv9PYzJ1aU-b4';
+export const GOOGLE_SHEETS_API_KEY = requiredGoogleConfig('googleSheetsApiKey');
+
+const GOOGLE_PICKER_APP_ID = requiredGoogleConfig('googlePickerAppId');
 
 const SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets.readonly',
@@ -225,7 +234,7 @@ export async function openPicker() {
         const picker = new google.picker.PickerBuilder()
             .enableFeature(google.picker.Feature.NAV_HIDDEN)
             .setDeveloperKey(API_KEY)
-            .setAppId('860755721651')
+            .setAppId(GOOGLE_PICKER_APP_ID)
             .setOAuthToken(accessToken)
             .addView(view)
             .setOrigin(window.location.origin)

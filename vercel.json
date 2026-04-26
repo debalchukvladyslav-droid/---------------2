@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/config.js", "destination": "/api/client-config.js" },
     { "source": "/dashboard", "destination": "/index.html" },
     { "source": "/calendar", "destination": "/index.html" },
     { "source": "/stats", "destination": "/index.html" },

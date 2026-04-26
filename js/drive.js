@@ -8,7 +8,8 @@ import { buildScreenshotPath, buildScreenshotPathVariants } from './storage_path
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 import { ensureGoogleApi, ensureGoogleIdentity } from './vendor_loader.js';
 
-const CLIENT_ID = '860755721651-eorsocc3iod2qnimc0qejch046vkeji6.apps.googleusercontent.com';
+const appConfig = window.TRADING_JOURNAL_CONFIG || {};
+const CLIENT_ID = String(appConfig.googleDriveClientId || appConfig.googleSheetsClientId || '').trim();
 const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
 const DRIVE_FILES_CACHE_TTL = 60 * 1000;
@@ -86,6 +87,7 @@ async function initGapi() {
 }
 
 async function initGsi() {
+    if (!CLIENT_ID) throw new Error('Missing googleDriveClientId in config.js.');
     if (_tokenClient) return;
     if (_gsiIniting) return _gsiIniting;
     _gsiIniting = (async () => {
