@@ -76,7 +76,7 @@ DECLARE
     merged_settings JSONB;
     is_telegram BOOLEAN;
 BEGIN
-    is_telegram := COALESCE(NEW.raw_user_meta_data->>'auth_provider', NEW.app_metadata->>'provider') = 'telegram';
+    is_telegram := COALESCE(NEW.raw_user_meta_data->>'auth_provider', NEW.raw_app_meta_data->>'provider') = 'telegram';
 
     derived_nick := LOWER(
         COALESCE(

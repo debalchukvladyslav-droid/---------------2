@@ -190,11 +190,7 @@ CREATE POLICY profiles_read_authenticated
 ON public.profiles
 FOR SELECT
 TO authenticated
-USING (
-    id = auth.uid()
-    OR public.app_is_admin()
-    OR (public.app_is_mentor() AND public.app_same_team(id))
-);
+USING (TRUE);
 
 DROP POLICY IF EXISTS profiles_insert_own ON public.profiles;
 CREATE POLICY profiles_insert_own
