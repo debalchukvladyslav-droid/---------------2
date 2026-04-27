@@ -1,5 +1,31 @@
--- Allow mentors to move any trader to another team from the admin panel,
--- without granting full profile administration.
+-- Mentors can see every trader's journal and move any trader between teams.
+-- They still cannot change roles, delete accounts, or move mentors/admins.
+
+CREATE OR REPLACE FUNCTION public.app_can_view_user(target_user_id UUID)
+RETURNS BOOLEAN
+LANGUAGE SQL
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT auth.uid() = target_user_id
+        OR public.app_is_admin()
+        OR public.app_is_mentor();
+$$;
+
+DROP POLICY IF EXISTS journal_days_insert_owner_or_same_team_mentor ON public.journal_days;
+CREATE POLICY journal_days_insert_owner_or_same_team_mentor
+ON public.journal_days
+FOR INSERT
+TO authenticated
+WITH CHECK (auth.uid() = user_id OR public.app_is_admin() OR public.app_is_mentor());
+
+DROP POLICY IF EXISTS journal_days_update_owner_or_same_team_mentor ON public.journal_days;
+CREATE POLICY journal_days_update_owner_or_same_team_mentor
+ON public.journal_days
+FOR UPDATE
+TO authenticated
+USING (auth.uid() = user_id OR public.app_is_admin() OR public.app_is_mentor())
+WITH CHECK (auth.uid() = user_id OR public.app_is_admin() OR public.app_is_mentor());
 
 CREATE OR REPLACE FUNCTION public.mentor_move_trader_team(target_user_id UUID, target_team TEXT)
 RETURNS VOID

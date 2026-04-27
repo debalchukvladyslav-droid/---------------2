@@ -80,11 +80,7 @@ function getScopedProfiles() {
 
     const traderProfiles = profiles.filter((p) => p?.id && p?.nick && !p.mentor_enabled);
     if (state.myRole === 'admin') return traderProfiles;
-
-    const myNick = state.USER_DOC_NAME?.replace('_stats', '') || '';
-    const me = state._teamProfiles?.[myNick];
-    const myTeam = me?.team || DEFAULT_TEAM;
-    return traderProfiles.filter((p) => (p.team || DEFAULT_TEAM) === myTeam);
+    return traderProfiles;
 }
 
 function activeFilterSet() {

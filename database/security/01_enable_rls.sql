@@ -116,7 +116,7 @@ SET search_path = public
 AS $$
     SELECT auth.uid() = target_user_id
         OR public.app_is_admin()
-        OR (public.app_is_mentor() AND public.app_same_team(target_user_id));
+        OR public.app_is_mentor();
 $$;
 
 CREATE OR REPLACE FUNCTION public.app_can_view_nick(target_nick TEXT)
@@ -226,15 +226,15 @@ CREATE POLICY journal_days_insert_owner_or_same_team_mentor
 ON public.journal_days
 FOR INSERT
 TO authenticated
-WITH CHECK (auth.uid() = user_id OR public.app_is_admin() OR (public.app_is_mentor() AND public.app_same_team(user_id)));
+WITH CHECK (auth.uid() = user_id OR public.app_is_admin() OR public.app_is_mentor());
 
 DROP POLICY IF EXISTS journal_days_update_owner_or_same_team_mentor ON public.journal_days;
 CREATE POLICY journal_days_update_owner_or_same_team_mentor
 ON public.journal_days
 FOR UPDATE
 TO authenticated
-USING (auth.uid() = user_id OR public.app_is_admin() OR (public.app_is_mentor() AND public.app_same_team(user_id)))
-WITH CHECK (auth.uid() = user_id OR public.app_is_admin() OR (public.app_is_mentor() AND public.app_same_team(user_id)));
+USING (auth.uid() = user_id OR public.app_is_admin() OR public.app_is_mentor())
+WITH CHECK (auth.uid() = user_id OR public.app_is_admin() OR public.app_is_mentor());
 
 DROP POLICY IF EXISTS journal_days_delete_owner_or_admin ON public.journal_days;
 CREATE POLICY journal_days_delete_owner_or_admin

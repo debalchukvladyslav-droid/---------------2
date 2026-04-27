@@ -40,14 +40,12 @@ export async function renderAdminPanel() {
         return;
     }
 
-    const myNick = state.USER_DOC_NAME ? state.USER_DOC_NAME.replace('_stats', '') : '';
-    const myProfile = (profiles || []).find((p) => p.nick === myNick);
     const visibleProfiles = fullAdmin
         ? profiles
-        : (profiles || []).filter((p) => p.team && myProfile?.team && p.team === myProfile.team);
+        : (profiles || []).filter((p) => p.id !== state.myUserId && p.role !== 'admin' && p.role !== 'mentor' && !p.mentor_enabled);
 
     if (!visibleProfiles.length) {
-        container.innerHTML = '<p class="admin-empty">У вашому кущі немає доступних профілів.</p>';
+        container.innerHTML = '<p class="admin-empty">Трейдерів для переміщення не знайдено.</p>';
         return;
     }
 
