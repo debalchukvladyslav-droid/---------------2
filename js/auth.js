@@ -602,6 +602,12 @@ const EMAILJS_PUBLIC_KEY = 'hyAD4pbm0LYmD1xAG';
 let resetNick = '';
 let resetCodeStore = { code: '', expiresAt: 0 };
 
+export function isPasswordRecoveryUrl() {
+    const raw = `${window.location.search || ''}&${String(window.location.hash || '').replace(/^#/, '')}`;
+    const params = new URLSearchParams(raw.replace(/^\?/, ''));
+    return params.get('type') === 'recovery' || /(^|[&#?])type=recovery(&|$)/.test(raw);
+}
+
 export function showResetStep(step) {
     document.getElementById('reset-step-1').style.display = step === 1 ? 'block' : 'none';
     document.getElementById('reset-step-2').style.display = step === 2 ? 'block' : 'none';
@@ -616,7 +622,30 @@ export function showResetStep(step) {
     if (step === 1) {
         const nickInput = document.getElementById('reset-nick');
         if (nickInput) nickInput.focus();
+    } else if (step === 3) {
+        const passInput = document.getElementById('reset-new-pass');
+        if (passInput) passInput.focus();
     }
+}
+
+export function showPasswordRecoveryForm() {
+    const overlay = document.getElementById('auth-overlay');
+    const title = document.getElementById('auth-title');
+    const subtitle = document.getElementById('auth-subtitle');
+    const step = document.getElementById('reset-step-3');
+    if (!overlay || !step) return;
+
+    if (title) title.textContent = 'Новий пароль';
+    if (subtitle) subtitle.textContent = 'Введіть новий пароль для акаунта';
+    step.innerHTML = `
+        <p class="reset-text">Посилання підтверджено. Введіть новий пароль мінімум 6 символів.</p>
+        <input type="password" id="reset-new-pass" class="auth-input" placeholder="Новий пароль" autocomplete="new-password" minlength="6">
+        <input type="password" id="reset-confirm-pass" class="auth-input" placeholder="Повторіть пароль" autocomplete="new-password" minlength="6">
+        <div id="reset-error-3" class="auth-error" role="alert" aria-live="polite"></div>
+        <button class="btn-primary" data-action="reset-apply">Зберегти пароль</button>
+    `;
+    overlay.style.display = 'flex';
+    showResetStep(3);
 }
 
 export async function sendResetCode() {
@@ -647,7 +676,43 @@ export async function sendResetCode() {
 }
 
 export async function verifyResetCode() {}
-export async function applyNewPassword() {}
+export async function applyNewPassword() {
+    const pass = document.getElementById('reset-new-pass')?.value || '';
+    const confirm = document.getElementById('reset-confirm-pass')?.value || '';
+    const btn = document.querySelector('#reset-step-3 .btn-primary');
+
+    if (pass.length < 6) {
+        showResetError(3, 'Пароль має бути мін. 6 символів');
+        return;
+    }
+    if (pass !== confirm) {
+        showResetError(3, 'Паролі не збігаються');
+        return;
+    }
+
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Зберігаємо...';
+    }
+
+    try {
+        const { error } = await supabase.auth.updateUser({ password: pass });
+        if (error) throw error;
+
+        window.history.replaceState({}, '', `${window.location.pathname}${window.location.search && !isPasswordRecoveryUrl() ? window.location.search : ''}`);
+        const overlay = document.getElementById('auth-overlay');
+        if (overlay) overlay.style.display = 'none';
+        showError('');
+        alert('Пароль оновлено. Можна користуватись акаунтом.');
+    } catch (e) {
+        showResetError(3, mapAuthError(e, 'Помилка'));
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Зберегти пароль';
+        }
+    }
+}
 
 function showResetError(step, text) {
     const el = document.getElementById(`reset-error${step > 1 ? '-' + step : ''}`);

@@ -4,7 +4,7 @@
 import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { getDefaultDayEntry } from './data_utils.js';
-import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm, canAccessMentorReviewQueue, mentorAcceptReviewRequest, ensureAuthUserProfile, signInWithTelegram, maybeFinishTelegramClaim, rejectBlockedProfile } from './auth.js';
+import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm, canAccessMentorReviewQueue, mentorAcceptReviewRequest, ensureAuthUserProfile, signInWithTelegram, maybeFinishTelegramClaim, rejectBlockedProfile, isPasswordRecoveryUrl, showPasswordRecoveryForm } from './auth.js';
 import { loadTeams, openTeamManager, createNewTeam, moveTrader, deleteTeam, renameTeam, deleteTraderProfile, renderTeamSidebar, switchUser } from './teams.js';
 import { saveToLocal, saveJournalData, markJournalDayDirty, initializeApp, exportData, importData, loadMonth, resolveViewedUserId, setCurrentViewedUserId,
          loadBackgroundGallery } from './storage.js';
@@ -409,6 +409,7 @@ window.saveMentorComment = saveMentorComment;
 window.showMigrationForm = showMigrationForm;
 window.resetPassword = resetPassword;
 window.showResetStep = showResetStep;
+window.showPasswordRecoveryForm = showPasswordRecoveryForm;
 window.sendResetCode = sendResetCode;
 window.verifyResetCode = verifyResetCode;
 window.applyNewPassword = applyNewPassword;
@@ -673,15 +674,18 @@ showAuthSpinner();
 (async () => {
     try {
         await maybeFinishTelegramClaim();
+        const isRecovery = isPasswordRecoveryUrl();
         const { data: { session }, error } = await supabase.auth.getSession();
         if (error) throw error;
 
         if (session?.user) {
             console.log('[AUTH] getSession: session found, booting app');
             await bootApp(session.user);
+            if (isRecovery) showPasswordRecoveryForm();
         } else {
             console.log('[AUTH] getSession: no session, showing login');
             showLoginScreen();
+            if (isRecovery) showPasswordRecoveryForm();
         }
     } catch (e) {
         console.error('[AUTH] getSession error:', e);
@@ -695,6 +699,15 @@ showAuthSpinner();
 // Не дублюємо bootApp якщо вже ініціалізовано через getSession.
 // Обробляємо тільки SIGNED_IN (новий логін) та SIGNED_OUT (логаут).
 supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'PASSWORD_RECOVERY') {
+        console.log('[AUTH] onAuthStateChange: PASSWORD_RECOVERY');
+        if (session?.user && !_appInitialized) {
+            bootApp(session.user).then(() => showPasswordRecoveryForm());
+        } else {
+            showPasswordRecoveryForm();
+        }
+        return;
+    }
     if (event === 'SIGNED_IN' && session?.user && !_appInitialized) {
         console.log('[AUTH] onAuthStateChange: SIGNED_IN');
         bootApp(session.user);

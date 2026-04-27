@@ -123,6 +123,7 @@ function activateAction(action, trigger, event = null) {
         'auth-toggle-mode': () => window.toggleAuthMode?.(),
         'reset-send': () => window.sendResetCode?.(),
         'reset-verify': () => window.verifyResetCode?.(),
+        'reset-apply': () => window.applyNewPassword?.(),
         'learn-refresh': () => window.loadLearnContent?.(),
         'left-sidebar-toggle': () => window.toggleLeftSidebar?.(),
         'mobile-sidebar-toggle': () => window.toggleMobileSidebar?.(),
