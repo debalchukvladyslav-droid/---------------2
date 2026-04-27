@@ -307,10 +307,7 @@ export async function deleteTeam(teamName = '') {
     const ok = await showConfirm(`Видалити кущ "${teamToDelete}"? Усі учасники перейдуть у "${DEFAULT_TEAM}".`);
     if (!ok) return;
 
-    const { error } = await supabase
-        .from('profiles')
-        .update({ team: null })
-        .eq('team', teamToDelete);
+    const { error } = await supabase.rpc('delete_team', { target_team: teamToDelete });
 
     if (error) {
         showToast('Помилка видалення куща: ' + error.message);

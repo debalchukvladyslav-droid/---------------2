@@ -182,9 +182,11 @@ function buildUserCard(profile, teamChoices, options = {}) {
 
     if (fullAdmin) {
         grid.appendChild(roleWrap);
-        grid.appendChild(teamWrap);
         grid.appendChild(mentorWrap);
         grid.appendChild(nickWrap);
+    }
+    if (dataManager) {
+        grid.appendChild(teamWrap);
     }
 
     const actions = document.createElement('div');
@@ -224,7 +226,7 @@ function buildUserCard(profile, teamChoices, options = {}) {
     }
 
     card.appendChild(head);
-    if (fullAdmin) card.appendChild(grid);
+    if (dataManager) card.appendChild(grid);
     card.appendChild(actions);
     return card;
 }
@@ -362,7 +364,12 @@ async function adminUpdateTeam(userId, nick, targetTeam, cardEl) {
     const teamVal = targetTeam === DEFAULT_TEAM ? null : targetTeam;
 
     cardEl?.classList.add('admin-user-busy');
-    const { error } = await supabase.from('profiles').update({ team: teamVal }).eq('id', userId);
+    const { error } = state.myRole === 'admin'
+        ? await supabase.from('profiles').update({ team: teamVal }).eq('id', userId)
+        : await supabase.rpc('mentor_move_trader_team', {
+            target_user_id: userId,
+            target_team: teamVal,
+        });
     cardEl?.classList.remove('admin-user-busy');
 
     if (error) {

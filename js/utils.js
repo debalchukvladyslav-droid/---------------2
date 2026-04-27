@@ -36,7 +36,7 @@ export function appendTextWithLineBreaks(parent, value) {
 export function showToast(msg, duration = 3000) {
     const t = document.createElement('div');
     t.textContent = msg;
-    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--bg-panel);border:1px solid var(--border);color:var(--text-main);padding:10px 22px;border-radius:10px;font-size:0.95rem;z-index:99999;pointer-events:none;';
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--bg-panel);border:1px solid var(--border);color:var(--text-main);padding:10px 22px;border-radius:10px;font-size:0.95rem;z-index:300001;pointer-events:none;';
     document.body.appendChild(t);
     setTimeout(() => t.remove(), duration);
 }
@@ -49,7 +49,7 @@ export function showToast(msg, duration = 3000) {
 export function showConfirm(msg) {
     return new Promise(resolve => {
         const overlay = document.createElement('div');
-        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:300000;display:flex;align-items:center;justify-content:center;';
         const box = document.createElement('div');
         box.style.cssText = 'background:var(--bg-panel);border:1px solid var(--border);border-radius:12px;padding:24px 28px;max-width:360px;width:90%;display:flex;flex-direction:column;gap:16px;';
         const text = document.createElement('p');
@@ -86,7 +86,7 @@ export function showConfirm(msg) {
 export function showPrompt(msg, defaultVal = '') {
     return new Promise(resolve => {
         const overlay = document.createElement('div');
-        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:center;justify-content:center;';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:300000;display:flex;align-items:center;justify-content:center;';
         const box = document.createElement('div');
         box.style.cssText = 'background:var(--bg-panel);border:1px solid var(--border);border-radius:12px;padding:24px 28px;max-width:360px;width:90%;display:flex;flex-direction:column;gap:14px;';
         const text = document.createElement('p');
