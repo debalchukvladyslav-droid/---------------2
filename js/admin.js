@@ -125,12 +125,15 @@ function buildUserCard(profile, teamChoices, options = {}) {
     mentorCb.type = 'checkbox';
     mentorCb.id = `admin-mentor-${profile.id}`;
     mentorCb.checked = !!(profile.mentor_enabled || profile.role === 'mentor');
+    mentorCb.disabled = profile.role === 'admin';
     mentorCb.addEventListener('change', () =>
         updateMentorFlag(profile.id, mentorCb.checked, profile.role, mentorCb)
     );
     const mentorLbl = document.createElement('label');
     mentorLbl.htmlFor = mentorCb.id;
-    mentorLbl.textContent = 'Показувати першим у кущі, доступ до коментарів ментора';
+    mentorLbl.textContent = profile.role === 'admin'
+        ? 'Адмін не бере участі в менторських ревʼю'
+        : 'Показувати першим у кущі, доступ до коментарів ментора';
     mentorRow.appendChild(mentorCb);
     mentorRow.appendChild(mentorLbl);
     mentorWrap.appendChild(mentorRow);
@@ -298,7 +301,7 @@ async function updateUserRole(userId, newRole, selectEl) {
 
     const patch = { role: newRole };
     if (newRole === 'mentor') patch.mentor_enabled = true;
-    else if (newRole === 'trader') patch.mentor_enabled = false;
+    else if (newRole === 'trader' || newRole === 'admin') patch.mentor_enabled = false;
 
     const { error } = await supabase.from('profiles').update(patch).eq('id', userId);
 
@@ -312,6 +315,7 @@ async function updateUserRole(userId, newRole, selectEl) {
 
     selectEl.dataset.prevRole = newRole;
     await loadTeams();
+    renderAdminPanel();
     if (window.renderTeamSidebar) window.renderTeamSidebar();
     if (window.refreshSidebarAccount) await window.refreshSidebarAccount();
     showToast('Роль оновлено');
