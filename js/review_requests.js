@@ -235,8 +235,9 @@ export async function fetchMentorReviewNotificationHits() {
 
     const profiles = Object.values(state._teamProfiles || {});
     const team = me?.team || 'Без куща';
+    const isTraderProfile = (p) => p?.id && !p.mentor_enabled && p.role !== 'mentor' && p.role !== 'admin';
     const traderIds = profiles
-        .filter((p) => p?.id && p.id !== state.myUserId && !p.mentor_enabled && (p.team || 'Без куща') === team)
+        .filter((p) => isTraderProfile(p) && p.id !== state.myUserId && (p.team || 'Без куща') === team)
         .map((p) => p.id);
     if (!traderIds.length) return hits;
 
@@ -254,7 +255,7 @@ export async function fetchMentorReviewNotificationHits() {
             if (!dayErr) {
                 const rowsByUser = new Map((dayRows || []).map((row) => [row.user_id, row]));
                 for (const p of profiles) {
-                    if (!p?.id || p.id === state.myUserId || p.mentor_enabled || (p.team || 'Без куща') !== team) continue;
+                    if (!isTraderProfile(p) || p.id === state.myUserId || (p.team || 'Без куща') !== team) continue;
                     const row = rowsByUser.get(p.id);
                     if (row && !pnlFieldEmpty(row.pnl)) continue;
                     const sid = `missing-day|${p.id}|${kyiv.date}`;

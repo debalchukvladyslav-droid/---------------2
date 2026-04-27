@@ -2,46 +2,25 @@
     <div class="panel mentor-review-panel" id="mentor-review-root">
         <div class="mentor-review-head">
             <div>
-                <h2 class="mentor-review-title">Черга рев'ю</h2>
-                <p class="mentor-review-sub">Трейдери з куща, у яких день потребує уваги ментора.</p>
+                <h2 class="mentor-review-title">Рев'ю трейдерів</h2>
+                <p class="mentor-review-sub">Статуси по трейдерах: зелене заповнено, сіре очікує, червоне потребує уваги.</p>
             </div>
             <button type="button" class="btn-primary" id="mr-refresh-btn">Оновити</button>
         </div>
+
         <div class="mentor-review-toolbar">
             <div class="mr-field mr-field-period">
                 <span>Період</span>
-                <input type="hidden" id="mr-days" value="3" autocomplete="off">
-                <div class="mr-period" role="group" aria-label="Період перегляду">
-                    <button type="button" class="mr-period-btn" data-mr-days="1">Сьогодні</button>
-                    <button type="button" class="mr-period-btn active" data-mr-days="3">3 дні</button>
-                    <button type="button" class="mr-period-btn" data-mr-days="7">7 днів</button>
+                <input type="hidden" id="mr-period" value="today" autocomplete="off">
+                <div class="mr-period" role="group" aria-label="Період рев'ю">
+                    <button type="button" class="mr-period-btn active" data-mr-period="today">Сьогодні</button>
+                    <button type="button" class="mr-period-btn" data-mr-period="3d">3 дні</button>
+                    <button type="button" class="mr-period-btn" data-mr-period="week">Цей тиждень</button>
+                    <button type="button" class="mr-period-btn" data-mr-period="month">Місяць</button>
                 </div>
             </div>
-            <label class="mr-field mr-loss-field">
-                <span>Великий мінус від</span>
-                <input type="number" id="mr-loss-threshold" value="-200" step="50">
-            </label>
         </div>
-        <div class="mentor-review-filters">
-            <div class="mr-filter-pills" aria-label="Фільтри черги рев'ю">
-                <label class="mr-pill" for="mr-f-incomplete">
-                    <input type="checkbox" id="mr-f-incomplete" class="mr-pill-input">
-                    <span class="mr-pill-text">Не заповнив день</span>
-                </label>
-                <label class="mr-pill" for="mr-f-no-note">
-                    <input type="checkbox" id="mr-f-no-note" class="mr-pill-input">
-                    <span class="mr-pill-text">Немає думки</span>
-                </label>
-                <label class="mr-pill" for="mr-f-loss-streak">
-                    <input type="checkbox" id="mr-f-loss-streak" class="mr-pill-input">
-                    <span class="mr-pill-text">Мінус серією</span>
-                </label>
-                <label class="mr-pill" for="mr-f-big-loss">
-                    <input type="checkbox" id="mr-f-big-loss" class="mr-pill-input">
-                    <span class="mr-pill-text">Великий мінус</span>
-                </label>
-            </div>
-        </div>
+
         <p id="mentor-review-meta" class="mentor-review-meta"></p>
         <div class="mentor-review-list" id="mentor-review-tbody"></div>
     </div>

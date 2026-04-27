@@ -77,7 +77,7 @@ async function getProfileForDocName(docName) {
     const nick = String(docName).replace(/_stats$/, '');
     const { data, error } = await supabase
         .from('profiles')
-        .select('id, nick, first_name, last_name, team, mentor_enabled')
+        .select('id, nick, first_name, last_name, team, mentor_enabled, role')
         .eq('nick', nick)
         .maybeSingle();
 
@@ -317,19 +317,54 @@ function getStatsSourceButtonClass(type, key, selection = state.statsSourceSelec
     return 'stats-source-btn';
 }
 
+function cleanStatsNick(value = '') {
+    const s = String(value || '');
+    return (s.includes('(') && s.includes(')')) ? s.split('(')[1].replace(')', '').trim() : s.trim();
+}
+
+function isStatsProfile(profile) {
+    return !!profile && profile.role !== 'admin' && profile.role !== 'mentor' && !profile.mentor_enabled;
+}
+
+function isStatsNickAllowed(nick) {
+    const profile = state._teamProfiles?.[cleanStatsNick(nick)];
+    return profile ? isStatsProfile(profile) : true;
+}
+
+function getStatsNicksForGroup(groupName) {
+    return (state.TEAM_GROUPS[groupName] || [])
+        .map(cleanStatsNick)
+        .filter((nick) => nick && isStatsNickAllowed(nick));
+}
+
+function getAllStatsNicks() {
+    const out = [];
+    for (const group in state.TEAM_GROUPS || {}) {
+        for (const nick of getStatsNicksForGroup(group)) {
+            if (!out.includes(nick)) out.push(nick);
+        }
+    }
+    return out;
+}
+
 function getStatsSourceOptionsHtml(selection = state.statsSourceSelection, dataPrefix = '') {
     const typeAttr = dataPrefix ? `data-${dataPrefix}-stats-source-type` : 'data-stats-source-type';
     const keyAttr = dataPrefix ? `data-${dataPrefix}-stats-source-key` : 'data-stats-source-key';
     let currentKey = state.CURRENT_VIEWED_USER || state.USER_DOC_NAME || '';
-    let html = `<button class="${getStatsSourceButtonClass('current', currentKey, selection)}" ${typeAttr}="current" ${keyAttr}="${escapeHtml(currentKey)}">🏠 Мій профіль</button>`;
+    let html = isStatsNickAllowed(currentKey.replace(/_stats$/, ''))
+        ? `<button class="${getStatsSourceButtonClass('current', currentKey, selection)}" ${typeAttr}="current" ${keyAttr}="${escapeHtml(currentKey)}">🏠 Мій профіль</button>`
+        : '';
 
     html += `<button class="${getStatsSourceButtonClass('all', '', selection)}" ${typeAttr}="all" ${keyAttr}="">🌍 Всі трейдери разом</button>`;
 
     Object.keys(state.TEAM_GROUPS || {}).sort((a, b) => a.localeCompare(b, 'uk')).forEach(groupName => {
+        const groupNicks = getStatsNicksForGroup(groupName);
+        if (!groupNicks.length) return;
         html += `<div class="stats-group-title">${escapeHtml(groupName)}</div>`;
         html += `<button class="${getStatsSourceButtonClass('team', groupName, selection)}" ${typeAttr}="team" ${keyAttr}="${escapeHtml(groupName)}">📚 Весь кущ</button>`;
         (state.TEAM_GROUPS[groupName] || []).slice().sort((a, b) => String(a).localeCompare(String(b), 'uk')).forEach(nick => {
-            let cleanNick = (nick.includes('(') && nick.includes(')')) ? nick.split('(')[1].replace(')', '').trim() : nick;
+            let cleanNick = cleanStatsNick(nick);
+            if (!isStatsNickAllowed(cleanNick)) return;
             // Не показуємо себе в списку
             if (`${cleanNick}_stats` === state.USER_DOC_NAME) return;
             html += `<button class="${getStatsSourceButtonClass('trader', cleanNick, selection)}" ${typeAttr}="trader" ${keyAttr}="${escapeHtml(cleanNick || nick)}">👤 ${escapeHtml(nick)}</button>`;
@@ -472,17 +507,14 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
 
     try {
         if (sel.type === 'current') {
-            await loadAllMonths(state.CURRENT_VIEWED_USER, currentUserId);
-            journal = state.appData.journal || {};
-            tradeTypes = state.appData.tradeTypes || extractTradeTypesFromJournal(journal);
-        } else if (sel.type === 'all') {
-            const allNicks = [];
-            for (const group in state.TEAM_GROUPS || {}) {
-                for (const trader of state.TEAM_GROUPS[group] || []) {
-                    const nick = (trader.includes('(') && trader.includes(')')) ? trader.split('(')[1].replace(')', '').trim() : trader;
-                    if (!allNicks.includes(nick)) allNicks.push(nick);
-                }
+            const nick = cleanStatsNick(state.CURRENT_VIEWED_USER || state.USER_DOC_NAME);
+            if (isStatsNickAllowed(nick.replace(/_stats$/, ''))) {
+                await loadAllMonths(state.CURRENT_VIEWED_USER, currentUserId);
+                journal = state.appData.journal || {};
+                tradeTypes = state.appData.tradeTypes || extractTradeTypesFromJournal(journal);
             }
+        } else if (sel.type === 'all') {
+            const allNicks = getAllStatsNicks();
             const cacheKey = '__compare_all__|all-time';
             const cached = _cacheGet(cacheKey);
             if (cached) {
@@ -508,8 +540,7 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
             if (cached) {
                 journal = cached;
             } else {
-                const journals = await Promise.all((state.TEAM_GROUPS[sel.key] || []).map(async (trader) => {
-                    const nick = (trader.includes('(') && trader.includes(')')) ? trader.split('(')[1].replace(')', '').trim() : trader;
+                const journals = await Promise.all(getStatsNicksForGroup(sel.key).map(async (nick) => {
                     const k = `${nick}_stats|all-time`;
                     const c = _cacheGet(k);
                     if (c) return { journal: c };
@@ -524,15 +555,19 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
             }
             tradeTypes = extractTradeTypesFromJournal(journal);
         } else if (sel.type === 'trader') {
-            const nick = (sel.key.includes('(') && sel.key.includes(')')) ? sel.key.split('(')[1].replace(')', '').trim() : sel.key;
-            const cacheKey = `${nick}_stats|all-time`;
-            const cached = _cacheGet(cacheKey);
-            if (cached) {
-                journal = cached;
+            const nick = cleanStatsNick(sel.key);
+            if (!isStatsNickAllowed(nick)) {
+                journal = {};
             } else {
-                const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
-                (snap.docs || []).forEach(d => { Object.assign(journal, d.data()); });
-                _cacheSet(cacheKey, journal);
+                const cacheKey = `${nick}_stats|all-time`;
+                const cached = _cacheGet(cacheKey);
+                if (cached) {
+                    journal = cached;
+                } else {
+                    const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
+                    (snap.docs || []).forEach(d => { Object.assign(journal, d.data()); });
+                    _cacheSet(cacheKey, journal);
+                }
             }
             tradeTypes = extractTradeTypesFromJournal(journal);
         }
@@ -779,7 +814,10 @@ export async function refreshStatsView() {
 
     try {
         if (sel.type === 'current') {
-            if (isAllTime) {
+            const currentNick = cleanStatsNick(state.CURRENT_VIEWED_USER || state.USER_DOC_NAME).replace(/_stats$/, '');
+            if (!isStatsNickAllowed(currentNick)) {
+                journal = {};
+            } else if (isAllTime) {
                 if (loadingText) loadingText.textContent = 'Завантаження всіх місяців...';
                 await loadAllMonths(state.CURRENT_VIEWED_USER, currentUserId);
                 journal = state.appData.journal || {};
@@ -807,13 +845,7 @@ export async function refreshStatsView() {
 
         } else if (sel.type === 'all') {
             if (loadingText) loadingText.textContent = 'Завантаження трейдерів...';
-            const allNicks = [];
-            for (const group in state.TEAM_GROUPS) {
-                for (const t of state.TEAM_GROUPS[group]) {
-                    const nick = (t.includes('(') && t.includes(')')) ? t.split('(')[1].replace(')', '').trim() : t;
-                    if (!allNicks.includes(nick)) allNicks.push(nick);
-                }
-            }
+            const allNicks = getAllStatsNicks();
             if (isAllTime) {
                 const allTimeCacheKey = `__all__|all-time`;
                 const cachedAll = _cacheGet(allTimeCacheKey);
@@ -844,7 +876,7 @@ export async function refreshStatsView() {
 
         } else if (sel.type === 'team' && state.TEAM_GROUPS[sel.key]) {
             if (loadingText) loadingText.textContent = `Завантаження куща ${sel.key}...`;
-            const traders = state.TEAM_GROUPS[sel.key];
+            const traders = getStatsNicksForGroup(sel.key);
             if (isAllTime) {
                 const teamCacheKey = `__team__${sel.key}|all-time`;
                 const cachedTeam = _cacheGet(teamCacheKey);
@@ -852,8 +884,7 @@ export async function refreshStatsView() {
                     journal = cachedTeam;
                 } else {
                     const journals = await Promise.all(
-                        traders.map(async t => {
-                            const nick = (t.includes('(') && t.includes(')')) ? t.split('(')[1].replace(')', '').trim() : t;
+                        traders.map(async nick => {
                             const k = `${nick}_stats|all-time`;
                             const c = _cacheGet(k);
                             if (c) return { journal: c };
@@ -869,18 +900,17 @@ export async function refreshStatsView() {
                 }
             } else {
                 const journals = await Promise.all(
-                    traders.map(t => {
-                        const nick = (t.includes('(') && t.includes(')')) ? t.split('(')[1].replace(')', '').trim() : t;
-                        return fetchMonthsForPeriod(`${nick}_stats`, filters);
-                    })
+                    traders.map(nick => fetchMonthsForPeriod(`${nick}_stats`, filters))
                 );
                 journal = mergeJournals(journals.map(j => ({ journal: j })));
             }
 
         } else if (sel.type === 'trader') {
             if (loadingText) loadingText.textContent = `Завантаження ${sel.key}...`;
-            const nick = (sel.key.includes('(') && sel.key.includes(')')) ? sel.key.split('(')[1].replace(')', '').trim() : sel.key;
-            if (isAllTime) {
+            const nick = cleanStatsNick(sel.key);
+            if (!isStatsNickAllowed(nick)) {
+                journal = {};
+            } else if (isAllTime) {
                 const k = `${nick}_stats|all-time`;
                 const cached = _cacheGet(k);
                 if (cached) {
@@ -906,11 +936,14 @@ export async function refreshStatsView() {
     // Збираємо tradeTypes для поточного контексту
     let contextTradeTypes = [];
     if (sel.type === 'current') {
-        contextTradeTypes = state.appData.tradeTypes || [];
+        const currentNick = cleanStatsNick(state.CURRENT_VIEWED_USER || state.USER_DOC_NAME).replace(/_stats$/, '');
+        contextTradeTypes = isStatsNickAllowed(currentNick) ? (state.appData.tradeTypes || []) : [];
     } else if (sel.type === 'trader') {
-        const nick = (sel.key.includes('(') && sel.key.includes(')')) ? sel.key.split('(')[1].replace(')', '').trim() : sel.key;
-        const data = await getStatsDocData(`${nick}_stats`, filters);
-        contextTradeTypes = data.tradeTypes || [];
+        const nick = cleanStatsNick(sel.key);
+        if (isStatsNickAllowed(nick)) {
+            const data = await getStatsDocData(`${nick}_stats`, filters);
+            contextTradeTypes = data.tradeTypes || [];
+        }
     } else {
         const seen = new Set();
         for (const d in journal) {

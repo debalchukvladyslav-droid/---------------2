@@ -5,7 +5,7 @@ import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { getDefaultDayEntry } from './data_utils.js';
 import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm, canAccessMentorReviewQueue, mentorAcceptReviewRequest, ensureAuthUserProfile, signInWithTelegram, maybeFinishTelegramClaim, rejectBlockedProfile } from './auth.js';
-import { loadTeams, openTeamManager, createNewTeam, moveTrader, deleteTeam, deleteTraderProfile, renderTeamSidebar, switchUser } from './teams.js';
+import { loadTeams, openTeamManager, createNewTeam, moveTrader, deleteTeam, renameTeam, deleteTraderProfile, renderTeamSidebar, switchUser } from './teams.js';
 import { saveToLocal, saveJournalData, markJournalDayDirty, initializeApp, exportData, importData, loadMonth, resolveViewedUserId, setCurrentViewedUserId,
          loadBackgroundGallery } from './storage.js';
 import { applyTheme, saveThemeSettings, switchTab, toggleMobileSidebar, switchMainTab, scrollMainTabs, toggleMoreTabs, toggleMobileMoreMenu, closeMobileMoreMenu, bindMainTabRoutes, syncMainTabFromRoute, refreshCurrentMainTitle } from './ui.js';
@@ -92,6 +92,7 @@ window.renderSavedAIChats = renderSavedAIChats;
 window.deleteSavedAI = deleteSavedAI;
 window.moveTrader = moveTrader;
 window.deleteTeam = deleteTeam;
+window.renameTeam = renameTeam;
 window.deleteTraderProfile = deleteTraderProfile;
 window.exportData = exportData;
 window.importData = importData;

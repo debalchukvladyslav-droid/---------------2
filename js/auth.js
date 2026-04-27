@@ -766,7 +766,7 @@ export function applyAccessRights() {
         const safeIds = [
             'trade-date', 'stats-filter-year', 'stats-filter-month', 'stats-filter-user',
             'sidebar-pf-fname', 'sidebar-pf-lname', 'sidebar-pf-avatar-url',
-            'mr-days', 'mr-loss-threshold', 'cal-view-month', 'cal-view-year',
+            'mr-days', 'mr-period', 'mr-loss-threshold', 'cal-view-month', 'cal-view-year',
             'mr-f-need-mentor', 'mr-f-big-loss', 'mr-f-errors', 'mr-f-no-screens', 'mr-f-no-session', 'mr-f-notes-request', 'mr-f-ai-hint', 'mr-f-incomplete', 'mr-f-no-note', 'mr-f-loss-streak',
             'rr-btn-screens-general', 'rr-btn-calendar-profit',
         ];

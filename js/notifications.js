@@ -260,7 +260,7 @@ export function scanJournalForNotifications() {
 
 async function pollMentorReviewRequests() {
     try {
-        const { fetchMentorReviewNotificationHits } = await import('./review_requests.js');
+        const { fetchMentorReviewNotificationHits } = await import('./mentor_review.js');
         const hits = await fetchMentorReviewNotificationHits();
         for (const h of hits) {
             addNotification({

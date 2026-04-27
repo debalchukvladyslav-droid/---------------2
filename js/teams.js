@@ -1,6 +1,6 @@
 import { supabase } from './supabase.js';
 import { state } from './state.js';
-import { showToast, showConfirm } from './utils.js';
+import { showToast, showConfirm, showPrompt } from './utils.js';
 
 const DEFAULT_TEAM = 'Без куща';
 const EXTRA_TEAMS_KEY = 'pj:extra-teams';
@@ -93,6 +93,14 @@ function makeTeamAvatarFallback(profile, fallbackNick, baseClass) {
 
 function isProfileMentor(profile) {
     return !!(profile?.mentor_enabled || profile?.role === 'mentor');
+}
+
+function isProfileAdmin(profile) {
+    return profile?.role === 'admin';
+}
+
+function isServiceProfile(profile) {
+    return isProfileAdmin(profile) || isProfileMentor(profile);
 }
 
 function orderedTeamNames() {
@@ -218,7 +226,8 @@ export async function openTeamManager() {
     list.innerHTML = orderedTeamNames()
         .map((group) => {
             const count = counts.get(group) || 0;
-            const removable = group !== DEFAULT_TEAM;
+            const editable = group !== DEFAULT_TEAM;
+            const removable = editable;
             return `<div class="tm-team-row">
                 <div class="tm-team-row-main">
                     <span class="tm-team-name">${escapeHtml(group)}</span>
@@ -228,6 +237,26 @@ export async function openTeamManager() {
             </div>`;
         })
         .join('');
+
+    list.querySelectorAll('.tm-team-delete-btn[data-team-name]').forEach((deleteBtn) => {
+        const teamName = deleteBtn.dataset.teamName || '';
+        if (!teamName || teamName === DEFAULT_TEAM) return;
+        if (deleteBtn.parentElement?.classList.contains('tm-team-actions')) return;
+
+        const actions = document.createElement('div');
+        actions.className = 'tm-team-actions';
+
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'tm-team-edit-btn';
+        editBtn.dataset.action = 'team-rename';
+        editBtn.dataset.teamName = teamName;
+        editBtn.textContent = 'Редагувати';
+
+        deleteBtn.replaceWith(actions);
+        actions.appendChild(editBtn);
+        actions.appendChild(deleteBtn);
+    });
 }
 
 function escapeHtml(value) {
@@ -319,6 +348,46 @@ export async function deleteTeam(teamName = '') {
     await openTeamManager();
     if (window.renderTeamSidebar) window.renderTeamSidebar();
     showToast(`Кущ "${teamToDelete}" успішно видалено!`);
+}
+
+export async function renameTeam(teamName = '') {
+    const oldName = teamName || '';
+    if (!oldName) {
+        showToast('Оберіть кущ для редагування!');
+        return;
+    }
+    if (oldName === DEFAULT_TEAM) {
+        showToast('Базовий кущ не можна перейменувати');
+        return;
+    }
+
+    const newName = (await showPrompt(`Нова назва для куща "${oldName}":`, oldName))?.trim();
+    if (!newName || newName === oldName) return;
+    if (newName === DEFAULT_TEAM) {
+        showToast(`Назва "${DEFAULT_TEAM}" зарезервована`);
+        return;
+    }
+    if (state.TEAM_GROUPS?.[newName]) {
+        showToast('Такий кущ вже існує');
+        return;
+    }
+
+    const { error } = await supabase.rpc('rename_team', {
+        old_team: oldName,
+        new_team: newName,
+    });
+
+    if (error) {
+        showToast('Помилка перейменування: ' + error.message);
+        return;
+    }
+
+    writeExtraTeams(readExtraTeams().filter(team => team !== oldName).concat(newName));
+    await loadTeams();
+    await openTeamManager();
+    if (window.renderTeamSidebar) window.renderTeamSidebar();
+    if (window.renderAdminPanel) window.renderAdminPanel();
+    showToast(`Кущ "${oldName}" перейменовано в "${newName}"`);
 }
 
 export async function deleteTraderProfile() {
@@ -415,8 +484,20 @@ function _renderTeamSidebarDOM(container) {
             bM.textContent = 'Ментор';
             myBadges.appendChild(bM);
         }
+        if (isProfileAdmin(myProfile)) {
+            const bA = document.createElement('span');
+            bA.className = 'team-badge team-badge-admin';
+            bA.textContent = 'Адмін';
+            myBadges.appendChild(bA);
+        }
         myText.appendChild(myTitle);
         myText.appendChild(myBadges);
+        if (isProfileAdmin(myProfile)) {
+            const contact = document.createElement('div');
+            contact.className = 'team-member-contact';
+            contact.textContent = 'Telegram: @kofer563';
+            myText.appendChild(contact);
+        }
         myBtn.appendChild(myText);
         mySection.appendChild(myBtn);
         container.appendChild(mySection);
@@ -438,9 +519,9 @@ function _renderTeamSidebarDOM(container) {
             const nb = extractNick(b);
             const pa = state._teamProfiles?.[na];
             const pb = state._teamProfiles?.[nb];
-            const ma = isProfileMentor(pa);
-            const mb = isProfileMentor(pb);
-            if (ma !== mb) return ma ? -1 : 1;
+            const sa = isServiceProfile(pa);
+            const sb = isServiceProfile(pb);
+            if (sa !== sb) return sa ? -1 : 1;
             return String(a).localeCompare(String(b), 'uk');
         });
 
@@ -452,13 +533,17 @@ function _renderTeamSidebarDOM(container) {
 
             const profile = state._teamProfiles?.[cleanNick];
             const isMentor = isProfileMentor(profile);
+            const isAdmin = isProfileAdmin(profile);
+            const isService = isServiceProfile(profile);
             const isActive = state.CURRENT_VIEWED_USER === `${cleanNick}_stats`;
             const isLoading = _isSwitching && loadingNick === cleanNick;
             const displayName = profile ? profileDisplayName(profile) : trader;
 
             const memberDiv = document.createElement('div');
             memberDiv.className = `team-member-item${isActive ? ' active' : ''}`;
-            if (_isSwitching) {
+            if (isService) {
+                memberDiv.style.cursor = 'default';
+            } else if (_isSwitching) {
                 memberDiv.style.pointerEvents = 'none';
                 memberDiv.style.opacity = isLoading ? '1' : '0.45';
                 memberDiv.style.cursor = 'not-allowed';
@@ -478,14 +563,26 @@ function _renderTeamSidebarDOM(container) {
             title.className = 'team-member-title';
             title.textContent = displayName;
             textWrap.appendChild(title);
-            if (isMentor) {
+            if (isMentor || isAdmin) {
                 const badges = document.createElement('div');
                 badges.className = 'team-member-badges';
                 const bm = document.createElement('span');
                 bm.className = 'team-badge team-badge-mentor';
                 bm.textContent = 'Ментор';
-                badges.appendChild(bm);
+                if (isMentor) badges.appendChild(bm);
+                if (isAdmin) {
+                    const ba = document.createElement('span');
+                    ba.className = 'team-badge team-badge-admin';
+                    ba.textContent = 'Адмін';
+                    badges.appendChild(ba);
+                }
                 textWrap.appendChild(badges);
+            }
+            if (isAdmin) {
+                const contact = document.createElement('div');
+                contact.className = 'team-member-contact';
+                contact.textContent = 'Telegram: @kofer563';
+                textWrap.appendChild(contact);
             }
 
             memberDiv.appendChild(textWrap);

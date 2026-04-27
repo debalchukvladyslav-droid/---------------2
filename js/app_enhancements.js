@@ -198,6 +198,7 @@ function activateAction(action, trigger, event = null) {
             trigger.style.display = 'none';
         },
         'team-create': () => window.createNewTeam?.(),
+        'team-rename': () => window.renameTeam?.(trigger?.dataset?.teamName || ''),
         'team-delete': () => window.deleteTeam?.(trigger?.dataset?.teamName || ''),
         'team-move-trader': () => window.moveTrader?.(),
         'team-delete-trader': () => window.deleteTraderProfile?.(),
