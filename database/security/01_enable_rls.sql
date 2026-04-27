@@ -144,6 +144,10 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
+    IF auth.role() = 'service_role' OR current_setting('app.telegram_profile_repair', TRUE) = 'on' THEN
+        RETURN NEW;
+    END IF;
+
     IF public.app_is_admin() THEN
         RETURN NEW;
     END IF;

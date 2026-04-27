@@ -117,6 +117,89 @@ async function loginPasswordHex(botToken: string, telegramId: string): Promise<s
     return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+function makeTelegramNick(telegramId: string, firstName: string, username: string): string {
+    const fromUsername = username
+        .trim()
+        .replace(/^@/, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9_.]/g, '')
+        .replace(/\.{2,}/g, '.')
+        .slice(0, 32);
+    if (fromUsername) return fromUsername;
+
+    const fromName = firstName
+        .trim()
+        .toLowerCase()
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9_.]+/g, '_')
+        .replace(/\.{2,}/g, '.')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 32);
+    if (fromName.length >= 2) return fromName;
+
+    return `tg_${telegramId}`.slice(0, 32);
+}
+
+async function syncTelegramProfile(
+    supabaseUrl: string,
+    serviceRole: string,
+    userId: string,
+    telegramId: string,
+    nick: string,
+    email: string,
+    firstName: string,
+    lastName: string,
+    username: string,
+) {
+    const adminDb = createClient(supabaseUrl, serviceRole, {
+        auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    const settings = {
+        auth_provider: 'telegram',
+        telegram_id: telegramId,
+        telegram_username: username,
+        nick,
+        display_name: nick,
+    };
+
+    const { data: existing, error: existingErr } = await adminDb
+        .from('profiles')
+        .select('id, nick, first_name, last_name, team, settings')
+        .eq('id', userId)
+        .maybeSingle();
+    if (existingErr) throw new Error(existingErr.message || 'profile lookup failed');
+
+    const currentSettings =
+        existing?.settings && typeof existing.settings === 'object' && !Array.isArray(existing.settings)
+            ? (existing.settings as Record<string, unknown>)
+            : {};
+
+    const technicalNick = !existing?.nick || /^tg_?\d+$/i.test(String(existing.nick));
+    const profilePatch = {
+        id: userId,
+        nick: technicalNick ? nick : existing.nick,
+        email,
+        first_name: String(existing?.first_name || '').trim() ? existing.first_name : firstName,
+        last_name: String(existing?.last_name || '').trim() ? existing.last_name : lastName,
+        team: String(existing?.team || '').trim() ? existing.team : 'Без куща',
+        settings: { ...currentSettings, ...settings },
+    };
+
+    if (!existing) {
+        const { error } = await adminDb.from('profiles').insert(profilePatch);
+        if (error) throw new Error(error.message || 'profile insert failed');
+        return;
+    }
+
+    const { error } = await adminDb
+        .from('profiles')
+        .update(profilePatch)
+        .eq('id', userId);
+    if (error) throw new Error(error.message || 'profile update failed');
+}
+
 async function createTelegramAuthSession(
     supabaseUrl: string,
     serviceRole: string,
@@ -127,12 +210,15 @@ async function createTelegramAuthSession(
     lastName: string,
     username: string,
 ): Promise<{ access_token: string; refresh_token: string }> {
-    const host = new URL(supabaseUrl).hostname;
-    const projectRef = host.split('.')[0] || 'project';
-    const email = `tg_${telegramId}@telegram.${projectRef}.invalid`;
+    const nick = makeTelegramNick(telegramId, firstName, username);
+    const email = `${nick}@tradejournal.tg`;
     const password = await loginPasswordHex(botToken, telegramId);
+    let authUserId = '';
 
     const userMeta = {
+        nick,
+        display_name: nick,
+        auth_provider: 'telegram',
         telegram_id: telegramId,
         telegram_username: username,
         first_name: firstName,
@@ -148,40 +234,80 @@ async function createTelegramAuthSession(
         auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    const { error: createErr } = await admin.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        app_metadata: { provider: 'telegram' },
-        user_metadata: userMeta,
+    const { data: existingUsers } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    const existing = existingUsers?.users?.find((u) => {
+        const meta = u.user_metadata as Record<string, unknown> | undefined;
+        return u.email === email || String(meta?.telegram_id || '') === telegramId;
     });
 
-    if (createErr) {
-        const msg = String(createErr.message || '').toLowerCase();
-        const dup = msg.includes('already') || msg.includes('registered') || createErr.status === 422;
-        if (!dup) throw new Error(createErr.message || 'createUser failed');
-        const filter = encodeURIComponent(`email.eq.${email}`);
-        let lr = await fetch(`${supabaseUrl}/auth/v1/admin/users?page=1&per_page=1&filter=${filter}`, {
-            headers: { Authorization: `Bearer ${serviceRole}`, apikey: serviceRole },
-        });
-        let lj = await lr.json();
-        let uid = lj?.users?.[0]?.id as string | undefined;
-        if (!uid) {
-            lr = await fetch(`${supabaseUrl}/auth/v1/admin/users?page=1&per_page=200`, {
-                headers: { Authorization: `Bearer ${serviceRole}`, apikey: serviceRole },
-            });
-            lj = await lr.json();
-            uid = (lj?.users as { id: string; email?: string }[] | undefined)?.find((u) => u.email === email)?.id;
-        }
-        if (!uid) throw new Error('User exists but lookup failed');
-        const { error: upErr } = await admin.auth.admin.updateUserById(uid, {
+    if (existing?.id) {
+        authUserId = existing.id;
+        const { error: upErr } = await admin.auth.admin.updateUserById(existing.id, {
+            email,
             password,
             email_confirm: true,
             app_metadata: { provider: 'telegram' },
             user_metadata: userMeta,
         });
         if (upErr) throw new Error(upErr.message || 'updateUser failed');
+    } else {
+        const { data: createData, error: createErr } = await admin.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+            app_metadata: { provider: 'telegram' },
+            user_metadata: userMeta,
+        });
+
+        if (!createErr && createData?.user?.id) {
+            authUserId = createData.user.id;
+        } else if (createErr) {
+            const msg = String(createErr.message || '').toLowerCase();
+            const dup = msg.includes('already') || msg.includes('registered') || createErr.status === 422;
+            if (!dup) throw new Error(createErr.message || 'createUser failed');
+            const filter = encodeURIComponent(`email.eq.${email}`);
+            let lr = await fetch(`${supabaseUrl}/auth/v1/admin/users?page=1&per_page=1&filter=${filter}`, {
+                headers: { Authorization: `Bearer ${serviceRole}`, apikey: serviceRole },
+            });
+            let lj = await lr.json();
+            let uid = lj?.users?.[0]?.id as string | undefined;
+            if (!uid) {
+                lr = await fetch(`${supabaseUrl}/auth/v1/admin/users?page=1&per_page=200`, {
+                    headers: { Authorization: `Bearer ${serviceRole}`, apikey: serviceRole },
+                });
+                lj = await lr.json();
+                uid = (lj?.users as { id: string; email?: string }[] | undefined)?.find((u) => u.email === email)?.id;
+            }
+            if (!uid) throw new Error('User exists but lookup failed');
+            authUserId = uid;
+            const { error: upErr } = await admin.auth.admin.updateUserById(uid, {
+                email,
+                password,
+                email_confirm: true,
+                app_metadata: { provider: 'telegram' },
+                user_metadata: userMeta,
+            });
+            if (upErr) throw new Error(upErr.message || 'updateUser failed');
+        }
     }
+
+    if (!authUserId) {
+        const { data: createdUsers } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+        authUserId = createdUsers?.users?.find((u) => u.email === email)?.id || '';
+    }
+    if (!authUserId) throw new Error('Telegram auth user lookup failed');
+
+    await syncTelegramProfile(
+        supabaseUrl,
+        serviceRole,
+        authUserId,
+        telegramId,
+        nick,
+        email,
+        firstName,
+        lastName,
+        username,
+    );
 
     const { data: signData, error: signErr } = await anon.auth.signInWithPassword({ email, password });
     if (signErr || !signData?.session) throw new Error(signErr?.message || 'signIn failed');

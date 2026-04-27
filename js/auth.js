@@ -95,10 +95,14 @@ function isTelegramAuthUser(user) {
 }
 
 /** Нік з акаунта Telegram: @username, інакше латиниця з імені, інакше tg<id>. */
+function isTechnicalTelegramNick(nick) {
+    return /^tg_?\d+$/i.test(String(nick || '').trim());
+}
+
 export function makeTelegramNick(user) {
     const rawUn = String(user.user_metadata?.telegram_username || '').trim().replace(/^@/, '');
     if (rawUn) {
-        const slug = rawUn.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 32);
+        const slug = rawUn.toLowerCase().replace(/[^a-z0-9_.]/g, '').replace(/\.{2,}/g, '.').slice(0, 32);
         if (slug.length >= 1) return slug;
     }
     const fn = String(user.user_metadata?.first_name || '').trim();
@@ -107,7 +111,8 @@ export function makeTelegramNick(user) {
             .toLowerCase()
             .normalize('NFKD')
             .replace(/[\u0300-\u036f]/g, '')
-            .replace(/[^a-z0-9_]+/g, '_')
+            .replace(/[^a-z0-9_.]+/g, '_')
+            .replace(/\.{2,}/g, '.')
             .replace(/^_+|_+$/g, '')
             .slice(0, 32);
         if (slug.length >= 2) return slug;
@@ -129,9 +134,23 @@ export async function ensureAuthUserProfile(user) {
     if (!user?.id) return null;
     const { data: row, error: selErr } = await supabase.from('profiles').select('id,nick').eq('id', user.id).maybeSingle();
     if (selErr) throw selErr;
-    if (row?.nick) return row;
-
     const tg = isTelegramAuthUser(user);
+    if (row?.nick && !(tg && isTechnicalTelegramNick(row.nick))) return row;
+
+    if (tg && row?.nick && isTechnicalTelegramNick(row.nick)) {
+        try {
+            const { data: repaired, error: repairErr } = await supabase.rpc('repair_my_telegram_profile');
+            if (repairErr) throw repairErr;
+            const repairedRow = Array.isArray(repaired) ? repaired[0] : repaired;
+            if (repairedRow?.nick && !isTechnicalTelegramNick(repairedRow.nick)) return repairedRow;
+
+            const { data: again } = await supabase.from('profiles').select('id,nick').eq('id', user.id).maybeSingle();
+            if (again?.nick && !isTechnicalTelegramNick(again.nick)) return again;
+        } catch (e) {
+            console.warn('[auth] repair_my_telegram_profile unavailable:', e);
+        }
+    }
+
     const nick = tg
         ? makeTelegramNick(user)
         : String(user.user_metadata?.nick || user.email?.split('@')[0] || `u_${String(user.id).replace(/-/g, '').slice(0, 12)}`)
