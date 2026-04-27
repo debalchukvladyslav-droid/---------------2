@@ -115,29 +115,6 @@ function buildUserCard(profile, teamChoices, options = {}) {
     );
     roleWrap.appendChild(roleSelect);
 
-    // Ментор у кущі (прапорець)
-    const mentorWrap = document.createElement('div');
-    mentorWrap.className = 'admin-field';
-    mentorWrap.innerHTML = '<label class="admin-label">У команді як ментор</label>';
-    const mentorRow = document.createElement('div');
-    mentorRow.className = 'admin-checkbox-row';
-    const mentorCb = document.createElement('input');
-    mentorCb.type = 'checkbox';
-    mentorCb.id = `admin-mentor-${profile.id}`;
-    mentorCb.checked = !!(profile.mentor_enabled || profile.role === 'mentor');
-    mentorCb.disabled = profile.role === 'admin';
-    mentorCb.addEventListener('change', () =>
-        updateMentorFlag(profile.id, mentorCb.checked, profile.role, mentorCb)
-    );
-    const mentorLbl = document.createElement('label');
-    mentorLbl.htmlFor = mentorCb.id;
-    mentorLbl.textContent = profile.role === 'admin'
-        ? 'Адмін не бере участі в менторських ревʼю'
-        : 'Показувати першим у кущі, доступ до коментарів ментора';
-    mentorRow.appendChild(mentorCb);
-    mentorRow.appendChild(mentorLbl);
-    mentorWrap.appendChild(mentorRow);
-
     // Кущ
     const teamWrap = document.createElement('div');
     teamWrap.className = 'admin-field';
@@ -183,7 +160,6 @@ function buildUserCard(profile, teamChoices, options = {}) {
 
     if (fullAdmin) {
         grid.appendChild(roleWrap);
-        grid.appendChild(mentorWrap);
         grid.appendChild(nickWrap);
     }
     if (dataManager) {
@@ -319,43 +295,6 @@ async function updateUserRole(userId, newRole, selectEl) {
     if (window.renderTeamSidebar) window.renderTeamSidebar();
     if (window.refreshSidebarAccount) await window.refreshSidebarAccount();
     showToast('Роль оновлено');
-}
-
-async function updateMentorFlag(userId, enabled, currentRole, cbEl) {
-    if (currentRole === 'admin') {
-        const { error } = await supabase
-            .from('profiles')
-            .update({ mentor_enabled: enabled })
-            .eq('id', userId);
-        if (error) {
-            showToast(error.message);
-            cbEl.checked = !enabled;
-            return;
-        }
-        await loadTeams();
-        renderAdminPanel();
-        if (window.renderTeamSidebar) window.renderTeamSidebar();
-        if (window.refreshSidebarAccount) await window.refreshSidebarAccount();
-        showToast('Статус ментора оновлено');
-        return;
-    } else {
-        const patch = {
-            mentor_enabled: enabled,
-            role: enabled ? 'mentor' : 'trader',
-        };
-        const { error } = await supabase.from('profiles').update(patch).eq('id', userId);
-        if (error) {
-            showToast(error.message);
-            cbEl.checked = !enabled;
-            return;
-        }
-        renderAdminPanel();
-        await loadTeams();
-        if (window.renderTeamSidebar) window.renderTeamSidebar();
-        if (window.refreshSidebarAccount) await window.refreshSidebarAccount();
-        showToast('Статус ментора оновлено');
-        return;
-    }
 }
 
 async function adminUpdateTeam(userId, nick, targetTeam, cardEl) {
