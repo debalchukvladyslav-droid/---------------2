@@ -250,6 +250,8 @@ BEGIN
                         NULLIF(BTRIM(u.raw_user_meta_data->>'nick'), ''),
                         NULLIF(BTRIM(u.raw_user_meta_data->>'display_name'), ''),
                         NULLIF(BTRIM(u.raw_user_meta_data->>'telegram_username'), ''),
+                        NULLIF(BTRIM(p.first_name), ''),
+                        NULLIF(BTRIM(u.raw_user_meta_data->>'first_name'), ''),
                         p.nick
                     )
                 ),
@@ -268,6 +270,8 @@ BEGIN
                         NULLIF(BTRIM(u.raw_user_meta_data->>'nick'), ''),
                         NULLIF(BTRIM(u.raw_user_meta_data->>'display_name'), ''),
                         NULLIF(BTRIM(u.raw_user_meta_data->>'telegram_username'), ''),
+                        NULLIF(BTRIM(p.first_name), ''),
+                        NULLIF(BTRIM(u.raw_user_meta_data->>'first_name'), ''),
                         p.nick
                     )
                 ),
@@ -285,7 +289,11 @@ BEGIN
         updated_at = NOW()
     FROM auth.users u
     WHERE p.id = u.id
-      AND COALESCE(u.raw_user_meta_data->>'auth_provider', u.raw_app_meta_data->>'provider') = 'telegram'
+      AND (
+          COALESCE(u.raw_user_meta_data->>'auth_provider', u.raw_app_meta_data->>'provider') = 'telegram'
+          OR u.raw_user_meta_data ? 'telegram_id'
+          OR p.email LIKE '%@telegram.%'
+      )
       AND p.nick ~ '^tg_?[0-9]+$';
 
     IF has_profile_guard THEN
