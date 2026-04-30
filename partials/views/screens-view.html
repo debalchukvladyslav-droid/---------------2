@@ -75,16 +75,11 @@
                 <div class="unassigned-gallery" id="unassigned-container"></div>
             </div>
 
-            <div class="panel rr-screens-panel" id="screens-review-requests">
-                <h3 class="review-request-title">Запит розбору до ментора куща</h3>
-                <p class="review-request-text">Після натискання кнопка стає активною, поки ментор не прийме запит. Загальний розбір дня — у вкладці «Календар». Тут — прибутковість і окремі скріни.</p>
-                <div class="flex-wrap-row">
-                    <button type="button" id="rr-btn-calendar-profit" class="btn-secondary rr-toggle-btn rr-exempt-access" data-action="review-request" data-review-type="calendar_profit">Розбір прибутковості / календар</button>
-                </div>
-            </div>
-            
             <div class="panel panel-flex-grow">
-                <h3 class="detail-title">Детальний розбір сетапів за: <span id="big-screen-date" class="text-accent"></span></h3>
+                <div class="detail-title-row">
+                    <h3 class="detail-title">Детальний розбір сетапів за: <span id="big-screen-date" class="text-accent"></span></h3>
+                    <button type="button" id="rr-btn-calendar-profit" class="btn-secondary btn-auto rr-toggle-btn rr-exempt-access detail-review-btn" data-action="review-request" data-review-type="calendar_profit" title="Запит розбору прибутковості / календаря до ментора">Розбір прибутковості / календар</button>
+                </div>
                 <div id="assigned-container"></div>
             </div>
         </div>

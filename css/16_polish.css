@@ -1617,6 +1617,23 @@ body {
     font-size: 1.4rem;
 }
 
+.detail-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.detail-title-row .detail-title {
+    margin-bottom: 0;
+}
+
+.detail-review-btn {
+    flex-shrink: 0;
+}
+
 .ai-workspace {
     display: flex;
     flex: 1;
