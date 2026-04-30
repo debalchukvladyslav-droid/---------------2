@@ -533,6 +533,20 @@ body[data-theme="light"] .btn-google-signin {
     padding-right: 32px;
 }
 
+.sheet-input-group__select option,
+.sheet-tab-picker select option,
+.sheet-auto-sync__row select option {
+    background: var(--bg-panel);
+    color: var(--text-main);
+}
+
+body[data-theme="light"] .sheet-input-group__select option,
+body[data-theme="light"] .sheet-tab-picker select option,
+body[data-theme="light"] .sheet-auto-sync__row select option {
+    background: #ffffff;
+    color: #111827;
+}
+
 .sheet-input-group__manual {
     display: none;
     flex: 1;
