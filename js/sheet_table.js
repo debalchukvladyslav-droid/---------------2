@@ -99,6 +99,8 @@ let _sheetPreviewHoverRef = null;
 let _sheetPreviewActiveField = 'date';
 let _sheetSmartAnchors = {};
 let _sheetGridBindingsReady = false;
+let _sheetGridZoom = 1;
+let _sheetSessionRestoreStarted = false;
 
 function el(id) {
     return document.getElementById(id);
@@ -206,9 +208,24 @@ function updateSmartRangeHints() {
 function updateGridPickerMeta() {
     const activeEl = el('sheet-grid-picker-active');
     const startRowEl = el('sheet-grid-picker-start-row');
+    const zoomEl = el('sheet-grid-zoom-label');
     if (activeEl) activeEl.textContent = smartFieldLabel(_sheetPreviewActiveField);
     if (startRowEl) startRowEl.textContent = String(deriveSheetStartRow());
+    if (zoomEl) zoomEl.textContent = `${Math.round(_sheetGridZoom * 100)}%`;
     updateSmartRangeHints();
+}
+
+function applySheetGridZoom() {
+    const preview = el('sheet-grid-picker-preview');
+    if (preview) preview.style.setProperty('--sheet-grid-zoom', String(_sheetGridZoom));
+    updateGridPickerMeta();
+}
+
+export function changeSheetGridZoom(delta) {
+    const next = Math.round(Math.min(1.6, Math.max(0.65, _sheetGridZoom + Number(delta || 0))) * 100) / 100;
+    if (next === _sheetGridZoom) return;
+    _sheetGridZoom = next;
+    applySheetGridZoom();
 }
 
 function syncActiveGridFieldUi() {
@@ -303,8 +320,12 @@ function buildSheetGridPreview() {
 
     table.appendChild(tbody);
     preview.innerHTML = '';
+    applySheetGridZoom();
     preview.appendChild(table);
     refreshSheetGridSelectionClasses();
+    requestAnimationFrame(() => {
+        preview.scrollTop = preview.scrollHeight;
+    });
 }
 
 function refreshSheetGridSelectionClasses() {
@@ -573,6 +594,20 @@ function parseMoneyCell(v) {
     return Number.isFinite(n) ? n : 0;
 }
 
+function parseOptionalNumber(v) {
+    if (v == null || String(v).trim() === '') return null;
+    const s = String(v).replace(/\s/g, '').replace(',', '.');
+    const n = parseFloat(s);
+    return Number.isFinite(n) ? n : null;
+}
+
+function computeStopFromEntryAndCents(entryPrice, consolidateCents) {
+    const entry = Number(entryPrice);
+    const cents = parseOptionalNumber(consolidateCents);
+    if (!Number.isFinite(entry) || cents == null) return null;
+    return Math.round((entry + cents / 100) * 10000) / 10000;
+}
+
 /** Перевірка YYYY-MM-DD (щоб не писати в Supabase «2026-13-03»). */
 function isValidIsoDateString(iso) {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
@@ -714,6 +749,8 @@ function parseSheetGridToTrades(values, smartColumns, spreadsheetId, startRow = 
         const altPvStr = cellStr(row, altPvIdx);
         const exitStr = cellStr(row, cExit);
         const entryNum = cEntry >= 0 ? parseMoneyCell(getCell(row, cEntry)) : NaN;
+        const consolidateCents = cellStr(row, cCons);
+        const stopPrice = computeStopFromEntryAndCents(entryNum, consolidateCents);
         const qtyRaw =
             cQty >= 0 ? String(getCell(row, cQty)).replace(/\s/g, '').replace(/,/g, '') : '';
         const qtyNum = qtyRaw !== '' ? parseFloat(qtyRaw) : NaN;
@@ -722,6 +759,8 @@ function parseSheetGridToTrades(values, smartColumns, spreadsheetId, startRow = 
             source: 'google',
             spreadsheetId,
             sheetRow: excelRow,
+            sheetNet: net,
+            sheetGross: gross,
             tradeType: typeCell || undefined,
             pv: pvCell !== '' && pvCell != null ? String(pvCell) : undefined,
             altPv: altPvStr || undefined,
@@ -734,8 +773,9 @@ function parseSheetGridToTrades(values, smartColumns, spreadsheetId, startRow = 
             period: cellStr(row, cPeriod) || undefined,
             growthPct: cellStr(row, cGrowth) || undefined,
             riskUsd: cellStr(row, cRisk) || undefined,
-            consolidateCents: cellStr(row, cCons) || undefined,
+            consolidateCents: consolidateCents || undefined,
             entryPrice: Number.isFinite(entryNum) && entryNum !== 0 ? entryNum : undefined,
+            stopPrice: stopPrice ?? undefined,
             qtyShares: Number.isFinite(qtyNum) && qtyNum !== 0 ? qtyNum : undefined,
             qtySharesCalc: cellStr(row, cQtyCalc) || undefined,
         };
@@ -748,6 +788,7 @@ function parseSheetGridToTrades(values, smartColumns, spreadsheetId, startRow = 
             held: '',
             entry: Number.isFinite(entryNum) ? entryNum : 0,
             exit: 0,
+            stop: stopPrice ?? undefined,
             qty: Number.isFinite(qtyNum) ? Math.round(qtyNum) : 0,
             gross,
             comm: 0,
@@ -765,6 +806,60 @@ function parseSheetGridToTrades(values, smartColumns, spreadsheetId, startRow = 
         outByDay,
         dateAnchors,
         stats: { tradeCount, dayCount: dates.length },
+    };
+}
+
+function normalizeTradeSymbol(value) {
+    return String(value || '').trim().toUpperCase();
+}
+
+function pnlTolerance(value) {
+    const n = Math.abs(Number(value) || 0);
+    return Math.max(5, n * 0.08);
+}
+
+function findSheetMatchIndex(existingTrades, incomingTrade, usedIndices) {
+    const symbol = normalizeTradeSymbol(incomingTrade?.symbol);
+    if (!symbol) return -1;
+
+    const incomingNet = Number(incomingTrade?.net);
+    const candidates = [];
+
+    existingTrades.forEach((trade, index) => {
+        if (usedIndices.has(index)) return;
+        if (normalizeTradeSymbol(trade?.symbol) !== symbol) return;
+        const existingNet = Number(trade?.net);
+        const hasPnl = Number.isFinite(existingNet) && Number.isFinite(incomingNet);
+        const pnlDiff = hasPnl ? Math.abs(existingNet - incomingNet) : Number.POSITIVE_INFINITY;
+        const okByPnl = hasPnl && pnlDiff <= pnlTolerance(incomingNet);
+        const noSheetYet = !trade?.sheet || trade.sheet.source !== 'google';
+        if (hasPnl && !okByPnl) return;
+        if (!hasPnl && !noSheetYet) return;
+        candidates.push({
+            index,
+            score: (okByPnl ? 1000 - pnlDiff : 10) + (noSheetYet ? 20 : 0),
+        });
+    });
+
+    candidates.sort((a, b) => b.score - a.score);
+    return candidates[0]?.index ?? -1;
+}
+
+function enrichTradeWithSheet(existingTrade, incomingTrade) {
+    const sheet = {
+        ...(existingTrade.sheet && typeof existingTrade.sheet === 'object' ? existingTrade.sheet : {}),
+        ...(incomingTrade.sheet || {}),
+        matchedBy: 'date+ticker+pnl',
+    };
+
+    return {
+        ...existingTrade,
+        type: existingTrade.type || incomingTrade.type,
+        entry: Number(existingTrade.entry) ? existingTrade.entry : incomingTrade.entry,
+        exit: Number(existingTrade.exit) ? existingTrade.exit : incomingTrade.exit,
+        qty: Number(existingTrade.qty) ? existingTrade.qty : incomingTrade.qty,
+        stop: existingTrade.stop ?? incomingTrade.stop,
+        sheet,
     };
 }
 
@@ -788,7 +883,21 @@ function mergeGoogleSheetTradesIntoJournal(outByDay, spreadsheetId) {
                     String(t.sheet.spreadsheetId || '') === String(spreadsheetId)
                 ),
         );
-        state.appData.journal[dateStr].trades = [...kept, ...incoming];
+        const usedIndices = new Set();
+        const merged = [...kept];
+        const appended = [];
+
+        incoming.forEach((trade) => {
+            const matchIndex = findSheetMatchIndex(merged, trade, usedIndices);
+            if (matchIndex >= 0) {
+                merged[matchIndex] = enrichTradeWithSheet(merged[matchIndex], trade);
+                usedIndices.add(matchIndex);
+            } else {
+                appended.push(trade);
+            }
+        });
+
+        state.appData.journal[dateStr].trades = [...merged, ...appended];
         syncFondexxFromTradesForDay(dateStr);
         markJournalDayDirty(dateStr);
     }
@@ -1084,19 +1193,25 @@ let _sheetFormHydratedFromStorage = false;
 export function initSheetTableView() {
     bindSheetGridPicker();
     syncSheetWorkspaceVisibility();
+    applySheetGridZoom();
     const needHydrate = !_sheetFormHydratedFromStorage;
     if (needHydrate) {
         applyConfigToForm(readStoredConfig());
         _sheetFormHydratedFromStorage = true;
     }
-    void import('./google_sheet_connector.js')
-        .then((m) => m.restoreGoogleSession?.())
-        .catch(() => {
-            /* конектор може бути недоступний офлайн */
-        })
-        .finally(() => {
-            ensureSheetAutoSyncFromConfig();
-        });
+    if (!_sheetSessionRestoreStarted) {
+        _sheetSessionRestoreStarted = true;
+        void import('./google_sheet_connector.js')
+            .then((m) => m.restoreGoogleSession?.())
+            .catch(() => {
+                /* конектор може бути недоступний офлайн */
+            })
+            .finally(() => {
+                ensureSheetAutoSyncFromConfig();
+            });
+    } else {
+        ensureSheetAutoSyncFromConfig();
+    }
 }
 
 export async function handleSheetTabChange(selectEl) {
@@ -1181,6 +1296,7 @@ export async function saveSheetMapping() {
 window.toggleMappingMode = toggleMappingMode;
 window.saveSheetMapping = saveSheetMapping;
 window.handleSheetTabChange = handleSheetTabChange;
+window.changeSheetGridZoom = changeSheetGridZoom;
 window.renderMappingDropdowns = renderMappingDropdowns;
 window.populateSheetMappingFromHeaders = populateSheetMappingFromHeaders;
 window.stopSheetAutoSync = stopSheetAutoSync;

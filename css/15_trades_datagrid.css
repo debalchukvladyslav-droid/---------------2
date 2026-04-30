@@ -103,6 +103,16 @@
     background: var(--bg-main);
 }
 
+.trade-data-row {
+    cursor: pointer;
+}
+
+.trade-data-row:focus-within,
+.trade-data-row:hover {
+    outline: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+    outline-offset: -1px;
+}
+
 .datagrid-ticker {
     font-weight: 700;
     color: var(--text-main);

@@ -314,6 +314,41 @@ body[data-theme="light"] .btn-google-signin {
     gap: 8px;
 }
 
+.sheet-grid-zoom {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-panel);
+}
+
+.sheet-grid-zoom__btn {
+    width: 26px;
+    height: 24px;
+    border: 0;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    color: var(--text-main);
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.sheet-grid-zoom__btn:hover {
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    color: var(--accent);
+}
+
+.sheet-grid-zoom__label {
+    min-width: 44px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-align: center;
+}
+
 .sheet-grid-picker__badge {
     display: inline-flex;
     align-items: center;
@@ -331,6 +366,7 @@ body[data-theme="light"] .btn-google-signin {
 }
 
 .sheet-grid-picker__preview {
+    --sheet-grid-zoom: 1;
     overflow-x: auto;
     overflow-y: auto;
     border: 1px solid var(--border);
@@ -371,7 +407,7 @@ body[data-theme="light"] .btn-google-signin {
 .sheet-grid__corner,
 .sheet-grid__row-head,
 .sheet-grid__col-head {
-    font-size: 0.74rem;
+    font-size: calc(0.74rem * var(--sheet-grid-zoom));
     font-weight: 650;
     text-align: center;
     color: var(--text-muted);
@@ -379,24 +415,24 @@ body[data-theme="light"] .btn-google-signin {
 }
 
 .sheet-grid__corner {
-    width: 48px;
-    min-width: 48px;
+    width: calc(48px * var(--sheet-grid-zoom));
+    min-width: calc(48px * var(--sheet-grid-zoom));
 }
 
 .sheet-grid__row-head {
     position: sticky;
     left: 0;
     z-index: 1;
-    width: 48px;
-    min-width: 48px;
+    width: calc(48px * var(--sheet-grid-zoom));
+    min-width: calc(48px * var(--sheet-grid-zoom));
 }
 
 .sheet-grid__cell {
     position: relative;
-    min-width: 120px;
-    height: 34px;
-    padding: 7px 9px;
-    font-size: 0.78rem;
+    min-width: calc(120px * var(--sheet-grid-zoom));
+    height: calc(34px * var(--sheet-grid-zoom));
+    padding: calc(7px * var(--sheet-grid-zoom)) calc(9px * var(--sheet-grid-zoom));
+    font-size: calc(0.78rem * var(--sheet-grid-zoom));
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

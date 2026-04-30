@@ -77,8 +77,8 @@ function collectRows() {
     Object.keys(journal).forEach((dateStr) => {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
         const trades = Array.isArray(journal[dateStr]?.trades) ? journal[dateStr].trades : [];
-        trades.forEach((t) => {
-            flat.push({ dateStr, trade: t });
+        trades.forEach((t, tradeIndex) => {
+            flat.push({ dateStr, trade: t, tradeIndex });
         });
     });
     flat.sort((a, b) => {
@@ -103,7 +103,7 @@ function badge(htmlClass, text) {
     return `<span class="badge ${htmlClass}">${esc(t)}</span>`;
 }
 
-function buildTradeRowHtml(dateStr, trade) {
+function buildTradeRowHtml(dateStr, trade, tradeIndex) {
     const sh = sheetOf(trade);
     const net = Number(trade.net);
     const profitClass = Number.isFinite(net) && net < 0 ? 'datagrid-profit datagrid-profit--loss' : 'datagrid-profit';
@@ -128,10 +128,11 @@ function buildTradeRowHtml(dateStr, trade) {
     const risk = sh.riskUsd != null && sh.riskUsd !== '' ? sh.riskUsd : '—';
     const cons = sh.consolidateCents != null && sh.consolidateCents !== '' ? sh.consolidateCents : '—';
     const entry = trade.entry != null && trade.entry !== '' ? trade.entry : (sh.entryPrice ?? '—');
+    const stop = trade.stop != null && trade.stop !== '' ? trade.stop : (sh.stopPrice ?? '—');
     const shares = trade.qty != null && trade.qty !== '' ? trade.qty : (sh.qtyShares ?? '—');
     const calc = sh.qtySharesCalc != null && sh.qtySharesCalc !== '' ? sh.qtySharesCalc : shares;
 
-    return `<tr class="trade-data-row">
+    return `<tr class="trade-data-row" data-date="${esc(dateStr)}" data-trade-index="${tradeIndex}" title="Відкрити цю угоду в журналі">
         <td>${esc(timeFromOpened(trade.opened))}</td>
         <td class="datagrid-ticker">${esc((trade.symbol || '?').toString().toUpperCase())}</td>
         <td>${typeLabel ? badge('datagrid-badge datagrid-badge--type', typeLabel) : '—'}</td>
@@ -147,6 +148,7 @@ function buildTradeRowHtml(dateStr, trade) {
         <td>${esc(String(risk))}</td>
         <td>${esc(String(cons))}</td>
         <td>${esc(String(entry))}</td>
+        <td>${esc(String(stop))}</td>
         <td>${esc(String(shares))}</td>
         <td>${esc(String(calc))}</td>
     </tr>`;
@@ -173,6 +175,14 @@ function bindDatagridControls() {
     if (_datagridBindingsReady) return;
     _datagridBindingsReady = true;
     document.addEventListener('click', (event) => {
+        const row = event.target?.closest?.('.trade-data-row[data-date][data-trade-index]');
+        if (row) {
+            const dateStr = row.getAttribute('data-date') || '';
+            const tradeIndex = Number(row.getAttribute('data-trade-index') || 0);
+            window.openTradesAtDayIndex?.(dateStr, tradeIndex);
+            return;
+        }
+
         const btn = event.target?.closest?.('#datagrid-load-more');
         if (!btn) return;
         _datagridVisibleCount += DATAGRID_PAGE_SIZE;
@@ -201,7 +211,7 @@ export function renderTradesDatagrid() {
     const rows = ensureRowsCache();
     if (rows.length === 0) {
         tbody.innerHTML =
-            '<tr><td class="datagrid-empty" colspan="17">Немає угод у журналі. Імпортуйте Fondexx або додайте дані.</td></tr>';
+            '<tr><td class="datagrid-empty" colspan="18">Немає угод у журналі. Імпортуйте Fondexx або додайте дані.</td></tr>';
         updateDatagridToolbar(0, 0);
         return;
     }
@@ -213,10 +223,10 @@ export function renderTradesDatagrid() {
     for (let i = 0; i < visibleLimit; i++) {
         const { dateStr, trade } = rows[i];
         if (dateStr !== prevDate) {
-            html += `<tr class="date-group-row"><td colspan="17">${esc(formatDateHeader(dateStr))}</td></tr>`;
+            html += `<tr class="date-group-row"><td colspan="18">${esc(formatDateHeader(dateStr))}</td></tr>`;
             prevDate = dateStr;
         }
-        html += buildTradeRowHtml(dateStr, trade);
+        html += buildTradeRowHtml(dateStr, trade, rows[i].tradeIndex);
     }
 
     tbody.innerHTML = html;

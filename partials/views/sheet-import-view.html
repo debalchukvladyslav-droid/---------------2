@@ -68,6 +68,11 @@
                                     <p class="sheet-grid-picker__hint">Оберіть поле нижче, потім наведіть або клікніть по клітинці. Наприклад, клік по <strong>A8</strong> для «Дата» вибере колонку <strong>A</strong> і почне рахувати рядки з <strong>8</strong>.</p>
                                 </div>
                                 <div class="sheet-grid-picker__meta">
+                                    <div class="sheet-grid-zoom" aria-label="Масштаб таблиці">
+                                        <button type="button" class="sheet-grid-zoom__btn" data-action="sheet-grid-zoom" data-zoom-delta="-0.1">−</button>
+                                        <span id="sheet-grid-zoom-label" class="sheet-grid-zoom__label">100%</span>
+                                        <button type="button" class="sheet-grid-zoom__btn" data-action="sheet-grid-zoom" data-zoom-delta="0.1">+</button>
+                                    </div>
                                     <span class="sheet-grid-picker__badge">Активне поле: <strong id="sheet-grid-picker-active">Дата</strong></span>
                                     <span class="sheet-grid-picker__badge">Старт імпорту: <strong id="sheet-grid-picker-start-row">6</strong></span>
                                 </div>

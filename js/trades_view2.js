@@ -281,6 +281,13 @@ function renderTradeInfoBar(trades) {
         ...(duration ? [{ label: 'Час',  value: duration,                                                   color: 'var(--text-muted)' }] : []),
         ...(trade?.shares ? [{ label: 'Акцій', value: String(trade.shares),                                    color: 'var(--text-muted)' }] : []),
     ];
+    const sheet = trade?.sheet && typeof trade.sheet === 'object' ? trade.sheet : {};
+    const sheetException = Array.isArray(sheet.exceptions) ? sheet.exceptions.join(', ') : (sheet.exception || '');
+    const sheetComment = sheet.traderComment || '';
+    const stopPrice = trade?.stop ?? sheet.stopPrice;
+    if (stopPrice != null && stopPrice !== '') items.push({ label: 'Стоп', value: String(stopPrice), color: 'var(--gold)' });
+    if (sheet.exit) items.push({ label: 'Вихід', value: String(sheet.exit), color: 'var(--text-main)' });
+    if (sheetException) items.push({ label: 'Виключення', value: sheetException, color: 'var(--loss)' });
 
     bar.innerHTML = '';
     bar.style.display = 'flex';
@@ -300,6 +307,14 @@ function renderTradeInfoBar(trades) {
         card.appendChild(lbl);
         bar.appendChild(card);
     });
+
+    if (sheetComment) {
+        const note = document.createElement('div');
+        note.style.cssText = 'flex:1 1 260px;min-width:220px;padding:7px 12px;background:var(--bg-main);border:1px solid var(--border);border-radius:8px;color:var(--text-main);font-size:0.82rem;line-height:1.35;';
+        note.textContent = sheetComment;
+        note.title = sheetComment;
+        bar.appendChild(note);
+    }
 
     if (trade) {
         const hasScreen = findScreenshotsForTicker(_activeTrade?.dateStr, trade.symbol).length > 0;

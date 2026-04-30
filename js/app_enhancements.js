@@ -172,6 +172,7 @@ function activateAction(action, trigger, event = null) {
         'google-logout': () => window.googleSheetsLogout?.(),
         'google-picker': () => window.openPicker?.(),
         'sheet-toggle-mapping': () => window.toggleMappingMode?.(trigger),
+        'sheet-grid-zoom': () => window.changeSheetGridZoom?.(Number(trigger?.dataset?.zoomDelta || 0)),
         'tag-search-toggle': () => window.toggleTagSearch?.(),
         'screens-distribution-toggle': () => window.toggleScreensDistribution?.(),
         'screens-settings-toggle': () => window.toggleScreensSettings?.(),
