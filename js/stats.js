@@ -323,7 +323,7 @@ function cleanStatsNick(value = '') {
 }
 
 function isStatsProfile(profile) {
-    return !!profile && profile.role !== 'admin' && profile.role !== 'mentor' && !profile.mentor_enabled;
+    return !!profile && profile.role !== 'mentor' && !profile.mentor_enabled;
 }
 
 function isStatsNickAllowed(nick) {

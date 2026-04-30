@@ -1,5 +1,5 @@
--- Mentors can see every trader's journal and move any trader between teams.
--- They still cannot change roles, delete accounts, or move mentors/admins.
+-- Mentors can see every trader/admin journal and move traders/admins between teams.
+-- They still cannot change roles, delete accounts, or move mentors.
 
 CREATE OR REPLACE FUNCTION public.app_can_view_user(target_user_id UUID)
 RETURNS BOOLEAN
@@ -74,7 +74,7 @@ BEGIN
         RAISE EXCEPTION 'Mentor cannot move own profile';
     END IF;
 
-    IF target.role IN ('admin', 'mentor') OR target.mentor_enabled = TRUE THEN
+    IF target.role = 'mentor' OR target.mentor_enabled = TRUE THEN
         RAISE EXCEPTION 'Mentor can move traders only';
     END IF;
 

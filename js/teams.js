@@ -100,7 +100,7 @@ function isProfileAdmin(profile) {
 }
 
 function isServiceProfile(profile) {
-    return isProfileAdmin(profile) || isProfileMentor(profile);
+    return isProfileMentor(profile);
 }
 
 function orderedTeamNames() {

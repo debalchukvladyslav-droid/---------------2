@@ -1,4 +1,4 @@
--- Allow mentors to move any trader to another team from the admin panel,
+-- Allow mentors to move traders/admins to another team from the admin panel,
 -- without granting full profile administration.
 
 CREATE OR REPLACE FUNCTION public.mentor_move_trader_team(target_user_id UUID, target_team TEXT)
@@ -48,7 +48,7 @@ BEGIN
         RAISE EXCEPTION 'Mentor cannot move own profile';
     END IF;
 
-    IF target.role IN ('admin', 'mentor') OR target.mentor_enabled = TRUE THEN
+    IF target.role = 'mentor' OR target.mentor_enabled = TRUE THEN
         RAISE EXCEPTION 'Mentor can move traders only';
     END IF;
 

@@ -42,7 +42,7 @@ export async function renderAdminPanel() {
 
     const visibleProfiles = fullAdmin
         ? profiles
-        : (profiles || []).filter((p) => p.id !== state.myUserId && p.role !== 'admin' && p.role !== 'mentor' && !p.mentor_enabled);
+        : (profiles || []).filter((p) => p.id !== state.myUserId && p.role !== 'mentor' && !p.mentor_enabled);
 
     if (!visibleProfiles.length) {
         container.innerHTML = '<p class="admin-empty">Трейдерів для переміщення не знайдено.</p>';

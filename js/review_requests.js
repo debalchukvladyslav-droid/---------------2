@@ -235,7 +235,7 @@ export async function fetchMentorReviewNotificationHits() {
 
     const profiles = Object.values(state._teamProfiles || {});
     const team = me?.team || 'Без куща';
-    const isTraderProfile = (p) => p?.id && !p.mentor_enabled && p.role !== 'mentor' && p.role !== 'admin';
+    const isTraderProfile = (p) => p?.id && !p.mentor_enabled && p.role !== 'mentor';
     const traderIds = profiles
         .filter((p) => isTraderProfile(p) && p.id !== state.myUserId && (p.team || 'Без куща') === team)
         .map((p) => p.id);
