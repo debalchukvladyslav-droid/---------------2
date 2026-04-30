@@ -562,9 +562,12 @@ export function switchMainTab(tab, options = {}) {
     if (tab === 'table' && window.initSheetTableView) window.initSheetTableView();
     if (tab === 'datagrid' && window.renderTradesDatagrid) window.renderTradesDatagrid();
     if (tab === 'dash' && window.renderDashboardNews) window.renderDashboardNews();
-    if (tab === 'settings' && window.loadLatestImageForOCR) window.loadLatestImageForOCR();
     if (tab === 'screens') {
         if (window.updateDriveUI) window.updateDriveUI();
+        const settingsPanel = document.getElementById('screens-settings-panel');
+        if (settingsPanel && !settingsPanel.classList.contains('initially-hidden') && window.loadLatestImageForOCR) {
+            window.loadLatestImageForOCR();
+        }
         if (window.syncDriveScreenshots) window.syncDriveScreenshots(true);
         if (window.refreshReviewRequestButtons) window.refreshReviewRequestButtons();
     }

@@ -238,6 +238,7 @@
     .news-tabs { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 2px; scrollbar-width: none; }
     .news-tabs::-webkit-scrollbar { display: none; }
     .news-tab-btn { flex: 0 0 auto; white-space: nowrap; }
+    .screens-settings-grid { grid-template-columns: 1fr; }
     #ocr-setup-container { height: 280px; }
     #team-sidebar { width: min(92vw, 320px); left: calc(-1 * min(92vw, 320px) - 24px); }
     #team-sidebar.open { left: 0; }

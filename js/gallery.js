@@ -163,9 +163,9 @@ export async function renderUnassignedUI() {
         const driveConnected = !!state.appData.settings.driveFolderId;
         container.innerHTML = driveConnected
             ? '<div style="color:var(--text-muted); padding: 10px;">Всі скріншоти розсортовані або папка порожня.</div>'
-            : '<div style="color:var(--text-muted); padding: 20px; text-align:center; border: 1px dashed var(--border); border-radius:8px;">'
-              + '☁️ Підключіть <strong>Google Drive</strong> в Налаштуваннях для автосинхронізації скріншотів, '
-              + 'або вставте зображення через <strong>Ctrl+V</strong>.</div>';
+            : '<div class="screens-first-connect">'
+              + '☁️ <button type="button" class="link-button" data-action="screens-settings-open">Підключіть <strong>Google Drive</strong></button> '
+              + 'для автосинхронізації скріншотів, або вставте зображення через <strong>Ctrl+V</strong>.</div>';
         return;
     }
     const imagesToShow = state.currentUnassignedImages.slice(0, state.unassignedVisibleCount);
@@ -591,6 +591,21 @@ window.removeScreenTag = function(encodedPath, tag) {
 window.toggleTagSearch = function() {
     const panel = document.getElementById('tag-search-panel');
     panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+};
+
+window.toggleScreensSettings = function(forceOpen) {
+    const panel = document.getElementById('screens-settings-panel');
+    const btn = document.querySelector('[data-action="screens-settings-toggle"]');
+    if (!panel) return;
+
+    const shouldOpen = forceOpen === true || (forceOpen !== false && panel.classList.contains('initially-hidden'));
+    panel.classList.toggle('initially-hidden', !shouldOpen);
+    if (btn) btn.setAttribute('aria-expanded', String(shouldOpen));
+
+    if (shouldOpen) {
+        if (window.updateDriveUI) window.updateDriveUI();
+        if (window.loadLatestImageForOCR) window.loadLatestImageForOCR();
+    }
 };
 
 window.showTagSearchSuggestions = function(input) {
