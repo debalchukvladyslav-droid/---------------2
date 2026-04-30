@@ -159,6 +159,7 @@ export function refreshReviewRequestButtons() {
     };
 
     setBtn('rr-btn-screens-general', 'screens_general');
+    setBtn('rr-btn-screens-detail', 'screens_general');
     setBtn('rr-btn-calendar-profit', 'calendar_profit');
 
     document.querySelectorAll('.rr-screen-btn').forEach((btn) => {

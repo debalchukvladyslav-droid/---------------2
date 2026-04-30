@@ -285,8 +285,26 @@ function normalizeTicker(value) {
     return String(value || '').toUpperCase().replace(/[^A-Z]/g, '');
 }
 
-function validTickerWord(w) {
-    return w.length >= 2 && w.length <= 5 && /^[A-Z]+$/.test(w) && !TICKER_GARBAGE.has(w);
+function normalizeOCRTicker(value) {
+    return String(value || '')
+        .toUpperCase()
+        .replace(/[0@]/g, 'O')
+        .replace(/[1!|]/g, 'I')
+        .replace(/2/g, 'Z')
+        .replace(/3/g, 'E')
+        .replace(/4/g, 'A')
+        .replace(/5|\$/g, 'S')
+        .replace(/6/g, 'G')
+        .replace(/7/g, 'T')
+        .replace(/8/g, 'B')
+        .replace(/[^A-Z]/g, '');
+}
+
+function validTickerWord(w, { allowSingle = false, trusted = false } = {}) {
+    const minLen = allowSingle ? 1 : 2;
+    if (w.length < minLen || w.length > 5 || !/^[A-Z]+$/.test(w)) return false;
+    if (trusted) return true;
+    return !TICKER_GARBAGE.has(w);
 }
 
 function findScreenshotDate(path) {
@@ -307,25 +325,69 @@ function tradeTickersForPath(path) {
     return Array.from(set);
 }
 
-function extractTickerFromText(rawText, tradedTickers = [], ocrWords = []) {
-    const clean = rawText.toUpperCase().replace(/[^A-Z\s]/g, ' ');
-    const words = clean.split(/\s+/).filter(validTickerWord);
+function addCandidate(scores, ticker, points, opts = {}) {
+    if (!validTickerWord(ticker, opts)) return;
+    scores[ticker] = (scores[ticker] || 0) + points;
+}
+
+function scoreTickerCandidates(rawText, tradedTickers = [], ocrWords = [], zoneWeight = 1) {
+    const clean = String(rawText || '').toUpperCase().replace(/[^A-Z0-9@$!|\s.-]/g, ' ');
+    const words = clean.split(/\s+/).map(normalizeOCRTicker).filter(w => validTickerWord(w));
     const traded = tradedTickers.map(normalizeTicker).filter(Boolean);
     const highConfidence = (ocrWords || [])
-        .map(w => ({ text: normalizeTicker(w.text), confidence: Number(w.confidence) || 0 }))
-        .filter(w => validTickerWord(w.text));
+        .map(w => ({ text: normalizeOCRTicker(w.text), confidence: Number(w.confidence) || 0 }))
+        .filter(w => validTickerWord(w.text, { allowSingle: traded.includes(w.text), trusted: traded.includes(w.text) }));
 
-    // 1. Збіг з traded_tickers — найвищий пріоритет
+    const scores = {};
+    const wordSet = new Set(words);
+    const rawTokens = clean.split(/\s+/).filter(Boolean);
+    const exchanges = new Set(['NASDAQ', 'NYSE', 'AMEX', 'ARCA', 'BATS']);
+
+    rawTokens.forEach((token, index) => {
+        if (!exchanges.has(normalizeTicker(token))) return;
+        for (let i = index - 1; i >= Math.max(0, index - 5); i--) {
+            const candidate = normalizeOCRTicker(rawTokens[i]);
+            if (!validTickerWord(candidate)) continue;
+            addCandidate(scores, candidate, 180 * zoneWeight);
+            break;
+        }
+    });
+
+    // Збіг з traded_tickers — найвищий пріоритет, бо це реальний список торгованих символів за день.
     for (const w of traded) {
-        if (words.includes(w) || highConfidence.some(item => item.text === w && item.confidence >= 45)) return w;
+        const trusted = { allowSingle: true, trusted: true };
+        if (wordSet.has(w)) addCandidate(scores, w, 120 * zoneWeight, trusted);
+        if (highConfidence.some(item => item.text === w && item.confidence >= 35)) addCandidate(scores, w, 160 * zoneWeight, trusted);
+        if (words.some(word => word.includes(w) || w.includes(word))) addCandidate(scores, w, 45 * zoneWeight, trusted);
     }
 
-    // 2. Найчастіше слово
-    const freq = {};
-    for (const w of words) freq[w] = (freq[w] || 0) + 1;
-    for (const w of highConfidence) freq[w.text] = (freq[w.text] || 0) + Math.max(1, w.confidence / 40);
-    const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
-    return sorted.length ? sorted[0][0] : '???';
+    for (const w of words) addCandidate(scores, w, 18 * zoneWeight);
+    for (const w of highConfidence) addCandidate(scores, w.text, Math.max(12, w.confidence / 2) * zoneWeight);
+
+    Object.keys(scores).forEach(ticker => {
+        if (traded.includes(ticker)) scores[ticker] += 80;
+        if (ticker.length >= 3 && ticker.length <= 4) scores[ticker] += 14;
+        if (ticker.length === 5) scores[ticker] += 4;
+    });
+
+    return scores;
+}
+
+function mergeScores(target, source) {
+    for (const [ticker, score] of Object.entries(source)) {
+        target[ticker] = (target[ticker] || 0) + score;
+    }
+}
+
+function bestTickerFromScores(scores, tradedTickers = []) {
+    const traded = tradedTickers.map(normalizeTicker).filter(Boolean);
+    const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+    if (!sorted.length) return traded.length === 1 ? traded[0] : '???';
+
+    const [best, bestScore] = sorted[0];
+    const secondScore = sorted[1]?.[1] || 0;
+    if (traded.includes(best) || bestScore >= 45 || bestScore >= secondScore * 1.35) return best;
+    return traded.length === 1 ? traded[0] : '???';
 }
 
 // Вирізаємо зону з зображення для OCR
@@ -337,13 +399,14 @@ function cropCanvas(imgObj, x, y, w, h) {
 }
 
 // Підвищуємо контраст для Tesseract
-function applyContrast(canvas) {
+function applyContrast(canvas, { threshold = 128, invert = false } = {}) {
     const ctx = canvas.getContext('2d');
     const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const d = imgData.data;
     for (let i = 0; i < d.length; i += 4) {
         const avg = (d[i] + d[i+1] + d[i+2]) / 3;
-        const v = avg > 128 ? 255 : 0;
+        let v = avg > threshold ? 255 : 0;
+        if (invert) v = 255 - v;
         d[i] = d[i+1] = d[i+2] = v;
     }
     ctx.putImageData(imgData, 0, 0);
@@ -362,22 +425,69 @@ function buildAutoOCRZones(iw, ih) {
         };
     };
 
-    return [
+    const zones = [];
+    const custom = state.appData?.settings?.ocrRect;
+    if (custom && custom.width > 10 && custom.height > 10) {
+        zones.push(clampZone(custom.left, custom.top, custom.width, custom.height));
+        zones.push(clampZone(custom.left - custom.width * 0.12, custom.top - custom.height * 0.25, custom.width * 1.25, custom.height * 1.45));
+    }
+
+    // thinkorswim layout: ticker is usually in a tiny header strip of each chart pane.
+    const headerH = Math.max(18, ih * 0.045);
+    const topHeaderY = Math.max(0, ih * 0.018);
+    const lowerHeaderY = ih * 0.595;
+    zones.push(
+        clampZone(0, topHeaderY, iw * 0.76, headerH),
+        clampZone(iw * 0.76, topHeaderY, iw * 0.24, headerH),
+        clampZone(0, lowerHeaderY, iw * 0.22, headerH),
+        clampZone(iw * 0.21, lowerHeaderY, iw * 0.62, headerH),
+        clampZone(iw * 0.82, lowerHeaderY, iw * 0.18, headerH),
+    );
+
+    zones.push(
         clampZone(0, 0, iw * 0.28, ih * 0.09),
         clampZone(0, 0, iw * 0.42, ih * 0.14),
         clampZone(0, 0, iw, ih * 0.16),
         clampZone(iw * 0.18, 0, iw * 0.42, ih * 0.12),
         clampZone(0, ih * 0.05, iw * 0.5, ih * 0.16),
         clampZone(0, 0, iw, ih * 0.28),
-    ];
+    );
+
+    const seen = new Set();
+    return zones.filter(zone => {
+        const key = `${zone.x}:${zone.y}:${zone.w}:${zone.h}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
 }
 
-function makeOCRCanvas(imgObj, zone, scale = 3) {
+function makeScaledCanvas(imgObj, zone, scale = 4) {
     const canvas = document.createElement('canvas');
     canvas.width = Math.max(1, zone.w * scale);
     canvas.height = Math.max(1, zone.h * scale);
-    canvas.getContext('2d').drawImage(imgObj, zone.x, zone.y, zone.w, zone.h, 0, 0, canvas.width, canvas.height);
-    return applyContrast(canvas);
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(imgObj, zone.x, zone.y, zone.w, zone.h, 0, 0, canvas.width, canvas.height);
+    return canvas;
+}
+
+function cloneCanvas(canvas) {
+    const copy = document.createElement('canvas');
+    copy.width = canvas.width;
+    copy.height = canvas.height;
+    copy.getContext('2d').drawImage(canvas, 0, 0);
+    return copy;
+}
+
+function makeOCRVariants(imgObj, zone, scale = 4) {
+    const base = makeScaledCanvas(imgObj, zone, scale);
+    return [
+        base,
+        applyContrast(cloneCanvas(base), { threshold: 115 }),
+        applyContrast(cloneCanvas(base), { threshold: 145 }),
+        applyContrast(cloneCanvas(base), { threshold: 135, invert: true }),
+    ];
 }
 
 export async function runOCR(encodedPath, force = false) {
@@ -406,18 +516,28 @@ export async function runOCR(encodedPath, force = false) {
 
         const traded = tradeTickersForPath(safePath);
 
+        const totalScores = {};
         let ticker = '???';
-        for (const zone of zones) {
-            const canvas = makeOCRCanvas(imgObj, zone, 3);
+        for (let zoneIndex = 0; zoneIndex < zones.length; zoneIndex++) {
+            const zone = zones[zoneIndex];
+            const zoneWeight = Math.max(0.65, 1.45 - zoneIndex * 0.12);
+            const variants = makeOCRVariants(imgObj, zone, zone.h <= ih * 0.06 ? 7 : zoneIndex < 2 ? 5 : 4);
 
-            const { data } = await Tesseract.recognize(canvas, 'eng', {
-                tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ ',
-                tessedit_pageseg_mode: '6',
-            });
+            for (const canvas of variants) {
+                const { data } = await Tesseract.recognize(canvas, 'eng', {
+                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@$!| ',
+                    tessedit_pageseg_mode: zone.h < ih * 0.12 ? '7' : '6',
+                    preserve_interword_spaces: '1',
+                });
 
-            ticker = extractTickerFromText(data.text || '', traded, data.words || []);
-            if (ticker !== '???') break; // знайшли — зупиняємось
+                mergeScores(totalScores, scoreTickerCandidates(data.text || '', traded, data.words || [], zoneWeight));
+            }
+
+            ticker = bestTickerFromScores(totalScores, traded);
+            if (ticker !== '???' && traded.includes(ticker) && (totalScores[ticker] || 0) >= 220) break;
         }
+
+        if (ticker === '???') ticker = bestTickerFromScores(totalScores, traded);
 
         state.appData.tickers[safePath] = ticker;
         saveToLocal();
