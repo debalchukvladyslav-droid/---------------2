@@ -82,7 +82,7 @@ function collectRows() {
         });
     });
     flat.sort((a, b) => {
-        const dc = b.dateStr.localeCompare(a.dateStr);
+        const dc = a.dateStr.localeCompare(b.dateStr);
         if (dc !== 0) return dc;
         const ta = timeFromOpened(a.trade?.opened);
         const tb = timeFromOpened(b.trade?.opened);
@@ -217,20 +217,26 @@ export function renderTradesDatagrid() {
     }
 
     const visibleLimit = Math.min(_datagridVisibleCount, rows.length);
+    const startIndex = Math.max(0, rows.length - visibleLimit);
+    const visibleRows = rows.slice(startIndex);
     let html = '';
     let prevDate = null;
 
-    for (let i = 0; i < visibleLimit; i++) {
-        const { dateStr, trade } = rows[i];
+    for (let i = 0; i < visibleRows.length; i++) {
+        const { dateStr, trade } = visibleRows[i];
         if (dateStr !== prevDate) {
             html += `<tr class="date-group-row"><td colspan="18">${esc(formatDateHeader(dateStr))}</td></tr>`;
             prevDate = dateStr;
         }
-        html += buildTradeRowHtml(dateStr, trade, rows[i].tradeIndex);
+        html += buildTradeRowHtml(dateStr, trade, visibleRows[i].tradeIndex);
     }
 
     tbody.innerHTML = html;
     updateDatagridToolbar(rows.length, visibleLimit);
+    requestAnimationFrame(() => {
+        const container = document.querySelector('.datagrid-container');
+        if (container) container.scrollTop = container.scrollHeight;
+    });
 }
 
 window.renderTradesDatagrid = renderTradesDatagrid;

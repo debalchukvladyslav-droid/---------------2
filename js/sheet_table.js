@@ -24,6 +24,7 @@ const SESSION_SHEET_TITLE = 'sheet_selected_sheet_title';
 /** Колонки таблиці / trade.sheet для статистики та datagrid (порядок = у формі). */
 const SMART_KEYS = [
     'date',
+    'time',
     'symbol',
     'tradeType',
     'profit',
@@ -228,6 +229,14 @@ export function changeSheetGridZoom(delta) {
     applySheetGridZoom();
 }
 
+function scrollSheetPreviewToBottom() {
+    const preview = el('sheet-grid-picker-preview');
+    if (!preview || !_sheetPreviewRows.length) return;
+    requestAnimationFrame(() => {
+        preview.scrollTop = preview.scrollHeight;
+    });
+}
+
 function syncActiveGridFieldUi() {
     document.querySelectorAll('.sheet-smart-row[data-smart-field]').forEach((row) => {
         row.classList.toggle('is-grid-active', row.dataset.smartField === _sheetPreviewActiveField);
@@ -323,9 +332,7 @@ function buildSheetGridPreview() {
     applySheetGridZoom();
     preview.appendChild(table);
     refreshSheetGridSelectionClasses();
-    requestAnimationFrame(() => {
-        preview.scrollTop = preview.scrollHeight;
-    });
+    scrollSheetPreviewToBottom();
 }
 
 function refreshSheetGridSelectionClasses() {
@@ -632,8 +639,8 @@ function calendarYmdValid(year, month, day) {
 }
 
 /**
- * Дата з клітинки Sheets: YYYY-MM-DD, серійне число, D/M/Y з «.» або «/».
- * Для 3/13/2026 (US) і 13.03.2026 (EU) обираємо валідну інтерпретацію; якщо обидві валідні — пріоритет DD.MM (UA).
+ * Дата з клітинки Sheets: YYYY-MM-DD, серійне число, D/M/Y з «.» або M/D/Y з «/».
+ * Slash-формат з брокерських таблиць читаємо як US: 4/2/2026 = 2026-04-02.
  */
 function sheetsCellToIsoDate(value) {
     if (value == null || value === '') return null;
@@ -643,7 +650,7 @@ function sheetsCellToIsoDate(value) {
     }
     if (typeof value === 'number' && Number.isFinite(value)) {
         const epoch = Date.UTC(1899, 11, 30);
-        const d = new Date(epoch + Math.round(value) * 86400000);
+        const d = new Date(epoch + Math.floor(value) * 86400000);
         const y = d.getUTCFullYear();
         const mo = d.getUTCMonth() + 1;
         const da = d.getUTCDate();
@@ -651,22 +658,48 @@ function sheetsCellToIsoDate(value) {
         const iso = toIsoFromParts(y, mo, da);
         return isValidIsoDateString(iso) ? iso : null;
     }
-    const m1 = /^(\d{1,2})[./](\d{1,2})[./](\d{4})$/.exec(s);
+    const datePart = s.split(/\s+/)[0];
+    const m1 = /^(\d{1,2})([./])(\d{1,2})[./](\d{4})$/.exec(datePart);
     if (m1) {
         const a = Number(m1[1]);
-        const b = Number(m1[2]);
-        const year = Number(m1[3]);
+        const sep = m1[2];
+        const b = Number(m1[3]);
+        const year = Number(m1[4]);
         if (!Number.isFinite(year) || year < 1990 || year > 2100) return null;
 
         const dmy = calendarYmdValid(year, b, a) ? toIsoFromParts(year, b, a) : null;
         const mdy = calendarYmdValid(year, a, b) ? toIsoFromParts(year, a, b) : null;
 
-        if (dmy && mdy && dmy !== mdy) return dmy;
+        if (dmy && mdy && dmy !== mdy) return sep === '/' ? mdy : dmy;
         if (dmy) return dmy;
         if (mdy) return mdy;
         return null;
     }
     return null;
+}
+
+function sheetsCellToTimeString(value) {
+    if (value == null || value === '') return '';
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        const fraction = value - Math.floor(value);
+        if (fraction > 0) {
+            const totalMinutes = Math.round(fraction * 24 * 60);
+            const hh = Math.floor(totalMinutes / 60) % 24;
+            const mm = totalMinutes % 60;
+            return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00`;
+        }
+    }
+    const s = String(value).trim();
+    const m = /(?:^|\s)(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i.exec(s);
+    if (!m) return '';
+    let hh = Number(m[1]);
+    const mm = Number(m[2]);
+    const ss = Number(m[3] || 0);
+    const ampm = m[4]?.toUpperCase();
+    if (ampm === 'PM' && hh < 12) hh += 12;
+    if (ampm === 'AM' && hh === 12) hh = 0;
+    if (hh > 23 || mm > 59 || ss > 59) return '';
+    return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
 }
 
 function isLikelyTicker(v) {
@@ -686,6 +719,7 @@ function isLikelyTicker(v) {
  */
 function parseSheetGridToTrades(values, smartColumns, spreadsheetId, startRow = SHEET_DATA_FIRST_ROW) {
     const dateIdx = smartValueToColumnIndex(smartColumns.date || '');
+    const timeIdx = smartValueToColumnIndex(smartColumns.time || '');
     const symIdx = smartValueToColumnIndex(smartColumns.symbol || '');
     const profitIdx = smartValueToColumnIndex(smartColumns.profit || '');
     const typeIdx = smartValueToColumnIndex(smartColumns.tradeType || '');
@@ -731,6 +765,8 @@ function parseSheetGridToTrades(values, smartColumns, spreadsheetId, startRow = 
         if (!isLikelyTicker(symRaw)) continue;
 
         const symbol = String(symRaw).trim().toUpperCase();
+        const parsedTime = sheetsCellToTimeString(timeIdx >= 0 ? getCell(row, timeIdx) : dateRaw);
+        const timeStr = parsedTime || '09:30:00';
         const net = profitIdx >= 0 ? parseMoneyCell(getCell(row, profitIdx)) : 0;
         const gross = net;
         const typeCell = typeIdx >= 0 ? String(getCell(row, typeIdx)).trim() : '';
@@ -759,6 +795,7 @@ function parseSheetGridToTrades(values, smartColumns, spreadsheetId, startRow = 
             source: 'google',
             spreadsheetId,
             sheetRow: excelRow,
+            sheetTime: parsedTime || undefined,
             sheetNet: net,
             sheetGross: gross,
             tradeType: typeCell || undefined,
@@ -783,7 +820,7 @@ function parseSheetGridToTrades(values, smartColumns, spreadsheetId, startRow = 
         const trade = {
             symbol,
             type: typeCell || 'Google Sheet',
-            opened: `${activeDate} 09:30:00`,
+            opened: `${activeDate} ${timeStr}`,
             closed: `${activeDate} 16:00:00`,
             held: '',
             entry: Number.isFinite(entryNum) ? entryNum : 0,
@@ -813,6 +850,12 @@ function normalizeTradeSymbol(value) {
     return String(value || '').trim().toUpperCase();
 }
 
+function tradeTimeMinutes(opened) {
+    const m = /\b(\d{1,2}):(\d{2})(?::\d{2})?/.exec(String(opened || ''));
+    if (!m) return null;
+    return Number(m[1]) * 60 + Number(m[2]);
+}
+
 function pnlTolerance(value) {
     const n = Math.abs(Number(value) || 0);
     return Math.max(5, n * 0.08);
@@ -835,9 +878,13 @@ function findSheetMatchIndex(existingTrades, incomingTrade, usedIndices) {
         const noSheetYet = !trade?.sheet || trade.sheet.source !== 'google';
         if (hasPnl && !okByPnl) return;
         if (!hasPnl && !noSheetYet) return;
+        const existingMin = tradeTimeMinutes(trade?.opened);
+        const incomingMin = incomingTrade?.sheet?.sheetTime ? tradeTimeMinutes(incomingTrade.opened) : null;
+        const timeDiff = existingMin != null && incomingMin != null ? Math.abs(existingMin - incomingMin) : null;
+        if (timeDiff != null && timeDiff > 90) return;
         candidates.push({
             index,
-            score: (okByPnl ? 1000 - pnlDiff : 10) + (noSheetYet ? 20 : 0),
+            score: (okByPnl ? 1000 - pnlDiff : 10) + (noSheetYet ? 20 : 0) + (timeDiff != null ? Math.max(0, 90 - timeDiff) : 0),
         });
     });
 
@@ -849,7 +896,7 @@ function enrichTradeWithSheet(existingTrade, incomingTrade) {
     const sheet = {
         ...(existingTrade.sheet && typeof existingTrade.sheet === 'object' ? existingTrade.sheet : {}),
         ...(incomingTrade.sheet || {}),
-        matchedBy: 'date+ticker+pnl',
+        matchedBy: incomingTrade.sheet?.sheetTime ? 'date+ticker+pnl+time' : 'date+ticker+pnl',
     };
 
     return {

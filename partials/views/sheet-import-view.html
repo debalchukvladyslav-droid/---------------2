@@ -103,6 +103,26 @@
                                 </div>
                             </div>
 
+                            <div class="sheet-smart-row" data-smart-field="time">
+                                <div class="sheet-smart-row__left">
+                                    <span class="sheet-smart-row__label">Час угоди</span>
+                                    <span class="sheet-smart-row__hint">Для точнішого зіставлення з угодою в журналі.</span>
+                                </div>
+                                <div class="sheet-smart-row__right">
+                                    <div class="sheet-input-group" data-mode="select">
+                                        <select id="sheet-smart-time" class="sheet-input-group__select" aria-label="Колонка для часу угоди">
+                                            <option value="">Виберіть колонку...</option>
+                                            <option value="Date">Date</option>
+                                            <option value="Time">Time</option>
+                                            <option value="Ticker">Ticker</option>
+                                            <option value="Profit/Loss">Profit/Loss</option>
+                                        </select>
+                                        <button type="button" class="sheet-input-group__toggle" data-action="sheet-toggle-mapping" title="Вручну">✍️</button>
+                                        <input type="text" id="sheet-smart-time-manual" class="sheet-input-group__manual" placeholder="Напр. B" autocomplete="off" aria-label="Час угоди вручну">
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="sheet-smart-row" data-smart-field="symbol">
                                 <div class="sheet-smart-row__left">
                                     <span class="sheet-smart-row__label">Тікер (symbol)</span>

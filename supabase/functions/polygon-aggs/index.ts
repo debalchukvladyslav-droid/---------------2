@@ -126,6 +126,19 @@ Deno.serve(async (req) => {
     }
 
     const data = await pRes.json();
+    const polygonMessage = typeof data?.message === 'string' ? data.message : '';
+    if (pRes.status === 403 && /plan doesn't include this data timeframe/i.test(polygonMessage)) {
+        return json(
+            {
+                code: 'POLYGON_PLAN_TIMEFRAME',
+                message: 'Поточний тариф Polygon не включає хвилинні дані за цей період.',
+                providerMessage: polygonMessage,
+                results: [],
+            },
+            403,
+            req,
+        );
+    }
     return new Response(JSON.stringify(data), {
         status: pRes.ok ? 200 : pRes.status,
         headers: { ...cors(req), 'Content-Type': 'application/json' },

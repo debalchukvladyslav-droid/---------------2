@@ -360,8 +360,11 @@ async function buildLWChart(symbol, dateStr, trades) {
     } catch(e) {
         container.textContent = '';
         const errDiv = document.createElement('div');
-        errDiv.style.cssText = 'color:var(--loss);padding:20px;text-align:center;';
-        errDiv.textContent = `❌ Не вдалось завантажити дані: ${e.message}`;
+        const isPlanLimit = e?.code === 'POLYGON_PLAN_TIMEFRAME' || /plan doesn't include this data timeframe|тариф Polygon/i.test(String(e?.message || ''));
+        errDiv.style.cssText = `color:${isPlanLimit ? 'var(--text-muted)' : 'var(--loss)'};padding:20px;text-align:center;line-height:1.45;`;
+        errDiv.textContent = isPlanLimit
+            ? `Свічки для ${symbol} за ${dateStr} недоступні на поточному тарифі Polygon. Журнал і дані угоди працюють, але для графіка потрібен Polygon-план з хвилинними historical aggregates за цей період.`
+            : `❌ Не вдалось завантажити дані: ${e.message}`;
         container.appendChild(errDiv);
         return;
     }
@@ -642,10 +645,16 @@ async function fetchPolygon(symbol, fromMs, toMs) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
+        const message = data?.message || '';
+        if (res.status === 403 && (data?.code === 'POLYGON_PLAN_TIMEFRAME' || /plan doesn't include this data timeframe/i.test(message))) {
+            const error = new Error('Поточний тариф Polygon не включає хвилинні дані за цей період.');
+            error.code = 'POLYGON_PLAN_TIMEFRAME';
+            throw error;
+        }
         if (res.status === 429) {
             throw new Error('Polygon: перевищено ліміт запитів для цього ключа. Спробуйте ще раз трохи пізніше.');
         }
-        throw new Error(data?.message || `Polygon: помилка сервера ${res.status}. Перевірте POLYGON_API_KEY і деплой polygon-aggs.`);
+        throw new Error(message || `Polygon: помилка сервера ${res.status}. Перевірте POLYGON_API_KEY і деплой polygon-aggs.`);
     }
     return mapPolygonResults(data);
 }
