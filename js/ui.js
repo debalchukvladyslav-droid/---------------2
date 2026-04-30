@@ -564,6 +564,7 @@ export function switchMainTab(tab, options = {}) {
     if (tab === 'dash' && window.renderDashboardNews) window.renderDashboardNews();
     if (tab === 'screens') {
         if (window.updateDriveUI) window.updateDriveUI();
+        if (window.restoreScreensDistributionState) window.restoreScreensDistributionState();
         const settingsPanel = document.getElementById('screens-settings-panel');
         if (settingsPanel && !settingsPanel.classList.contains('initially-hidden') && window.loadLatestImageForOCR) {
             window.loadLatestImageForOCR();

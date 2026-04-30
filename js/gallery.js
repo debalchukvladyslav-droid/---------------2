@@ -7,24 +7,77 @@ import { deleteFromSupabaseStorage, getSupabaseStorageUrl, uploadToSupabaseStora
 import { buildScreenshotPath } from './storage_paths.js';
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 
+let zoomSources = [];
+let zoomIndex = -1;
+
 export function openZoom(src) {
+    if (!zoomSources.includes(src)) {
+        zoomSources = [src];
+    }
+    zoomIndex = Math.max(0, zoomSources.indexOf(src));
     state.currentZoomedSrc = src;
     const preview = document.getElementById('image-preview');
     preview.querySelector('img').src = src;
     preview.style.display = 'flex';
+    syncZoomControls();
 }
 
 export function closeZoom(e) {
     if (e.target.id === 'image-preview') {
-        document.getElementById('image-preview').style.display = 'none';
+        closeZoomPreview();
     }
+}
+
+function closeZoomPreview() {
+    const preview = document.getElementById('image-preview');
+    if (preview) preview.style.display = 'none';
 }
 
 export function openOriginal(e) {
     if(e) e.stopPropagation();
-    document.getElementById('image-preview').style.display = 'none';
+    closeZoomPreview();
     window.open(state.currentZoomedSrc, '_blank');
 }
+
+function syncZoomControls() {
+    const preview = document.getElementById('image-preview');
+    if (!preview) return;
+    const hasMany = zoomSources.length > 1;
+    preview.classList.toggle('has-zoom-nav', hasMany);
+    preview.querySelectorAll('.zoom-nav-btn').forEach(btn => {
+        btn.classList.toggle('initially-hidden', !hasMany);
+    });
+}
+
+export function openZoomGallery(src, sources = []) {
+    zoomSources = sources.length ? sources : [src];
+    openZoom(src);
+}
+
+export function zoomStep(direction) {
+    if (!zoomSources.length) return;
+    zoomIndex = (zoomIndex + direction + zoomSources.length) % zoomSources.length;
+    const src = zoomSources[zoomIndex];
+    state.currentZoomedSrc = src;
+    const img = document.querySelector('#image-preview img');
+    if (img) img.src = src;
+    syncZoomControls();
+}
+
+document.addEventListener('keydown', (event) => {
+    const preview = document.getElementById('image-preview');
+    if (!preview || getComputedStyle(preview).display === 'none') return;
+    if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        zoomStep(-1);
+    } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        zoomStep(1);
+    } else if (event.key === 'Escape') {
+        event.preventDefault();
+        closeZoomPreview();
+    }
+});
 
 export function getImgUrl(path) { 
     return decodeURIComponent(path); 
@@ -72,6 +125,33 @@ export async function getStorageUrl(pathOrUrl) {
         return pathOrUrl;
     }
 }
+
+function applyScreensDistributionCollapsed(collapsed) {
+    const panel = document.getElementById('screens-distribution-panel');
+    const body = document.getElementById('screens-distribution-body');
+    const btn = document.getElementById('screens-distribution-toggle');
+    if (!panel || !body) return;
+
+    panel.classList.toggle('screens-distribution-collapsed', collapsed);
+    body.classList.toggle('initially-hidden', collapsed);
+    if (btn) {
+        btn.textContent = collapsed ? '⌄' : '⌃';
+        btn.setAttribute('aria-expanded', String(!collapsed));
+        btn.setAttribute('aria-label', collapsed ? 'Розгорнути розподіл скріншотів' : 'Згорнути розподіл скріншотів');
+        btn.title = collapsed ? 'Розгорнути розподіл' : 'Згорнути розподіл';
+    }
+}
+
+window.toggleScreensDistribution = function(forceCollapsed = null) {
+    const body = document.getElementById('screens-distribution-body');
+    const collapsed = forceCollapsed === null ? !body?.classList.contains('initially-hidden') : !!forceCollapsed;
+    applyScreensDistributionCollapsed(collapsed);
+    localStorage.setItem('screens_distribution_collapsed', collapsed ? '1' : '0');
+};
+
+window.restoreScreensDistributionState = function() {
+    applyScreensDistributionCollapsed(localStorage.getItem('screens_distribution_collapsed') === '1');
+};
 
 // Гарантує, що в об'єкті дня є правильна структура
 function normalizeTicker(value) {
@@ -261,12 +341,41 @@ export async function renderAssignedScreens() {
 
     // Презавантажуємо blob URL для Firebase Storage
     const allFilenames = SCREEN_CATS.flatMap(cat => screens[cat.id] || []);
+    const catCounts = Object.fromEntries(SCREEN_CATS.map(cat => [cat.id, (screens[cat.id] || []).length]));
+    const activeFilter = state.screensCategoryFilter || 'all';
+    const visibleCats = activeFilter === 'all'
+        ? SCREEN_CATS
+        : SCREEN_CATS.filter(cat => cat.id === activeFilter);
     const srcMap = {};
     await Promise.all(allFilenames.map(async f => {
         srcMap[f] = await getStorageUrl(f);
     }));
+    const visibleSources = visibleCats
+        .flatMap(cat => screens[cat.id] || [])
+        .map(filename => srcMap[filename] || getImgUrl(filename));
+
+    const filterBar = document.createElement('div');
+    filterBar.className = 'screen-category-filter';
+    const filterOptions = [
+        { id: 'all', name: 'Всі', count: allFilenames.length, color: 'var(--accent)' },
+        ...SCREEN_CATS.map(cat => ({ ...cat, count: catCounts[cat.id] || 0 })),
+    ];
+    filterOptions.forEach(option => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'screen-filter-chip';
+        btn.classList.toggle('active', activeFilter === option.id);
+        btn.style.setProperty('--chip-color', option.color);
+        btn.innerHTML = `<span>${option.name}</span><strong>${option.count}</strong>`;
+        btn.addEventListener('click', () => {
+            state.screensCategoryFilter = option.id;
+            void renderAssignedScreens();
+        });
+        filterBar.appendChild(btn);
+    });
+    assignedContainer.appendChild(filterBar);
     
-    SCREEN_CATS.forEach(cat => {
+    visibleCats.forEach(cat => {
         const list = screens[cat.id] || []; count += list.length;
         if (list.length === 0) return;
 
@@ -297,7 +406,7 @@ export async function renderAssignedScreens() {
             const imgEl = document.createElement('img');
             imgEl.src = src; imgEl.title = 'Клікніть, щоб збільшити';
             imgEl.loading = 'lazy';
-            imgEl.addEventListener('click', () => openZoom(src));
+            imgEl.addEventListener('click', () => openZoomGallery(src, visibleSources));
             zoomWrap.appendChild(badge); zoomWrap.appendChild(imgEl);
 
             // Action buttons
@@ -377,15 +486,17 @@ export async function renderAssignedScreens() {
         });
         assignedContainer.appendChild(catDiv);
     });
-    if (!assignedContainer.hasChildNodes()) {
+    if (allFilenames.length === 0 || (activeFilter !== 'all' && count === 0)) {
         const empty = document.createElement('div');
-        empty.style.cssText = 'color:var(--text-muted);font-size:1.1rem;margin-top:20px;';
-        empty.textContent = 'Немає скріншотів для цього дня.';
+        empty.className = 'screen-empty-state';
+        empty.textContent = allFilenames.length === 0
+            ? 'Немає скріншотів для цього дня.'
+            : 'У цій категорії поки немає скріншотів.';
         assignedContainer.appendChild(empty);
     }
     
     document.getElementById('big-screen-date').innerText = state.selectedDateStr; 
-    const infoEl = document.getElementById('sidebar-screen-info'); if (infoEl) infoEl.innerText = `Скріншотів додано: ${count}`;
+    const infoEl = document.getElementById('sidebar-screen-info'); if (infoEl) infoEl.innerText = `Скріншотів додано: ${allFilenames.length}`;
     
     currentDayImages.forEach(encodedPath => { if(window.updateBadgeUI) window.updateBadgeUI(encodedPath) });
 
@@ -518,7 +629,7 @@ window.updateDisciplineUI = function(encodedPath, value, slider) {
     const v = parseInt(value);
     const color = v <= 3 ? '#10b981' : v >= 8 ? '#ef4444' : '#f59e0b';
     slider.style.accentColor = color;
-    const wrap = slider.closest('div[style*="margin-top:12px"]');
+    const wrap = slider.closest('.screen-discipline');
     if (wrap) {
         const valLabel = wrap.querySelector('span:nth-child(2)');
         if (valLabel) { valLabel.textContent = `${v}/10`; valLabel.style.color = color; }
@@ -590,7 +701,10 @@ window.removeScreenTag = function(encodedPath, tag) {
 
 window.toggleTagSearch = function() {
     const panel = document.getElementById('tag-search-panel');
-    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    if (!panel) return;
+    const shouldOpen = getComputedStyle(panel).display === 'none';
+    if (shouldOpen) window.toggleScreensDistribution?.(false);
+    panel.style.display = shouldOpen ? 'block' : 'none';
 };
 
 window.toggleScreensSettings = function(forceOpen) {
@@ -599,6 +713,7 @@ window.toggleScreensSettings = function(forceOpen) {
     if (!panel) return;
 
     const shouldOpen = forceOpen === true || (forceOpen !== false && panel.classList.contains('initially-hidden'));
+    if (shouldOpen) window.toggleScreensDistribution?.(false);
     panel.classList.toggle('initially-hidden', !shouldOpen);
     if (btn) btn.setAttribute('aria-expanded', String(shouldOpen));
 

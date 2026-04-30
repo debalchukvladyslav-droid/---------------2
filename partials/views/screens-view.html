@@ -1,5 +1,5 @@
 ﻿        <div id="view-screens" class="view-content">
-            <div class="panel">
+            <div class="panel" id="screens-distribution-panel">
                 <div class="screens-panel-head">
                     <h3 class="panel-title-accent" id="unassigned-title">
                         Нерозподілені скріншоти: 
@@ -7,72 +7,75 @@
                     </h3>
                     <div class="inline-flex-row">
                         <span id="drive-sync-status" class="muted-status"></span>
+                        <button class="screens-collapse-toggle" type="button" id="screens-distribution-toggle" data-action="screens-distribution-toggle" aria-expanded="true" aria-controls="screens-distribution-body" aria-label="Згорнути розподіл скріншотів" title="Згорнути розподіл">⌃</button>
                         <button class="btn-secondary btn-auto" data-action="tag-search-toggle">🔍 Пошук по тегах</button>
                         <button class="btn-secondary btn-auto" data-action="leader-screens">🏆 Лідер дня</button>
                         <button class="btn-secondary btn-auto screens-settings-btn" type="button" data-action="screens-settings-toggle" aria-expanded="false" aria-controls="screens-settings-panel" title="Налаштування скріншотів">⚙️</button>
                     </div>
                 </div>
 
-                <!-- Панель пошуку -->
-                <div id="tag-search-panel" class="tag-search-panel">
-                    <div class="tag-search-grid">
-                        <div class="tag-search-field">
-                            <label class="tag-search-label">Тег</label>
-                            <input type="text" id="tag-search-input" class="tag-search-input" placeholder="напр. пробій" data-action="tag-search-input">
-                            <div id="tag-search-suggestions" class="tag-suggestions"></div>
-                        </div>
-                        <div>
-                            <label class="tag-search-label">Від</label>
-                            <input type="date" id="tag-search-from" class="tag-search-date">
-                        </div>
-                        <div>
-                            <label class="tag-search-label">До</label>
-                            <input type="date" id="tag-search-to" class="tag-search-date">
-                        </div>
-                        <div>
-                            <label class="tag-search-label">Ліміт</label>
-                            <select id="tag-search-limit" class="tag-search-limit">
-                                <option value="10">10</option>
-                                <option value="20">20</option>
-                                <option value="50" selected>50</option>
-                                <option value="100">100</option>
-                                <option value="200">200</option>
-                            </select>
-                        </div>
-                        <button class="btn-primary btn-auto" data-action="tag-search-run">🔍 Знайти</button>
-                        <button class="btn-secondary btn-auto" data-action="tag-search-clear">✕ Скинути</button>
-                    </div>
-                    <div id="tag-search-results" class="tag-search-results"></div>
-                </div>
-
-                <div id="screens-settings-panel" class="screens-settings-panel initially-hidden">
-                    <div class="screens-settings-grid">
-                        <section class="screens-settings-card">
-                            <h3 class="settings-title">Google Drive</h3>
-                            <p class="muted-copy">Підключення акаунта Google і вибір папки, з якої автоматично підтягувати скріншоти.</p>
-                            <div class="settings-row">
-                                <button class="btn-secondary btn-auto" id="drive-connect-btn" data-action="drive-connect">Підключити Google Drive</button>
-                                <button class="btn-secondary btn-auto drive-disconnect-btn initially-hidden" id="drive-disconnect-btn" data-action="drive-disconnect">Вийти</button>
-                                <span id="drive-folder-info" class="drive-folder-info"></span>
+                <div id="screens-distribution-body">
+                    <!-- Панель пошуку -->
+                    <div id="tag-search-panel" class="tag-search-panel">
+                        <div class="tag-search-grid">
+                            <div class="tag-search-field">
+                                <label class="tag-search-label">Тег</label>
+                                <input type="text" id="tag-search-input" class="tag-search-input" placeholder="напр. пробій" data-action="tag-search-input">
+                                <div id="tag-search-suggestions" class="tag-suggestions"></div>
                             </div>
-                        </section>
+                            <div>
+                                <label class="tag-search-label">Від</label>
+                                <input type="date" id="tag-search-from" class="tag-search-date">
+                            </div>
+                            <div>
+                                <label class="tag-search-label">До</label>
+                                <input type="date" id="tag-search-to" class="tag-search-date">
+                            </div>
+                            <div>
+                                <label class="tag-search-label">Ліміт</label>
+                                <select id="tag-search-limit" class="tag-search-limit">
+                                    <option value="10">10</option>
+                                    <option value="20">20</option>
+                                    <option value="50" selected>50</option>
+                                    <option value="100">100</option>
+                                    <option value="200">200</option>
+                                </select>
+                            </div>
+                            <button class="btn-primary btn-auto" data-action="tag-search-run">🔍 Знайти</button>
+                            <button class="btn-secondary btn-auto" data-action="tag-search-clear">✕ Скинути</button>
+                        </div>
+                        <div id="tag-search-results" class="tag-search-results"></div>
+                    </div>
 
-                        <section class="screens-settings-card screens-settings-card-wide">
-                            <h3 class="settings-title">OCR зона для авто-тікерів</h3>
-                            <p class="muted-copy">Налаштуйте область, з якої система читає тікер на скріншоті.</p>
-                            <div id="ocr-setup-container">
-                                <div id="ocr-zoom-wrapper">
-                                    <img id="ocr-setup-img" src="" alt="Завантаження...">
-                                    <div id="ocr-selection-box"></div>
+                    <div id="screens-settings-panel" class="screens-settings-panel initially-hidden">
+                        <div class="screens-settings-grid">
+                            <section class="screens-settings-card">
+                                <h3 class="settings-title">Google Drive</h3>
+                                <p class="muted-copy">Підключення акаунта Google і вибір папки, з якої автоматично підтягувати скріншоти.</p>
+                                <div class="settings-row">
+                                    <button class="btn-secondary btn-auto" id="drive-connect-btn" data-action="drive-connect">Підключити Google Drive</button>
+                                    <button class="btn-secondary btn-auto drive-disconnect-btn initially-hidden" id="drive-disconnect-btn" data-action="drive-disconnect">Вийти</button>
+                                    <span id="drive-folder-info" class="drive-folder-info"></span>
                                 </div>
-                            </div>
-                            <div id="ocr-setup-status" class="settings-status"></div>
-                            <button class="btn-primary btn-auto" data-action="ocr-save">Зберегти OCR-зону і оновити скріншоти</button>
-                        </section>
-                    </div>
-                </div>
+                            </section>
 
-                <div class="unassigned-gallery" id="unassigned-container"></div>
+                            <section class="screens-settings-card screens-settings-card-wide">
+                                <h3 class="settings-title">OCR зона для авто-тікерів</h3>
+                                <p class="muted-copy">Налаштуйте область, з якої система читає тікер на скріншоті.</p>
+                                <div id="ocr-setup-container">
+                                    <div id="ocr-zoom-wrapper">
+                                        <img id="ocr-setup-img" src="" alt="Завантаження...">
+                                        <div id="ocr-selection-box"></div>
+                                    </div>
+                                </div>
+                                <div id="ocr-setup-status" class="settings-status"></div>
+                                <button class="btn-primary btn-auto" data-action="ocr-save">Зберегти OCR-зону і оновити скріншоти</button>
+                            </section>
+                        </div>
+                    </div>
+
+                    <div class="unassigned-gallery" id="unassigned-container"></div>
+                </div>
             </div>
 
             <div class="panel panel-flex-grow">
