@@ -340,18 +340,6 @@ function scoreTickerCandidates(rawText, tradedTickers = [], ocrWords = [], zoneW
 
     const scores = {};
     const wordSet = new Set(words);
-    const rawTokens = clean.split(/\s+/).filter(Boolean);
-    const exchanges = new Set(['NASDAQ', 'NYSE', 'AMEX', 'ARCA', 'BATS']);
-
-    rawTokens.forEach((token, index) => {
-        if (!exchanges.has(normalizeTicker(token))) return;
-        for (let i = index - 1; i >= Math.max(0, index - 5); i--) {
-            const candidate = normalizeOCRTicker(rawTokens[i]);
-            if (!validTickerWord(candidate)) continue;
-            addCandidate(scores, candidate, 180 * zoneWeight);
-            break;
-        }
-    });
 
     // Збіг з traded_tickers — найвищий пріоритет, бо це реальний список торгованих символів за день.
     for (const w of traded) {
@@ -432,18 +420,6 @@ function buildAutoOCRZones(iw, ih) {
         zones.push(clampZone(custom.left - custom.width * 0.12, custom.top - custom.height * 0.25, custom.width * 1.25, custom.height * 1.45));
     }
 
-    // thinkorswim layout: ticker is usually in a tiny header strip of each chart pane.
-    const headerH = Math.max(18, ih * 0.045);
-    const topHeaderY = Math.max(0, ih * 0.018);
-    const lowerHeaderY = ih * 0.595;
-    zones.push(
-        clampZone(0, topHeaderY, iw * 0.76, headerH),
-        clampZone(iw * 0.76, topHeaderY, iw * 0.24, headerH),
-        clampZone(0, lowerHeaderY, iw * 0.22, headerH),
-        clampZone(iw * 0.21, lowerHeaderY, iw * 0.62, headerH),
-        clampZone(iw * 0.82, lowerHeaderY, iw * 0.18, headerH),
-    );
-
     zones.push(
         clampZone(0, 0, iw * 0.28, ih * 0.09),
         clampZone(0, 0, iw * 0.42, ih * 0.14),
@@ -521,7 +497,7 @@ export async function runOCR(encodedPath, force = false) {
         for (let zoneIndex = 0; zoneIndex < zones.length; zoneIndex++) {
             const zone = zones[zoneIndex];
             const zoneWeight = Math.max(0.65, 1.45 - zoneIndex * 0.12);
-            const variants = makeOCRVariants(imgObj, zone, zone.h <= ih * 0.06 ? 7 : zoneIndex < 2 ? 5 : 4);
+            const variants = makeOCRVariants(imgObj, zone, zoneIndex < 2 ? 5 : 4);
 
             for (const canvas of variants) {
                 const { data } = await Tesseract.recognize(canvas, 'eng', {
