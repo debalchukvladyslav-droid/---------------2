@@ -178,8 +178,9 @@ function smartFieldRanges(field) {
     return String(value || '')
         .split(',')
         .map(v => v.trim().toUpperCase())
-        .filter(v => /^[A-Z]{1,3}$/.test(v))
-        .map(letter => `${letter}${startRow}:${letter}`);
+        .map(v => parseColumnRangeToken(v) || (/^[A-Z]{1,3}$/.test(v) ? { letter: v, row: null } : null))
+        .filter(Boolean)
+        .map(({ letter, row }) => `${letter}${row || startRow}:${letter}`);
 }
 
 function updateSmartRangeHints() {
@@ -496,6 +497,29 @@ function isColumnLetterToken(v) {
     return typeof v === 'string' && /^[A-Z]{1,3}$/i.test(v.trim());
 }
 
+function parseColumnRangeToken(raw) {
+    const v = String(raw || '').trim().toUpperCase().replace(/\$/g, '');
+    if (!v) return null;
+
+    let match = /^([A-Z]{1,3})(\d+)?(?::([A-Z]{1,3}))?$/.exec(v);
+    if (match && (!match[3] || match[3] === match[1])) {
+        return {
+            letter: match[1],
+            row: match[2] ? Number(match[2]) : null,
+        };
+    }
+
+    match = /^([A-Z]{1,3})(\d+)?:([A-Z]{1,3})(\d+)?$/.exec(v);
+    if (match && match[1] === match[3]) {
+        return {
+            letter: match[1],
+            row: match[2] ? Number(match[2]) : null,
+        };
+    }
+
+    return null;
+}
+
 function isPresetValue(v) {
     if (isColumnLetterToken(v)) return true;
     return getKnownColumnValues().has(v);
@@ -505,6 +529,8 @@ function isPresetValue(v) {
 function resolveMappingValueToSelectLetter(raw) {
     const v = typeof raw === 'string' ? raw.trim() : '';
     if (!v || v.includes(',')) return v;
+    const rangeToken = parseColumnRangeToken(v);
+    if (rangeToken) return rangeToken.letter;
     if (isColumnLetterToken(v)) return v.toUpperCase();
     if (!_dynamicColumnChoices.length) return v;
     const hit = _dynamicColumnChoices.find(
@@ -516,7 +542,8 @@ function resolveMappingValueToSelectLetter(raw) {
 function smartValueToColumnIndex(raw) {
     const v = typeof raw === 'string' ? raw.trim() : '';
     if (!v || v.includes(',')) return -1;
-    const letter = isColumnLetterToken(v) ? v.toUpperCase() : resolveMappingValueToSelectLetter(v);
+    const rangeToken = parseColumnRangeToken(v);
+    const letter = rangeToken ? rangeToken.letter : isColumnLetterToken(v) ? v.toUpperCase() : resolveMappingValueToSelectLetter(v);
     if (!letter || letter.includes(',')) return -1;
     return columnLetterToIndex(letter);
 }
