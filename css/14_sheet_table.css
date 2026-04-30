@@ -118,6 +118,13 @@ body[data-theme="light"] .btn-google-signin {
 }
 
 /* --- Робоча зона (стан 2) --- */
+.sheet-card[hidden],
+.sheet-workspace[hidden],
+.sheet-file-card[hidden],
+.sheet-smart-mapping[hidden] {
+    display: none !important;
+}
+
 .sheet-workspace {
     display: flex;
     flex-direction: column;
