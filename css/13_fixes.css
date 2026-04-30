@@ -942,6 +942,27 @@
 }
 .sidebar-account-dropdown textarea { min-height: 72px; resize: vertical; }
 .sidebar-pf-save { margin-top: 6px; width: 100%; border-radius: 10px; }
+.sidebar-account-actions-section {
+    padding: 12px;
+    border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.sidebar-account-actions-section .sidebar-pf-section-title {
+    margin-bottom: 4px;
+}
+.sidebar-account-actions {
+    display: grid;
+    gap: 8px;
+    margin-top: 10px;
+}
+.sidebar-account-action-btn,
+.sidebar-account-logout-btn {
+    width: 100%;
+    margin: 0;
+    justify-content: center;
+    border-radius: 10px;
+}
 
 /* === Адмін: картки користувачів === */
 .admin-panel-content { max-width: 920px; margin: 0 auto; }

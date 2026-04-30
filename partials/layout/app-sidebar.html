@@ -18,6 +18,10 @@
                 <span class="ti-icon ti-calendar"></span>
                 <span class="nav-label">Календар</span>
             </button>
+            <button class="sidebar-nav-item" data-tab="screens">
+                <span class="ti-icon ti-image"></span>
+                <span class="nav-label">Скріншоти</span>
+            </button>
             <div class="nav-divider"></div>
             <button class="sidebar-nav-item" data-tab="trades">
                 <span class="ti-icon ti-list-check"></span>
@@ -30,10 +34,6 @@
             <button class="sidebar-nav-item" data-tab="table" title="Мапінг колонок Google Sheets">
                 <span class="ti-icon ti-columns"></span>
                 <span class="nav-label">Імпорт</span>
-            </button>
-            <button class="sidebar-nav-item" data-tab="screens">
-                <span class="ti-icon ti-image"></span>
-                <span class="nav-label">Скріншоти</span>
             </button>
             <div class="nav-divider"></div>
             <button class="sidebar-nav-item" data-tab="stats">
@@ -81,6 +81,14 @@
                 </span>
             </button>
             <div class="sidebar-account-dropdown" id="sidebar-account-dropdown" hidden>
+                <div class="sidebar-pf-section sidebar-account-actions-section">
+                    <div class="sidebar-pf-section-title">Налаштування</div>
+                    <p class="sidebar-pf-hint">Акаунт, ризик і система</p>
+                    <div class="sidebar-account-actions">
+                        <button type="button" class="btn-secondary sidebar-account-action-btn" data-tab="settings">Відкрити налаштування</button>
+                        <button type="button" class="btn-primary sidebar-account-logout-btn" data-action="logout">Вийти з акаунту</button>
+                    </div>
+                </div>
                 <div class="sidebar-pf-section">
                     <div class="sidebar-pf-section-title">Акаунт</div>
                     <div class="sidebar-pf-label">Логін (нік)</div>

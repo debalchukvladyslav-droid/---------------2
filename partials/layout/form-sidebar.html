@@ -20,6 +20,7 @@
         <button type="button" class="tab-btn" data-tab="tab-errors">Помилки</button>
         <button type="button" class="tab-btn" data-tab="tab-trades">Угоди</button>
         <button type="button" class="tab-btn" data-tab="tab-session">🎯 Сесія</button>
+        <button type="button" class="tab-btn" data-tab="tab-fields">Поля</button>
     </div>
 
     <div id="tab-profit" class="tab-content active">
@@ -120,6 +121,35 @@
         </div>
         <button class="btn-ai" data-action="session-readiness-check">🤖 AI: Чи готовий торгувати?</button>
         <div id="session-ai-result" class="session-ai-result"></div>
+    </div>
+
+    <div id="tab-fields" class="tab-content">
+        <div class="form-config-block">
+            <h4 class="form-config-title">Чекліст дня</h4>
+            <div id="settings-checklist-list" class="settings-list"></div>
+            <div class="settings-actions">
+                <button class="btn-secondary btn-auto" data-action="settings-checklist-add">Додати пункт</button>
+                <button class="btn-primary btn-auto" data-action="settings-checklist-save">Зберегти чекліст</button>
+            </div>
+        </div>
+
+        <div class="form-config-block">
+            <h4 class="form-config-title">Стан перед торгівлею</h4>
+            <div id="settings-sliders-list" class="settings-list"></div>
+            <div class="settings-actions">
+                <button class="btn-secondary btn-auto" data-action="settings-slider-add">Додати шкалу</button>
+                <button class="btn-primary btn-auto" data-action="settings-slider-save">Зберегти шкали</button>
+            </div>
+        </div>
+
+        <div class="form-config-block">
+            <h4 class="form-config-title">Типи трейдів</h4>
+            <div id="my-trade-types-list" class="settings-list"></div>
+            <div class="settings-actions">
+                <button class="btn-secondary btn-auto" data-action="my-trade-type-add">Додати тип</button>
+                <button class="btn-primary btn-auto" data-action="my-trade-type-save">Зберегти типи</button>
+            </div>
+        </div>
     </div>
 
     <button type="button" id="btn-save-day" class="btn-primary save-day-btn" data-action="day-save">

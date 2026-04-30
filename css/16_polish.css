@@ -1699,6 +1699,17 @@ body {
     color: var(--accent);
 }
 
+.settings-hub-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.settings-hub-card {
+    min-height: 0;
+}
+
 .settings-title-spaced {
     margin-bottom: 15px;
 }
@@ -1721,6 +1732,25 @@ body {
 
 .settings-list {
     margin-bottom: 15px;
+}
+
+.form-config-block {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+    background: color-mix(in srgb, var(--bg-panel) 72%, var(--bg-main));
+}
+
+.form-config-title {
+    margin: 0 0 10px;
+    color: var(--text-main);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.broker-import-card {
+    margin-bottom: 16px;
 }
 
 .settings-copy {
@@ -1795,6 +1825,12 @@ body {
 
 .flex-fill {
     flex: 1;
+}
+
+@media (max-width: 920px) {
+    .settings-hub-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 .import-fondexx-btn {
@@ -1989,6 +2025,14 @@ select:user-invalid {
 
 .auth-card {
     width: min(390px, calc(100vw - 28px));
+    background:
+        linear-gradient(180deg, color-mix(in srgb, var(--card) 95%, #122018), color-mix(in srgb, var(--bg-main) 94%, #020617));
+    border-color: color-mix(in srgb, var(--border) 62%, var(--accent) 38%);
+    box-shadow:
+        0 32px 90px rgba(0, 0, 0, 0.58),
+        0 0 0 1px rgba(255, 255, 255, 0.035);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .auth-title {
@@ -1997,6 +2041,410 @@ select:user-invalid {
 
 .auth-error:not(:empty) {
     border-radius: 8px;
+}
+
+.auth-overlay {
+    background:
+        linear-gradient(120deg, rgba(0, 229, 160, 0.12), transparent 34%),
+        linear-gradient(235deg, rgba(59, 130, 246, 0.18), transparent 42%),
+        linear-gradient(145deg, #020617 0%, #082f2b 36%, #111827 68%, #020617 100%);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+.auth-overlay::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    pointer-events: none;
+    background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: linear-gradient(180deg, rgba(0,0,0,0.9), rgba(0,0,0,0.24));
+}
+
+.auth-overlay::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+        linear-gradient(115deg, transparent 0 18%, rgba(0, 229, 160, 0.12) 18% 18.5%, transparent 18.5% 100%),
+        linear-gradient(128deg, transparent 0 58%, rgba(245, 158, 11, 0.11) 58% 58.4%, transparent 58.4% 100%),
+        linear-gradient(98deg, transparent 0 72%, rgba(59, 130, 246, 0.12) 72% 72.45%, transparent 72.45% 100%);
+    opacity: 0.95;
+}
+
+body[data-theme="light"] .auth-overlay {
+    background:
+        linear-gradient(120deg, rgba(0, 150, 106, 0.16), transparent 35%),
+        linear-gradient(235deg, rgba(37, 99, 235, 0.14), transparent 44%),
+        linear-gradient(145deg, #eef7f3 0%, #dfeef5 42%, #f6f8fb 100%);
+}
+
+body[data-theme="light"] .auth-card {
+    background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(247,250,252,0.98));
+    box-shadow:
+        0 28px 70px rgba(15, 23, 42, 0.16),
+        0 0 0 1px rgba(255, 255, 255, 0.75);
+}
+
+/* Day form redesign */
+#form-sidebar {
+    width: min(430px, 100vw);
+    min-width: min(430px, 100vw);
+    padding: 0;
+    overflow: hidden;
+    border-left: 1px solid color-mix(in srgb, var(--border) 74%, var(--accent) 26%);
+    background:
+        linear-gradient(180deg, color-mix(in srgb, var(--bg-panel) 96%, var(--accent) 4%), var(--bg-panel) 42%),
+        radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 14%, transparent), transparent 34%);
+    box-shadow: -18px 0 54px rgba(0, 0, 0, 0.42);
+}
+
+#form-sidebar.collapsed {
+    width: 0 !important;
+    min-width: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+#form-sidebar .sidebar-panel-head {
+    margin: 0;
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    background:
+        linear-gradient(135deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent 48%),
+        color-mix(in srgb, var(--bg-panel) 94%, #020617);
+}
+
+#form-sidebar .sidebar-panel-title {
+    font-size: 1rem;
+    letter-spacing: 0;
+}
+
+#form-sidebar .icon-button-plain {
+    width: 34px;
+    height: 34px;
+    justify-content: center;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    background: color-mix(in srgb, var(--bg-main) 54%, transparent);
+}
+
+#form-sidebar .header-actions {
+    margin: 0;
+    padding: 14px 20px;
+    gap: 10px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    background: color-mix(in srgb, var(--bg-main) 38%, transparent);
+}
+
+#form-sidebar .date-display {
+    min-height: 38px;
+    padding: 9px 12px;
+    border: 1px solid color-mix(in srgb, var(--border) 78%, var(--accent) 22%);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-panel) 82%, #020617);
+    color: var(--text-main);
+    font-family: var(--font-main);
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#form-sidebar .date-nav-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-panel) 84%, transparent);
+}
+
+#form-sidebar .tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin: 0;
+    padding: 12px 20px;
+    border: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    border-radius: 0;
+    background: color-mix(in srgb, var(--bg-panel) 92%, #020617);
+}
+
+#form-sidebar .tab-btn {
+    min-height: 36px;
+    padding: 8px 7px;
+    border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-main) 54%, transparent);
+    color: color-mix(in srgb, var(--text-muted) 88%, var(--text-main));
+    font-size: 0.78rem;
+    letter-spacing: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#form-sidebar .tab-btn:hover {
+    color: var(--text-main);
+    border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+}
+
+#form-sidebar .tab-btn.active {
+    background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 78%, var(--profit)));
+    border-color: transparent;
+    color: var(--primary-foreground);
+    box-shadow: 0 10px 24px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+#form-sidebar .tab-content {
+    min-height: 0;
+    padding: 18px 20px 20px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-gutter: stable;
+}
+
+#form-sidebar .tab-content.active {
+    display: block;
+}
+
+#form-sidebar .sidebar-form-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+#form-sidebar .sidebar-form-row:has(.form-group:nth-child(3)) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+#form-sidebar .form-group {
+    margin-bottom: 12px;
+}
+
+#form-sidebar label,
+#form-sidebar .checklist-label,
+#form-sidebar .state-label {
+    margin-bottom: 7px;
+    color: color-mix(in srgb, var(--text-muted) 86%, var(--text-main));
+    font-size: 0.69rem;
+    letter-spacing: 0.05em;
+}
+
+#form-sidebar input[type="text"],
+#form-sidebar input[type="number"],
+#form-sidebar input[type="password"],
+#form-sidebar input[type="email"],
+#form-sidebar textarea,
+#form-sidebar select {
+    min-height: 40px;
+    border-radius: 8px;
+    border-color: color-mix(in srgb, var(--border) 84%, transparent);
+    background: color-mix(in srgb, var(--bg-main) 72%, #020617);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+}
+
+#form-sidebar textarea {
+    line-height: 1.45;
+}
+
+#form-sidebar input:focus,
+#form-sidebar textarea:focus,
+#form-sidebar select:focus {
+    border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
+    background: color-mix(in srgb, var(--bg-main) 86%, transparent);
+}
+
+#form-sidebar .trade-types-container,
+#form-sidebar .sliders-container,
+#form-sidebar .sidebar-checklist-container,
+#form-sidebar .errors-list-container,
+#form-sidebar .trades-list-container {
+    gap: 8px;
+}
+
+#form-sidebar .trade-types-container,
+#form-sidebar .sliders-container {
+    margin: 8px 0 14px;
+    padding: 12px;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-main) 38%, transparent);
+}
+
+#form-sidebar .error-item {
+    min-height: 38px;
+    margin-bottom: 0;
+    padding: 9px 11px !important;
+    border-radius: 8px;
+    border-color: color-mix(in srgb, var(--border) 82%, transparent) !important;
+    background: color-mix(in srgb, var(--bg-panel) 72%, transparent) !important;
+}
+
+#form-sidebar .error-item:hover {
+    border-color: color-mix(in srgb, var(--accent) 34%, var(--border)) !important;
+    background: color-mix(in srgb, var(--accent) 6%, var(--bg-panel)) !important;
+}
+
+#form-sidebar .error-label {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 0;
+    color: var(--text-main);
+    font-size: 0.86rem !important;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+#form-sidebar input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+}
+
+#form-sidebar .slider-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 42px;
+    grid-template-areas: "label value" "slider slider";
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 10px;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-panel) 66%, transparent);
+}
+
+#form-sidebar .slider-row label {
+    grid-area: label;
+    flex: none;
+    white-space: normal;
+}
+
+#form-sidebar .slider-row input[type="range"] {
+    grid-area: slider;
+    width: 100%;
+}
+
+#form-sidebar .slider-val {
+    grid-area: value;
+    justify-self: end;
+    min-width: 30px;
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    text-align: center;
+}
+
+#form-sidebar .mentor-comment-block,
+#form-sidebar .private-note-container,
+#form-sidebar .form-config-block {
+    margin-top: 14px;
+    padding: 13px;
+    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-main) 36%, transparent);
+}
+
+#form-sidebar .mentor-comment-block {
+    border-color: color-mix(in srgb, var(--gold) 34%, var(--border));
+}
+
+#form-sidebar .private-note-container {
+    border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+}
+
+#form-sidebar .error-add-row,
+#form-sidebar .settings-actions {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+
+#form-sidebar .error-add-row input {
+    flex: 1;
+}
+
+#form-sidebar .error-add-btn {
+    width: 42px;
+    flex: 0 0 42px;
+    padding: 0;
+}
+
+#form-sidebar .trades-empty {
+    padding: 18px;
+    border: 1px dashed color-mix(in srgb, var(--border) 72%, var(--text-muted));
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-main) 34%, transparent);
+    color: var(--text-muted);
+    text-align: center;
+    line-height: 1.45;
+}
+
+#form-sidebar .save-day-btn {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    width: calc(100% - 40px);
+    margin: 0 20px 18px;
+    min-height: 44px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--profit) 78%, var(--accent)));
+    color: var(--primary-foreground);
+    box-shadow: 0 14px 30px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+body[data-theme="light"] #form-sidebar {
+    background:
+        linear-gradient(180deg, #ffffff, color-mix(in srgb, var(--bg-panel) 94%, var(--accent) 6%)),
+        radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 10%, transparent), transparent 32%);
+    box-shadow: -18px 0 46px rgba(15, 23, 42, 0.15);
+}
+
+body[data-theme="light"] #form-sidebar input[type="text"],
+body[data-theme="light"] #form-sidebar input[type="number"],
+body[data-theme="light"] #form-sidebar input[type="password"],
+body[data-theme="light"] #form-sidebar input[type="email"],
+body[data-theme="light"] #form-sidebar textarea,
+body[data-theme="light"] #form-sidebar select {
+    background: color-mix(in srgb, var(--bg-main) 58%, #fff);
+}
+
+@media (max-width: 768px) {
+    #form-sidebar {
+        width: min(100vw, 420px);
+        min-width: min(100vw, 420px);
+    }
+
+    #form-sidebar .tabs {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        padding: 10px 14px;
+    }
+
+    #form-sidebar .sidebar-panel-head,
+    #form-sidebar .header-actions,
+    #form-sidebar .tab-content {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+
+    #form-sidebar .sidebar-form-row,
+    #form-sidebar .sidebar-form-row:has(.form-group:nth-child(3)) {
+        grid-template-columns: 1fr;
+    }
+
+    #form-sidebar .save-day-btn {
+        width: calc(100% - 28px);
+        margin: 0 14px 14px;
+    }
 }
 
 .image-preview {

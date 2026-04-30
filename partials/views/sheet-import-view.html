@@ -4,6 +4,16 @@
                 <h2 class="sheet-zapier-title">Google Sheets</h2>
                 <p class="sheet-zapier-lead">Підключення в стилі Zapier / Make: спочатку акаунт, потім файл на Диску, далі мапінг колонок.</p>
 
+                <section class="sheet-card broker-import-card" aria-labelledby="broker-import-title">
+                    <h3 id="broker-import-title" class="sheet-card-title">Імпорт брокерських звітів</h3>
+                    <p class="sheet-card-desc">Швидке завантаження файлів з брокерів і торгових звітів без відкриття системних налаштувань.</p>
+                    <div class="import-export-grid">
+                        <button class="btn-secondary flex-fill import-fondexx-btn" data-action="file-picker" data-target="csv-input">Fondexx</button>
+                        <button class="btn-secondary flex-fill import-trades-btn" data-action="file-picker" data-target="trades-input">Trades</button>
+                        <button class="btn-secondary flex-fill import-ppro-btn" data-action="file-picker" data-target="ppro-input">PPRO</button>
+                    </div>
+                </section>
+
                 <!-- Стан 1: неавторизований -->
                 <section id="sheet-state-connect" class="sheet-card sheet-card--hero" aria-labelledby="sheet-connect-title">
                     <div class="sheet-drive-icon" aria-hidden="true">

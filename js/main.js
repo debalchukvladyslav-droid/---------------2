@@ -637,8 +637,16 @@ async function bootApp(user) {
     setTimeout(() => window._checkSessionModal?.(), 1500);
 }
 
+function resetRouteForLoginScreen() {
+    if (!window.history?.replaceState || isPasswordRecoveryUrl()) return;
+    const cleanPath = '/';
+    if (window.location.pathname === cleanPath && !window.location.search && !window.location.hash) return;
+    window.history.replaceState({}, '', cleanPath);
+}
+
 function showLoginScreen() {
     _appInitialized = false;
+    resetRouteForLoginScreen();
     state.USER_DOC_NAME = '';
     state.CURRENT_VIEWED_USER = '';
     state.myUserId = null;

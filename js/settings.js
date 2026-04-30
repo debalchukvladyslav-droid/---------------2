@@ -1,6 +1,6 @@
 // === js/settings.js ===
 import { state } from './state.js';
-import { saveToLocal } from './storage.js';
+import { markJournalDayDirty, saveToLocal } from './storage.js';
 import { showToast, showConfirm } from './utils.js';
 
 function clearNode(node) {
@@ -31,6 +31,165 @@ function createParamSetupRow({ inputId, value, onDelete, flex = false, title = '
     row.appendChild(input);
     row.appendChild(createDeleteButton(onDelete, title));
     return row;
+}
+
+function ensureSettingsCollections() {
+    if (!state.appData) state.appData = {};
+    if (!state.appData.settings) state.appData.settings = {};
+    if (!Array.isArray(state.appData.settings.checklist)) state.appData.settings.checklist = [];
+    if (!Array.isArray(state.appData.settings.sliders)) state.appData.settings.sliders = [];
+    if (!Array.isArray(state.appData.tradeTypes)) state.appData.tradeTypes = [];
+}
+
+function parseOptionalNumber(value) {
+    return value && !isNaN(value) ? parseFloat(value) : null;
+}
+
+function commitVisibleDayFormInputs() {
+    if (!state.selectedDateStr || state.dayDetailsLoading) return;
+    const pnlEl = document.getElementById('trade-pnl');
+    const notesEl = document.getElementById('trade-notes');
+    if (!pnlEl || !notesEl) return;
+
+    const checklist = [];
+    document.querySelectorAll('.checklist-checkbox:checked').forEach((el) => {
+        if (el.value) checklist.push(el.value);
+    });
+
+    const sliders = Object.create(null);
+    document.querySelectorAll('.slider-input').forEach((el) => {
+        const key = el.dataset.id || (el.id ? el.id.replace('slider-', '') : '');
+        if (key && !Object.prototype.hasOwnProperty.call(Object.prototype, key)) sliders[key] = el.value;
+    });
+
+    const tradeTypesData = Object.create(null);
+    document.querySelectorAll('.tt-input-pnl').forEach((el) => {
+        const name = el.getAttribute('data-name');
+        if (!name || Object.prototype.hasOwnProperty.call(Object.prototype, name)) return;
+        const kfInput = document.querySelector(`.tt-input-kf[data-name="${CSS.escape(name)}"]`);
+        tradeTypesData[name] = { pnl: el.value, kf: kfInput ? kfInput.value : '' };
+    });
+
+    const oldData = state.appData.journal[state.selectedDateStr] || {};
+    state.appData.journal[state.selectedDateStr] = {
+        ...oldData,
+        pnl: parseOptionalNumber(pnlEl.value),
+        gross_pnl: parseOptionalNumber(document.getElementById('trade-gross')?.value),
+        commissions: parseOptionalNumber(document.getElementById('trade-comm')?.value),
+        locates: parseOptionalNumber(document.getElementById('trade-locates')?.value),
+        kf: parseOptionalNumber(document.getElementById('trade-kf')?.value),
+        notes: notesEl.value || '',
+        errors: [...document.querySelectorAll('.error-checkbox:checked')].map((el) => el.value),
+        checkedParams: checklist,
+        sliders,
+        tradeTypesData,
+        sessionGoal: document.getElementById('session-goal')?.value ?? oldData.sessionGoal,
+        sessionPlan: document.getElementById('session-plan')?.value ?? oldData.sessionPlan,
+        sessionReadiness: document.getElementById('session-readiness')?.value ?? oldData.sessionReadiness,
+        __detailsLoaded: true,
+    };
+    markJournalDayDirty(state.selectedDateStr);
+}
+
+function markJournalDateDirtyIfLoaded(dateStr, day) {
+    if (day?.__detailsLoaded !== false) markJournalDayDirty(dateStr);
+}
+
+function renameTradeTypeData(oldName, newName) {
+    if (!oldName || !newName || oldName === newName) return;
+    Object.entries(state.appData.journal || {}).forEach(([dateStr, day]) => {
+        if (!day?.tradeTypesData || typeof day.tradeTypesData !== 'object') return;
+        if (!Object.prototype.hasOwnProperty.call(day.tradeTypesData, oldName)) return;
+        if (!Object.prototype.hasOwnProperty.call(day.tradeTypesData, newName)) {
+            day.tradeTypesData[newName] = day.tradeTypesData[oldName];
+        }
+        delete day.tradeTypesData[oldName];
+        markJournalDateDirtyIfLoaded(dateStr, day);
+    });
+}
+
+function commitVisibleChecklistInputs() {
+    ensureSettingsCollections();
+    state.appData.settings.checklist.forEach((p, idx) => {
+        const inputEl = document.getElementById(`check-name-${idx}`);
+        if (inputEl) p.name = inputEl.value.trim() || p.name || `Пункт ${idx + 1}`;
+    });
+}
+
+function commitVisibleSliderInputs() {
+    ensureSettingsCollections();
+    state.appData.settings.sliders.forEach((p, idx) => {
+        const inputEl = document.getElementById(`slider-name-${idx}`);
+        if (inputEl) p.name = inputEl.value.trim() || p.name || `Шкала ${idx + 1}`;
+    });
+}
+
+function commitVisibleTradeTypeInputs() {
+    ensureSettingsCollections();
+    state.appData.tradeTypes.forEach((t, idx) => {
+        const inputEl = document.getElementById(`my-tt-name-${idx}`) || document.getElementById(`tt-name-${idx}`);
+        if (inputEl) {
+            const nextName = inputEl.value.trim() || t || `Тип ${idx + 1}`;
+            renameTradeTypeData(t, nextName);
+            state.appData.tradeTypes[idx] = nextName;
+        }
+    });
+}
+
+function pruneRemovedFieldData() {
+    ensureSettingsCollections();
+    const checklistIds = new Set(state.appData.settings.checklist.map((p) => p.id).filter(Boolean));
+    const sliderIds = new Set(state.appData.settings.sliders.map((p) => p.id).filter(Boolean));
+    const tradeTypes = new Set(state.appData.tradeTypes.filter(Boolean));
+    Object.entries(state.appData.journal || {}).forEach(([dateStr, day]) => {
+        if (!day || typeof day !== 'object') return;
+        let changed = false;
+        if (Array.isArray(day.checkedParams)) {
+            const nextCheckedParams = day.checkedParams.filter((id) => checklistIds.has(id));
+            if (nextCheckedParams.length !== day.checkedParams.length) {
+                day.checkedParams = nextCheckedParams;
+                changed = true;
+            }
+        }
+        if (day.sliders && typeof day.sliders === 'object') {
+            Object.keys(day.sliders).forEach((id) => {
+                if (!sliderIds.has(id)) {
+                    delete day.sliders[id];
+                    changed = true;
+                }
+            });
+        }
+        if (day.tradeTypesData && typeof day.tradeTypesData === 'object') {
+            Object.keys(day.tradeTypesData).forEach((name) => {
+                if (!tradeTypes.has(name)) {
+                    delete day.tradeTypesData[name];
+                    changed = true;
+                }
+            });
+        }
+        if (changed) markJournalDateDirtyIfLoaded(dateStr, day);
+    });
+}
+
+function refreshFieldEditorsAndDayForm() {
+    renderSettingsChecklist();
+    renderSettingsSliders();
+    renderSettingsTradeTypes();
+    renderMyTradeTypes();
+    renderChecklistDisplay();
+    renderSidebarSliders();
+    if (window.selectDate && state.selectedDateStr) window.selectDate(state.selectedDateStr, true);
+    if (window.renderTradeTypeSelector) window.renderTradeTypeSelector();
+    if (window.renderStatsSourceSelector) window.renderStatsSourceSelector();
+}
+
+function persistFieldChanges(message) {
+    commitVisibleDayFormInputs();
+    pruneRemovedFieldData();
+    refreshFieldEditorsAndDayForm();
+    return saveToLocal().then(() => {
+        if (message) showToast(message);
+    });
 }
 
 // --- ПОМИЛКИ ---
@@ -124,6 +283,7 @@ export function renderChecklistDisplay() {
 }
 
 export function renderSettingsChecklist() {
+    ensureSettingsCollections();
     const safeContainer = document.getElementById('settings-checklist-list');
     if (!safeContainer) return;
     clearNode(safeContainer);
@@ -137,32 +297,29 @@ export function renderSettingsChecklist() {
     });
 }
 
-export function addNewChecklistItem() { 
-    state.appData.settings.checklist.push({ id: 'chk_' + Date.now(), name: 'Новий пункт' }); 
-    renderSettingsChecklist(); 
+
+export function addNewChecklistItem() {
+    commitVisibleChecklistInputs();
+    state.appData.settings.checklist.push({ id: 'chk_' + Date.now(), name: 'Новий пункт' });
+    persistFieldChanges('Поле додано');
 }
 
-export function deleteChecklistItem(idx) { 
-    showConfirm("Видалити цей пункт?").then(ok => { if (!ok) return;
-        state.appData.settings.checklist.splice(idx, 1); 
-        renderSettingsChecklist(); 
-    }); 
+
+export function deleteChecklistItem(idx) {
+    showConfirm('Видалити цей пункт?').then(ok => {
+        if (!ok) return;
+        commitVisibleChecklistInputs();
+        state.appData.settings.checklist.splice(idx, 1);
+        persistFieldChanges('Поле видалено');
+    });
 }
 
-export function saveChecklist() { 
-    state.appData.settings.checklist.forEach((p, idx) => { 
-        let inputEl = document.getElementById(`check-name-${idx}`);
-        if (inputEl) { // Захист: зберігаємо тільки якщо інпут існує
-            p.name = inputEl.value; 
-        }
-    }); 
-    saveToLocal().then(() => { 
-        renderChecklistDisplay(); 
-        showToast('Чекліст збережено!'); 
-    }); 
+
+export function saveChecklist() {
+    commitVisibleChecklistInputs();
+    persistFieldChanges('Чекліст збережено');
 }
 
-// --- ПОВЗУНКИ (ШКАЛИ СТАНУ) ---
 export function renderSidebarSliders() {
     const safeContainer = document.getElementById('sliders-container');
     if (!safeContainer) return;
@@ -205,6 +362,7 @@ export function renderSidebarSliders() {
 }
 
 export function renderSettingsSliders() {
+    ensureSettingsCollections();
     const safeContainer = document.getElementById('settings-sliders-list');
     if (!safeContainer) return;
     clearNode(safeContainer);
@@ -217,32 +375,31 @@ export function renderSettingsSliders() {
     });
 }
 
-export function addNewSliderItem() { 
-    state.appData.settings.sliders.push({ id: 'sld_' + Date.now(), name: 'Новий параметр' }); 
-    renderSettingsSliders(); 
+
+export function addNewSliderItem() {
+    commitVisibleSliderInputs();
+    state.appData.settings.sliders.push({ id: 'sld_' + Date.now(), name: 'Новий параметр' });
+    persistFieldChanges('Шкалу додано');
 }
 
-export function deleteSliderItem(idx) { 
-    showConfirm("Видалити цю шкалу?").then(ok => { if (!ok) return;
-        state.appData.settings.sliders.splice(idx, 1); 
-        renderSettingsSliders(); 
-    }); 
+
+export function deleteSliderItem(idx) {
+    showConfirm('Видалити цю шкалу?').then(ok => {
+        if (!ok) return;
+        commitVisibleSliderInputs();
+        state.appData.settings.sliders.splice(idx, 1);
+        persistFieldChanges('Шкалу видалено');
+    });
 }
 
-export function saveSlidersSettings() { 
-    state.appData.settings.sliders.forEach((p, idx) => { 
-        let inputEl = document.getElementById(`slider-name-${idx}`);
-        if (inputEl) { // Захист: зберігаємо тільки якщо інпут існує
-            p.name = inputEl.value; 
-        }
-    }); 
-    saveToLocal().then(() => { 
-        renderSidebarSliders(); 
-        showToast('Шкали збережено!'); 
-    }); 
+
+export function saveSlidersSettings() {
+    commitVisibleSliderInputs();
+    persistFieldChanges('Шкали збережено');
 }
 
 export function renderSettingsTradeTypes() {
+    ensureSettingsCollections();
     const safeContainer = document.getElementById('settings-trade-types-list');
     if (!safeContainer) return;
     clearNode(safeContainer);
@@ -255,19 +412,27 @@ export function renderSettingsTradeTypes() {
         }));
     });
 }
-export function addNewTradeType() { 
-    if(!state.appData.tradeTypes) state.appData.tradeTypes = [];
-    state.appData.tradeTypes.push('Новий тип'); renderSettingsTradeTypes(); 
+
+export function addNewTradeType() {
+    commitVisibleTradeTypeInputs();
+    state.appData.tradeTypes.push('Новий тип');
+    persistFieldChanges('Тип додано');
 }
-export function deleteTradeType(idx) { 
-    showConfirm("Видалити?").then(ok => { if (!ok) return; state.appData.tradeTypes.splice(idx, 1); renderSettingsTradeTypes(); }); 
+
+
+export function deleteTradeType(idx) {
+    showConfirm('Видалити?').then(ok => {
+        if (!ok) return;
+        commitVisibleTradeTypeInputs();
+        state.appData.tradeTypes.splice(idx, 1);
+        persistFieldChanges('Тип видалено');
+    });
 }
-export function saveTradeTypes() { 
-    (state.appData.tradeTypes || []).forEach((t, idx) => { 
-        let inputEl = document.getElementById(`tt-name-${idx}`);
-        if(inputEl) state.appData.tradeTypes[idx] = inputEl.value; 
-    }); 
-    saveToLocal().then(() => { showToast('Типи трейдів збережено!'); if(window.selectDate) window.selectDate(state.selectedDateStr); }); 
+
+
+export function saveTradeTypes() {
+    commitVisibleTradeTypeInputs();
+    persistFieldChanges('Типи трейдів збережено');
 }
 
 export function renderMyTradeTypes() {
@@ -283,22 +448,29 @@ export function renderMyTradeTypes() {
         }));
     });
 }
+
 export function addMyTradeType() {
-    if(!state.appData.tradeTypes) state.appData.tradeTypes = [];
-    state.appData.tradeTypes.push('Новий тип'); renderMyTradeTypes();
-}
-export function deleteMyTradeType(idx) {
-    showConfirm("Видалити?").then(ok => { if (!ok) return; state.appData.tradeTypes.splice(idx, 1); renderMyTradeTypes(); });
-}
-export function saveMyTradeTypes() {
-    (state.appData.tradeTypes || []).forEach((t, idx) => {
-        let inputEl = document.getElementById(`my-tt-name-${idx}`);
-        if(inputEl) state.appData.tradeTypes[idx] = inputEl.value;
-    });
-    saveToLocal().then(() => { showToast('Типи трейдів збережено!'); if(window.selectDate) window.selectDate(state.selectedDateStr); });
+    commitVisibleTradeTypeInputs();
+    state.appData.tradeTypes.push('Новий тип');
+    persistFieldChanges('Тип додано');
 }
 
-// --- КОНСТРУКТОР СИТУАЦІЙ ПЛЕЙБУКУ ---
+
+export function deleteMyTradeType(idx) {
+    showConfirm('Видалити?').then(ok => {
+        if (!ok) return;
+        commitVisibleTradeTypeInputs();
+        state.appData.tradeTypes.splice(idx, 1);
+        persistFieldChanges('Тип видалено');
+    });
+}
+
+
+export function saveMyTradeTypes() {
+    commitVisibleTradeTypeInputs();
+    persistFieldChanges('Типи трейдів збережено');
+}
+
 export function renderSettingsSituations() {
     const safeContainer = document.getElementById('settings-situations-list');
     if (!safeContainer) return;
