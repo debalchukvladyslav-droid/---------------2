@@ -222,6 +222,31 @@ body[data-theme="light"] .btn-google-signin {
     }
 }
 
+.sheet-tab-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 360px;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.sheet-tab-picker[hidden] {
+    display: none !important;
+}
+
+.sheet-tab-picker select {
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md, 8px);
+    background: var(--bg-main);
+    color: var(--text-main);
+    font-family: inherit;
+    font-size: 0.9rem;
+}
+
 /* --- Стан 3: smart mapping --- */
 .sheet-smart-mapping {
     display: flex;
@@ -451,6 +476,20 @@ body[data-theme="light"] .btn-google-signin {
     font-size: 0.76rem;
     line-height: 1.45;
     color: var(--text-muted);
+}
+
+.sheet-smart-row__range {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 3px;
+    padding: 2px 7px;
+    border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 800;
 }
 
 .sheet-smart-row__right {

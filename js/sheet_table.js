@@ -19,6 +19,7 @@ const SESSION_GOOGLE = 'sheet_google_connected';
 /** Обрана таблиця (Spreadsheet ID). */
 const SESSION_SPREADSHEET_ID = 'sheet_spreadsheet_id';
 const SESSION_SPREADSHEET_TITLE = 'sheet_spreadsheet_title';
+const SESSION_SHEET_TITLE = 'sheet_selected_sheet_title';
 
 /** Колонки таблиці / trade.sheet для статистики та datagrid (порядок = у формі). */
 const SMART_KEYS = [
@@ -168,11 +169,45 @@ function smartFieldLabel(field) {
     return row?.textContent?.trim() || field || '—';
 }
 
+function smartFieldRanges(field) {
+    const anchor = parseCellReference(_sheetSmartAnchors?.[field]);
+    if (anchor) return [`${anchor.letter}${anchor.row}:${anchor.letter}`];
+
+    const value = readSmartRowValue(field);
+    const startRow = deriveSheetStartRow();
+    return String(value || '')
+        .split(',')
+        .map(v => v.trim().toUpperCase())
+        .filter(v => /^[A-Z]{1,3}$/.test(v))
+        .map(letter => `${letter}${startRow}:${letter}`);
+}
+
+function updateSmartRangeHints() {
+    document.querySelectorAll('.sheet-smart-row[data-smart-field]').forEach(row => {
+        const field = row.dataset.smartField || '';
+        const hint = row.querySelector('.sheet-smart-row__hint');
+        if (!hint) return;
+        if (hint.dataset.baseHint == null) hint.dataset.baseHint = hint.textContent.trim();
+
+        const baseHint = hint.dataset.baseHint || '';
+        const ranges = smartFieldRanges(field);
+        hint.textContent = baseHint;
+
+        if (!ranges.length) return;
+        if (baseHint) hint.appendChild(document.createTextNode(' '));
+        const badge = document.createElement('span');
+        badge.className = 'sheet-smart-row__range';
+        badge.textContent = `Діапазон: ${ranges.join(', ')}`;
+        hint.appendChild(badge);
+    });
+}
+
 function updateGridPickerMeta() {
     const activeEl = el('sheet-grid-picker-active');
     const startRowEl = el('sheet-grid-picker-start-row');
     if (activeEl) activeEl.textContent = smartFieldLabel(_sheetPreviewActiveField);
     if (startRowEl) startRowEl.textContent = String(deriveSheetStartRow());
+    updateSmartRangeHints();
 }
 
 function syncActiveGridFieldUi() {
@@ -386,14 +421,48 @@ export function rememberSpreadsheet(id, title) {
     if (nameEl) nameEl.textContent = title || id;
 }
 
+export function getSelectedSheetTitle() {
+    return sessionStorage.getItem(SESSION_SHEET_TITLE) || '';
+}
+
+export function setSpreadsheetSheets(sheets, selectedTitle = '') {
+    const list = Array.isArray(sheets) ? sheets.filter(s => s && s.title) : [];
+    const picker = el('sheet-tab-picker');
+    const select = el('sheet-tab-select');
+    if (!picker || !select) return;
+
+    select.innerHTML = '';
+    list.forEach(sheet => {
+        const option = document.createElement('option');
+        option.value = sheet.title;
+        option.textContent = sheet.title;
+        select.appendChild(option);
+    });
+
+    const stored = selectedTitle || sessionStorage.getItem(SESSION_SHEET_TITLE) || list[0]?.title || '';
+    if (stored && list.some(sheet => sheet.title === stored)) {
+        select.value = stored;
+        sessionStorage.setItem(SESSION_SHEET_TITLE, stored);
+    } else if (list[0]) {
+        select.value = list[0].title;
+        sessionStorage.setItem(SESSION_SHEET_TITLE, list[0].title);
+    } else {
+        sessionStorage.removeItem(SESSION_SHEET_TITLE);
+    }
+
+    picker.hidden = list.length <= 1;
+}
+
 export function clearGoogleSheetSession() {
     stopSheetAutoSync();
     sessionStorage.removeItem(SESSION_GOOGLE);
     sessionStorage.removeItem(SESSION_SPREADSHEET_ID);
     sessionStorage.removeItem(SESSION_SPREADSHEET_TITLE);
+    sessionStorage.removeItem(SESSION_SHEET_TITLE);
     sessionStorage.removeItem('sheet_google_access_token');
     const nameEl = el('sheet-selected-file-name');
     if (nameEl) nameEl.textContent = '—';
+    setSpreadsheetSheets([]);
 }
 
 export function syncSheetWorkspaceVisibility() {
@@ -404,11 +473,13 @@ export function syncSheetWorkspaceVisibility() {
     const s2 = el('sheet-state-workspace');
     const fileCard = el('sheet-mock-file-card');
     const mapping = el('sheet-smart-mapping');
+    const tabPicker = el('sheet-tab-picker');
 
     if (s1) s1.hidden = connected;
     if (s2) s2.hidden = !connected;
     if (fileCard) fileCard.hidden = !connected || !fileOk;
     if (mapping) mapping.hidden = !connected || !fileOk;
+    if (tabPicker && (!connected || !fileOk)) tabPicker.hidden = true;
 }
 
 function getKnownColumnValues() {
@@ -745,12 +816,13 @@ async function executeSyncWithCfg(cfg, options = {}) {
 
     try {
         const mod = await import('./google_sheet_connector.js');
-        const values = await mod.fetchSpreadsheetValuesRange(spreadsheetId, `A${startRow}:ZZ2000`);
+        const values = await mod.fetchSpreadsheetValuesRange(spreadsheetId, `A${startRow}:ZZ2000`, cfg.sheetTitle || getSelectedSheetTitle());
         const { outByDay, dateAnchors, stats } = parseSheetGridToTrades(values, smart, spreadsheetId, startRow);
 
         if (!quiet) {
             console.group('[Google Sheets] Синхронізація');
             console.log('Таблиця:', cfg.selectedFileName || spreadsheetId);
+            if (cfg.sheetTitle || getSelectedSheetTitle()) console.log('Лист:', cfg.sheetTitle || getSelectedSheetTitle());
             console.log('Якорі дат (перший рядок Excel з цією датою в колонці дати):', dateAnchors);
             console.groupEnd();
             logTradesImportConsole('Google Sheets → журнал', outByDay);
@@ -917,6 +989,20 @@ function bindSheetGridPicker() {
         _sheetPreviewHoverRef = null;
         refreshSheetGridSelectionClasses();
     });
+
+    document.addEventListener('change', (event) => {
+        const row = event.target?.closest?.('.sheet-smart-row[data-smart-field]');
+        if (!row) return;
+        delete _sheetSmartAnchors[row.dataset.smartField || ''];
+        updateGridPickerMeta();
+    });
+
+    document.addEventListener('input', (event) => {
+        const row = event.target?.closest?.('.sheet-smart-row[data-smart-field]');
+        if (!row) return;
+        delete _sheetSmartAnchors[row.dataset.smartField || ''];
+        updateGridPickerMeta();
+    });
 }
 
 function readStoredConfig() {
@@ -932,6 +1018,7 @@ function readStoredConfig() {
 
 function applyConfigToForm(cfg) {
     _sheetSmartAnchors = cfg?.smartAnchors && typeof cfg.smartAnchors === 'object' ? { ...cfg.smartAnchors } : {};
+    if (cfg?.sheetTitle) sessionStorage.setItem(SESSION_SHEET_TITLE, cfg.sheetTitle);
     if (!cfg) {
         updateGridPickerMeta();
         syncActiveGridFieldUi();
@@ -985,6 +1072,22 @@ export function initSheetTableView() {
         });
 }
 
+export async function handleSheetTabChange(selectEl) {
+    const title = String(selectEl?.value || '').trim();
+    const spreadsheetId = sessionStorage.getItem(SESSION_SPREADSHEET_ID) || '';
+    if (!title || !spreadsheetId) return;
+
+    sessionStorage.setItem(SESSION_SHEET_TITLE, title);
+    try {
+        const mod = await import('./google_sheet_connector.js');
+        await mod.fetchSpreadsheetData(spreadsheetId, title);
+        showToast(`Обрано лист: ${title}`);
+    } catch (e) {
+        console.error('[Google Sheets] sheet tab change', e);
+        showToast('Не вдалося зчитати лист: ' + (e?.message || String(e)));
+    }
+}
+
 function collectFormConfig() {
     const smartColumns = {};
     SMART_KEYS.forEach((k) => {
@@ -992,6 +1095,7 @@ function collectFormConfig() {
     });
 
     const spreadsheetId = sessionStorage.getItem(SESSION_SPREADSHEET_ID) || '';
+    const sheetTitle = getSelectedSheetTitle();
     const title =
         el('sheet-selected-file-name')?.textContent?.trim() ||
         sessionStorage.getItem(SESSION_SPREADSHEET_TITLE) ||
@@ -1007,6 +1111,7 @@ function collectFormConfig() {
         savedAt: new Date().toISOString(),
         spreadsheetId,
         selectedFileName: title,
+        sheetTitle,
         sheetHeaders: _dynamicHeaders,
         smartColumns,
         smartAnchors: { ..._sheetSmartAnchors },
@@ -1048,6 +1153,7 @@ export async function saveSheetMapping() {
 
 window.toggleMappingMode = toggleMappingMode;
 window.saveSheetMapping = saveSheetMapping;
+window.handleSheetTabChange = handleSheetTabChange;
 window.renderMappingDropdowns = renderMappingDropdowns;
 window.populateSheetMappingFromHeaders = populateSheetMappingFromHeaders;
 window.stopSheetAutoSync = stopSheetAutoSync;

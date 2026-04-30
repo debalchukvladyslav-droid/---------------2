@@ -13,6 +13,8 @@ import {
     setGoogleAccountEmail,
     rememberSpreadsheet,
     clearGoogleSheetSession,
+    setSpreadsheetSheets,
+    getSelectedSheetTitle,
 } from './sheet_table.js';
 import { ensureGoogleApi, ensureGoogleIdentity } from './vendor_loader.js';
 
@@ -44,11 +46,21 @@ const OAUTH_SCOPES_VERSION = '2';
 
 const TOKEN_STORAGE_KEY = 'sheet_google_access_token';
 const SCOPES_VERSION_KEY = 'sheet_google_scopes_v';
+const SELECTED_SHEET_TITLE_KEY = 'sheet_selected_sheet_title';
 
 let tokenClient = null;
 let accessToken = null;
 let gapiClientReady = false;
 let gapiPickerLoading = null;
+
+function quoteSheetTitle(title) {
+    return `'${String(title).replace(/'/g, "''")}'`;
+}
+
+function rangeForSelectedSheet(range, sheetTitle = getSelectedSheetTitle()) {
+    if (!sheetTitle || String(range).includes('!')) return range;
+    return `${quoteSheetTitle(sheetTitle)}!${range}`;
+}
 
 function waitForGlobal(name, timeoutMs = 20000) {
     return new Promise((resolve, reject) => {
@@ -259,18 +271,37 @@ async function pickerCallback(data) {
     syncSheetWorkspaceVisibility();
     showToast(`Обрано: ${name}`);
     try {
-        await fetchSpreadsheetData(doc.id);
+        const selectedSheet = await loadSpreadsheetSheets(doc.id);
+        await fetchSpreadsheetData(doc.id, selectedSheet);
     } catch (e) {
         console.error(e);
         showToast('Не вдалося зчитати заголовки: ' + (e.message || String(e)));
     }
 }
 
+async function loadSpreadsheetSheets(fileId) {
+    await ensureGapiClientAndPicker();
+    const response = await gapi.client.sheets.spreadsheets.get({
+        spreadsheetId: fileId,
+        fields: 'sheets.properties(title,sheetId,index)',
+    });
+    const sheets = (response.result?.sheets || [])
+        .map(sheet => sheet.properties)
+        .filter(Boolean)
+        .sort((a, b) => Number(a.index || 0) - Number(b.index || 0));
+    const stored = sessionStorage.getItem(SELECTED_SHEET_TITLE_KEY);
+    const selected = stored && sheets.some(sheet => sheet.title === stored)
+        ? stored
+        : (sheets[0]?.title || '');
+    setSpreadsheetSheets(sheets, selected);
+    return selected;
+}
+
 /**
  * Зчитує перший рядок таблиці (заголовки) для розумного мапінгу.
  * (У ТЗ також як fetchSpreadsheetData.)
  */
-export async function fetchSpreadsheetData(fileId) {
+export async function fetchSpreadsheetData(fileId, sheetTitle = getSelectedSheetTitle()) {
     await ensureGapiClientAndPicker();
     const token = accessToken || sessionStorage.getItem(TOKEN_STORAGE_KEY);
     if (!token) throw new Error('Немає access token');
@@ -280,11 +311,11 @@ export async function fetchSpreadsheetData(fileId) {
         const [headersResponse, previewResponse] = await Promise.all([
             gapi.client.sheets.spreadsheets.values.get({
                 spreadsheetId: fileId,
-                range: 'A1:ZZ1',
+                range: rangeForSelectedSheet('A1:ZZ1', sheetTitle),
             }),
             gapi.client.sheets.spreadsheets.values.get({
                 spreadsheetId: fileId,
-                range: 'A1:ZZ300',
+                range: rangeForSelectedSheet('A1:ZZ300', sheetTitle),
             }),
         ]);
         const range = headersResponse.result;
@@ -310,7 +341,7 @@ export async function loadSheetHeaders(fileId) {
  * @param {string} range
  * @returns {Promise<string[][]>}
  */
-export async function fetchSpreadsheetValuesRange(spreadsheetId, range) {
+export async function fetchSpreadsheetValuesRange(spreadsheetId, range, sheetTitle = getSelectedSheetTitle()) {
     await ensureGapiClientAndPicker();
     const token = accessToken || sessionStorage.getItem(TOKEN_STORAGE_KEY);
     if (!token) throw new Error('Немає access token');
@@ -318,7 +349,7 @@ export async function fetchSpreadsheetValuesRange(spreadsheetId, range) {
 
     const response = await gapi.client.sheets.spreadsheets.values.get({
         spreadsheetId,
-        range,
+        range: rangeForSelectedSheet(range, sheetTitle),
     });
     return response.result.values || [];
 }
@@ -374,7 +405,8 @@ export async function restoreGoogleSession() {
             const nameEl = document.getElementById('sheet-selected-file-name');
             if (nameEl) nameEl.textContent = st || sid;
             try {
-                await fetchSpreadsheetData(sid);
+                const selectedSheet = await loadSpreadsheetSheets(sid);
+                await fetchSpreadsheetData(sid, selectedSheet);
             } catch (e) {
                 console.warn('[Sheets] headers refresh failed', e);
             }

@@ -338,6 +338,10 @@ function bindDeclarativeActions() {
             window.toggleStatsEquityMode?.(target.checked, target.id === 'compare-stats-equity-advanced-toggle' ? 'compare' : 'main');
             return;
         }
+        if (target?.matches?.('[data-action="sheet-tab-select"]')) {
+            window.handleSheetTabChange?.(target);
+            return;
+        }
         if (target?.matches?.('[data-action="trade-date-symbol-select"]')) {
             window.populateSymbolSelect?.(target.value);
         }
