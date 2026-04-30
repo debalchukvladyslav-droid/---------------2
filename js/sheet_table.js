@@ -7,6 +7,7 @@
 
 import { showToast } from './utils.js';
 import { state } from './state.js';
+import { supabase } from './supabase.js';
 import { getDefaultDayEntry } from './data_utils.js';
 import { saveJournalData, markJournalDayDirty } from './storage.js';
 import { syncFondexxFromTradesForDay, logTradesImportConsole } from './parsers.js';
@@ -639,8 +640,8 @@ function calendarYmdValid(year, month, day) {
 }
 
 /**
- * Дата з клітинки Sheets: YYYY-MM-DD, серійне число, D/M/Y з «.» або M/D/Y з «/».
- * Slash-формат з брокерських таблиць читаємо як US: 4/2/2026 = 2026-04-02.
+ * Дата з клітинки Sheets: YYYY-MM-DD, серійне число, D/M/Y з «.» або «/».
+ * Для вашої таблиці slash-формат читаємо як день/місяць: 12/3/2026 = 2026-03-12.
  */
 function sheetsCellToIsoDate(value) {
     if (value == null || value === '') return null;
@@ -670,7 +671,7 @@ function sheetsCellToIsoDate(value) {
         const dmy = calendarYmdValid(year, b, a) ? toIsoFromParts(year, b, a) : null;
         const mdy = calendarYmdValid(year, a, b) ? toIsoFromParts(year, a, b) : null;
 
-        if (dmy && mdy && dmy !== mdy) return sep === '/' ? mdy : dmy;
+        if (dmy && mdy && dmy !== mdy) return dmy;
         if (dmy) return dmy;
         if (mdy) return mdy;
         return null;
@@ -910,7 +911,71 @@ function enrichTradeWithSheet(existingTrade, incomingTrade) {
     };
 }
 
+function isSameSpreadsheetGoogleTrade(trade, spreadsheetId) {
+    return !!(
+        trade?.sheet &&
+        trade.sheet.source === 'google' &&
+        String(trade.sheet.spreadsheetId || '') === String(spreadsheetId)
+    );
+}
+
+function isPureGoogleSheetTrade(trade, spreadsheetId) {
+    return isSameSpreadsheetGoogleTrade(trade, spreadsheetId) && !trade.sheet?.matchedBy;
+}
+
+function hasAnyScreenshot(day) {
+    const screens = day?.screenshots && typeof day.screenshots === 'object' ? day.screenshots : {};
+    return Object.values(screens).some((items) => Array.isArray(items) && items.length > 0);
+}
+
+function hasNonEmptyObject(value) {
+    return value && typeof value === 'object' && Object.keys(value).length > 0;
+}
+
+function isDayEmptyAfterSheetCleanup(day) {
+    if (!day || typeof day !== 'object') return true;
+    if (Array.isArray(day.trades) && day.trades.length > 0) return false;
+    if (String(day.notes || '').trim() || String(day.mentor_comment || '').trim()) return false;
+    if (hasAnyScreenshot(day)) return false;
+    if (Array.isArray(day.errors) && day.errors.length > 0) return false;
+    if (Array.isArray(day.checkedParams) && day.checkedParams.length > 0) return false;
+    if (hasNonEmptyObject(day.sliders) || hasNonEmptyObject(day.tradeTypesData) || hasNonEmptyObject(day.review_requests)) return false;
+    if (String(day.sessionGoal || '').trim() || String(day.sessionPlan || '').trim() || day.sessionDone) return false;
+    const ppro = day.ppro && typeof day.ppro === 'object' ? day.ppro : {};
+    if (Number(ppro.net) || Number(ppro.gross) || Number(ppro.comm) || Number(ppro.locates)) return false;
+    return true;
+}
+
+function cleanupPreviousGoogleSheetImport(spreadsheetId) {
+    const deletedDates = [];
+    const touchedDates = [];
+    const journal = state.appData?.journal || {};
+
+    Object.keys(journal).forEach((dateStr) => {
+        const day = journal[dateStr];
+        const trades = Array.isArray(day?.trades) ? day.trades : [];
+        const nextTrades = trades.filter((trade) => !isPureGoogleSheetTrade(trade, spreadsheetId));
+        if (nextTrades.length === trades.length) return;
+
+        day.trades = nextTrades;
+        syncFondexxFromTradesForDay(dateStr);
+
+        if (isDayEmptyAfterSheetCleanup(day)) {
+            delete journal[dateStr];
+            deletedDates.push(dateStr);
+        } else {
+            touchedDates.push(dateStr);
+            markJournalDayDirty(dateStr);
+        }
+    });
+
+    return { deletedDates, touchedDates };
+}
+
 function mergeGoogleSheetTradesIntoJournal(outByDay, spreadsheetId) {
+    const cleanup = cleanupPreviousGoogleSheetImport(spreadsheetId);
+    const touchedDates = new Set(cleanup.touchedDates);
+
     for (const dateStr of Object.keys(outByDay)) {
         if (!isValidIsoDateString(dateStr)) {
             console.warn('[Google Sheets] Пропущено невалідну дату (не пишемо в журнал):', dateStr);
@@ -922,14 +987,7 @@ function mergeGoogleSheetTradesIntoJournal(outByDay, spreadsheetId) {
         const prev = Array.isArray(state.appData.journal[dateStr].trades)
             ? state.appData.journal[dateStr].trades
             : [];
-        const kept = prev.filter(
-            (t) =>
-                !(
-                    t.sheet &&
-                    t.sheet.source === 'google' &&
-                    String(t.sheet.spreadsheetId || '') === String(spreadsheetId)
-                ),
-        );
+        const kept = prev.filter((t) => !isPureGoogleSheetTrade(t, spreadsheetId));
         const usedIndices = new Set();
         const merged = [...kept];
         const appended = [];
@@ -947,6 +1005,27 @@ function mergeGoogleSheetTradesIntoJournal(outByDay, spreadsheetId) {
         state.appData.journal[dateStr].trades = [...merged, ...appended];
         syncFondexxFromTradesForDay(dateStr);
         markJournalDayDirty(dateStr);
+        touchedDates.add(dateStr);
+    }
+
+    return { deletedDates: cleanup.deletedDates, touchedDates: [...touchedDates] };
+}
+
+async function deleteJournalDatesFromSupabase(dateStrs = []) {
+    const uniqueDates = [...new Set(dateStrs)].filter((dateStr) => /^\d{4}-\d{2}-\d{2}$/.test(dateStr));
+    if (!uniqueDates.length) return;
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError) throw userError;
+    if (!user?.id) return;
+
+    for (let i = 0; i < uniqueDates.length; i += 100) {
+        const chunk = uniqueDates.slice(i, i + 100);
+        const { error } = await supabase
+            .from('journal_days')
+            .delete()
+            .eq('user_id', user.id)
+            .in('trade_date', chunk);
+        if (error) throw error;
     }
 }
 
@@ -1011,7 +1090,8 @@ async function executeSyncWithCfg(cfg, options = {}) {
             logTradesImportConsole('Google Sheets → журнал', outByDay);
         }
 
-        mergeGoogleSheetTradesIntoJournal(outByDay, spreadsheetId);
+        const mergeResult = mergeGoogleSheetTradesIntoJournal(outByDay, spreadsheetId);
+        await deleteJournalDatesFromSupabase(mergeResult.deletedDates);
         await saveJournalData();
         try {
             clearStatsCache(state.USER_DOC_NAME);
