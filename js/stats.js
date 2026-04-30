@@ -13,6 +13,7 @@ import { ensureChartJs } from './vendor_loader.js';
 const _statsCache = new Map();
 const _CACHE_TTL = 24 * 60 * 60 * 1000;
 const _profileIdCache = new Map();
+const STATS_BREAKEVEN_DAYLOSS_RATIO = 0.04;
 
 function _cacheGet(key) {
     const entry = _statsCache.get(key);
@@ -77,13 +78,48 @@ async function getProfileForDocName(docName) {
     const nick = String(docName).replace(/_stats$/, '');
     const { data, error } = await supabase
         .from('profiles')
-        .select('id, nick, first_name, last_name, team, mentor_enabled, role')
+        .select('id, nick, first_name, last_name, team, mentor_enabled, role, settings')
         .eq('nick', nick)
         .maybeSingle();
 
     if (error) throw error;
     _profileIdCache.set(docName, data || null);
     return data || null;
+}
+
+function getStatsProfileSettingsByNick(nick = '') {
+    const cleanNick = cleanStatsNick(nick).replace(/_stats$/, '');
+    const profileSettings = state._teamProfiles?.[cleanNick]?.settings;
+    if (profileSettings && typeof profileSettings === 'object') return profileSettings;
+
+    const currentNick = cleanStatsNick(state.CURRENT_VIEWED_USER || state.USER_DOC_NAME).replace(/_stats$/, '');
+    if (cleanNick && cleanNick === currentNick) return state.appData?.settings || {};
+    return {};
+}
+
+function getStatsDaylossForDate(settings = {}, dateStr = '') {
+    const safeSettings = settings && typeof settings === 'object' ? settings : {};
+    const monthKey = /^\d{4}-\d{2}/.test(String(dateStr || '')) ? String(dateStr).slice(0, 7) : '';
+    const monthlyRaw = monthKey && safeSettings.monthlyDayloss && typeof safeSettings.monthlyDayloss === 'object'
+        ? Number(safeSettings.monthlyDayloss[monthKey])
+        : NaN;
+    const fallbackRaw = Number(safeSettings.defaultDayloss ?? safeSettings.daylossLimit ?? -100);
+    const raw = Number.isFinite(monthlyRaw) ? monthlyRaw : fallbackRaw;
+    return Math.abs(Number.isFinite(raw) && raw !== 0 ? raw : -100);
+}
+
+function getStatsBreakevenBand(settings = {}, dateStr = '') {
+    return getStatsDaylossForDate(settings, dateStr) * STATS_BREAKEVEN_DAYLOSS_RATIO;
+}
+
+function classifyStatsPnlDay(pnl, settings = {}, dateStr = '', explicitBand = null) {
+    const value = Number(pnl);
+    if (!Number.isFinite(value)) return 'none';
+    const band = Number.isFinite(Number(explicitBand))
+        ? Math.max(0, Number(explicitBand))
+        : getStatsBreakevenBand(settings, dateStr);
+    if (Math.abs(value) <= band) return 'be';
+    return value > 0 ? 'win' : 'loss';
 }
 
 async function fetchJournalRowsForDoc(docName, monthKeys = null, userId = null) {
@@ -140,18 +176,19 @@ function makeDocSnapshot(id, payload) {
     };
 }
 
-function aggregateJournal(journal) {
+function aggregateJournal(journal, settings = {}) {
     let allTimePnl = 0;
     let allTimeWinDays = 0;
     let allTimeLossDays = 0;
     let allTimeBeDays = 0;
 
-    Object.values(journal || {}).forEach(entry => {
+    Object.entries(journal || {}).forEach(([dateStr, entry]) => {
         const pnl = parseFloat(entry?.pnl);
         if (Number.isNaN(pnl)) return;
         allTimePnl += pnl;
-        if (pnl > 0) allTimeWinDays++;
-        else if (pnl < 0) allTimeLossDays++;
+        const dayClass = classifyStatsPnlDay(pnl, settings, dateStr, entry?.__statsBreakevenBand);
+        if (dayClass === 'win') allTimeWinDays++;
+        else if (dayClass === 'loss') allTimeLossDays++;
         else allTimeBeDays++;
     });
 
@@ -169,7 +206,7 @@ const db = {
                             getProfileForDocName(docName),
                             fetchJournalRowsForDoc(docName, null)
                         ]);
-                        return makeDocSnapshot(docName, { ...(profile || {}), ...aggregateJournal(journal) });
+                        return makeDocSnapshot(docName, { ...(profile || {}), ...aggregateJournal(journal, profile?.settings || {}) });
                     },
                     collection(childName) {
                         if (childName !== 'months') throw new Error(`Unsupported subcollection: ${childName}`);
@@ -504,6 +541,7 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
     const currentUserId = getCurrentViewedUserId() || await resolveViewedUserId(state.CURRENT_VIEWED_USER);
     let journal = {};
     let tradeTypes = [];
+    let settings = {};
 
     try {
         if (sel.type === 'current') {
@@ -512,6 +550,7 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
                 await loadAllMonths(state.CURRENT_VIEWED_USER, currentUserId);
                 journal = state.appData.journal || {};
                 tradeTypes = state.appData.tradeTypes || extractTradeTypesFromJournal(journal);
+                settings = state.appData.settings || {};
             }
         } else if (sel.type === 'all') {
             const allNicks = getAllStatsNicks();
@@ -523,12 +562,13 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
                 const journals = await Promise.all(allNicks.map(async (nick) => {
                     const k = `${nick}_stats|all-time`;
                     const c = _cacheGet(k);
-                    if (c) return { journal: c };
+                    const settings = getStatsProfileSettingsByNick(nick);
+                    if (c) return { journal: c, settings };
                     const j = {};
                     const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
                     (snap.docs || []).forEach(d => { Object.assign(j, d.data()); });
                     _cacheSet(k, j);
-                    return { journal: j };
+                    return { journal: j, settings };
                 }));
                 journal = mergeJournals(journals);
                 _cacheSet(cacheKey, journal);
@@ -543,12 +583,13 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
                 const journals = await Promise.all(getStatsNicksForGroup(sel.key).map(async (nick) => {
                     const k = `${nick}_stats|all-time`;
                     const c = _cacheGet(k);
-                    if (c) return { journal: c };
+                    const settings = getStatsProfileSettingsByNick(nick);
+                    if (c) return { journal: c, settings };
                     const j = {};
                     const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
                     (snap.docs || []).forEach(d => { Object.assign(j, d.data()); });
                     _cacheSet(k, j);
-                    return { journal: j };
+                    return { journal: j, settings };
                 }));
                 journal = mergeJournals(journals);
                 _cacheSet(cacheKey, journal);
@@ -559,6 +600,7 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
             if (!isStatsNickAllowed(nick)) {
                 journal = {};
             } else {
+                settings = getStatsProfileSettingsByNick(nick);
                 const cacheKey = `${nick}_stats|all-time`;
                 const cached = _cacheGet(cacheKey);
                 if (cached) {
@@ -578,7 +620,8 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
     state.statsCompareContext = {
         label: getStatsSelectionLabel(sel.type, sel.key),
         journal,
-        tradeTypes
+        tradeTypes,
+        settings
     };
     if (state.statsCompareTradeTypeFilter && !tradeTypes.includes(state.statsCompareTradeTypeFilter)) {
         state.statsCompareTradeTypeFilter = null;
@@ -736,11 +779,15 @@ function mergeJournals(journals) {
         for (let d in j.journal) {
             let entry = j.journal[d];
             if (entry.pnl === null || entry.pnl === undefined || entry.pnl === '') continue;
-            if (!merged[d]) merged[d] = { pnl: 0, commissions: 0, locates: 0, tradeTypesData: {} };
+            if (!merged[d]) merged[d] = { pnl: 0, commissions: 0, locates: 0, tradeTypesData: {}, __statsBreakevenBand: 0 };
             const costs = getEntryCosts(entry);
             merged[d].pnl = (parseFloat(merged[d].pnl) || 0) + (parseFloat(entry.pnl) || 0);
             merged[d].commissions = (parseFloat(merged[d].commissions) || 0) + costs.commissions;
             merged[d].locates = (parseFloat(merged[d].locates) || 0) + costs.locates;
+            const entryBand = Number.isFinite(Number(entry.__statsBreakevenBand))
+                ? Number(entry.__statsBreakevenBand)
+                : getStatsBreakevenBand(j.settings || {}, d);
+            merged[d].__statsBreakevenBand = (Number(merged[d].__statsBreakevenBand) || 0) + entryBand;
             Object.entries(entry.tradeTypesData || {}).forEach(([type, typeData]) => {
                 const typePnl = parseFloat(typeData?.pnl);
                 if (!Number.isFinite(typePnl)) return;
@@ -856,12 +903,13 @@ export async function refreshStatsView() {
                         allNicks.map(async nick => {
                             const k = `${nick}_stats|all-time`;
                             const c = _cacheGet(k);
-                            if (c) return { journal: c };
+                            const settings = getStatsProfileSettingsByNick(nick);
+                            if (c) return { journal: c, settings };
                             const j = {};
                             const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
                             (snap.docs || []).forEach(d => { Object.assign(j, d.data()); });
                             _cacheSet(k, j);
-                            return { journal: j };
+                            return { journal: j, settings };
                         })
                     );
                     journal = mergeJournals(journals);
@@ -871,7 +919,7 @@ export async function refreshStatsView() {
                 const journals = await Promise.all(
                     allNicks.map(nick => fetchMonthsForPeriod(`${nick}_stats`, filters))
                 );
-                journal = mergeJournals(journals.map(j => ({ journal: j })));
+                journal = mergeJournals(journals.map((j, index) => ({ journal: j, settings: getStatsProfileSettingsByNick(allNicks[index]) })));
             }
 
         } else if (sel.type === 'team' && state.TEAM_GROUPS[sel.key]) {
@@ -887,12 +935,13 @@ export async function refreshStatsView() {
                         traders.map(async nick => {
                             const k = `${nick}_stats|all-time`;
                             const c = _cacheGet(k);
-                            if (c) return { journal: c };
+                            const settings = getStatsProfileSettingsByNick(nick);
+                            if (c) return { journal: c, settings };
                             const j = {};
                             const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
                             (snap.docs || []).forEach(d => { Object.assign(j, d.data()); });
                             _cacheSet(k, j);
-                            return { journal: j };
+                            return { journal: j, settings };
                         })
                     );
                     journal = mergeJournals(journals);
@@ -902,7 +951,7 @@ export async function refreshStatsView() {
                 const journals = await Promise.all(
                     traders.map(nick => fetchMonthsForPeriod(`${nick}_stats`, filters))
                 );
-                journal = mergeJournals(journals.map(j => ({ journal: j })));
+                journal = mergeJournals(journals.map((j, index) => ({ journal: j, settings: getStatsProfileSettingsByNick(traders[index]) })));
             }
 
         } else if (sel.type === 'trader') {
@@ -935,14 +984,17 @@ export async function refreshStatsView() {
 
     // Збираємо tradeTypes для поточного контексту
     let contextTradeTypes = [];
+    let contextSettings = {};
     if (sel.type === 'current') {
         const currentNick = cleanStatsNick(state.CURRENT_VIEWED_USER || state.USER_DOC_NAME).replace(/_stats$/, '');
         contextTradeTypes = isStatsNickAllowed(currentNick) ? (state.appData.tradeTypes || []) : [];
+        contextSettings = isStatsNickAllowed(currentNick) ? (state.appData.settings || {}) : {};
     } else if (sel.type === 'trader') {
         const nick = cleanStatsNick(sel.key);
         if (isStatsNickAllowed(nick)) {
             const data = await getStatsDocData(`${nick}_stats`, filters);
             contextTradeTypes = data.tradeTypes || [];
+            contextSettings = data.settings || getStatsProfileSettingsByNick(nick);
         }
     } else {
         const seen = new Set();
@@ -955,7 +1007,7 @@ export async function refreshStatsView() {
 
     if (requestId !== state.statsLoadRequestId) { if (overlay) overlay.style.display = 'none'; return; }
 
-    state.currentStatsContext = { label: getStatsSelectionLabel(sel.type, sel.key), journal, tradeTypes: contextTradeTypes };
+    state.currentStatsContext = { label: getStatsSelectionLabel(sel.type, sel.key), journal, tradeTypes: contextTradeTypes, settings: contextSettings };
 
     if (window.renderStatsSourceSelector) window.renderStatsSourceSelector();
     if (window.renderTradeTypeSelector) window.renderTradeTypeSelector();
@@ -1168,7 +1220,7 @@ function buildStatsChartTheme(cssGreen, cssRed, cssAccent, cssBgPanel, cssText) 
     };
 }
 
-function buildStatsEquityAnalysis(entries, cumulativeValues) {
+function buildStatsEquityAnalysis(entries, cumulativeValues, settings = {}) {
     const rows = [];
     let peak = 0;
     let worstDrawdown = 0;
@@ -1178,21 +1230,23 @@ function buildStatsEquityAnalysis(entries, cumulativeValues) {
     const mergeGap = entries.length > 260 ? 4 : entries.length > 120 ? 2 : 0;
 
     entries.forEach((entry, index) => {
+        const dayClass = classifyStatsPnlDay(entry.pnl, settings, entry.dateStr, entry.breakevenBand);
         const equity = cumulativeValues[index] || 0;
         const previousPeak = peak;
         peak = Math.max(peak, equity);
         const drawdown = equity - peak;
         worstDrawdown = Math.min(worstDrawdown, drawdown);
-        positiveRun = entry.pnl > 0 ? positiveRun + 1 : 0;
+        positiveRun = dayClass === 'win' ? positiveRun + 1 : 0;
         rows.push({
             dateStr: entry.dateStr,
             pnl: entry.pnl,
+            dayClass,
             equity,
             peak,
             drawdown,
             drawdownAbs: Math.abs(drawdown),
             isNewHigh: equity >= previousPeak && equity > 0,
-            isGoodDay: entry.pnl > 0,
+            isGoodDay: dayClass === 'win',
             isRecovery: drawdown < 0 && index > 0 && drawdown > (rows[index - 1]?.drawdown || 0),
             positiveRun,
         });
@@ -1673,7 +1727,13 @@ function buildStatsEntriesFromJournal(journal, tradeTypeFilter = null) {
         }
         if (!Number.isNaN(pnl)) {
             const parts = dateStr.split('-');
-            entries.push({ dateStr, dateObj: new Date(parts[0], parts[1] - 1, parts[2]), pnl, data });
+            entries.push({
+                dateStr,
+                dateObj: new Date(parts[0], parts[1] - 1, parts[2]),
+                pnl,
+                data,
+                breakevenBand: Number(data.__statsBreakevenBand),
+            });
         }
     }
     entries.sort((a, b) => a.dateObj - b.dateObj);
@@ -1747,7 +1807,7 @@ function toggleStatsCompareFilter(type, val, labelName) {
     renderStatsTab();
 }
 
-function buildComparePaneSummary(entries) {
+function buildComparePaneSummary(entries, settings = {}) {
     let winDays = 0, lossDays = 0, beDays = 0;
     let grossProfit = 0, grossLoss = 0;
     let bestDay = 0, worstDay = 0;
@@ -1769,13 +1829,16 @@ function buildComparePaneSummary(entries) {
         periodLabels.push(`${entry.dateObj.getDate()} ${monthsNamesShort[entry.dateObj.getMonth()]}`);
         const day = entry.dateObj.getDay();
         if (day >= 1 && day <= 5) dayTotals[day - 1] += pnl;
-        if (pnl > 0) { winDays++; grossProfit += pnl; if (pnl > bestDay) bestDay = pnl; }
-        else if (pnl < 0) { lossDays++; grossLoss += Math.abs(pnl); if (pnl < worstDay) worstDay = pnl; }
+        if (pnl > bestDay) bestDay = pnl;
+        if (pnl < worstDay) worstDay = pnl;
+        const dayClass = classifyStatsPnlDay(pnl, settings, entry.dateStr, entry.breakevenBand);
+        if (dayClass === 'win') { winDays++; grossProfit += pnl; }
+        else if (dayClass === 'loss') { lossDays++; grossLoss += Math.abs(pnl); }
         else { beDays++; }
     });
 
     const totalDays = winDays + lossDays + beDays;
-    const totalPnl = parseFloat((grossProfit - grossLoss).toFixed(2));
+    const totalPnl = parseFloat(periodSum.toFixed(2));
     return {
         totalPnl,
         winrate: totalDays ? (winDays / totalDays) * 100 : 0,
@@ -1793,6 +1856,7 @@ function buildComparePaneSummary(entries) {
         dayTotals,
         periodLabels,
         periodCumData,
+        settings,
     };
 }
 
@@ -1843,7 +1907,7 @@ function renderCompareCharts(entries, summary, theme, advancedEquityMode = false
     if (!pnlCanvas || !daysCanvas || !pieCanvas) return;
 
     destroyCompareCharts();
-    const equityAnalysis = buildStatsEquityAnalysis(entries, summary.periodCumData);
+    const equityAnalysis = buildStatsEquityAnalysis(entries, summary.periodCumData, summary.settings || {});
     const longHorizon = !!equityAnalysis.longHorizon;
     const peakEquity = Math.max(...equityAnalysis.rows.map(row => row.equity), 0);
     const worstDrawdownAbs = Math.abs(equityAnalysis.worstDrawdown);
@@ -1851,8 +1915,8 @@ function renderCompareCharts(entries, summary, theme, advancedEquityMode = false
         if (index === equityAnalysis.rows.length - 1) return theme.orange;
         if (row.equity === peakEquity && peakEquity > 0) return theme.profit;
         if (longHorizon) return statsDrawdownColor(row.drawdown, equityAnalysis.worstDrawdown, theme);
-        if (row.pnl > 0 && (row.isNewHigh || row.positiveRun >= 2)) return theme.profit;
-        if (row.pnl > 0) return '#14b8a6';
+        if (row.dayClass === 'win' && (row.isNewHigh || row.positiveRun >= 2)) return theme.profit;
+        if (row.dayClass === 'win') return '#14b8a6';
         if (row.drawdown < 0) return row.drawdownAbs >= worstDrawdownAbs * 0.6 ? theme.loss : theme.orange;
         return statsDrawdownColor(row.drawdown, equityAnalysis.worstDrawdown, theme);
     });
@@ -1861,7 +1925,7 @@ function renderCompareCharts(entries, summary, theme, advancedEquityMode = false
         if (row.equity === peakEquity && peakEquity > 0) return 4;
         if (longHorizon) return 0;
         if (row.isNewHigh) return 4;
-        if (row.pnl > 0) return 3;
+        if (row.dayClass === 'win') return 3;
         if (row.drawdown < 0 && row.drawdownAbs >= worstDrawdownAbs * 0.6) return 3;
         return summary.periodCumData.length > 70 ? 0 : 2;
     });
@@ -2065,7 +2129,8 @@ function renderStatsComparePanel(validEntries) {
         state.statsCompareContext = {
             journal: state.currentStatsContext.journal || {},
             label: getStatsSelectionLabel(state.statsCompareSourceSelection.type, state.statsCompareSourceSelection.key),
-            tradeTypes: state.currentStatsContext.tradeTypes || state.appData.tradeTypes || []
+            tradeTypes: state.currentStatsContext.tradeTypes || state.appData.tradeTypes || [],
+            settings: state.currentStatsContext.settings || state.appData.settings || {}
         };
     }
 
@@ -2172,8 +2237,8 @@ function renderStatsComparePanel(validEntries) {
 
     const baseEntries = filterEntriesByStatsFilters(validEntries, state.activeFilters);
     const compareEntries = filterEntriesByStatsFilters(compareValidEntries, state.statsCompareFilters || []);
-    const base = buildComparePaneSummary(baseEntries);
-    const compare = buildComparePaneSummary(compareEntries);
+    const base = buildComparePaneSummary(baseEntries, state.currentStatsContext.settings || state.appData.settings || {});
+    const compare = buildComparePaneSummary(compareEntries, state.statsCompareContext.settings || {});
     const pfDelta = compare.pf - base.pf;
 
     const cssGreen = getComputedStyle(document.documentElement).getPropertyValue('--profit').trim() || '#10b981';
@@ -2189,8 +2254,8 @@ function renderStatsComparePanel(validEntries) {
     theme.panel = cssBgPanel;
     theme.orange = theme.orange || '#f97316';
 
-    const baseEquity = buildStatsEquityAnalysis(baseEntries, base.periodCumData);
-    const compareEquity = buildStatsEquityAnalysis(compareEntries, compare.periodCumData);
+    const baseEquity = buildStatsEquityAnalysis(baseEntries, base.periodCumData, state.currentStatsContext.settings || state.appData.settings || {});
+    const compareEquity = buildStatsEquityAnalysis(compareEntries, compare.periodCumData, state.statsCompareContext.settings || {});
     const compareAdvancedToggle = document.getElementById('compare-stats-equity-advanced-toggle');
     if (compareAdvancedToggle) compareAdvancedToggle.checked = !!state.statsCompareEquityAdvancedMode;
     setText('compare-stat-total-pnl', fmtMoney(compare.totalPnl));
@@ -2243,6 +2308,7 @@ function renderStatsInsights({
     avgLoss,
     totalPnl,
     equityAnalysis,
+    settings = {},
 }) {
     const insightsEl = document.getElementById('stats-insights-list');
     if (!insightsEl) return;
@@ -2269,10 +2335,11 @@ function renderStatsInsights({
     let maxLossStreak = 0;
     filteredEntries.forEach((entry) => {
         const pnl = Number(entry.pnl) || 0;
-        if (pnl > 0) {
+        const dayClass = classifyStatsPnlDay(pnl, settings, entry.dateStr, entry.breakevenBand);
+        if (dayClass === 'win') {
             currentWinStreak += 1;
             currentLossStreak = 0;
-        } else if (pnl < 0) {
+        } else if (dayClass === 'loss') {
             currentLossStreak += 1;
             currentWinStreak = 0;
         } else {
@@ -2366,7 +2433,13 @@ export function renderStatsTab() {
         }
         if (!isNaN(pnl)) {
             let parts = d.split('-');
-            validEntries.push({ dateStr: d, dateObj: new Date(parts[0], parts[1]-1, parts[2]), pnl, data });
+            validEntries.push({
+                dateStr: d,
+                dateObj: new Date(parts[0], parts[1]-1, parts[2]),
+                pnl,
+                data,
+                breakevenBand: Number(data.__statsBreakevenBand),
+            });
         }
     }
     validEntries.sort((a, b) => a.dateObj - b.dateObj);
@@ -2419,7 +2492,12 @@ export function renderStatsTab() {
         periodSum += pnl; periodCumData.push(parseFloat(periodSum.toFixed(2)));
         if (isBroadView) { periodLabels.push(`${e.dateObj.getDate()} ${monthsNamesShort[e.dateObj.getMonth()]}`); } else { periodLabels.push(e.dateObj.getDate().toString()); }
         let day = e.dateObj.getDay(); if (day >= 1 && day <= 5) { dayTotals[day-1] += pnl; }
-        if (pnl > 0) { winDays++; grossProfit += pnl; if (pnl > bestDay) bestDay = pnl; } else if (pnl < 0) { lossDays++; grossLoss += Math.abs(pnl); if (pnl < worstDay) worstDay = pnl; } else { beDays++; }
+        if (pnl > bestDay) bestDay = pnl;
+        if (pnl < worstDay) worstDay = pnl;
+        const dayClass = classifyStatsPnlDay(pnl, state.currentStatsContext.settings || {}, e.dateStr, e.breakevenBand);
+        if (dayClass === 'win') { winDays++; grossProfit += pnl; }
+        else if (dayClass === 'loss') { lossDays++; grossLoss += Math.abs(pnl); }
+        else { beDays++; }
     }
 
     let totalDays = winDays + lossDays + beDays;
@@ -2427,7 +2505,7 @@ export function renderStatsTab() {
     let profitFactor = grossLoss > 0 ? (grossProfit / grossLoss).toFixed(2) : (grossProfit > 0 ? '∞' : '0.00');
     let avgWin = winDays > 0 ? (grossProfit / winDays).toFixed(2) : '0.00';
     let avgLoss = lossDays > 0 ? (grossLoss / lossDays).toFixed(2) : '0.00';
-    const totalPnl = parseFloat((grossProfit - grossLoss).toFixed(2));
+    const totalPnl = parseFloat(periodSum.toFixed(2));
     
     document.getElementById('stat-winrate').innerText = `${winRate}%`;
     document.getElementById('stat-pf').innerText = profitFactor;
@@ -2465,7 +2543,7 @@ export function renderStatsTab() {
     if (advancedToggle) advancedToggle.checked = advancedEquityMode;
 
     const statsChartTheme = buildStatsChartTheme(cssGreen, cssRed, cssAccent, cssBgPanel, cssText);
-    const equityAnalysis = buildStatsEquityAnalysis(filteredEntries, periodCumData);
+    const equityAnalysis = buildStatsEquityAnalysis(filteredEntries, periodCumData, state.currentStatsContext.settings || {});
     setText('stat-max-dd', fmtMoneyAbs(equityAnalysis.worstDrawdown || 0));
     renderStatsInsights({
         filteredEntries,
@@ -2476,6 +2554,7 @@ export function renderStatsTab() {
         avgLoss,
         totalPnl,
         equityAnalysis,
+        settings: state.currentStatsContext.settings || {},
     });
     const longHorizon = !!equityAnalysis.longHorizon;
     const worstDrawdownAbs = Math.abs(equityAnalysis.worstDrawdown);
@@ -2484,8 +2563,8 @@ export function renderStatsTab() {
         if (index === equityAnalysis.rows.length - 1) return statsChartTheme.orange;
         if (row.equity === peakEquity && peakEquity > 0) return statsChartTheme.profit;
         if (longHorizon) return statsDrawdownColor(row.drawdown, equityAnalysis.worstDrawdown, statsChartTheme);
-        if (row.pnl > 0 && (row.isNewHigh || row.positiveRun >= 2)) return statsChartTheme.profit;
-        if (row.pnl > 0) return '#14b8a6';
+        if (row.dayClass === 'win' && (row.isNewHigh || row.positiveRun >= 2)) return statsChartTheme.profit;
+        if (row.dayClass === 'win') return '#14b8a6';
         if (row.drawdown < 0) return row.drawdownAbs >= worstDrawdownAbs * 0.6 ? statsChartTheme.loss : statsChartTheme.orange;
         return statsDrawdownColor(row.drawdown, equityAnalysis.worstDrawdown, statsChartTheme);
     });
@@ -2494,7 +2573,7 @@ export function renderStatsTab() {
         if (row.equity === peakEquity && peakEquity > 0) return 4;
         if (longHorizon) return 0;
         if (row.isNewHigh) return 4;
-        if (row.pnl > 0) return 3;
+        if (row.dayClass === 'win') return 3;
         if (row.drawdown < 0 && row.drawdownAbs >= worstDrawdownAbs * 0.6) return 3;
         return periodCumData.length > 70 ? 0 : 2;
     });
