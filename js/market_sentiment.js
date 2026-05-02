@@ -110,7 +110,7 @@ function renderLoading() {
     setText('market-sentiment-label', 'Loading');
     setText('market-sentiment-delta', 'CNN Fear & Greed');
     setText('market-sentiment-updated', '');
-    setMeter(50);
+    setNeedle(50);
 }
 
 function renderError(message) {
@@ -121,7 +121,7 @@ function renderError(message) {
     setText('market-sentiment-label', 'Unavailable');
     setText('market-sentiment-delta', 'CNN Fear & Greed');
     setText('market-sentiment-updated', message || 'Try again later');
-    setMeter(50);
+    setNeedle(50);
 }
 
 function renderSentiment(payload) {
@@ -138,10 +138,10 @@ function renderSentiment(payload) {
     root.className = `market-sentiment-card market-sentiment-card--${tone}`;
 
     setText('market-sentiment-score', String(score));
-    setText('market-sentiment-label', payload.ratingLabel || 'Neutral');
+    setText('market-sentiment-label', translateRating(payload.rating));
     setText('market-sentiment-delta', formatDelta(score, payload.previous?.week) || 'CNN Fear & Greed');
     setText('market-sentiment-updated', formatTimestamp(payload.timestamp));
-    setMeter(score);
+    setNeedle(score);
 }
 
 function setText(id, value) {
@@ -149,11 +149,22 @@ function setText(id, value) {
     if (el) el.textContent = value || '';
 }
 
-function setMeter(score) {
-    const meter = document.getElementById('market-sentiment-fill');
-    if (!meter) return;
+function setNeedle(score) {
+    const needle = document.getElementById('market-sentiment-needle');
+    if (!needle) return;
     const value = Math.max(0, Math.min(100, Number(score) || 0));
-    meter.style.width = `${value}%`;
+    const degrees = -90 + (value * 1.8);
+    needle.style.transform = `translateX(-50%) rotate(${degrees}deg) translateY(-76px)`;
+}
+
+function translateRating(rating) {
+    return {
+        extreme_fear: 'Сильний страх',
+        fear: 'Страх',
+        neutral: 'Нейтрально',
+        greed: 'Жадібність',
+        extreme_greed: 'Сильна жадібність',
+    }[String(rating || '').trim().toLowerCase()] || 'Нейтрально';
 }
 
 export async function renderMarketSentiment(options = {}) {
