@@ -32,6 +32,7 @@ import { showToast } from './utils.js';
 import { connectGoogleDrive, syncDriveScreenshots, updateDriveUI, disconnectGoogleDrive, startDriveAutoSync, tryRestoreDriveToken } from './drive.js';
 import { initPlaybookChart } from './playbook_chart.js';
 import { renderDashboardNews, refreshDashboardNews } from './news.js';
+import { renderMarketSentiment, refreshMarketSentiment } from './market_sentiment.js';
 import { loadPartials } from './partials.js';
 import { applyPersistedBackground, initBackgroundControls } from './backgrounds.js';
 import { initGlobalAppEvents } from './app_events.js';
@@ -79,6 +80,8 @@ window.refreshMentorReviewQueue = refreshMentorReviewQueue;
 window.setMentorReviewNavBadges = setMentorReviewNavBadges;
 window.renderDashboardNews = renderDashboardNews;
 window.refreshDashboardNews = refreshDashboardNews;
+window.renderMarketSentiment = renderMarketSentiment;
+window.refreshMarketSentiment = refreshMarketSentiment;
 window.toggleAuthMode = toggleAuthMode;
 window.handleAuth = handleAuth;
 window.signInWithTelegram = signInWithTelegram;
@@ -618,6 +621,7 @@ async function bootApp(user) {
         syncMainTabFromRoute();
         if (window.loadAIChatHistory) window.loadAIChatHistory();
         if (window.renderDashboardNews) void window.renderDashboardNews();
+        if (window.renderMarketSentiment) void window.renderMarketSentiment();
         cleanupUnusedAIRequests();
 
         applyPersistedBackground();

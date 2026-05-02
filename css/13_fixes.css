@@ -1131,6 +1131,154 @@
     margin-bottom: 6px;
 }
 
+.market-sentiment-card {
+    display: grid;
+    grid-template-columns: minmax(150px, 0.32fr) minmax(240px, 1fr);
+    align-items: center;
+    gap: 14px;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, var(--accent) 18%);
+    border-radius: var(--radius-lg);
+    background:
+        linear-gradient(145deg, color-mix(in srgb, var(--accent) 5%, transparent), transparent 42%),
+        color-mix(in srgb, var(--bg-panel) 96%, var(--bg-main));
+    box-shadow: var(--shadow-accent-sm);
+    padding: 10px 12px;
+    margin-bottom: 2px;
+    min-height: 78px;
+    overflow: hidden;
+}
+.market-sentiment-main {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+}
+.market-sentiment-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--text-muted);
+    font-size: 0.66rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0;
+}
+.market-sentiment-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--text-muted);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--text-muted) 10%, transparent);
+}
+.market-sentiment-value-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+}
+.market-sentiment-value-row strong {
+    color: var(--text-main);
+    font-family: var(--font-mono);
+    font-size: 1.72rem;
+    font-weight: 800;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+.market-sentiment-value-row span {
+    color: var(--text-main);
+    font-size: 0.9rem;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.market-sentiment-meter-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+.market-sentiment-meter {
+    position: relative;
+    height: 9px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--loss) 0%, var(--gold) 48%, var(--profit) 100%);
+    overflow: hidden;
+}
+.market-sentiment-meter::after {
+    content: "";
+    position: absolute;
+    inset: 1px;
+    border-radius: inherit;
+    background: color-mix(in srgb, var(--bg-main) 34%, transparent);
+    pointer-events: none;
+}
+.market-sentiment-meter span {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 50%;
+    min-width: 8px;
+    border-radius: inherit;
+    background: rgba(255, 255, 255, 0.18);
+    box-shadow: 0 0 18px rgba(255, 255, 255, 0.18);
+    transition: width 0.45s ease;
+    z-index: 1;
+}
+.market-sentiment-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    min-width: 0;
+}
+.market-sentiment-meta span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.market-sentiment-card--extreme-fear .market-sentiment-dot,
+.market-sentiment-card--fear .market-sentiment-dot {
+    background: var(--loss);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--loss) 13%, transparent);
+}
+.market-sentiment-card--neutral .market-sentiment-dot {
+    background: var(--gold);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--gold) 13%, transparent);
+}
+.market-sentiment-card--greed .market-sentiment-dot,
+.market-sentiment-card--extreme-greed .market-sentiment-dot {
+    background: var(--profit);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--profit) 13%, transparent);
+}
+.market-sentiment-card--extreme-fear .market-sentiment-value-row span,
+.market-sentiment-card--fear .market-sentiment-value-row span {
+    color: var(--loss);
+}
+.market-sentiment-card--neutral .market-sentiment-value-row span {
+    color: var(--gold);
+}
+.market-sentiment-card--greed .market-sentiment-value-row span,
+.market-sentiment-card--extreme-greed .market-sentiment-value-row span {
+    color: var(--profit);
+}
+.market-sentiment-card.is-loading,
+.market-sentiment-card.is-muted {
+    opacity: 0.82;
+}
+@media (max-width: 720px) {
+    .market-sentiment-card {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        min-height: 0;
+    }
+    .market-sentiment-meta {
+        font-size: 0.68rem;
+    }
+}
+
 .app-sidebar.collapsed .sidebar-account-wrap {
     display: none !important;
 }

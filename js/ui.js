@@ -561,7 +561,10 @@ export function switchMainTab(tab, options = {}) {
     }
     if (tab === 'table' && window.initSheetTableView) window.initSheetTableView();
     if (tab === 'datagrid' && window.renderTradesDatagrid) window.renderTradesDatagrid();
-    if (tab === 'dash' && window.renderDashboardNews) window.renderDashboardNews();
+    if (tab === 'dash') {
+        if (window.renderDashboardNews) window.renderDashboardNews();
+        if (window.renderMarketSentiment) window.renderMarketSentiment();
+    }
     if (tab === 'screens') {
         if (window.updateDriveUI) window.updateDriveUI();
         if (window.restoreScreensDistributionState) window.restoreScreensDistributionState();
