@@ -13,30 +13,6 @@
                 </div>
             </div>
 
-            <!-- MARKET SENTIMENT -->
-            <section class="market-sentiment-card is-loading" id="market-sentiment-card" aria-label="Stock market fear and greed index">
-                <div class="market-sentiment-kicker">
-                    <span class="market-sentiment-dot" aria-hidden="true"></span>
-                    <span>Market Mood</span>
-                </div>
-                <div class="market-sentiment-gauge" aria-hidden="true">
-                    <svg viewBox="0 0 240 130" role="img" focusable="false">
-                        <path class="market-sentiment-arc market-sentiment-arc--danger" d="M 20 110 A 100 100 0 0 1 70 23.4" pathLength="100" />
-                        <path class="market-sentiment-arc market-sentiment-arc--warn" d="M 70 23.4 A 100 100 0 0 1 170 23.4" pathLength="100" />
-                        <path class="market-sentiment-arc market-sentiment-arc--good" d="M 170 23.4 A 100 100 0 0 1 220 110" pathLength="100" />
-                    </svg>
-                    <span class="market-sentiment-needle" id="market-sentiment-needle"></span>
-                    <div class="market-sentiment-center">
-                        <strong id="market-sentiment-score">--</strong>
-                        <span id="market-sentiment-label">Loading</span>
-                    </div>
-                </div>
-                <div class="market-sentiment-meta">
-                    <span id="market-sentiment-delta">CNN Fear &amp; Greed</span>
-                    <span id="market-sentiment-updated"></span>
-                </div>
-            </section>
-
             <!-- TOP STATS CARDS -->
             <div class="stats-grid-pro" id="stats-cards-pro">
                 <div class="stat-card-pro">
@@ -78,6 +54,28 @@
                     </div>
                     <p class="stat-card-pro-label">Profit Factor (місяць)</p>
                     <p class="stat-card-pro-value" id="pro-pf">0.00</p>
+                </div>
+                <div class="stat-card-pro market-sentiment-card is-loading" id="market-sentiment-card" aria-label="Stock market fear and greed index">
+                    <div class="market-sentiment-kicker">
+                        <span class="market-sentiment-dot" aria-hidden="true"></span>
+                        <span>Market Mood</span>
+                    </div>
+                    <div class="market-sentiment-gauge" aria-hidden="true">
+                        <svg viewBox="0 0 240 130" role="img" focusable="false">
+                            <path class="market-sentiment-arc market-sentiment-arc--danger" d="M 20 110 A 100 100 0 0 1 70 23.4" pathLength="100" />
+                            <path class="market-sentiment-arc market-sentiment-arc--warn" d="M 70 23.4 A 100 100 0 0 1 170 23.4" pathLength="100" />
+                            <path class="market-sentiment-arc market-sentiment-arc--good" d="M 170 23.4 A 100 100 0 0 1 220 110" pathLength="100" />
+                        </svg>
+                        <span class="market-sentiment-needle" id="market-sentiment-needle"></span>
+                        <div class="market-sentiment-center">
+                            <strong id="market-sentiment-score">--</strong>
+                            <span id="market-sentiment-label">Loading</span>
+                        </div>
+                    </div>
+                    <div class="market-sentiment-meta">
+                        <span id="market-sentiment-delta">CNN Fear &amp; Greed</span>
+                        <span id="market-sentiment-updated"></span>
+                    </div>
                 </div>
             </div>
 

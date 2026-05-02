@@ -1203,11 +1203,85 @@
     border-left: 9px solid transparent;
     border-right: 9px solid transparent;
     border-bottom: 24px solid color-mix(in srgb, var(--text-muted) 88%, white);
-    transform: translateX(-50%) rotate(-90deg) translateY(-76px);
+    transform: translateX(-50%) rotate(var(--market-needle-angle, -90deg)) translateY(var(--market-needle-distance, -76px));
     transform-origin: 50% 88px;
     filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.35));
     transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
     z-index: 2;
+}
+
+#view-dash .stats-grid-pro {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.stat-card-pro.market-sentiment-card {
+    --market-needle-distance: -38px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 4px;
+    min-height: 0;
+    margin-bottom: 0;
+    padding: 10px 12px;
+}
+.stat-card-pro.market-sentiment-card .market-sentiment-kicker {
+    width: auto;
+    font-size: 0.62rem;
+}
+.stat-card-pro.market-sentiment-card .market-sentiment-gauge {
+    width: 100%;
+    min-width: 0;
+    height: 64px;
+    flex-shrink: 0;
+}
+.stat-card-pro.market-sentiment-card .market-sentiment-arc {
+    stroke-width: 18;
+}
+.stat-card-pro.market-sentiment-card .market-sentiment-needle {
+    bottom: 6px;
+    border-left-width: 6px;
+    border-right-width: 6px;
+    border-bottom-width: 16px;
+    transform-origin: 50% 45px;
+}
+.stat-card-pro.market-sentiment-card .market-sentiment-center {
+    bottom: 0;
+    width: 100%;
+    gap: 2px;
+}
+.stat-card-pro.market-sentiment-card .market-sentiment-center strong {
+    font-size: 1.05rem;
+    line-height: 1;
+}
+.stat-card-pro.market-sentiment-card .market-sentiment-center span {
+    font-size: 0.7rem;
+    max-width: 100%;
+}
+.stat-card-pro.market-sentiment-card .market-sentiment-meta {
+    width: 100%;
+    min-width: 0;
+    align-items: flex-start;
+    gap: 2px;
+    text-align: left;
+    font-size: 0.62rem;
+}
+.stat-card-pro.market-sentiment-card .market-sentiment-meta span:last-child {
+    display: none;
+}
+@media (max-width: 1280px) {
+    #view-dash .stats-grid-pro {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+@media (max-width: 760px) {
+    #view-dash .stats-grid-pro {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+@media (max-width: 420px) {
+    #view-dash .stats-grid-pro {
+        grid-template-columns: 1fr;
+    }
 }
 .market-sentiment-center {
     position: absolute;

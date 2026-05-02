@@ -105,7 +105,7 @@ function formatDelta(current, previous) {
 function renderLoading() {
     const root = document.getElementById('market-sentiment-card');
     if (!root) return;
-    root.className = 'market-sentiment-card is-loading';
+    root.className = 'stat-card-pro market-sentiment-card is-loading';
     setText('market-sentiment-score', '--');
     setText('market-sentiment-label', 'Loading');
     setText('market-sentiment-delta', 'CNN Fear & Greed');
@@ -116,7 +116,7 @@ function renderLoading() {
 function renderError(message) {
     const root = document.getElementById('market-sentiment-card');
     if (!root) return;
-    root.className = 'market-sentiment-card is-muted';
+    root.className = 'stat-card-pro market-sentiment-card is-muted';
     setText('market-sentiment-score', '--');
     setText('market-sentiment-label', 'Unavailable');
     setText('market-sentiment-delta', 'CNN Fear & Greed');
@@ -135,7 +135,7 @@ function renderSentiment(payload) {
 
     const score = Math.round(Number(payload.score));
     const tone = getTone(score, payload.rating);
-    root.className = `market-sentiment-card market-sentiment-card--${tone}`;
+    root.className = `stat-card-pro market-sentiment-card market-sentiment-card--${tone}`;
 
     setText('market-sentiment-score', String(score));
     setText('market-sentiment-label', translateRating(payload.rating));
@@ -154,7 +154,7 @@ function setNeedle(score) {
     if (!needle) return;
     const value = Math.max(0, Math.min(100, Number(score) || 0));
     const degrees = -90 + (value * 1.8);
-    needle.style.transform = `translateX(-50%) rotate(${degrees}deg) translateY(-76px)`;
+    needle.style.setProperty('--market-needle-angle', `${degrees}deg`);
 }
 
 function translateRating(rating) {
