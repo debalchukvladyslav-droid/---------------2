@@ -12,6 +12,7 @@ import { getDefaultDayEntry } from './data_utils.js';
 import { saveJournalData, markJournalDayDirty } from './storage.js';
 import { syncFondexxFromTradesForDay, logTradesImportConsole } from './parsers.js';
 import { clearStatsCache } from './stats.js';
+import { parseSheetDateCellToIso } from './parser_utils.js';
 
 const LS_KEY = 'tj_google_sheet_import_v1';
 
@@ -653,37 +654,7 @@ function calendarYmdValid(year, month, day) {
  * Для вашої таблиці slash-формат читаємо як день/місяць: 12/3/2026 = 2026-03-12.
  */
 function sheetsCellToIsoDate(value) {
-    if (value == null || value === '') return null;
-    const s = String(value).trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-        return isValidIsoDateString(s) && !isFutureIsoDateString(s) ? s : null;
-    }
-    if (typeof value === 'number' && Number.isFinite(value)) {
-        const epoch = Date.UTC(1899, 11, 30);
-        const d = new Date(epoch + Math.floor(value) * 86400000);
-        const y = d.getUTCFullYear();
-        const mo = d.getUTCMonth() + 1;
-        const da = d.getUTCDate();
-        if (y < 1990 || y > 2100) return null;
-        const iso = toIsoFromParts(y, mo, da);
-        return isValidIsoDateString(iso) && !isFutureIsoDateString(iso) ? iso : null;
-    }
-    const datePart = s.split(/\s+/)[0];
-    const m1 = /^(\d{1,2})([./])(\d{1,2})[./](\d{4})$/.exec(datePart);
-    if (m1) {
-        const a = Number(m1[1]);
-        const b = Number(m1[3]);
-        const year = Number(m1[4]);
-        if (!Number.isFinite(year) || year < 1990 || year > 2100) return null;
-
-        const dmy = calendarYmdValid(year, b, a) ? toIsoFromParts(year, b, a) : null;
-        const mdy = calendarYmdValid(year, a, b) ? toIsoFromParts(year, a, b) : null;
-
-        if (dmy && !isFutureIsoDateString(dmy)) return dmy;
-        if (mdy && !isFutureIsoDateString(mdy)) return mdy;
-        return null;
-    }
-    return null;
+    return parseSheetDateCellToIso(value);
 }
 
 function sheetsCellToTimeString(value) {

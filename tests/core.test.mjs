@@ -23,7 +23,7 @@ globalThis.document = {
 
 const { canAccessMentorReviewQueueState, isMentorViewingOtherJournalState } = await import('../js/access_control.js');
 const { normalizeAppData, normalizeDayEntry } = await import('../js/data_utils.js');
-const { ecnFeeColumnIndex } = await import('../js/parser_utils.js');
+const { ecnFeeColumnIndex, parseSheetDateCellToIso } = await import('../js/parser_utils.js');
 const { sanitizeHTML, safeExternalUrl, sanitizeRichHTML } = await import('../js/sanitize.js');
 const { summarizeJournalPnl } = await import('../js/stats_math.js');
 
@@ -31,6 +31,13 @@ test('parser utils find ECN fee columns across supported header names', () => {
     assert.equal(ecnFeeColumnIndex({ Symbol: 0, 'Ecn Fee': 4 }), 4);
     assert.equal(ecnFeeColumnIndex({ Symbol: 0, ECN: 7 }), 7);
     assert.equal(ecnFeeColumnIndex({ Symbol: 0 }), undefined);
+});
+
+test('sheet date parser treats slash Excel dates as month/day/year', () => {
+    assert.equal(parseSheetDateCellToIso('4/1/2026'), '2026-04-01');
+    assert.equal(parseSheetDateCellToIso('4/2/2026'), '2026-04-02');
+    assert.equal(parseSheetDateCellToIso('4/6/2026'), '2026-04-06');
+    assert.equal(parseSheetDateCellToIso('1.4.2026'), '2026-04-01');
 });
 
 test('stats math summarizes journal pnl safely', () => {
