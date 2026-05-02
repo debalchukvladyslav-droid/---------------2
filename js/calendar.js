@@ -450,6 +450,30 @@ function fillSelectedDateUI(dateStr) {
     if (window.refreshReviewRequestButtons) window.refreshReviewRequestButtons();
 }
 
+function focusActiveDayEditorField() {
+    const activeTabId = document.querySelector('#form-sidebar .tab-content.active')?.id || 'tab-profit';
+    const focusId = activeTabId === 'tab-mind' ? 'trade-notes' : 'trade-pnl';
+    const el = document.getElementById(focusId);
+    if (!el || el.disabled) return;
+    el.focus({ preventScroll: true });
+    if (typeof el.select === 'function' && el.tagName === 'INPUT') el.select();
+}
+
+async function openDayEditor(dateStr) {
+    const loadPromise = selectDate(dateStr);
+    const sidebar = document.getElementById('form-sidebar');
+
+    if (sidebar?.classList.contains('collapsed') && window.toggleRightSidebar) {
+        window.toggleRightSidebar();
+    } else if (window.innerWidth <= 1024 && !sidebar?.classList.contains('open') && window.toggleMobileSidebar) {
+        window.toggleMobileSidebar(true);
+    }
+
+    requestAnimationFrame(focusActiveDayEditorField);
+    await loadPromise;
+    requestAnimationFrame(focusActiveDayEditorField);
+}
+
 export async function selectDate(dateStr) {
     const requestId = ++_selectDateRequestId;
     state.selectedDateStr = dateStr;
@@ -893,6 +917,11 @@ export async function renderView() {
         cell.appendChild(dayNum);
         cell.appendChild(dayPnl);
         cell.onclick = () => { void selectDate(dateKey); };
+        cell.ondblclick = (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void openDayEditor(dateKey);
+        };
         if (dateKey === state.selectedDateStr) cell.classList.add('active-day');
         grid.appendChild(cell);
     }
