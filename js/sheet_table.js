@@ -746,7 +746,9 @@ function parseSheetGridToTrades(values, smartColumns, spreadsheetId, startRow = 
         const symbol = String(symRaw).trim().toUpperCase();
         const parsedTime = sheetsCellToTimeString(timeIdx >= 0 ? getCell(row, timeIdx) : dateRaw);
         const timeStr = parsedTime || '09:30:00';
-        const net = profitIdx >= 0 ? parseMoneyCell(getCell(row, profitIdx)) : 0;
+        const profitRaw = profitIdx >= 0 ? getCell(row, profitIdx) : '';
+        const hasProfitCell = profitRaw != null && String(profitRaw).trim() !== '';
+        const net = hasProfitCell ? parseMoneyCell(profitRaw) : 0;
         const gross = net;
         const typeCell = typeIdx >= 0 ? String(getCell(row, typeIdx)).trim() : '';
 
@@ -775,8 +777,8 @@ function parseSheetGridToTrades(values, smartColumns, spreadsheetId, startRow = 
             spreadsheetId,
             sheetRow: excelRow,
             sheetTime: parsedTime || undefined,
-            sheetNet: net,
-            sheetGross: gross,
+            sheetNet: hasProfitCell ? net : undefined,
+            sheetGross: hasProfitCell ? gross : undefined,
             tradeType: typeCell || undefined,
             pv: pvCell !== '' && pvCell != null ? String(pvCell) : undefined,
             altPv: altPvStr || undefined,
@@ -844,7 +846,7 @@ function findSheetMatchIndex(existingTrades, incomingTrade, usedIndices) {
     const symbol = normalizeTradeSymbol(incomingTrade?.symbol);
     if (!symbol) return -1;
 
-    const incomingNet = Number(incomingTrade?.net);
+    const incomingNet = Number(incomingTrade?.sheet?.sheetNet);
     const candidates = [];
 
     existingTrades.forEach((trade, index) => {
@@ -855,15 +857,13 @@ function findSheetMatchIndex(existingTrades, incomingTrade, usedIndices) {
         const pnlDiff = hasPnl ? Math.abs(existingNet - incomingNet) : Number.POSITIVE_INFINITY;
         const okByPnl = hasPnl && pnlDiff <= pnlTolerance(incomingNet);
         const noSheetYet = !trade?.sheet || trade.sheet.source !== 'google';
-        if (hasPnl && !okByPnl) return;
-        if (!hasPnl && !noSheetYet) return;
         const existingMin = tradeTimeMinutes(trade?.opened);
         const incomingMin = incomingTrade?.sheet?.sheetTime ? tradeTimeMinutes(incomingTrade.opened) : null;
         const timeDiff = existingMin != null && incomingMin != null ? Math.abs(existingMin - incomingMin) : null;
         if (timeDiff != null && timeDiff > 90) return;
         candidates.push({
             index,
-            score: (okByPnl ? 1000 - pnlDiff : 10) + (noSheetYet ? 20 : 0) + (timeDiff != null ? Math.max(0, 90 - timeDiff) : 0),
+            score: (okByPnl ? 1000 - pnlDiff : 25) + (noSheetYet ? 20 : 0) + (timeDiff != null ? Math.max(0, 90 - timeDiff) : 0),
         });
     });
 
@@ -876,11 +876,12 @@ function enrichTradeWithSheet(existingTrade, incomingTrade) {
         ...(existingTrade.sheet && typeof existingTrade.sheet === 'object' ? existingTrade.sheet : {}),
         ...(incomingTrade.sheet || {}),
         matchedBy: incomingTrade.sheet?.sheetTime ? 'date+ticker+pnl+time' : 'date+ticker+pnl',
+        fondexxType: existingTrade.sheet?.fondexxType || existingTrade.type || undefined,
     };
 
     return {
         ...existingTrade,
-        type: existingTrade.type || incomingTrade.type,
+        type: incomingTrade.sheet?.tradeType || incomingTrade.type || existingTrade.type,
         entry: Number(existingTrade.entry) ? existingTrade.entry : incomingTrade.entry,
         exit: Number(existingTrade.exit) ? existingTrade.exit : incomingTrade.exit,
         qty: Number(existingTrade.qty) ? existingTrade.qty : incomingTrade.qty,

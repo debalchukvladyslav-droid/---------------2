@@ -61,6 +61,10 @@ function isGoogleSheetTrade(t) {
     return !!(t && typeof t.sheet === 'object' && t.sheet.source === 'google');
 }
 
+function isPureGoogleSheetTrade(t) {
+    return isGoogleSheetTrade(t) && !t.sheet?.matchedBy;
+}
+
 function emptySourceTotals(locates = 0, tickers = []) {
     return { gross: 0, net: 0, comm: 0, locates, tickers };
 }
@@ -110,7 +114,7 @@ function almostEqualMoney(a, b) {
 }
 
 function looksLikeSheetDerivedFondexx(source, trades) {
-    const googleTrades = trades.filter(isGoogleSheetTrade);
+    const googleTrades = trades.filter(isPureGoogleSheetTrade);
     if (!googleTrades.length || googleTrades.length !== trades.length) return false;
     const src = normalizeSourceTotals(source);
     const totals = sumTrades(googleTrades);
@@ -141,7 +145,7 @@ export function syncFondexxFromTradesForDay(dateStr) {
             ? { ...prevFx, tickers: prevFx.tickers }
             : emptySourceTotals(locates);
     } else {
-        const importTrades = trades.filter((t) => !isGoogleSheetTrade(t));
+        const importTrades = trades.filter((t) => !isPureGoogleSheetTrade(t));
         if (importTrades.length > 0) {
             const totals = sumTrades(importTrades);
             entry.fondexx = {
@@ -188,6 +192,87 @@ function recalculateDailyTotals(d) {
     if (f.tickers) f.tickers.forEach(t => existingTickers.add(t));
     if (p.tickers) p.tickers.forEach(t => existingTickers.add(t));
     entry.traded_tickers = Array.from(existingTickers);
+}
+
+function normalizeTradeSymbol(value) {
+    return String(value || '').trim().toUpperCase();
+}
+
+function tradeTimeMinutes(opened) {
+    const m = /\b(\d{1,2}):(\d{2})(?::\d{2})?/.exec(String(opened || ''));
+    if (!m) return null;
+    return Number(m[1]) * 60 + Number(m[2]);
+}
+
+function pnlTolerance(value) {
+    const n = Math.abs(Number(value) || 0);
+    return Math.max(5, n * 0.08);
+}
+
+function findSheetContextMatchIndex(existingTrades, fondexxTrade, usedIndices) {
+    const symbol = normalizeTradeSymbol(fondexxTrade?.symbol);
+    if (!symbol) return -1;
+
+    const incomingNet = Number(fondexxTrade?.net);
+    const incomingMin = tradeTimeMinutes(fondexxTrade?.opened);
+    const candidates = [];
+
+    existingTrades.forEach((trade, index) => {
+        if (usedIndices.has(index)) return;
+        if (!isGoogleSheetTrade(trade)) return;
+        if (normalizeTradeSymbol(trade?.symbol) !== symbol) return;
+
+        const sheetNet = Number(trade?.sheet?.sheetNet);
+        const existingNet = Number.isFinite(sheetNet) ? sheetNet : Number(trade?.net);
+        const hasPnl = Number.isFinite(existingNet) && Number.isFinite(incomingNet);
+        const pnlDiff = hasPnl ? Math.abs(existingNet - incomingNet) : Number.POSITIVE_INFINITY;
+        const okByPnl = hasPnl && pnlDiff <= pnlTolerance(incomingNet);
+
+        const existingMin = tradeTimeMinutes(trade?.opened);
+        const timeDiff = existingMin != null && incomingMin != null ? Math.abs(existingMin - incomingMin) : null;
+        if (timeDiff != null && timeDiff > 120) return;
+
+        const pureBonus = isPureGoogleSheetTrade(trade) ? 30 : 10;
+        const pnlScore = okByPnl ? 1000 - pnlDiff : (hasPnl ? Math.max(0, 80 - Math.min(pnlDiff, 80)) : 25);
+        const timeScore = timeDiff != null ? Math.max(0, 120 - timeDiff) : 0;
+        candidates.push({ index, score: pnlScore + timeScore + pureBonus });
+    });
+
+    candidates.sort((a, b) => b.score - a.score);
+    return candidates[0]?.index ?? -1;
+}
+
+function enrichFondexxTradeWithSheet(fondexxTrade, sheetTrade) {
+    const sheet = {
+        ...(sheetTrade.sheet && typeof sheetTrade.sheet === 'object' ? sheetTrade.sheet : {}),
+        matchedBy: 'fondexx-trades+sheet',
+        fondexxType: fondexxTrade.type || undefined,
+    };
+
+    return {
+        ...fondexxTrade,
+        type: sheet.tradeType || sheetTrade.type || fondexxTrade.type,
+        entry: Number(fondexxTrade.entry) ? fondexxTrade.entry : sheetTrade.entry,
+        exit: Number(fondexxTrade.exit) ? fondexxTrade.exit : sheetTrade.exit,
+        qty: Number(fondexxTrade.qty) ? fondexxTrade.qty : sheetTrade.qty,
+        stop: fondexxTrade.stop ?? sheetTrade.stop,
+        sheet,
+    };
+}
+
+function attachSheetContextToFondexxTrades(dateStr, fondexxTrades) {
+    const existing = Array.isArray(state.appData.journal?.[dateStr]?.trades)
+        ? state.appData.journal[dateStr].trades
+        : [];
+    if (!existing.some(isGoogleSheetTrade)) return fondexxTrades;
+
+    const usedIndices = new Set();
+    return fondexxTrades.map((trade) => {
+        const matchIndex = findSheetContextMatchIndex(existing, trade, usedIndices);
+        if (matchIndex < 0) return trade;
+        usedIndices.add(matchIndex);
+        return enrichFondexxTradeWithSheet(trade, existing[matchIndex]);
+    });
 }
 
 function toIsoFromParts(year, month, day) {
@@ -438,7 +523,7 @@ export function importFondexxTrades(event) {
             let daysUpdated = 0;
             for (let d in dailyTrades) {
                 if (!state.appData.journal[d]) state.appData.journal[d] = getDefaultDayEntry();
-                state.appData.journal[d].trades = dailyTrades[d];
+                state.appData.journal[d].trades = attachSheetContextToFondexxTrades(d, dailyTrades[d]);
                 syncFondexxFromTradesForDay(d);
                 markJournalDayDirty(d);
                 daysUpdated++;

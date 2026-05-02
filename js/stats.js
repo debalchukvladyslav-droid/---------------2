@@ -126,6 +126,10 @@ function isGoogleSheetTrade(trade) {
     return !!(trade?.sheet && typeof trade.sheet === 'object' && trade.sheet.source === 'google');
 }
 
+function isPureGoogleSheetTrade(trade) {
+    return isGoogleSheetTrade(trade) && !trade.sheet?.matchedBy;
+}
+
 function sourceHasMoney(source) {
     return !!(
         Number(source?.gross)
@@ -150,7 +154,7 @@ function almostEqualMoney(a, b) {
 
 function isSheetOnlyPnl(entry = {}) {
     const trades = Array.isArray(entry.trades) ? entry.trades : [];
-    if (!trades.length || !trades.every(isGoogleSheetTrade)) return false;
+    if (!trades.length || !trades.every(isPureGoogleSheetTrade)) return false;
     if (sourceHasMoney(entry.ppro)) return false;
     const totals = tradeMoneyTotals(trades);
     return almostEqualMoney(entry.fondexx?.gross, totals.gross)
