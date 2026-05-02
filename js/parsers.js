@@ -61,55 +61,119 @@ function isGoogleSheetTrade(t) {
     return !!(t && typeof t.sheet === 'object' && t.sheet.source === 'google');
 }
 
+function emptySourceTotals(locates = 0, tickers = []) {
+    return { gross: 0, net: 0, comm: 0, locates, tickers };
+}
+
+function normalizeSourceTotals(value, fallback = getDefaultDayEntry().fondexx) {
+    const src = value && typeof value === 'object' ? value : fallback;
+    return {
+        gross: Number(src.gross) || 0,
+        net: Number(src.net) || 0,
+        comm: Number(src.comm) || 0,
+        locates: Number(src.locates) || 0,
+        tickers: Array.isArray(src.tickers) ? src.tickers : [],
+    };
+}
+
+function hasSourceMoney(source) {
+    const src = normalizeSourceTotals(source);
+    return !!(src.gross || src.net || src.comm || src.locates);
+}
+
+function tradeTickers(trades) {
+    const tickers = new Set();
+    for (const t of trades) {
+        if (t?.symbol) tickers.add(String(t.symbol).trim());
+    }
+    return Array.from(tickers).filter(Boolean);
+}
+
+function sumTrades(trades) {
+    let gross = 0;
+    let net = 0;
+    let comm = 0;
+    for (const t of trades) {
+        gross += Number(t.gross) || 0;
+        net += Number(t.net) || 0;
+        comm += Number(t.comm) || 0;
+    }
+    return {
+        gross: parseFloat(gross.toFixed(2)),
+        net: parseFloat(net.toFixed(2)),
+        comm: parseFloat(comm.toFixed(2)),
+    };
+}
+
+function almostEqualMoney(a, b) {
+    return Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.01;
+}
+
+function looksLikeSheetDerivedFondexx(source, trades) {
+    const googleTrades = trades.filter(isGoogleSheetTrade);
+    if (!googleTrades.length || googleTrades.length !== trades.length) return false;
+    const src = normalizeSourceTotals(source);
+    const totals = sumTrades(googleTrades);
+    return almostEqualMoney(src.gross, totals.gross)
+        && almostEqualMoney(src.net, totals.net)
+        && almostEqualMoney(src.comm, totals.comm);
+}
+
 /**
  * Після імпорту угод — узгоджуємо fondexx і day.pnl.
- * Прибуток/комісії з агрегату fondexx: пріоритет угод з імпорту (Fondexx тощо), без подвійного сумування
- * з рядків Google Sheet; якщо «імпортних» угод немає — тоді беремо лише дані з таблиці (sheet).
+ * Прибуток/комісії з агрегату fondexx: пріоритет тільки за реальним імпортом
+ * Fondexx/PPRO. Рядки Google Sheet зберігаємо як угоди/метадані, але не робимо
+ * з них денний P/L для календаря та статистики.
  * Тікери для списку дня збираємо з усіх угод.
  */
 export function syncFondexxFromTradesForDay(dateStr) {
     if (!state.appData.journal[dateStr]) return;
     const entry = state.appData.journal[dateStr];
     const trades = Array.isArray(entry.trades) ? entry.trades : [];
-    const prevFx = entry.fondexx && typeof entry.fondexx === 'object' ? entry.fondexx : {};
+    const prevFx = normalizeSourceTotals(entry.fondexx);
     const locates = Number(prevFx.locates) || 0;
+    const tickers = tradeTickers(trades);
+    let hasAuthoritativePnl = hasSourceMoney(entry.ppro);
 
     if (trades.length === 0) {
-        entry.fondexx = { gross: 0, net: 0, comm: 0, locates, tickers: [] };
+        hasAuthoritativePnl = hasAuthoritativePnl || hasSourceMoney(prevFx);
+        entry.fondexx = hasSourceMoney(prevFx)
+            ? { ...prevFx, tickers: prevFx.tickers }
+            : emptySourceTotals(locates);
     } else {
         const importTrades = trades.filter((t) => !isGoogleSheetTrade(t));
-        const basisForPnl = importTrades.length > 0 ? importTrades : trades;
-
-        let gross = 0;
-        let net = 0;
-        let comm = 0;
-        for (const t of basisForPnl) {
-            gross += parseFloat(t.gross) || 0;
-            net += parseFloat(t.net) || 0;
-            comm += parseFloat(t.comm) || 0;
+        if (importTrades.length > 0) {
+            const totals = sumTrades(importTrades);
+            entry.fondexx = {
+                ...totals,
+                locates,
+                tickers,
+            };
+            hasAuthoritativePnl = true;
+        } else if (!hasSourceMoney(prevFx) || looksLikeSheetDerivedFondexx(prevFx, trades)) {
+            entry.fondexx = emptySourceTotals(locates, tickers);
+        } else {
+            entry.fondexx = {
+                ...prevFx,
+                tickers: Array.from(new Set([...prevFx.tickers, ...tickers])),
+            };
+            hasAuthoritativePnl = true;
         }
-
-        const tickers = new Set();
-        for (const t of trades) {
-            if (t.symbol) tickers.add(String(t.symbol).trim());
-        }
-
-        entry.fondexx = {
-            gross: parseFloat(gross.toFixed(2)),
-            net: parseFloat(net.toFixed(2)),
-            comm: parseFloat(comm.toFixed(2)),
-            locates,
-            tickers: Array.from(tickers),
-        };
     }
     recalculateDailyTotals(dateStr);
+    if (!hasAuthoritativePnl) {
+        entry.pnl = null;
+        entry.gross_pnl = null;
+        entry.commissions = null;
+        entry.locates = null;
+    }
 }
 
 function recalculateDailyTotals(d) {
     if (!state.appData.journal[d]) return;
     let entry = state.appData.journal[d];
-    let f = entry.fondexx || getDefaultDayEntry().fondexx;
-    let p = entry.ppro || getDefaultDayEntry().ppro;
+    let f = normalizeSourceTotals(entry.fondexx, getDefaultDayEntry().fondexx);
+    let p = normalizeSourceTotals(entry.ppro, getDefaultDayEntry().ppro);
     
     entry.gross_pnl = parseFloat((f.gross + p.gross).toFixed(2));
     entry.commissions = parseFloat((f.comm + p.comm).toFixed(2));
@@ -124,6 +188,47 @@ function recalculateDailyTotals(d) {
     if (f.tickers) f.tickers.forEach(t => existingTickers.add(t));
     if (p.tickers) p.tickers.forEach(t => existingTickers.add(t));
     entry.traded_tickers = Array.from(existingTickers);
+}
+
+function toIsoFromParts(year, month, day) {
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function isValidIsoDateString(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+    if (!m) return false;
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    const d = Number(m[3]);
+    const dt = new Date(Date.UTC(y, mo - 1, d));
+    return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
+}
+
+function todayIsoDate() {
+    const now = new Date();
+    return toIsoFromParts(now.getFullYear(), now.getMonth() + 1, now.getDate());
+}
+
+function isFutureIsoDate(iso) {
+    return isValidIsoDateString(iso) && iso > todayIsoDate();
+}
+
+function parseSlashDatePreferDayMonth(value) {
+    const s = String(value || '').trim().split(/\s+/)[0];
+    const m = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/.exec(s);
+    if (!m) return null;
+
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    const year = Number(m[3].length === 2 ? `20${m[3]}` : m[3]);
+    const dmy = toIsoFromParts(year, b, a);
+    const mdy = toIsoFromParts(year, a, b);
+    const dmyValid = isValidIsoDateString(dmy) ? dmy : null;
+    const mdyValid = isValidIsoDateString(mdy) ? mdy : null;
+
+    if (dmyValid && !isFutureIsoDate(dmyValid)) return dmyValid;
+    if (mdyValid && !isFutureIsoDate(mdyValid)) return mdyValid;
+    return dmyValid || mdyValid;
 }
 
 export function importFondexxReport(event) {
@@ -386,17 +491,9 @@ export function importPPROReport(event) {
                     let totalVal = String(row[totalKey]).trim();
                     let d = null;
                     
-                    if (dateVal && dateVal.includes('/')) {
-                        let parts = dateVal.split('/');
-                        if (parts.length === 3) {
-                            let month = parts[0].padStart(2, '0');
-                            let day = parts[1].padStart(2, '0');
-                            let year = parts[2].length === 2 ? "20" + parts[2] : parts[2];
-                            d = `${year}-${month}-${day}`;
-                        }
-                    }
+                    if (dateVal && dateVal.includes('/')) d = parseSlashDatePreferDayMonth(dateVal);
                     
-                    if (d) {
+                    if (d && !isFutureIsoDate(d)) {
                         let cleanTotal = totalVal.replace(/,/g, '').replace(/"/g, '');
                         let profit = parseFloat(cleanTotal) || 0;
                         if (!dailyData[d]) dailyData[d] = { profit: 0 };

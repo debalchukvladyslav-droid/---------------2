@@ -10,6 +10,48 @@ import { findScreenshotsForTicker, openScreenshotForTrade } from './gallery.js';
 
 let _selectDateRequestId = 0;
 
+function isGoogleSheetTrade(trade) {
+    return !!(trade?.sheet && typeof trade.sheet === 'object' && trade.sheet.source === 'google');
+}
+
+function sourceHasMoney(source) {
+    return !!(
+        Number(source?.gross)
+        || Number(source?.net)
+        || Number(source?.comm)
+        || Number(source?.locates)
+    );
+}
+
+function tradeMoneyTotals(trades = []) {
+    return trades.reduce((sum, trade) => {
+        sum.gross += Number(trade?.gross) || 0;
+        sum.net += Number(trade?.net) || 0;
+        sum.comm += Number(trade?.comm) || 0;
+        return sum;
+    }, { gross: 0, net: 0, comm: 0 });
+}
+
+function almostEqualMoney(a, b) {
+    return Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.01;
+}
+
+function isSheetOnlyPnl(day = {}) {
+    const trades = Array.isArray(day.trades) ? day.trades : [];
+    if (!trades.length || !trades.every(isGoogleSheetTrade)) return false;
+    if (sourceHasMoney(day.ppro)) return false;
+    const totals = tradeMoneyTotals(trades);
+    return almostEqualMoney(day.fondexx?.gross, totals.gross)
+        && almostEqualMoney(day.fondexx?.net, totals.net)
+        && almostEqualMoney(day.fondexx?.comm, totals.comm);
+}
+
+function getEffectiveDayPnl(day = {}) {
+    if (isSheetOnlyPnl(day)) return null;
+    const pnl = parseFloat(day.pnl);
+    return Number.isFinite(pnl) ? pnl : null;
+}
+
 function sanitizeHTML(str) {
     const div = document.createElement('div');
     div.textContent = String(str ?? '');
@@ -47,11 +89,11 @@ export async function updateAutoFlags() {
     let absoluteRecord = null;
     
     let sortedDates = Object.keys(state.appData.journal)
-        .filter(d => d.match(/^\d{4}-\d{2}-\d{2}$/) && state.appData.journal[d].pnl !== null && state.appData.journal[d].pnl !== undefined && state.appData.journal[d].pnl !== "")
+        .filter(d => d.match(/^\d{4}-\d{2}-\d{2}$/) && getEffectiveDayPnl(state.appData.journal[d]) !== null)
         .sort((a, b) => new Date(a) - new Date(b));
         
     for (let d of sortedDates) {
-        let pnl = parseFloat(state.appData.journal[d].pnl);
+        let pnl = getEffectiveDayPnl(state.appData.journal[d]);
         if (!isNaN(pnl) && pnl > 0) {
             if (pnl > maxPnL) {
                 maxPnL = pnl;
@@ -65,12 +107,12 @@ export async function updateAutoFlags() {
 
 export function getWinstreak() {
     let sortedDates = Object.keys(state.appData.journal)
-        .filter(d => d.match(/^\d{4}-\d{2}-\d{2}$/) && state.appData.journal[d].pnl !== null && state.appData.journal[d].pnl !== "")
+        .filter(d => d.match(/^\d{4}-\d{2}-\d{2}$/) && getEffectiveDayPnl(state.appData.journal[d]) !== null)
         .sort((a, b) => new Date(a) - new Date(b));
 
     let streak = 0;
     for (let d of sortedDates) {
-        let pnl = parseFloat(state.appData.journal[d].pnl);
+        let pnl = getEffectiveDayPnl(state.appData.journal[d]);
         if (pnl < 0) streak = 0;
         else if (pnl > 0) streak++; 
     }
@@ -84,14 +126,13 @@ export function getWinstreakForMonth(year, monthIndex) {
         .filter(d =>
             d.startsWith(prefix) &&
             d.match(/^\d{4}-\d{2}-\d{2}$/) &&
-            state.appData.journal[d].pnl !== null &&
-            state.appData.journal[d].pnl !== ''
+            getEffectiveDayPnl(state.appData.journal[d]) !== null
         )
         .sort((a, b) => new Date(a) - new Date(b));
 
     let streak = 0;
     for (let d of sortedDates) {
-        let pnl = parseFloat(state.appData.journal[d].pnl);
+        let pnl = getEffectiveDayPnl(state.appData.journal[d]);
         if (pnl < 0) streak = 0;
         else if (pnl > 0) streak++;
     }
@@ -116,7 +157,7 @@ export function updateDashboardWidgets(year, month) {
 
     for (const [dateKey, day] of Object.entries(journal)) {
         if (!day || !dateKey.startsWith(prefix) || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) continue;
-        const pnl = parseFloat(day.pnl);
+        const pnl = getEffectiveDayPnl(day);
         if (!Number.isFinite(pnl) || pnl === 0) continue;
         totalPnl += pnl;
         totalTrades++;
@@ -324,10 +365,12 @@ function fillSelectedDateUI(dateStr) {
     renderSidebarTradesList(dateStr);
 
     const dayData = state.appData.journal[dateStr] || {};
-    document.getElementById('trade-pnl').value = dayData.pnl !== undefined && dayData.pnl !== null ? parseFloat(dayData.pnl).toFixed(2) : '';
-    document.getElementById('trade-gross').value = dayData.gross_pnl !== undefined && dayData.gross_pnl !== null ? parseFloat(dayData.gross_pnl).toFixed(2) : '';
-    document.getElementById('trade-comm').value = dayData.commissions !== undefined && dayData.commissions !== null ? parseFloat(dayData.commissions).toFixed(2) : '';
-    document.getElementById('trade-locates').value = dayData.locates !== undefined && dayData.locates !== null ? parseFloat(dayData.locates).toFixed(2) : '';
+    const effectivePnl = getEffectiveDayPnl(dayData);
+    const sheetOnlyPnl = isSheetOnlyPnl(dayData);
+    document.getElementById('trade-pnl').value = effectivePnl !== null ? effectivePnl.toFixed(2) : '';
+    document.getElementById('trade-gross').value = !sheetOnlyPnl && dayData.gross_pnl !== undefined && dayData.gross_pnl !== null ? parseFloat(dayData.gross_pnl).toFixed(2) : '';
+    document.getElementById('trade-comm').value = !sheetOnlyPnl && dayData.commissions !== undefined && dayData.commissions !== null ? parseFloat(dayData.commissions).toFixed(2) : '';
+    document.getElementById('trade-locates').value = !sheetOnlyPnl && dayData.locates !== undefined && dayData.locates !== null ? parseFloat(dayData.locates).toFixed(2) : '';
     document.getElementById('trade-kf').value = dayData.kf !== undefined && dayData.kf !== null ? parseFloat(dayData.kf).toFixed(2) : '';
     document.getElementById('trade-notes').value = dayData.notes || '';
     document.getElementById('mentor-notes').value = dayData.mentor_comment || '';
@@ -556,8 +599,9 @@ function sumWeekTradingStats(mondayIso) {
         const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
         const j = state.appData.journal[key];
         if (!j) continue;
-        if (j.pnl !== null && j.pnl !== '' && !isNaN(parseFloat(j.pnl))) {
-            sumPnl += parseFloat(j.pnl);
+        const pnl = getEffectiveDayPnl(j);
+        if (pnl !== null) {
+            sumPnl += pnl;
             sumComm += parseFloat(j.commissions) || 0;
             sumLoc += parseFloat(j.locates) || 0;
             nPnl++;
@@ -593,11 +637,12 @@ function buildWeekHoverText(wkKey) {
 
 function buildDayDetailBody(dateKey, data, currentMonthDayloss) {
     const lines = [];
-    if (data.pnl !== null && data.pnl !== undefined && data.pnl !== '') {
-        const rp = parseFloat(data.pnl);
+    const effectivePnl = getEffectiveDayPnl(data);
+    if (effectivePnl !== null) {
+        const rp = effectivePnl;
         lines.push(`PnL: ${rp >= 0 ? '+' : ''}${rp.toFixed(2)}$`);
     }
-    if (data.pnl !== null && data.pnl !== '' && !isNaN(parseFloat(data.pnl)) && parseFloat(data.pnl) <= currentMonthDayloss) {
+    if (effectivePnl !== null && effectivePnl <= currentMonthDayloss) {
         lines.push('Увага: день на рівні денного ліміту.');
     }
 
@@ -618,7 +663,7 @@ function buildDayDetailBody(dateKey, data, currentMonthDayloss) {
         lines.push(`Що змінити: коротко опишіть думку дня — так легше не повторити ті самі помилки.`);
     } else if (note) {
         lines.push(`Що покращити: додайте умову входу/виходу або тригер, де стиль просідає.`);
-    } else if (!hasErrors && (!data.pnl || data.pnl === '')) {
+    } else if (!hasErrors && effectivePnl === null) {
         lines.push('Заповніть думку або PnL у формі дня — тултіп стане кориснішим.');
     }
 
@@ -781,8 +826,9 @@ export async function renderView() {
         const dayPnl = document.createElement('div');
 
         if (data) {
-            if (data.pnl !== null && data.pnl !== undefined && data.pnl !== "") { 
-                let roundedPnl = parseFloat(data.pnl.toFixed(2));
+            const effectivePnl = getEffectiveDayPnl(data);
+            if (effectivePnl !== null) { 
+                let roundedPnl = parseFloat(effectivePnl.toFixed(2));
                 pnlDisplay = roundedPnl >= 0 ? `+${roundedPnl}$` : `${roundedPnl}$`; 
                 
                 cell.classList.add(roundedPnl >= 0 ? 'green' : 'red'); 
@@ -841,7 +887,8 @@ export async function renderView() {
             cell.onmousemove = (e) => positionCalendarTooltip(e, tooltip);
             cell.onmouseleave = () => { tooltip.style.display = 'none'; };
         }
-        dayPnl.className = 'day-pnl' + ((data && data.pnl !== null && data.pnl !== '') ? (data.pnl >= 0 ? ' text-green' : ' text-red') : '');
+        const effectivePnlForClass = data ? getEffectiveDayPnl(data) : null;
+        dayPnl.className = 'day-pnl' + (effectivePnlForClass !== null ? (effectivePnlForClass >= 0 ? ' text-green' : ' text-red') : '');
         dayPnl.textContent = pnlDisplay;
         cell.appendChild(dayNum);
         cell.appendChild(dayPnl);

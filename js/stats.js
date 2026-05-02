@@ -122,6 +122,48 @@ function classifyStatsPnlDay(pnl, settings = {}, dateStr = '', explicitBand = nu
     return value > 0 ? 'win' : 'loss';
 }
 
+function isGoogleSheetTrade(trade) {
+    return !!(trade?.sheet && typeof trade.sheet === 'object' && trade.sheet.source === 'google');
+}
+
+function sourceHasMoney(source) {
+    return !!(
+        Number(source?.gross)
+        || Number(source?.net)
+        || Number(source?.comm)
+        || Number(source?.locates)
+    );
+}
+
+function tradeMoneyTotals(trades = []) {
+    return trades.reduce((sum, trade) => {
+        sum.gross += Number(trade?.gross) || 0;
+        sum.net += Number(trade?.net) || 0;
+        sum.comm += Number(trade?.comm) || 0;
+        return sum;
+    }, { gross: 0, net: 0, comm: 0 });
+}
+
+function almostEqualMoney(a, b) {
+    return Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.01;
+}
+
+function isSheetOnlyPnl(entry = {}) {
+    const trades = Array.isArray(entry.trades) ? entry.trades : [];
+    if (!trades.length || !trades.every(isGoogleSheetTrade)) return false;
+    if (sourceHasMoney(entry.ppro)) return false;
+    const totals = tradeMoneyTotals(trades);
+    return almostEqualMoney(entry.fondexx?.gross, totals.gross)
+        && almostEqualMoney(entry.fondexx?.net, totals.net)
+        && almostEqualMoney(entry.fondexx?.comm, totals.comm);
+}
+
+function getEffectiveStatsPnl(entry = {}) {
+    if (isSheetOnlyPnl(entry)) return null;
+    const pnl = parseFloat(entry.pnl);
+    return Number.isFinite(pnl) ? pnl : null;
+}
+
 async function fetchJournalRowsForDoc(docName, monthKeys = null, userId = null) {
     let resolvedUserId = userId;
     if (!resolvedUserId && docName === state.CURRENT_VIEWED_USER) {
@@ -183,8 +225,8 @@ function aggregateJournal(journal, settings = {}) {
     let allTimeBeDays = 0;
 
     Object.entries(journal || {}).forEach(([dateStr, entry]) => {
-        const pnl = parseFloat(entry?.pnl);
-        if (Number.isNaN(pnl)) return;
+        const pnl = getEffectiveStatsPnl(entry);
+        if (pnl == null) return;
         allTimePnl += pnl;
         const dayClass = classifyStatsPnlDay(pnl, settings, dateStr, entry?.__statsBreakevenBand);
         if (dayClass === 'win') allTimeWinDays++;
@@ -778,10 +820,11 @@ function mergeJournals(journals) {
         if (!j || !j.journal) continue;
         for (let d in j.journal) {
             let entry = j.journal[d];
-            if (entry.pnl === null || entry.pnl === undefined || entry.pnl === '') continue;
+            const entryPnl = getEffectiveStatsPnl(entry);
+            if (entryPnl == null) continue;
             if (!merged[d]) merged[d] = { pnl: 0, commissions: 0, locates: 0, tradeTypesData: {}, __statsBreakevenBand: 0 };
             const costs = getEntryCosts(entry);
-            merged[d].pnl = (parseFloat(merged[d].pnl) || 0) + (parseFloat(entry.pnl) || 0);
+            merged[d].pnl = (parseFloat(merged[d].pnl) || 0) + entryPnl;
             merged[d].commissions = (parseFloat(merged[d].commissions) || 0) + costs.commissions;
             merged[d].locates = (parseFloat(merged[d].locates) || 0) + costs.locates;
             const entryBand = Number.isFinite(Number(entry.__statsBreakevenBand))
@@ -1490,7 +1533,7 @@ export function buildStatsTree() {
         const sourceJournal = state.appData.journal || {};
         for (let d in sourceJournal) {
             const data = sourceJournal[d];
-            if (data.pnl === null || data.pnl === undefined || data.pnl === '') continue;
+            if (getEffectiveStatsPnl(data) == null) continue;
             const parts = d.split('-');
             const y = parseInt(parts[0]), m = parseInt(parts[1]) - 1;
             const w = getWeekOfMonth(new Date(y, m, parseInt(parts[2])));
@@ -1502,7 +1545,7 @@ export function buildStatsTree() {
             : (state.currentStatsContext.journal || {});
         for (let d in sourceJournal) {
             const data = sourceJournal[d];
-            if (data.pnl !== null && data.pnl !== undefined && data.pnl !== '') {
+            if (getEffectiveStatsPnl(data) != null) {
                 const parts = d.split('-');
                 const y = parseInt(parts[0]), m = parseInt(parts[1]) - 1;
                 const w = getWeekOfMonth(new Date(y, m, parseInt(parts[2])));
@@ -1722,8 +1765,8 @@ function buildStatsEntriesFromJournal(journal, tradeTypeFilter = null) {
             if (!typeData || typeData.pnl === '' || typeData.pnl === undefined || typeData.pnl === null) continue;
             pnl = parseFloat(typeData.pnl);
         } else {
-            if (data.pnl === null || data.pnl === undefined || data.pnl === '') continue;
-            pnl = parseFloat(data.pnl);
+            pnl = getEffectiveStatsPnl(data);
+            if (pnl == null) continue;
         }
         if (!Number.isNaN(pnl)) {
             const parts = dateStr.split('-');
@@ -2428,8 +2471,8 @@ export function renderStatsTab() {
             if (!ttVal || ttVal.pnl === '' || ttVal.pnl === undefined || ttVal.pnl === null) continue;
             pnl = parseFloat(ttVal.pnl);
         } else {
-            if (data.pnl === null || data.pnl === undefined || data.pnl === '') continue;
-            pnl = parseFloat(data.pnl);
+            pnl = getEffectiveStatsPnl(data);
+            if (pnl == null) continue;
         }
         if (!isNaN(pnl)) {
             let parts = d.split('-');

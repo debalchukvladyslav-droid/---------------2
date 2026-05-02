@@ -632,6 +632,15 @@ function toIsoFromParts(year, month, day) {
     return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+function todayIsoDate() {
+    const now = new Date();
+    return toIsoFromParts(now.getFullYear(), now.getMonth() + 1, now.getDate());
+}
+
+function isFutureIsoDateString(iso) {
+    return isValidIsoDateString(iso) && iso > todayIsoDate();
+}
+
 /** Чи існує такий день у календарі (UTC). */
 function calendarYmdValid(year, month, day) {
     if (month < 1 || month > 12 || day < 1 || day > 31) return false;
@@ -647,7 +656,7 @@ function sheetsCellToIsoDate(value) {
     if (value == null || value === '') return null;
     const s = String(value).trim();
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-        return isValidIsoDateString(s) ? s : null;
+        return isValidIsoDateString(s) && !isFutureIsoDateString(s) ? s : null;
     }
     if (typeof value === 'number' && Number.isFinite(value)) {
         const epoch = Date.UTC(1899, 11, 30);
@@ -657,13 +666,12 @@ function sheetsCellToIsoDate(value) {
         const da = d.getUTCDate();
         if (y < 1990 || y > 2100) return null;
         const iso = toIsoFromParts(y, mo, da);
-        return isValidIsoDateString(iso) ? iso : null;
+        return isValidIsoDateString(iso) && !isFutureIsoDateString(iso) ? iso : null;
     }
     const datePart = s.split(/\s+/)[0];
     const m1 = /^(\d{1,2})([./])(\d{1,2})[./](\d{4})$/.exec(datePart);
     if (m1) {
         const a = Number(m1[1]);
-        const sep = m1[2];
         const b = Number(m1[3]);
         const year = Number(m1[4]);
         if (!Number.isFinite(year) || year < 1990 || year > 2100) return null;
@@ -671,9 +679,8 @@ function sheetsCellToIsoDate(value) {
         const dmy = calendarYmdValid(year, b, a) ? toIsoFromParts(year, b, a) : null;
         const mdy = calendarYmdValid(year, a, b) ? toIsoFromParts(year, a, b) : null;
 
-        if (dmy && mdy && dmy !== mdy) return dmy;
-        if (dmy) return dmy;
-        if (mdy) return mdy;
+        if (dmy && !isFutureIsoDateString(dmy)) return dmy;
+        if (mdy && !isFutureIsoDateString(mdy)) return mdy;
         return null;
     }
     return null;
@@ -923,6 +930,27 @@ function isPureGoogleSheetTrade(trade, spreadsheetId) {
     return isSameSpreadsheetGoogleTrade(trade, spreadsheetId) && !trade.sheet?.matchedBy;
 }
 
+function sumTradeMoney(trades = []) {
+    return trades.reduce((sum, trade) => {
+        sum.gross += Number(trade?.gross) || 0;
+        sum.net += Number(trade?.net) || 0;
+        sum.comm += Number(trade?.comm) || 0;
+        return sum;
+    }, { gross: 0, net: 0, comm: 0 });
+}
+
+function almostEqualMoney(a, b) {
+    return Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.01;
+}
+
+function fondexxLooksDerivedFromTrades(fondexx, trades) {
+    if (!fondexx || typeof fondexx !== 'object' || !Array.isArray(trades) || trades.length === 0) return false;
+    const totals = sumTradeMoney(trades);
+    return almostEqualMoney(fondexx.gross, totals.gross)
+        && almostEqualMoney(fondexx.net, totals.net)
+        && almostEqualMoney(fondexx.comm, totals.comm);
+}
+
 function hasAnyScreenshot(day) {
     const screens = day?.screenshots && typeof day.screenshots === 'object' ? day.screenshots : {};
     return Object.values(screens).some((items) => Array.isArray(items) && items.length > 0);
@@ -941,6 +969,8 @@ function isDayEmptyAfterSheetCleanup(day) {
     if (Array.isArray(day.checkedParams) && day.checkedParams.length > 0) return false;
     if (hasNonEmptyObject(day.sliders) || hasNonEmptyObject(day.tradeTypesData) || hasNonEmptyObject(day.review_requests)) return false;
     if (String(day.sessionGoal || '').trim() || String(day.sessionPlan || '').trim() || day.sessionDone) return false;
+    const fondexx = day.fondexx && typeof day.fondexx === 'object' ? day.fondexx : {};
+    if (Number(fondexx.net) || Number(fondexx.gross) || Number(fondexx.comm) || Number(fondexx.locates)) return false;
     const ppro = day.ppro && typeof day.ppro === 'object' ? day.ppro : {};
     if (Number(ppro.net) || Number(ppro.gross) || Number(ppro.comm) || Number(ppro.locates)) return false;
     return true;
@@ -954,10 +984,18 @@ function cleanupPreviousGoogleSheetImport(spreadsheetId) {
     Object.keys(journal).forEach((dateStr) => {
         const day = journal[dateStr];
         const trades = Array.isArray(day?.trades) ? day.trades : [];
+        const removedTrades = trades.filter((trade) => isPureGoogleSheetTrade(trade, spreadsheetId));
         const nextTrades = trades.filter((trade) => !isPureGoogleSheetTrade(trade, spreadsheetId));
         if (nextTrades.length === trades.length) return;
 
+        const clearSheetDerivedFondexx = nextTrades.length === 0 && fondexxLooksDerivedFromTrades(day.fondexx, removedTrades);
         day.trades = nextTrades;
+        if (clearSheetDerivedFondexx) {
+            day.fondexx = { gross: 0, net: 0, comm: 0, locates: Number(day.fondexx?.locates) || 0, tickers: [] };
+            day.pnl = null;
+            day.gross_pnl = null;
+            day.commissions = null;
+        }
         syncFondexxFromTradesForDay(dateStr);
 
         if (isDayEmptyAfterSheetCleanup(day)) {
