@@ -195,8 +195,9 @@ function activateAction(action, trigger, event = null) {
         'live-news-open': () => window.openLiveNewsModal?.(),
         'live-news-close': () => window.closeLiveNewsModal?.(),
         'live-news-backdrop': () => {
-            if (event?.target !== trigger) return;
+            if (event?.target !== trigger) return false;
             window.closeLiveNewsModal?.();
+            return true;
         },
         'sos-open': () => window.openSOSModal?.(),
         'sos-close': () => window.closeSOSModal?.(),
@@ -207,8 +208,9 @@ function activateAction(action, trigger, event = null) {
             if (modal) modal.style.display = 'none';
         },
         'team-manager-backdrop': () => {
-            if (event?.target !== trigger) return;
+            if (event?.target !== trigger) return false;
             trigger.style.display = 'none';
+            return true;
         },
         'team-create': () => window.createNewTeam?.(),
         'team-rename': () => window.renameTeam?.(trigger?.dataset?.teamName || ''),
@@ -223,8 +225,7 @@ function activateAction(action, trigger, event = null) {
 
     const fn = actions[action];
     if (!fn) return false;
-    fn();
-    return true;
+    return fn() !== false;
 }
 
 function updateRangeOutput(input) {
