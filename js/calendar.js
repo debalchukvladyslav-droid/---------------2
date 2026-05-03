@@ -56,6 +56,15 @@ function getEffectiveDayPnl(day = {}) {
     return Number.isFinite(pnl) ? pnl : null;
 }
 
+function getFondexxMonthAdjustment(monthKey) {
+    const source = state.appData?.settings?.fondexxMonthlyAdjustments?.[monthKey];
+    return {
+        pnl: Number(source?.pnl) || 0,
+        commissions: Number(source?.commissions) || 0,
+        locates: Number(source?.locates) || 0,
+    };
+}
+
 function sanitizeHTML(str) {
     const div = document.createElement('div');
     div.textContent = String(str ?? '');
@@ -172,6 +181,12 @@ export function updateDashboardWidgets(year, month) {
             losses++;
             totalLoss += Math.abs(pnl);
         }
+    }
+    const monthAdjustment = getFondexxMonthAdjustment(mk);
+    if (monthAdjustment.pnl) {
+        totalPnl += monthAdjustment.pnl;
+        if (monthAdjustment.pnl > 0) totalGross += monthAdjustment.pnl;
+        else totalLoss += Math.abs(monthAdjustment.pnl);
     }
 
     const winrate = totalTrades > 0 ? (wins / totalTrades) * 100 : 0;
@@ -929,6 +944,11 @@ export async function renderView() {
         if (dateKey === state.selectedDateStr) cell.classList.add('active-day');
         grid.appendChild(cell);
     }
+
+    const monthAdjustment = getFondexxMonthAdjustment(mk);
+    totalPnl += monthAdjustment.pnl;
+    totalComm += monthAdjustment.commissions;
+    totalLocates += monthAdjustment.locates;
     
     let totalEl = document.getElementById('total-pnl');
     if(totalEl) {

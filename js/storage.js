@@ -122,6 +122,7 @@ function dayEntryToJournalRow(userId, tradeDate, entry) {
             ppro: day.ppro && typeof day.ppro === 'object'
                 ? day.ppro
                 : { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
+            fondexxSource: typeof day.fondexxSource === 'string' ? day.fondexxSource : '',
             sessionGoal: day.sessionGoal ?? '',
             sessionPlan: day.sessionPlan ?? '',
             sessionReadiness: day.sessionReadiness ?? null,
@@ -154,6 +155,7 @@ function journalRowToDayEntry(row) {
         tickers: metrics.tickers || {},
         traded_tickers: metrics.traded_tickers || [],
         fondexx: metrics.fondexx,
+        fondexxSource: metrics.fondexxSource,
         ppro: metrics.ppro,
         sessionGoal: metrics.sessionGoal,
         sessionPlan: metrics.sessionPlan,
@@ -180,6 +182,7 @@ function journalRowToMonthEntry(row) {
             tickers: metrics.tickers || {},
             traded_tickers: metrics.traded_tickers || [],
             fondexx: metrics.fondexx,
+            fondexxSource: metrics.fondexxSource,
             ppro: metrics.ppro,
             trades: metrics.trades || [],
         }),

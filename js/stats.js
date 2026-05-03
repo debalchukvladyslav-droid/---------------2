@@ -1709,6 +1709,38 @@ function getEntryCosts(entryData = {}) {
     };
 }
 
+function getFondexxMonthlyAdjustment(settings = {}, monthKey = '') {
+    const source = settings?.fondexxMonthlyAdjustments?.[monthKey];
+    return {
+        pnl: Number(source?.pnl) || 0,
+        commissions: Number(source?.commissions) || 0,
+        locates: Number(source?.locates) || 0,
+    };
+}
+
+function monthKeyFromDateObj(dateObj) {
+    return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function getAdjustmentMonthsForEntries(entries = [], filters = [], settings = {}) {
+    const available = new Set(Object.keys(settings?.fondexxMonthlyAdjustments || {}));
+    if (!available.size) return [];
+    if (!filters.length || filters.some((filter) => filter.type === 'all-time')) {
+        return [...new Set(entries.map((entry) => monthKeyFromDateObj(entry.dateObj)).filter((mk) => available.has(mk)))];
+    }
+    const months = new Set();
+    filters.forEach((filter) => {
+        if (filter.type === 'year') {
+            available.forEach((mk) => { if (mk.startsWith(`${filter.val}-`)) months.add(mk); });
+        } else if (filter.type === 'month') {
+            const [year, zeroMonth] = String(filter.val).split('-');
+            const mk = `${year}-${String(Number(zeroMonth) + 1).padStart(2, '0')}`;
+            if (available.has(mk)) months.add(mk);
+        }
+    });
+    return [...months];
+}
+
 function renderCompareMetricCard({ title, a, b, deltaValue, aClass = '', bClass = '', changeType = 'percent' }) {
     const directionClass = statsDeltaClass(deltaValue || 0);
     const icon = deltaValue > 0 ? '▲' : deltaValue < 0 ? '▼' : '•';
@@ -2545,6 +2577,26 @@ export function renderStatsTab() {
         if (dayClass === 'win') { winDays++; grossProfit += pnl; }
         else if (dayClass === 'loss') { lossDays++; grossLoss += Math.abs(pnl); }
         else { beDays++; }
+    }
+
+    const activeSettings = state.currentStatsContext.settings || {};
+    let statsMonthAdjustment = { pnl: 0, commissions: 0, locates: 0 };
+    if (!ttFilter) {
+        for (const monthKey of getAdjustmentMonthsForEntries(filteredEntries, state.activeFilters || [], activeSettings)) {
+            const adjustment = getFondexxMonthlyAdjustment(activeSettings, monthKey);
+            statsMonthAdjustment.pnl += adjustment.pnl;
+            statsMonthAdjustment.commissions += adjustment.commissions;
+            statsMonthAdjustment.locates += adjustment.locates;
+        }
+        if (statsMonthAdjustment.pnl) {
+            periodSum += statsMonthAdjustment.pnl;
+            periodCumData.push(parseFloat(periodSum.toFixed(2)));
+            periodLabels.push('Adj');
+            if (statsMonthAdjustment.pnl > bestDay) bestDay = statsMonthAdjustment.pnl;
+            if (statsMonthAdjustment.pnl < worstDay) worstDay = statsMonthAdjustment.pnl;
+        }
+        totalComm += statsMonthAdjustment.commissions;
+        totalLocates += statsMonthAdjustment.locates;
     }
 
     let totalDays = winDays + lossDays + beDays;

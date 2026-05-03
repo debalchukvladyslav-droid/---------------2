@@ -16,7 +16,8 @@ export function getDefaultSettings() {
         ocrPos: 'left',
         ocrRect: { top: 0, left: 0, width: 250, height: 80 },
         defaultDayloss: -100,
-        monthlyDayloss: {}
+        monthlyDayloss: {},
+        fondexxMonthlyAdjustments: {}
     };
 }
 
@@ -114,6 +115,7 @@ export function normalizeAppData(rawData) {
     normalizedSettings.sliders = Array.isArray(normalizedSettings.sliders) ? normalizedSettings.sliders : [];
     normalizedSettings.gemini_keys = Array.isArray(normalizedSettings.gemini_keys) ? normalizedSettings.gemini_keys : [];
     normalizedSettings.monthlyDayloss = typeof normalizedSettings.monthlyDayloss === 'object' ? normalizedSettings.monthlyDayloss : {};
+    normalizedSettings.fondexxMonthlyAdjustments = typeof normalizedSettings.fondexxMonthlyAdjustments === 'object' ? normalizedSettings.fondexxMonthlyAdjustments : {};
     
     if (!normalizedSettings.gemini_key && typeof normalizedSettings.openai_key === 'string') {
         normalizedSettings.gemini_key = normalizedSettings.openai_key;

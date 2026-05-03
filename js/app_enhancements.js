@@ -248,6 +248,7 @@ function handleImportInput(event) {
     const handlers = {
         json: window.importData,
         fondexx: window.importFondexxReport,
+        'fondexx-summary': window.importFondexxSummaryByDate,
         'fondexx-trades': window.importFondexxTrades,
         ppro: window.importPPROReport,
     };

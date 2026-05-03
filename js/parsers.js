@@ -1,6 +1,6 @@
 // === js/parsers.js ===
 import { state } from './state.js';
-import { saveJournalData, markJournalDayDirty } from './storage.js';
+import { saveJournalData, saveToLocal, markJournalDayDirty } from './storage.js';
 import { getDefaultDayEntry } from './data_utils.js';
 import { ensureXlsx } from './vendor_loader.js';
 import { ecnFeeColumnIndex } from './parser_utils.js';
@@ -85,6 +85,84 @@ function hasSourceMoney(source) {
     return !!(src.gross || src.net || src.comm || src.locates);
 }
 
+function isFondexxSummarySource(entry) {
+    return entry?.fondexxSource === 'summary-by-date';
+}
+
+function roundMoney(value) {
+    return parseFloat((Number(value) || 0).toFixed(2));
+}
+
+function parseMoney(value) {
+    const cleaned = String(value ?? '').replace(/\s/g, '').replace(/[$,]/g, '');
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : 0;
+}
+
+function findHeaderIndex(headers, names) {
+    const wanted = names.map((name) => String(name).trim().toLowerCase());
+    return headers.findIndex((header) => wanted.includes(String(header || '').trim().toLowerCase()));
+}
+
+function findTotalDeltaIndex(headers) {
+    return headers.findIndex((header) => {
+        const normalized = String(header || '').trim().toLowerCase();
+        return normalized.startsWith('total') && (
+            normalized.includes('δ')
+            || normalized.includes('Δ'.toLowerCase())
+            || normalized.includes('delta')
+            || normalized === 'total d'
+        );
+    });
+}
+
+function getMonthKey(dateStr) {
+    return String(dateStr || '').slice(0, 7);
+}
+
+function isWeekendIsoDate(dateStr) {
+    const [year, month, day] = String(dateStr || '').split('-').map(Number);
+    if (!year || !month || !day) return false;
+    const jsDay = new Date(year, month - 1, day).getDay();
+    return jsDay === 0 || jsDay === 6;
+}
+
+function ensureFondexxMonthlyAdjustments() {
+    if (!state.appData.settings || typeof state.appData.settings !== 'object') state.appData.settings = {};
+    if (!state.appData.settings.fondexxMonthlyAdjustments || typeof state.appData.settings.fondexxMonthlyAdjustments !== 'object') {
+        state.appData.settings.fondexxMonthlyAdjustments = {};
+    }
+    return state.appData.settings.fondexxMonthlyAdjustments;
+}
+
+function addMonthlyAdjustment(bucket, monthKey, adjustment) {
+    if (!monthKey) return;
+    const current = bucket[monthKey] || { pnl: 0, commissions: 0, locates: 0 };
+    bucket[monthKey] = {
+        pnl: roundMoney((Number(current.pnl) || 0) + (Number(adjustment.pnl) || 0)),
+        commissions: roundMoney((Number(current.commissions) || 0) + (Number(adjustment.commissions) || 0)),
+        locates: roundMoney((Number(current.locates) || 0) + (Number(adjustment.locates) || 0)),
+    };
+}
+
+function showImportedMonth(firstDateStr) {
+    const m = /^(\d{4})-(\d{2})-\d{2}$/.exec(String(firstDateStr || ''));
+    if (!m) return;
+
+    if (window.switchMainTab) window.switchMainTab('calendar');
+
+    const yearEl = document.getElementById('cal-view-year');
+    const monthEl = document.getElementById('cal-view-month');
+    if (yearEl) yearEl.value = m[1];
+    if (monthEl) monthEl.value = String(Number(m[2]) - 1);
+    state.selectedDateStr = firstDateStr;
+
+    Promise.resolve(window.renderView?.()).then(() => {
+        if (window.selectDate) return window.selectDate(firstDateStr);
+        return null;
+    });
+}
+
 function tradeTickers(trades) {
     const tickers = new Set();
     for (const t of trades) {
@@ -138,6 +216,15 @@ export function syncFondexxFromTradesForDay(dateStr) {
     const locates = Number(prevFx.locates) || 0;
     const tickers = tradeTickers(trades);
     let hasAuthoritativePnl = hasSourceMoney(entry.ppro);
+
+    if (isFondexxSummarySource(entry)) {
+        entry.fondexx = {
+            ...prevFx,
+            tickers: Array.from(new Set([...(prevFx.tickers || []), ...tickers])),
+        };
+        recalculateDailyTotals(dateStr);
+        return;
+    }
 
     if (trades.length === 0) {
         hasAuthoritativePnl = hasAuthoritativePnl || hasSourceMoney(prevFx);
@@ -427,9 +514,19 @@ export function importFondexxReport(event) {
             const fondexxTradeCount = logTradesImportConsole('Fondexx звіт', fondexxTradesByDay);
 
             let daysUpdated = 0;
+            let summaryProtectedDays = 0;
             for(let d in dailyData) {
                 if (!state.appData.journal[d]) state.appData.journal[d] = getDefaultDayEntry();
+                if (isFondexxSummarySource(state.appData.journal[d])) {
+                    if (dailyData[d].trades.length > 0) state.appData.journal[d].trades = dailyData[d].trades;
+                    recalculateDailyTotals(d);
+                    markJournalDayDirty(d);
+                    summaryProtectedDays++;
+                    daysUpdated++;
+                    continue;
+                }
                 state.appData.journal[d].fondexx = { gross: dailyData[d].gross, net: dailyData[d].net, comm: dailyData[d].comm, locates: dailyData[d].locates, tickers: Array.from(dailyData[d].tickers) };
+                state.appData.journal[d].fondexxSource = 'fondexx-report';
                 if (dailyData[d].trades.length > 0) state.appData.journal[d].trades = dailyData[d].trades;
                 recalculateDailyTotals(d);
                 markJournalDayDirty(d);
@@ -445,7 +542,8 @@ export function importFondexxReport(event) {
                         `[Імпорт Fondexx звіт] Записано агрегати по днях (summary або без рядків угод), днів: ${daysUpdated}.`,
                     );
                 }
-                showToast(`Звіт Fondexx імпортовано! Оновлено днів: ${daysUpdated}`); 
+                const protectedNote = summaryProtectedDays ? ` Summary by date має пріоритет: ${summaryProtectedDays} днів не перетерто.` : '';
+                showToast(`Звіт Fondexx імпортовано! Оновлено днів: ${daysUpdated}.${protectedNote}`); 
                 if(window.updateAutoFlags) window.updateAutoFlags(); 
                 if(window.renderView) window.renderView();
                 let viewStats = document.getElementById('view-stats');
@@ -457,6 +555,135 @@ export function importFondexxReport(event) {
         } catch(err) { showToast('Помилка обробки Fondexx: ' + err.message); }
     };
     reader.readAsArrayBuffer(file); event.target.value = ''; 
+}
+
+export function importFondexxSummaryByDate(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (!canMutateJournalImports(event)) return;
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        try {
+            await ensureXlsx();
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, defval: '' });
+            const headerRow = rows.findIndex((row) => row.some((cell) => String(cell).trim().toLowerCase() === 'date'));
+            if (headerRow < 0) throw new Error('Не знайдено колонку Date');
+
+            const headers = rows[headerRow].map((h) => String(h || '').trim());
+            const dateIdx = findHeaderIndex(headers, ['Date']);
+            const typeIdx = findHeaderIndex(headers, ['Type']);
+            const grossIdx = findHeaderIndex(headers, ['Gross']);
+            const netIdx = findHeaderIndex(headers, ['Net']);
+            const totalIdx = findTotalDeltaIndex(headers);
+            const adjNetIdx = findHeaderIndex(headers, ['Adj Net']);
+            const commIdx = findHeaderIndex(headers, ['Comm']);
+            const ecnIdx = findHeaderIndex(headers, ['Ecn Fee', 'ECN Fee']);
+            const secIdx = findHeaderIndex(headers, ['SEC']);
+            const tafIdx = findHeaderIndex(headers, ['TAF']);
+            const nsccIdx = findHeaderIndex(headers, ['NSCC']);
+            const clrIdx = findHeaderIndex(headers, ['CLR']);
+            const miscIdx = findHeaderIndex(headers, ['Misc']);
+            const orfIdx = findHeaderIndex(headers, ['ORF']);
+            const ptfpfIdx = findHeaderIndex(headers, ['PTFPF']);
+            const softwareIdx = findHeaderIndex(headers, ['Software']);
+
+            if (dateIdx < 0 || grossIdx < 0 || netIdx < 0 || totalIdx < 0) {
+                throw new Error('Потрібні колонки Date, Gross, Net і Total Δ');
+            }
+
+            const feeIndices = [commIdx, ecnIdx, secIdx, tafIdx, nsccIdx, clrIdx, miscIdx, orfIdx, ptfpfIdx].filter((idx) => idx >= 0);
+            let daysUpdated = 0;
+            let monthlyAdjustmentDays = 0;
+            const importedDates = [];
+            const monthlyAdjustments = {};
+            const monthBrokerTotals = {};
+
+            for (const row of rows.slice(headerRow + 1)) {
+                const rawDate = String(row[dateIdx] || '').trim();
+                if (rawDate.toLowerCase() === 'equities') {
+                    const totalDelta = roundMoney(parseMoney(row[totalIdx]));
+                    const firstMonth = importedDates[0]?.slice(0, 7);
+                    if (firstMonth) monthBrokerTotals[firstMonth] = totalDelta;
+                    continue;
+                }
+
+                const dateStr = /^\d{4}-\d{2}-\d{2}/.test(rawDate)
+                    ? rawDate.slice(0, 10)
+                    : parseSlashDatePreferDayMonth(rawDate);
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
+                const type = typeIdx >= 0 ? String(row[typeIdx] || '').trim().toLowerCase() : '';
+
+                const monthKey = getMonthKey(dateStr);
+                const gross = roundMoney(parseMoney(row[grossIdx]));
+                const net = roundMoney(parseMoney(row[netIdx]));
+                const totalDelta = roundMoney(parseMoney(row[totalIdx]));
+                const adjNet = adjNetIdx >= 0 ? roundMoney(parseMoney(row[adjNetIdx])) : totalDelta;
+                const feeSum = roundMoney(feeIndices.reduce((sum, idx) => sum + parseMoney(row[idx]), 0));
+                const software = softwareIdx >= 0 ? roundMoney(parseMoney(row[softwareIdx])) : 0;
+                const comm = roundMoney((feeSum || roundMoney(gross - net)) + Math.abs(software));
+                const locates = roundMoney(net - totalDelta);
+
+                if (isWeekendIsoDate(dateStr) || (type && type !== 'eq' && type !== 'equities')) {
+                    addMonthlyAdjustment(monthlyAdjustments, monthKey, {
+                        pnl: totalDelta || adjNet,
+                        commissions: comm,
+                        locates,
+                    });
+                    monthlyAdjustmentDays++;
+                    continue;
+                }
+
+                if (!state.appData.journal[dateStr]) state.appData.journal[dateStr] = getDefaultDayEntry();
+                const entry = state.appData.journal[dateStr];
+                const tickers = Array.from(new Set([
+                    ...(Array.isArray(entry.fondexx?.tickers) ? entry.fondexx.tickers : []),
+                    ...tradeTickers(Array.isArray(entry.trades) ? entry.trades : []),
+                ])).filter(Boolean);
+
+                entry.fondexx = { gross, net, comm, locates, tickers };
+                entry.fondexxSource = 'summary-by-date';
+                recalculateDailyTotals(dateStr);
+                markJournalDayDirty(dateStr);
+                importedDates.push(dateStr);
+                daysUpdated++;
+            }
+
+            for (const [monthKey, brokerTotal] of Object.entries(monthBrokerTotals)) {
+                const journalMonthTotal = importedDates
+                    .filter((dateStr) => dateStr.startsWith(`${monthKey}-`))
+                    .reduce((sum, dateStr) => sum + (Number(state.appData.journal[dateStr]?.pnl) || 0), 0);
+                const existingAdjustment = Number(monthlyAdjustments[monthKey]?.pnl) || 0;
+                const missing = roundMoney(brokerTotal - journalMonthTotal - existingAdjustment);
+                if (Math.abs(missing) >= 0.01) {
+                    addMonthlyAdjustment(monthlyAdjustments, monthKey, { pnl: missing, commissions: 0, locates: 0 });
+                }
+            }
+
+            const adjustmentBucket = ensureFondexxMonthlyAdjustments();
+            for (const monthKey of new Set([...importedDates.map(getMonthKey), ...Object.keys(monthlyAdjustments)])) {
+                adjustmentBucket[monthKey] = monthlyAdjustments[monthKey] || { pnl: 0, commissions: 0, locates: 0 };
+            }
+
+            if (!daysUpdated) throw new Error('У Summary by date не знайдено денних рядків');
+            saveToLocal().then(() => {
+                console.log(`[Імпорт Fondexx Summary by date] Оновлено точні денні P&L/fees/locates: ${daysUpdated} днів`, importedDates);
+                const adjustmentNote = monthlyAdjustmentDays ? ` Місячні adjustment-и: ${monthlyAdjustmentDays} ряд.` : '';
+                showToast(`Summary by date імпортовано! Точні денні дані: ${daysUpdated} днів.${adjustmentNote}`);
+                if (window.updateAutoFlags) window.updateAutoFlags();
+                showImportedMonth(importedDates[0]);
+                const viewStats = document.getElementById('view-stats');
+                if (viewStats && viewStats.classList.contains('active') && window.refreshStatsView) {
+                    window.refreshStatsView();
+                }
+            }).catch(err => {
+                showToast('Import save error: ' + (err?.message || err));
+            });
+        } catch(err) { showToast('Помилка імпорту Summary by date: ' + err.message); }
+    };
+    reader.readAsArrayBuffer(file); event.target.value = '';
 }
 
 export function importFondexxTrades(event) {
@@ -521,8 +748,10 @@ export function importFondexxTrades(event) {
             const fondexxListCount = logTradesImportConsole('Fondexx Trades (лише угоди)', tradesOnlyByDay);
 
             let daysUpdated = 0;
+            let daysWithoutSummary = 0;
             for (let d in dailyTrades) {
                 if (!state.appData.journal[d]) state.appData.journal[d] = getDefaultDayEntry();
+                if (!isFondexxSummarySource(state.appData.journal[d])) daysWithoutSummary++;
                 state.appData.journal[d].trades = attachSheetContextToFondexxTrades(d, dailyTrades[d]);
                 syncFondexxFromTradesForDay(d);
                 markJournalDayDirty(d);
@@ -534,7 +763,10 @@ export function importFondexxTrades(event) {
                         `[Імпорт Fondexx Trades] Імпортовано у журнал: ${fondexxListCount} угод, оновлено днів: ${daysUpdated}.`,
                     );
                 }
-                showToast(`Trades імпортовано! Днів: ${daysUpdated}`);
+                const warning = daysWithoutSummary
+                    ? ` Для ${daysWithoutSummary} днів P&L пораховано з trades; для точності імпортуйте Summary by date.`
+                    : ' Денний P&L з Summary by date збережено.';
+                showToast(`Trades імпортовано! Днів: ${daysUpdated}.${warning}`);
                 if (window.updateAutoFlags) window.updateAutoFlags();
                 if (window.renderView) window.renderView();
                 const viewStats = document.getElementById('view-stats');
