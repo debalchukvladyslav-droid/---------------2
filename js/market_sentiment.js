@@ -3,6 +3,7 @@ import { supabase } from './supabase.js';
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const CACHE_KEY = 'pj:market-sentiment:fear-greed:v1';
 const PROXY_FALLBACK = 'https://traderjournal-six.vercel.app/api/fear-greed';
+const CNN_FEAR_GREED_PAGE = 'https://www.cnn.com/markets/fear-and-greed';
 
 let memoryCache = { ts: 0, payload: null };
 let pendingRequest = null;
@@ -188,4 +189,8 @@ export function refreshMarketSentiment() {
     pendingRequest = null;
     memoryCache = { ts: 0, payload: null };
     return renderMarketSentiment({ force: true });
+}
+
+export function openMarketSentimentSource() {
+    window.open(CNN_FEAR_GREED_PAGE, '_blank', 'noopener,noreferrer');
 }

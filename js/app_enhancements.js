@@ -199,6 +199,7 @@ function activateAction(action, trigger, event = null) {
             window.closeLiveNewsModal?.();
             return true;
         },
+        'market-sentiment-open': () => window.openMarketSentimentSource?.(),
         'sos-open': () => window.openSOSModal?.(),
         'sos-close': () => window.closeSOSModal?.(),
         'sos-send': () => window.sendSOSMessage?.(),
