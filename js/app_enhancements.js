@@ -192,6 +192,12 @@ function activateAction(action, trigger, event = null) {
         'session-modal-snooze': () => window.snoozeSessionModal?.(),
         'session-modal-check': () => window.checkSessionModalReadiness?.(),
         'session-modal-save': () => window.saveSessionModal?.(),
+        'live-news-open': () => window.openLiveNewsModal?.(),
+        'live-news-close': () => window.closeLiveNewsModal?.(),
+        'live-news-backdrop': () => {
+            if (event?.target !== trigger) return;
+            window.closeLiveNewsModal?.();
+        },
         'sos-open': () => window.openSOSModal?.(),
         'sos-close': () => window.closeSOSModal?.(),
         'sos-send': () => window.sendSOSMessage?.(),

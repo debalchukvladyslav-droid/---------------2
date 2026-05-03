@@ -399,9 +399,17 @@ export function loadAIChatHistory() {
 export function switchAITab(tab) {
     document.getElementById('ai-chat-section').style.display = tab === 'chat' ? 'flex' : 'none';
     document.getElementById('ai-saved-section').style.display = tab === 'saved' ? 'flex' : 'none';
-    
-    document.getElementById('btn-ai-chat').className = tab === 'chat' ? 'btn-primary' : 'btn-secondary';
-    document.getElementById('btn-ai-saved').className = tab === 'saved' ? 'btn-primary' : 'btn-secondary';
+
+    const chatBtn = document.getElementById('btn-ai-chat');
+    const savedBtn = document.getElementById('btn-ai-saved');
+    if (chatBtn) {
+        chatBtn.classList.toggle('btn-primary', tab === 'chat');
+        chatBtn.classList.toggle('btn-secondary', tab !== 'chat');
+    }
+    if (savedBtn) {
+        savedBtn.classList.toggle('btn-primary', tab === 'saved');
+        savedBtn.classList.toggle('btn-secondary', tab !== 'saved');
+    }
     
     if(tab === 'saved') renderSavedAIChats();
 }

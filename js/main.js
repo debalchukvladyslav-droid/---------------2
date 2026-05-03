@@ -31,7 +31,7 @@ import { submitReviewRequest, refreshReviewRequestButtons } from './review_reque
 import { showToast } from './utils.js';
 import { connectGoogleDrive, syncDriveScreenshots, updateDriveUI, disconnectGoogleDrive, startDriveAutoSync, tryRestoreDriveToken } from './drive.js';
 import { initPlaybookChart } from './playbook_chart.js';
-import { renderDashboardNews, refreshDashboardNews } from './news.js';
+import { renderDashboardNews, refreshDashboardNews, openLiveNewsModal, closeLiveNewsModal } from './news.js';
 import { renderMarketSentiment, refreshMarketSentiment } from './market_sentiment.js';
 import { loadPartials } from './partials.js';
 import { applyPersistedBackground, initBackgroundControls } from './backgrounds.js';
@@ -80,6 +80,8 @@ window.refreshMentorReviewQueue = refreshMentorReviewQueue;
 window.setMentorReviewNavBadges = setMentorReviewNavBadges;
 window.renderDashboardNews = renderDashboardNews;
 window.refreshDashboardNews = refreshDashboardNews;
+window.openLiveNewsModal = openLiveNewsModal;
+window.closeLiveNewsModal = closeLiveNewsModal;
 window.renderMarketSentiment = renderMarketSentiment;
 window.refreshMarketSentiment = refreshMarketSentiment;
 window.toggleAuthMode = toggleAuthMode;

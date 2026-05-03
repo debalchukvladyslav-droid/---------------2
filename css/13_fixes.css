@@ -408,6 +408,10 @@
     flex-shrink: 0;
 }
 .news-ticker-label {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    margin: 0;
     font-size: 0.68rem;
     font-weight: 800;
     color: var(--accent);
@@ -417,6 +421,13 @@
     border-right: 1px solid var(--border);
     padding-right: 10px;
     flex-shrink: 0;
+    cursor: pointer;
+    font-family: inherit;
+    line-height: 1;
+}
+.news-ticker-label:hover,
+.news-ticker-label:focus-visible {
+    color: var(--text-main);
 }
 .news-ticker-scroll {
     flex: 1;

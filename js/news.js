@@ -9,6 +9,7 @@ const NEWS_CACHE_VERSION = 'uk-v2';
 const NEWS_PROXY_FALLBACK = 'https://traderjournal-six.vercel.app/api/news';
 let _newsCache = { key: '', ts: 0, payload: null };
 let _newsPromise = null;
+let _visibleNewsItems = [];
 
 function setTickerHTML(html) {
     const ticker = document.getElementById('news-ticker-text');
@@ -308,18 +309,65 @@ function formatNewsTime(timestamp) {
     return date.toLocaleString('uk-UA', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
+function renderLiveNewsModalList(items = _visibleNewsItems) {
+    const list = document.getElementById('live-news-list');
+    if (!list) return;
+
+    if (!items.length) {
+        list.innerHTML = '<div class="live-news-empty">Поки немає новин у live-стрічці.</div>';
+        return;
+    }
+
+    list.innerHTML = items.map((item) => {
+        const related = Array.isArray(item.related) && item.related.length
+            ? `<span class="live-news-related">${sanitizeHTML(item.related.slice(0, 4).join(', '))}</span>`
+            : '';
+        const time = formatNewsTime(item.datetime);
+        const source = item.source ? sanitizeHTML(item.source) : '';
+        const meta = [source, time].filter(Boolean).join(' • ');
+        const title = sanitizeHTML(item.titleUk || item.title || 'Новина без заголовка');
+        const summary = item.summary ? `<p>${sanitizeHTML(String(item.summary).slice(0, 260))}</p>` : '';
+        const url = safeExternalUrl(item.url);
+
+        return `
+            <a class="live-news-item" href="${sanitizeHTML(url)}" target="_blank" rel="noopener noreferrer">
+                <div class="live-news-item-top">
+                    ${related}
+                    ${meta ? `<span class="live-news-meta">${sanitizeHTML(meta)}</span>` : ''}
+                </div>
+                <strong>${title}</strong>
+                ${summary}
+            </a>
+        `;
+    }).join('');
+}
+
+export function openLiveNewsModal() {
+    const modal = document.getElementById('live-news-modal');
+    if (!modal) return;
+    renderLiveNewsModalList();
+    modal.style.display = 'flex';
+}
+
+export function closeLiveNewsModal() {
+    const modal = document.getElementById('live-news-modal');
+    if (modal) modal.style.display = 'none';
+}
+
 function renderTickerNews(payload) {
     const items = Array.isArray(payload?.items) ? payload.items : [];
     const tickers = Array.isArray(payload?.tickers) ? payload.tickers : [];
 
     if (!items.length) {
         if (payload?.degraded) {
+            _visibleNewsItems = [];
             const reason = String(payload.reason || '').includes('FINNHUB_API_KEY')
                 ? 'додайте FINNHUB_API_KEY у Vercel Environment Variables і зробіть Redeploy'
                 : (payload.reason || 'провайдер новин тимчасово недоступний');
             setTickerHTML(`Live news тимчасово недоступні: ${sanitizeHTML(reason)}`);
             return;
         }
+        _visibleNewsItems = [];
         const scope = tickers.length ? `по ${sanitizeHTML(tickers.join(', '))}` : 'по ринку';
         setTickerHTML(`Немає свіжих новин ${scope}<span class="news-ticker-sep">•</span>Імпортуйте угоди, щоб стрічка брала ваші тикери`);
         return;
@@ -328,6 +376,10 @@ function renderTickerNews(payload) {
     const generalItems = items.filter((item) => item.section === 'general').slice(0, 6);
     const tickerItems = items.filter((item) => item.section !== 'general').slice(0, 8);
     const orderedItems = [...generalItems, ...tickerItems];
+    _visibleNewsItems = orderedItems;
+    if (document.getElementById('live-news-modal')?.style.display === 'flex') {
+        renderLiveNewsModalList(orderedItems);
+    }
     const windowMatched = Number(payload?.newsWindow?.matched) || 0;
     const tickerLabel = tickers.length
         ? `${windowMatched ? 'Памп-вікно' : 'Останні тікери'}: ${sanitizeHTML(tickers.join(', '))}`
