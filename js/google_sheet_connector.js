@@ -17,6 +17,7 @@ import {
     getSelectedSheetTitle,
 } from './sheet_table.js';
 import { ensureGoogleApi, ensureGoogleIdentity } from './vendor_loader.js';
+import { state } from './state.js';
 
 const appConfig = window.TRADING_JOURNAL_CONFIG || {};
 
@@ -45,6 +46,7 @@ const SCOPES = [
 const OAUTH_SCOPES_VERSION = '2';
 
 const TOKEN_STORAGE_KEY = 'sheet_google_access_token';
+const TOKEN_EXPIRES_KEY = 'sheet_google_access_token_expires_at';
 const SCOPES_VERSION_KEY = 'sheet_google_scopes_v';
 const SELECTED_SHEET_TITLE_KEY = 'sheet_selected_sheet_title';
 
@@ -109,10 +111,48 @@ function applyAccessTokenToGapiClient(token) {
     gapi.client.setToken({ access_token: token });
 }
 
-/** Скидає OAuth у сесії (токен виданий без актуальних scope або прострочений). */
-function invalidateStoredGoogleOAuth() {
+function userStorageKey(baseKey) {
+    return state.myUserId ? `${baseKey}:${state.myUserId}` : baseKey;
+}
+
+function readStoredGoogleToken() {
+    const token = sessionStorage.getItem(TOKEN_STORAGE_KEY) || localStorage.getItem(userStorageKey(TOKEN_STORAGE_KEY));
+    if (!token) return null;
+    const expiresAtRaw = localStorage.getItem(userStorageKey(TOKEN_EXPIRES_KEY));
+    const expiresAt = Number(expiresAtRaw || 0);
+    if (expiresAt && Date.now() >= expiresAt) {
+        clearStoredGoogleToken();
+        return null;
+    }
+    return token;
+}
+
+function persistStoredGoogleToken(token, expiresInSec) {
+    if (!token) return;
+    const sec = Math.max(120, Number(expiresInSec) || 3600);
+    const expiresAt = Date.now() + sec * 1000 - 90_000;
+    sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
+    localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    localStorage.setItem(userStorageKey(TOKEN_STORAGE_KEY), token);
+    localStorage.setItem(TOKEN_EXPIRES_KEY, String(expiresAt));
+    localStorage.setItem(userStorageKey(TOKEN_EXPIRES_KEY), String(expiresAt));
+    localStorage.setItem(userStorageKey(SCOPES_VERSION_KEY), OAUTH_SCOPES_VERSION);
+}
+
+function clearStoredGoogleToken() {
     sessionStorage.removeItem(TOKEN_STORAGE_KEY);
     sessionStorage.removeItem(SCOPES_VERSION_KEY);
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem(TOKEN_EXPIRES_KEY);
+    localStorage.removeItem(SCOPES_VERSION_KEY);
+    localStorage.removeItem(userStorageKey(TOKEN_STORAGE_KEY));
+    localStorage.removeItem(userStorageKey(TOKEN_EXPIRES_KEY));
+    localStorage.removeItem(userStorageKey(SCOPES_VERSION_KEY));
+}
+
+/** Скидає OAuth у сесії (токен виданий без актуальних scope або прострочений). */
+function invalidateStoredGoogleOAuth() {
+    clearStoredGoogleToken();
     accessToken = null;
     tokenClient = null;
     if (typeof gapi !== 'undefined' && gapi.client) {
@@ -181,9 +221,10 @@ function onTokenSuccess(resp) {
         return;
     }
     accessToken = resp.access_token;
-    sessionStorage.setItem(TOKEN_STORAGE_KEY, accessToken);
+    persistStoredGoogleToken(accessToken, resp.expires_in);
     sessionStorage.setItem(SCOPES_VERSION_KEY, OAUTH_SCOPES_VERSION);
     sessionStorage.setItem('sheet_google_connected', '1');
+    localStorage.setItem('sheet_google_connected', '1');
     applyAccessTokenToGapiClient(accessToken);
     void (async () => {
         const email = await fetchGoogleUserEmail(accessToken);
@@ -209,7 +250,10 @@ export async function handleAuthClick() {
     try {
         await ensureGapiClientAndPicker();
         await ensureTokenClient();
-        tokenClient.requestAccessToken({ prompt: 'consent' });
+        const hasPreviousGrant =
+            localStorage.getItem(userStorageKey(SCOPES_VERSION_KEY)) === OAUTH_SCOPES_VERSION ||
+            sessionStorage.getItem(SCOPES_VERSION_KEY) === OAUTH_SCOPES_VERSION;
+        tokenClient.requestAccessToken({ prompt: hasPreviousGrant ? '' : 'consent' });
     } catch (e) {
         console.error(e);
         showToast(
@@ -228,7 +272,7 @@ export async function handleAuthClick() {
 export async function openPicker() {
     try {
         await ensureGapiClientAndPicker();
-        accessToken = accessToken || sessionStorage.getItem(TOKEN_STORAGE_KEY);
+        accessToken = accessToken || readStoredGoogleToken();
         if (!accessToken) {
             console.error('Немає accessToken! Спочатку треба залогінитись.');
             showToast('Спочатку увійдіть через Google.');
@@ -289,7 +333,7 @@ async function loadSpreadsheetSheets(fileId) {
         .map(sheet => sheet.properties)
         .filter(Boolean)
         .sort((a, b) => Number(a.index || 0) - Number(b.index || 0));
-    const stored = sessionStorage.getItem(SELECTED_SHEET_TITLE_KEY);
+    const stored = localStorage.getItem(SELECTED_SHEET_TITLE_KEY) || sessionStorage.getItem(SELECTED_SHEET_TITLE_KEY);
     const selected = stored && sheets.some(sheet => sheet.title === stored)
         ? stored
         : (sheets[0]?.title || '');
@@ -303,7 +347,7 @@ async function loadSpreadsheetSheets(fileId) {
  */
 export async function fetchSpreadsheetData(fileId, sheetTitle = getSelectedSheetTitle()) {
     await ensureGapiClientAndPicker();
-    const token = accessToken || sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    const token = accessToken || readStoredGoogleToken();
     if (!token) throw new Error('Немає access token');
     applyAccessTokenToGapiClient(token);
 
@@ -343,7 +387,7 @@ export async function loadSheetHeaders(fileId) {
  */
 export async function fetchSpreadsheetValuesRange(spreadsheetId, range, sheetTitle = getSelectedSheetTitle()) {
     await ensureGapiClientAndPicker();
-    const token = accessToken || sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    const token = accessToken || readStoredGoogleToken();
     if (!token) throw new Error('Немає access token');
     applyAccessTokenToGapiClient(token);
 
@@ -355,7 +399,7 @@ export async function fetchSpreadsheetValuesRange(spreadsheetId, range, sheetTit
 }
 
 export async function googleSheetsLogout() {
-    const tok = accessToken || sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    const tok = accessToken || readStoredGoogleToken();
     if (tok && typeof google !== 'undefined' && google.accounts?.oauth2?.revoke) {
         try {
             await new Promise((resolve) => {
@@ -367,7 +411,7 @@ export async function googleSheetsLogout() {
     }
     accessToken = null;
     tokenClient = null;
-    sessionStorage.removeItem(SCOPES_VERSION_KEY);
+    clearStoredGoogleToken();
     if (typeof gapi !== 'undefined' && gapi.client) {
         gapi.client.setToken(null);
     }
@@ -379,10 +423,10 @@ export async function googleSheetsLogout() {
 }
 
 export async function restoreGoogleSession() {
-    const tok = sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    const tok = readStoredGoogleToken();
     if (!tok) return;
 
-    const scopeVer = sessionStorage.getItem(SCOPES_VERSION_KEY);
+    const scopeVer = localStorage.getItem(userStorageKey(SCOPES_VERSION_KEY)) || sessionStorage.getItem(SCOPES_VERSION_KEY);
     if (scopeVer !== OAUTH_SCOPES_VERSION) {
         console.warn(
             '[Google] збережений токен виданий зі старими дозволами — виконайте вхід знову (потрібні userinfo + Sheets + Drive).',
@@ -394,14 +438,19 @@ export async function restoreGoogleSession() {
     try {
         await ensureGapiClientAndPicker();
         accessToken = tok;
+        sessionStorage.setItem(TOKEN_STORAGE_KEY, tok);
+        sessionStorage.setItem(SCOPES_VERSION_KEY, OAUTH_SCOPES_VERSION);
         applyAccessTokenToGapiClient(tok);
         sessionStorage.setItem('sheet_google_connected', '1');
+        localStorage.setItem('sheet_google_connected', '1');
         const email = await fetchGoogleUserEmail(tok, { silent401: true });
         setGoogleAccountEmail(email || 'Google акаунт');
 
-        const sid = sessionStorage.getItem('sheet_spreadsheet_id');
-        const st = sessionStorage.getItem('sheet_spreadsheet_title');
-        if (sid && sessionStorage.getItem(TOKEN_STORAGE_KEY)) {
+        const sid = localStorage.getItem('sheet_spreadsheet_id') || sessionStorage.getItem('sheet_spreadsheet_id');
+        const st = localStorage.getItem('sheet_spreadsheet_title') || sessionStorage.getItem('sheet_spreadsheet_title');
+        if (sid && readStoredGoogleToken()) {
+            sessionStorage.setItem('sheet_spreadsheet_id', sid);
+            if (st) sessionStorage.setItem('sheet_spreadsheet_title', st);
             const nameEl = document.getElementById('sheet-selected-file-name');
             if (nameEl) nameEl.textContent = st || sid;
             try {

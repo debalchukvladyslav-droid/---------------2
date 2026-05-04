@@ -72,8 +72,8 @@ export function ensureSheetAutoSyncFromConfig() {
     stopSheetAutoSync();
     const cfg = readStoredConfig();
     if (!cfg?.autoSync?.enabled) return;
-    if (sessionStorage.getItem(SESSION_GOOGLE) !== '1') return;
-    if (!sessionStorage.getItem(SESSION_SPREADSHEET_ID)) return;
+    if ((localStorage.getItem(SESSION_GOOGLE) || sessionStorage.getItem(SESSION_GOOGLE)) !== '1') return;
+    if (!(localStorage.getItem(SESSION_SPREADSHEET_ID) || sessionStorage.getItem(SESSION_SPREADSHEET_ID))) return;
     const min = clampSheetIntervalMin(cfg.autoSync.intervalMinutes);
     _sheetAutoTimer = setInterval(() => {
         if (document.visibilityState !== 'visible') return;
@@ -446,14 +446,17 @@ export function setGoogleAccountEmail(email) {
 
 export function rememberSpreadsheet(id, title) {
     sessionStorage.setItem(SESSION_SPREADSHEET_ID, id);
+    localStorage.setItem(SESSION_SPREADSHEET_ID, id);
     if (title) sessionStorage.setItem(SESSION_SPREADSHEET_TITLE, title);
+    if (title) localStorage.setItem(SESSION_SPREADSHEET_TITLE, title);
     sessionStorage.setItem(SESSION_GOOGLE, '1');
+    localStorage.setItem(SESSION_GOOGLE, '1');
     const nameEl = el('sheet-selected-file-name');
     if (nameEl) nameEl.textContent = title || id;
 }
 
 export function getSelectedSheetTitle() {
-    return sessionStorage.getItem(SESSION_SHEET_TITLE) || '';
+    return localStorage.getItem(SESSION_SHEET_TITLE) || sessionStorage.getItem(SESSION_SHEET_TITLE) || '';
 }
 
 export function setSpreadsheetSheets(sheets, selectedTitle = '') {
@@ -474,11 +477,14 @@ export function setSpreadsheetSheets(sheets, selectedTitle = '') {
     if (stored && list.some(sheet => sheet.title === stored)) {
         select.value = stored;
         sessionStorage.setItem(SESSION_SHEET_TITLE, stored);
+        localStorage.setItem(SESSION_SHEET_TITLE, stored);
     } else if (list[0]) {
         select.value = list[0].title;
         sessionStorage.setItem(SESSION_SHEET_TITLE, list[0].title);
+        localStorage.setItem(SESSION_SHEET_TITLE, list[0].title);
     } else {
         sessionStorage.removeItem(SESSION_SHEET_TITLE);
+        localStorage.removeItem(SESSION_SHEET_TITLE);
     }
 
     picker.hidden = list.length <= 1;
@@ -491,14 +497,18 @@ export function clearGoogleSheetSession() {
     sessionStorage.removeItem(SESSION_SPREADSHEET_TITLE);
     sessionStorage.removeItem(SESSION_SHEET_TITLE);
     sessionStorage.removeItem('sheet_google_access_token');
+    localStorage.removeItem(SESSION_GOOGLE);
+    localStorage.removeItem(SESSION_SPREADSHEET_ID);
+    localStorage.removeItem(SESSION_SPREADSHEET_TITLE);
+    localStorage.removeItem(SESSION_SHEET_TITLE);
     const nameEl = el('sheet-selected-file-name');
     if (nameEl) nameEl.textContent = '—';
     setSpreadsheetSheets([]);
 }
 
 export function syncSheetWorkspaceVisibility() {
-    const connected = sessionStorage.getItem(SESSION_GOOGLE) === '1';
-    const fileOk = !!sessionStorage.getItem(SESSION_SPREADSHEET_ID);
+    const connected = (localStorage.getItem(SESSION_GOOGLE) || sessionStorage.getItem(SESSION_GOOGLE)) === '1';
+    const fileOk = !!(localStorage.getItem(SESSION_SPREADSHEET_ID) || sessionStorage.getItem(SESSION_SPREADSHEET_ID));
 
     const s1 = el('sheet-state-connect');
     const s2 = el('sheet-state-workspace');
@@ -1062,7 +1072,7 @@ async function executeSyncWithCfg(cfg, options = {}) {
     const quiet = !!options.quiet;
     if (!canMutateSheetSync({ silent: quiet })) return { ok: false };
 
-    const spreadsheetId = cfg.spreadsheetId || sessionStorage.getItem(SESSION_SPREADSHEET_ID) || '';
+    const spreadsheetId = cfg.spreadsheetId || localStorage.getItem(SESSION_SPREADSHEET_ID) || sessionStorage.getItem(SESSION_SPREADSHEET_ID) || '';
     if (!spreadsheetId) {
         if (!quiet) showToast('Оберіть таблицю на Google Диску.');
         return { ok: false };
@@ -1077,7 +1087,7 @@ async function executeSyncWithCfg(cfg, options = {}) {
         return { ok: false };
     }
 
-    const token = sessionStorage.getItem('sheet_google_access_token');
+    const token = sessionStorage.getItem('sheet_google_access_token') || localStorage.getItem('sheet_google_access_token');
     if (!token) {
         if (!quiet) showToast('Немає доступу Google — увійдіть знову.');
         return { ok: false };
@@ -1353,10 +1363,11 @@ export function initSheetTableView() {
 
 export async function handleSheetTabChange(selectEl) {
     const title = String(selectEl?.value || '').trim();
-    const spreadsheetId = sessionStorage.getItem(SESSION_SPREADSHEET_ID) || '';
+    const spreadsheetId = localStorage.getItem(SESSION_SPREADSHEET_ID) || sessionStorage.getItem(SESSION_SPREADSHEET_ID) || '';
     if (!title || !spreadsheetId) return;
 
     sessionStorage.setItem(SESSION_SHEET_TITLE, title);
+    localStorage.setItem(SESSION_SHEET_TITLE, title);
     try {
         const mod = await import('./google_sheet_connector.js');
         await mod.fetchSpreadsheetData(spreadsheetId, title);
@@ -1373,10 +1384,11 @@ function collectFormConfig() {
         smartColumns[k] = readSmartRowValue(k);
     });
 
-    const spreadsheetId = sessionStorage.getItem(SESSION_SPREADSHEET_ID) || '';
+    const spreadsheetId = localStorage.getItem(SESSION_SPREADSHEET_ID) || sessionStorage.getItem(SESSION_SPREADSHEET_ID) || '';
     const sheetTitle = getSelectedSheetTitle();
     const title =
         el('sheet-selected-file-name')?.textContent?.trim() ||
+        localStorage.getItem(SESSION_SPREADSHEET_TITLE) ||
         sessionStorage.getItem(SESSION_SPREADSHEET_TITLE) ||
         '';
 
