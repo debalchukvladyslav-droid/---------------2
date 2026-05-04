@@ -46,6 +46,30 @@ const SMART_KEYS = [
     'qtySharesCalc',
 ];
 
+const QUICK_MAPPING_KEYS = [
+    'date',
+    'symbol',
+    'time',
+    'tradeType',
+    'profit',
+    'pv',
+    'exceptions',
+    'altPv',
+    'traderComment',
+    'exit',
+    'teamLeadComment',
+    'paperType',
+    'period',
+    'growthPct',
+    'riskUsd',
+    'consolidateCents',
+    'entryPrice',
+    'qtyShares',
+    'qtySharesCalc',
+];
+
+const REQUIRED_MAPPING_KEYS = ['date', 'symbol'];
+
 /** Перший рядок даних угод у Google Sheets (1-based). */
 const SHEET_DATA_FIRST_ROW = 6;
 
@@ -188,6 +212,54 @@ function smartFieldRanges(field) {
         .map(({ letter, row }) => `${letter}${row || startRow}:${letter}`);
 }
 
+function smartFieldAnchorLabel(field) {
+    const anchor = parseCellReference(_sheetSmartAnchors?.[field]);
+    if (anchor) return anchor.ref;
+
+    const value = readSmartRowValue(field);
+    if (!value) return '';
+    const first = String(value)
+        .split(',')
+        .map((v) => v.trim().toUpperCase())
+        .find(Boolean);
+    if (!first) return '';
+
+    const parsed = parseColumnRangeToken(first);
+    if (parsed?.letter) return `${parsed.letter}${parsed.row || deriveSheetStartRow()}`;
+    if (/^[A-Z]{1,3}$/.test(first)) return `${first}${deriveSheetStartRow()}`;
+    return first;
+}
+
+function renderMappingStatus() {
+    const host = el('sheet-mapping-status');
+    if (!host) return;
+
+    const fragment = document.createDocumentFragment();
+    QUICK_MAPPING_KEYS.forEach((field) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'sheet-mapping-chip';
+        button.dataset.sheetMapField = field;
+        button.classList.toggle('is-active', field === _sheetPreviewActiveField);
+        button.classList.toggle('is-required', REQUIRED_MAPPING_KEYS.includes(field));
+
+        const label = document.createElement('span');
+        label.className = 'sheet-mapping-chip__label';
+        label.textContent = smartFieldLabel(field);
+
+        const value = document.createElement('span');
+        const anchorLabel = smartFieldAnchorLabel(field);
+        value.className = 'sheet-mapping-chip__value';
+        value.textContent = anchorLabel || (REQUIRED_MAPPING_KEYS.includes(field) ? 'потрібно' : 'порожньо');
+        button.classList.toggle('is-empty', !anchorLabel);
+
+        button.append(label, value);
+        fragment.appendChild(button);
+    });
+
+    host.replaceChildren(fragment);
+}
+
 function updateSmartRangeHints() {
     document.querySelectorAll('.sheet-smart-row[data-smart-field]').forEach(row => {
         const field = row.dataset.smartField || '';
@@ -216,6 +288,7 @@ function updateGridPickerMeta() {
     if (startRowEl) startRowEl.textContent = String(deriveSheetStartRow());
     if (zoomEl) zoomEl.textContent = `${Math.round(_sheetGridZoom * 100)}%`;
     updateSmartRangeHints();
+    renderMappingStatus();
 }
 
 function applySheetGridZoom() {
@@ -253,6 +326,15 @@ function setActiveGridField(field) {
     syncActiveGridFieldUi();
 }
 
+function focusNextUnmappedField(currentField) {
+    const currentIndex = QUICK_MAPPING_KEYS.indexOf(currentField);
+    if (currentIndex < 0) return;
+    const next = QUICK_MAPPING_KEYS
+        .slice(currentIndex + 1)
+        .find((field) => !smartFieldAnchorLabel(field));
+    if (next) setActiveGridField(next);
+}
+
 function setSmartAnchor(field, ref) {
     if (!field) return;
     const parsed = parseCellReference(ref);
@@ -260,6 +342,16 @@ function setSmartAnchor(field, ref) {
     else delete _sheetSmartAnchors[field];
     updateGridPickerMeta();
     refreshSheetGridSelectionClasses();
+}
+
+function persistSheetMappingDraft() {
+    try {
+        const cfg = collectFormConfig();
+        localStorage.setItem(LS_KEY, JSON.stringify(cfg));
+        _sheetFormHydratedFromStorage = true;
+    } catch (e) {
+        console.warn('[Google Sheets] mapping draft save failed', e);
+    }
 }
 
 export function clearSheetPreviewData() {
@@ -1234,6 +1326,16 @@ function bindSheetGridPicker() {
     _sheetGridBindingsReady = true;
 
     document.addEventListener('click', (event) => {
+        const chip = event.target?.closest?.('[data-sheet-map-field]');
+        if (chip) {
+            setActiveGridField(chip.dataset.sheetMapField || 'date');
+            document.querySelector(`[data-smart-field="${chip.dataset.sheetMapField}"]`)?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+            });
+            return;
+        }
+
         const row = event.target?.closest?.('.sheet-smart-row[data-smart-field]');
         if (row) {
             setActiveGridField(row.dataset.smartField || 'date');
@@ -1249,6 +1351,8 @@ function bindSheetGridPicker() {
 
         setSmartRowValue(field, colLetter, false);
         setSmartAnchor(field, `${colLetter}${rowNumber}`);
+        persistSheetMappingDraft();
+        focusNextUnmappedField(field);
     });
 
     document.addEventListener('focusin', (event) => {
@@ -1278,6 +1382,7 @@ function bindSheetGridPicker() {
         if (!row) return;
         delete _sheetSmartAnchors[row.dataset.smartField || ''];
         updateGridPickerMeta();
+        persistSheetMappingDraft();
     });
 
     document.addEventListener('input', (event) => {
@@ -1285,6 +1390,7 @@ function bindSheetGridPicker() {
         if (!row) return;
         delete _sheetSmartAnchors[row.dataset.smartField || ''];
         updateGridPickerMeta();
+        persistSheetMappingDraft();
     });
 }
 

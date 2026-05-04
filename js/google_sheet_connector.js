@@ -49,6 +49,7 @@ const TOKEN_STORAGE_KEY = 'sheet_google_access_token';
 const TOKEN_EXPIRES_KEY = 'sheet_google_access_token_expires_at';
 const SCOPES_VERSION_KEY = 'sheet_google_scopes_v';
 const SELECTED_SHEET_TITLE_KEY = 'sheet_selected_sheet_title';
+const SHEET_PREVIEW_MAX_ROWS = 100;
 
 let tokenClient = null;
 let accessToken = null;
@@ -359,7 +360,7 @@ export async function fetchSpreadsheetData(fileId, sheetTitle = getSelectedSheet
             }),
             gapi.client.sheets.spreadsheets.values.get({
                 spreadsheetId: fileId,
-                range: rangeForSelectedSheet('A1:ZZ2000', sheetTitle),
+                range: rangeForSelectedSheet(`A1:ZZ${SHEET_PREVIEW_MAX_ROWS}`, sheetTitle),
             }),
         ]);
         const range = headersResponse.result;

@@ -365,6 +365,61 @@ body[data-theme="light"] .btn-google-signin {
     color: var(--text-main);
 }
 
+.sheet-mapping-status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.sheet-mapping-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-panel);
+    color: var(--text-main);
+    font: inherit;
+    cursor: pointer;
+    transition: border-color 0.14s ease, background 0.14s ease, box-shadow 0.14s ease;
+}
+
+.sheet-mapping-chip:hover {
+    border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+    background: color-mix(in srgb, var(--accent) 6%, var(--bg-panel));
+}
+
+.sheet-mapping-chip.is-active {
+    border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
+    background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.sheet-mapping-chip.is-empty .sheet-mapping-chip__value {
+    color: var(--text-muted);
+}
+
+.sheet-mapping-chip.is-required.is-empty {
+    border-color: color-mix(in srgb, var(--loss) 40%, var(--border));
+}
+
+.sheet-mapping-chip__label {
+    font-size: 0.8rem;
+    font-weight: 650;
+}
+
+.sheet-mapping-chip__value {
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-main) 80%, var(--accent) 6%);
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
 .sheet-grid-picker__preview {
     --sheet-grid-zoom: 1;
     overflow-x: auto;
