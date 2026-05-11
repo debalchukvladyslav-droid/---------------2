@@ -5,7 +5,7 @@ import { loadTradeDays } from './storage.js';
 import { safeExternalUrl, sanitizeHTML } from './sanitize.js';
 
 const CLIENT_CACHE_TTL_MS = 2 * 60 * 1000;
-const NEWS_CACHE_VERSION = 'uk-v2';
+const NEWS_CACHE_VERSION = 'uk-v3';
 const NEWS_PROXY_FALLBACK = 'https://traderjournal-six.vercel.app/api/news';
 let _newsCache = { key: '', ts: 0, payload: null };
 let _newsPromise = null;
@@ -219,6 +219,7 @@ async function translateNewsPayload(payload) {
                         'Для tickers: це catalyst tape навколо пампу/угоди. Пиши причину руху, а не факт що акція росте.',
                         'Шукай конкретику: фаза дослідження, FDA, trial data, offering, earnings, guidance, downgrade, merger, contract, lawsuit.',
                         'Збережи тикери, час, назви компаній, цифри і фази. Не вигадуй фактів, яких немає у title/summary.',
+                        'Ніколи не пиши "новина без каталізатора", "без каталізатора", "без точного catalyst" або схожі службові фрази. Якщо каталізатор неясний, стисло перекажи реальний заголовок.',
                         'Відповідай тільки JSON масивом рядків у тому самому порядку.',
                     ].join(' '),
                 }],
@@ -234,9 +235,7 @@ async function translateNewsPayload(payload) {
             ...payload,
             items: payload.items.map((item, index) => ({
                 ...item,
-                titleUk: typeof translated[index] === 'string' && translated[index].trim()
-                    ? translated[index].trim()
-                    : item.title,
+                titleUk: cleanNewsDisplayTitle(translated[index]) || buildUkrainianFallbackLine(item),
             })),
         };
     } catch (error) {
@@ -251,10 +250,38 @@ function withFallbackUkrainianTitles(payload) {
         items: Array.isArray(payload?.items)
             ? payload.items.map((item) => ({
                 ...item,
-                titleUk: item.titleUk || buildUkrainianFallbackLine(item),
+                titleUk: cleanNewsDisplayTitle(item.titleUk) || buildUkrainianFallbackLine(item),
             }))
             : [],
     };
+}
+
+function cleanNewsDisplayTitle(value) {
+    const title = String(value || '')
+        .replace(/\s+/g, ' ')
+        .replace(/^[\s"'“”'`-]+|[\s"'“”'`-]+$/g, '')
+        .replace(/^новин[а-яіїєґ\s-]*без\s+(точного\s+)?(каталізатора|каталiзатора|catalyst)\s*:?\s*/i, '')
+        .replace(/^без\s+(точного\s+)?(каталізатора|каталiзатора|catalyst)\s*:?\s*/i, '')
+        .replace(/^no\s+(clear\s+)?catalyst\s*:?\s*/i, '')
+        .replace(/^news\s+without\s+(a\s+)?catalyst\s*:?\s*/i, '')
+        .trim();
+
+    if (!title || isLowValueCatalystTitle(title)) return '';
+    return title.slice(0, 140);
+}
+
+function isLowValueCatalystTitle(title) {
+    const text = String(title || '').toLowerCase();
+    return /новин[а-яіїєґ\s-]*(без|нема).{0,32}(катал|catalyst)/i.test(text) ||
+        /без\s+(точного\s+)?(каталізатора|каталiзатора|catalyst)/i.test(text) ||
+        /no\s+(clear\s+)?catalyst/i.test(text) ||
+        /news\s+without\s+(a\s+)?catalyst/i.test(text);
+}
+
+function sourceTitleFallback(item) {
+    return cleanNewsDisplayTitle(item?.title) ||
+        cleanNewsDisplayTitle(item?.summary) ||
+        '';
 }
 
 function buildUkrainianFallbackLine(item) {
@@ -262,13 +289,14 @@ function buildUkrainianFallbackLine(item) {
     const related = Array.isArray(item?.related) ? item.related.filter(Boolean) : [];
     const ticker = related[0] || '';
     const source = item?.source ? ` (${item.source})` : '';
+    const sourceTitle = sourceTitleFallback(item);
     const text = `${item?.title || ''} ${item?.summary || ''}`.toLowerCase();
 
     if (section === 'general') {
         if (/fed|fomc|rate|inflation|cpi|pce|jobs|payroll/.test(text)) return `Ринок: макро/ФРС у фокусі${source}`;
         if (/oil|crude|energy|gold|yield|treasury|dollar/.test(text)) return `Ринок: рух у сировині, дохідностях або доларі${source}`;
         if (/earnings|guidance|revenue|profit/.test(text)) return `Ринок: сезон звітів впливає на настрій${source}`;
-        return `Ринок: свіжа новина без точного catalyst${source}`;
+        return sourceTitle ? `Ринок: ${sourceTitle}${source}` : `Ринок: свіжа подія зі стрічки${source}`;
     }
 
     const prefix = ticker ? `${ticker}: ` : '';
@@ -299,7 +327,7 @@ function buildUkrainianFallbackLine(item) {
     if (/launch|product|patent|presentation|conference|webcast/.test(text)) {
         return `${prefix}продуктова, патентна або презентаційна новина${source}`;
     }
-    return `${prefix}корпоративна новина, перевір деталі у джерелі${source}`;
+    return sourceTitle ? `${prefix}${sourceTitle}${source}` : `${prefix}корпоративна подія зі стрічки${source}`;
 }
 
 function formatNewsTime(timestamp) {
