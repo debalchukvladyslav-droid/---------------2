@@ -759,7 +759,7 @@ window.appendReviewTag = function (chunk) {
 
 initTradesView();
 initNotifications();
-initSheetTableView();
+initSheetTableView({ deferGoogleRestore: true });
 window.initSheetTableView = initSheetTableView;
 window.saveSheetMapping = saveSheetMapping;
 window.renderTradesDatagrid = renderTradesDatagrid;

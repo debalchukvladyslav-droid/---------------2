@@ -72,6 +72,9 @@ const REQUIRED_MAPPING_KEYS = ['date', 'symbol'];
 
 /** Перший рядок даних угод у Google Sheets (1-based). */
 const SHEET_DATA_FIRST_ROW = 6;
+const SHEET_PREVIEW_RENDER_MAX_ROWS = 60;
+const SHEET_PREVIEW_RENDER_MAX_COLS = 52;
+const SHEET_MAPPING_SELECT_MAX_COLS = 80;
 
 let _sheetAutoTimer = null;
 let _sheetSyncInProgress = false;
@@ -128,6 +131,7 @@ let _sheetSmartAnchors = {};
 let _sheetGridBindingsReady = false;
 let _sheetGridZoom = 1;
 let _sheetSessionRestoreStarted = false;
+let _sheetSelectionRefreshQueued = false;
 
 function el(id) {
     return document.getElementById(id);
@@ -382,7 +386,10 @@ function buildSheetGridPreview() {
     corner.textContent = '';
     headRow.appendChild(corner);
 
-    const maxCols = Math.max(..._sheetPreviewRows.map((row) => row.length), 0);
+    const maxCols = Math.min(
+        SHEET_PREVIEW_RENDER_MAX_COLS,
+        Math.max(..._sheetPreviewRows.map((row) => row.length), 0),
+    );
     for (let colIndex = 0; colIndex < maxCols; colIndex++) {
         const th = document.createElement('th');
         th.className = 'sheet-grid__col-head';
@@ -461,8 +468,19 @@ function refreshSheetGridSelectionClasses() {
     });
 }
 
+function requestSheetGridSelectionRefresh() {
+    if (_sheetSelectionRefreshQueued) return;
+    _sheetSelectionRefreshQueued = true;
+    requestAnimationFrame(() => {
+        _sheetSelectionRefreshQueued = false;
+        refreshSheetGridSelectionClasses();
+    });
+}
+
 export function setSheetPreviewData(rows) {
-    _sheetPreviewRows = Array.isArray(rows) ? rows : [];
+    _sheetPreviewRows = Array.isArray(rows)
+        ? rows.slice(0, SHEET_PREVIEW_RENDER_MAX_ROWS).map((row) => Array.isArray(row) ? row.slice(0, SHEET_PREVIEW_RENDER_MAX_COLS) : [])
+        : [];
     _sheetPreviewHoverRef = null;
     buildSheetGridPreview();
 }
@@ -490,12 +508,18 @@ export function populateSheetMappingFromHeaders(headers) {
         opt0.textContent = 'Виберіть колонку...';
         sel.appendChild(opt0);
 
-        _dynamicColumnChoices.forEach(({ letter, header }) => {
+        _dynamicColumnChoices.slice(0, SHEET_MAPPING_SELECT_MAX_COLS).forEach(({ letter, header }) => {
             const o = document.createElement('option');
             o.value = letter;
             o.textContent = header ? `${header} (${letter})` : `(${letter} порожньо)`;
             sel.appendChild(o);
         });
+        if (_dynamicColumnChoices.length > SHEET_MAPPING_SELECT_MAX_COLS) {
+            const o = document.createElement('option');
+            o.disabled = true;
+            o.textContent = `... ${_dynamicColumnChoices.length - SHEET_MAPPING_SELECT_MAX_COLS} more columns: use manual mode`;
+            sel.appendChild(o);
+        }
 
         let nextVal = prev;
         if (prev && ![...sel.options].some((o) => o.value === prev)) {
@@ -1300,7 +1324,8 @@ function setSmartRowValue(key, value, preferManual) {
         v = resolveMappingValueToSelectLetter(v);
     }
 
-    const useManual = preferManual || !isPresetValue(v);
+    const hasSelectOption = [...sel.options].some((o) => o.value === v);
+    const useManual = preferManual || !isPresetValue(v) || !hasSelectOption;
 
     if (useManual) {
         group.setAttribute('data-mode', 'manual');
@@ -1365,7 +1390,7 @@ function bindSheetGridPicker() {
         const cell = event.target?.closest?.('.sheet-grid__cell');
         if (!cell) return;
         _sheetPreviewHoverRef = cell.dataset.cellRef || null;
-        refreshSheetGridSelectionClasses();
+        requestSheetGridSelectionRefresh();
     });
 
     document.addEventListener('mouseout', (event) => {
@@ -1374,7 +1399,7 @@ function bindSheetGridPicker() {
         const related = event.relatedTarget;
         if (related?.closest?.('#sheet-grid-picker-preview')) return;
         _sheetPreviewHoverRef = null;
-        refreshSheetGridSelectionClasses();
+        requestSheetGridSelectionRefresh();
     });
 
     document.addEventListener('change', (event) => {
@@ -1443,7 +1468,7 @@ function applyConfigToForm(cfg) {
 
 let _sheetFormHydratedFromStorage = false;
 
-export function initSheetTableView() {
+export function initSheetTableView(options = {}) {
     bindSheetGridPicker();
     syncSheetWorkspaceVisibility();
     applySheetGridZoom();
@@ -1452,6 +1477,13 @@ export function initSheetTableView() {
         applyConfigToForm(readStoredConfig());
         _sheetFormHydratedFromStorage = true;
     }
+
+    const isImportTabActive = !!el('view-table')?.classList.contains('active');
+    if (options?.deferGoogleRestore && !isImportTabActive) {
+        ensureSheetAutoSyncFromConfig();
+        return;
+    }
+
     if (!_sheetSessionRestoreStarted) {
         _sheetSessionRestoreStarted = true;
         void import('./google_sheet_connector.js')

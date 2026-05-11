@@ -49,7 +49,8 @@ const TOKEN_STORAGE_KEY = 'sheet_google_access_token';
 const TOKEN_EXPIRES_KEY = 'sheet_google_access_token_expires_at';
 const SCOPES_VERSION_KEY = 'sheet_google_scopes_v';
 const SELECTED_SHEET_TITLE_KEY = 'sheet_selected_sheet_title';
-const SHEET_PREVIEW_MAX_ROWS = 100;
+const SHEET_PREVIEW_MAX_ROWS = 60;
+const SHEET_PREVIEW_MAX_COLS = 52;
 
 let tokenClient = null;
 let accessToken = null;
@@ -63,6 +64,23 @@ function quoteSheetTitle(title) {
 function rangeForSelectedSheet(range, sheetTitle = getSelectedSheetTitle()) {
     if (!sheetTitle || String(range).includes('!')) return range;
     return `${quoteSheetTitle(sheetTitle)}!${range}`;
+}
+
+function indexToColumnLetter(index) {
+    let n = Math.max(0, Number(index) || 0) + 1;
+    let result = '';
+    while (n > 0) {
+        const rem = (n - 1) % 26;
+        result = String.fromCharCode(65 + rem) + result;
+        n = Math.floor((n - 1) / 26);
+    }
+    return result;
+}
+
+function previewRangeForHeaders(headers = []) {
+    const usedCols = Array.isArray(headers) ? headers.length : 0;
+    const colCount = Math.min(SHEET_PREVIEW_MAX_COLS, Math.max(26, usedCols || 0));
+    return `A1:${indexToColumnLetter(colCount - 1)}${SHEET_PREVIEW_MAX_ROWS}`;
 }
 
 function waitForGlobal(name, timeoutMs = 20000) {
@@ -353,18 +371,16 @@ export async function fetchSpreadsheetData(fileId, sheetTitle = getSelectedSheet
     applyAccessTokenToGapiClient(token);
 
     try {
-        const [headersResponse, previewResponse] = await Promise.all([
-            gapi.client.sheets.spreadsheets.values.get({
-                spreadsheetId: fileId,
-                range: rangeForSelectedSheet('A1:ZZ1', sheetTitle),
-            }),
-            gapi.client.sheets.spreadsheets.values.get({
-                spreadsheetId: fileId,
-                range: rangeForSelectedSheet(`A1:ZZ${SHEET_PREVIEW_MAX_ROWS}`, sheetTitle),
-            }),
-        ]);
+        const headersResponse = await gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: fileId,
+            range: rangeForSelectedSheet('A1:ZZ1', sheetTitle),
+        });
         const range = headersResponse.result;
         const row = range.values && range.values.length > 0 ? range.values[0] : [];
+        const previewResponse = await gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: fileId,
+            range: rangeForSelectedSheet(previewRangeForHeaders(row), sheetTitle),
+        });
         const previewRows = previewResponse.result?.values || [];
         populateSheetMappingFromHeaders(row);
         setSheetPreviewData(previewRows);
