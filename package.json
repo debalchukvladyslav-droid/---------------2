@@ -7,5 +7,9 @@
     "dev": "node dev-server.mjs",
     "dev:5500": "node dev-server.mjs --port 5500",
     "start": "node dev-server.mjs"
+  },
+  "devDependencies": {
+    "supabase": "^2.98.2",
+    "vercel": "^53.4.0"
   }
 }

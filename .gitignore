@@ -4,4 +4,5 @@ config.js
 supabase/.secrets.env
 _dev-server.*.log
 
+node_modules/
 .vercel

@@ -272,8 +272,9 @@ export function updateBadgeUI(encodedPath, isLoading = false) {
 const TICKER_GARBAGE = new Set([
     'FLEXIBLE','GRID','MAIN','THINKORSWIM','BUILD','VWAP','NASDAQ','NYSE',
     'VOPRE','VDPRE','PRE','SHARE','STYLE','DRAWINGS','STUDIES','PATTERNS',
-    'SELL','BUY','DAY','MIN','TOS','FE','FI','FL','AM','PM','EXT',
+    'SELL','BUY','DAY','MIN','TOS','FE','FI','FL','AM','PM','IM','EXT',
     'W','M','D','Y','H','S','L','O','C','V','P','R','T','N','E','A','B',
+    'ID','IY','IH','IW',
     'AH','EST','USD','PNL','NET','AVG','QTY','POS','ALL','NEW','SET',
     'OPEN','CLOSE','HIGH','LOW','LAST','MARK','BID','ASK','VOL','HALT',
     'CHART','SCAN','TRADE','LEVEL','PRICE','SIZE','TIME','DATE','BETA',
@@ -475,7 +476,7 @@ export async function runOCR(encodedPath, force = false) {
     }
     const safePath = decodeURIComponent(encodedPath);
     const existing = state.appData.tickers[safePath];
-    if (!force && existing && existing !== '???' && existing !== '⏳') { updateBadgeUI(encodedPath, false); return; }
+    if (!force && existing && existing !== '???' && existing !== '⏳' && !TICKER_GARBAGE.has(normalizeTicker(existing))) { updateBadgeUI(encodedPath, false); return; }
 
     try {
         updateBadgeUI(encodedPath, true);

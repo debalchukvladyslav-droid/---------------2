@@ -163,6 +163,7 @@ export async function analyzeChart(encodedPath, cleanId) {
         if (!src) throw new Error('Не вдалось отримати URL зображення.');
         const _srcUrl = new URL(src, location.origin);
         const _isAllowed = _srcUrl.origin === location.origin ||
+            /^([a-z0-9-]+\.)?supabase\.co$/.test(_srcUrl.hostname) ||
             /^([a-z0-9-]+\.)?googleapis\.com$/.test(_srcUrl.hostname) ||
             /^([a-z0-9-]+\.)?firebasestorage\.app$/.test(_srcUrl.hostname);
         if (!_isAllowed) throw new Error('Недозволений URL зображення.');
