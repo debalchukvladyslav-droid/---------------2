@@ -5,7 +5,7 @@ import { loadTradeDays } from './storage.js';
 import { safeExternalUrl, sanitizeHTML } from './sanitize.js';
 
 const CLIENT_CACHE_TTL_MS = 2 * 60 * 1000;
-const NEWS_CACHE_VERSION = 'uk-v4';
+const NEWS_CACHE_VERSION = 'uk-v5';
 const NEWS_PROXY_FALLBACK = 'https://traderjournal-six.vercel.app/api/news';
 let _newsCache = { key: '', ts: 0, payload: null };
 let _newsPromise = null;
@@ -295,6 +295,26 @@ function isLowValueCatalystTitle(title) {
         /news\s+without\s+(a\s+)?catalyst/i.test(text);
 }
 
+function compactNewsText(value, maxLen = 118) {
+    return String(value || '')
+        .replace(/\s+/g, ' ')
+        .replace(/^[\s"'“”'`-]+|[\s"'“”'`-]+$/g, '')
+        .trim()
+        .slice(0, maxLen);
+}
+
+function readableSourceTitle(item) {
+    const title = compactNewsText(item?.title, 120);
+    if (title) return title;
+    return compactNewsText(item?.summary, 120);
+}
+
+function fallbackWithHeadline(prefix, label, item, source) {
+    const headline = readableSourceTitle(item);
+    if (headline) return `${prefix}${label}: ${headline}${source}`;
+    return `${prefix}${label}${source}`;
+}
+
 function buildUkrainianFallbackLine(item) {
     const section = item?.section || 'general';
     const related = Array.isArray(item?.related) ? item.related.filter(Boolean) : [];
@@ -303,46 +323,46 @@ function buildUkrainianFallbackLine(item) {
     const text = `${item?.title || ''} ${item?.summary || ''}`.toLowerCase();
 
     if (section === 'general') {
-        if (/fed|fomc|rate|inflation|cpi|pce|jobs|payroll/.test(text)) return `Ринок: макро/ФРС у фокусі${source}`;
-        if (/oil|crude|energy|gold|yield|treasury|dollar/.test(text)) return `Ринок: рух у сировині, дохідностях або доларі${source}`;
-        if (/earnings|guidance|revenue|profit/.test(text)) return `Ринок: сезон звітів впливає на настрій${source}`;
-        if (/ai|chip|semiconductor|nvidia|tech|software/.test(text)) return `Ринок: технологічний сектор у фокусі${source}`;
-        if (/bank|credit|loan|financial|yield|treasury/.test(text)) return `Ринок: фінансовий сектор і ставки у фокусі${source}`;
-        return `Ринок: свіжа подія зі стрічки${source}`;
+        if (/fed|fomc|rate|inflation|cpi|pce|jobs|payroll/.test(text)) return fallbackWithHeadline('Ринок: ', 'макро/ФРС', item, source);
+        if (/oil|crude|energy|gold|yield|treasury|dollar/.test(text)) return fallbackWithHeadline('Ринок: ', 'сировина/дохідності/долар', item, source);
+        if (/earnings|guidance|revenue|profit/.test(text)) return fallbackWithHeadline('Ринок: ', 'звітність', item, source);
+        if (/ai|chip|semiconductor|nvidia|tech|software/.test(text)) return fallbackWithHeadline('Ринок: ', 'технології', item, source);
+        if (/bank|credit|loan|financial|yield|treasury/.test(text)) return fallbackWithHeadline('Ринок: ', 'фінсектор/ставки', item, source);
+        return fallbackWithHeadline('Ринок: ', 'подія', item, source);
     }
 
     const prefix = ticker ? `${ticker}: ` : '';
     if (/phase\s*(1|2|3|i|ii|iii)|clinical trial|trial data|endpoint|patients|study|data readout/.test(text)) {
-        return `${prefix}новина щодо клінічних даних або фази дослідження${source}`;
+        return fallbackWithHeadline(prefix, 'клінічні дані / фаза', item, source);
     }
     if (/fda|approval|clearance|pdufa|regulatory|drug|therapy/.test(text)) {
-        return `${prefix}регуляторна/FDA новина по препарату або терапії${source}`;
+        return fallbackWithHeadline(prefix, 'FDA / регуляторика', item, source);
     }
     if (/offering|public offering|registered direct|private placement|atm|warrant|dilution|convertible/.test(text)) {
-        return `${prefix}новина про розміщення акцій або можливе розмивання${source}`;
+        return fallbackWithHeadline(prefix, 'offering / розмивання', item, source);
     }
     if (/earnings|revenue|guidance|forecast|outlook|eps|sales|profit|loss|quarter|q[1-4]/.test(text)) {
-        return `${prefix}звітність, прогноз або фінансові показники компанії${source}`;
+        return fallbackWithHeadline(prefix, 'звіт / guidance', item, source);
     }
     if (/merger|acquisition|buyout|takeover|strategic alternatives|asset sale/.test(text)) {
-        return `${prefix}угода M&A, продаж активів або стратегічні варіанти${source}`;
+        return fallbackWithHeadline(prefix, 'M&A / стратегічні варіанти', item, source);
     }
     if (/upgrade|downgrade|price target|initiates|analyst|rating/.test(text)) {
-        return `${prefix}аналітики оновили рейтинг або цільову ціну${source}`;
+        return fallbackWithHeadline(prefix, 'аналітик / price target', item, source);
     }
     if (/contract|partnership|collaboration|agreement|license|supply|order/.test(text)) {
-        return `${prefix}контракт, партнерство або ліцензійна угода${source}`;
+        return fallbackWithHeadline(prefix, 'контракт / партнерство', item, source);
     }
     if (/sec|investigation|lawsuit|class action|delisting|nasdaq notice|compliance/.test(text)) {
-        return `${prefix}SEC, судовий ризик або питання лістингу${source}`;
+        return fallbackWithHeadline(prefix, 'SEC / суд / лістинг', item, source);
     }
     if (/launch|product|patent|presentation|conference|webcast/.test(text)) {
-        return `${prefix}продуктова, патентна або презентаційна новина${source}`;
+        return fallbackWithHeadline(prefix, 'продукт / патент / презентація', item, source);
     }
     if (/shares|stock|surge|jump|rise|fall|drop|volatile|volume/.test(text)) {
-        return `${prefix}акція в русі після корпоративної новини${source}`;
+        return fallbackWithHeadline(prefix, 'акція в русі', item, source);
     }
-    return `${prefix}корпоративна подія зі стрічки${source}`;
+    return fallbackWithHeadline(prefix, 'корпоративна подія', item, source);
 }
 
 function formatNewsTime(timestamp) {

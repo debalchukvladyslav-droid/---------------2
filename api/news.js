@@ -139,7 +139,12 @@ async function fetchCompanyNews(tickers, apiKey, fromTs = null, toTs = null) {
         url.searchParams.set('from', fromStr);
         url.searchParams.set('to', toStr);
         url.searchParams.set('token', apiKey);
-        return fetchJson(url);
+        const items = await fetchJson(url);
+        return items.map((item) => ({
+            ...item,
+            related: item.related || symbol,
+            requestedSymbol: symbol,
+        }));
     }));
 
     return results.flat();
