@@ -269,16 +269,6 @@ export async function renderUnassignedUI() {
         imgEl.loading = 'lazy';
         zoomWrapper.appendChild(badge);
         zoomWrapper.appendChild(imgEl);
-
-        const quickActions = document.createElement('div');
-        quickActions.className = 'screen-card-actions screen-card-actions--single';
-        const aiBtn = document.createElement('button');
-        aiBtn.type = 'button';
-        aiBtn.className = 'btn-ai screen-card-main-action';
-        aiBtn.textContent = 'AI Аналіз';
-        aiBtn.addEventListener('click', () => window.analyzeChart?.(encodedPath, cleanId));
-        quickActions.appendChild(aiBtn);
-
         const btns = document.createElement('div');
         btns.className = 'assign-btns';
         [['good', '+ Хороший'], ['normal', '+ Норм'], ['bad', '+ Поганий'], ['error', '+ Помилка']].forEach(([cat, label]) => {
@@ -295,7 +285,6 @@ export async function renderUnassignedUI() {
         btns.appendChild(delBtn);
 
         item.appendChild(zoomWrapper);
-        item.appendChild(quickActions);
         item.appendChild(btns);
         container.appendChild(item);
 
