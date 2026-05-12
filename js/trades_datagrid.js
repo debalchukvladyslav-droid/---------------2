@@ -1,20 +1,17 @@
-// === js/trades_datagrid.js — горизонтальна таблиця угод з групуванням по датах ===
+// === js/trades_datagrid.js — horizontal trades table grouped by date ===
 
 import { state } from './state.js';
 
 const DATAGRID_PAGE_SIZE = 250;
+const DATAGRID_COLSPAN = 20;
 
-/**
- * Довідник типів трейду для майбутніх випадаючих списків у формах.
- * Порядок — як у вимогах; дублікати прибрані (перше входження зберігається).
- */
 const TRADE_TYPES_RAW = [
     'шорт', 'не брав', 'виключення', 'виключення візуально', 'візуально',
-    'виключення не брав', 'фіолетова', 'не брав', 'не брав візуально',
-    'фіолетова', 'виключення-фіолетова', 'шортНСРП', 'шортРП', 'виключРП',
-    'фіолетоваРП', 'візуально', 'Свій підхід', 'не брав свій підхід',
+    'виключення не брав', 'фіолетова', 'не брав візуально',
+    'виключення-фіолетова', 'шортНСРП', 'шортРП', 'виключРП',
+    'фіолетоваРП', 'Свій підхід', 'не брав свій підхід',
     'RV підхід', 'OLD-трейд', 'не брав OLD-трейд', 'виключення-OLD-трейд',
-    'Виключення Інплей', 'ЛП з відкриття', 'не брав візуально', 'тренд-шорт',
+    'Виключення Інплей', 'ЛП з відкриття', 'тренд-шорт',
     'Візуально Потенціал', 'памп-тренд', 'Не брав памп-тренд',
     'фіолетова не брав', 'візуально-маркет', 'СИСТ-виключення',
     'СИСТ-виключення не брав', 'памп-лонг',
@@ -45,7 +42,7 @@ function formatDateHeader(dateStr) {
     const mo = parseInt(m[2], 10) - 1;
     const y = m[1];
     const monthName = UK_MONTHS_GEN[mo] ?? m[2];
-    return `📅 ${day} ${monthName} ${y}`;
+    return `${day} ${monthName} ${y}`;
 }
 
 function timeFromOpened(opened) {
@@ -67,6 +64,10 @@ function sheetOf(trade) {
     return trade && typeof trade.sheet === 'object' ? trade.sheet : {};
 }
 
+function nonEmpty(value, fallback = '—') {
+    return value != null && value !== '' ? value : fallback;
+}
+
 function isDatagridViewActive() {
     return !!document.getElementById('view-datagrid')?.classList.contains('active');
 }
@@ -84,9 +85,7 @@ function collectRows() {
     flat.sort((a, b) => {
         const dc = a.dateStr.localeCompare(b.dateStr);
         if (dc !== 0) return dc;
-        const ta = timeFromOpened(a.trade?.opened);
-        const tb = timeFromOpened(b.trade?.opened);
-        return String(ta).localeCompare(String(tb));
+        return String(timeFromOpened(a.trade?.opened)).localeCompare(String(timeFromOpened(b.trade?.opened)));
     });
     return flat;
 }
@@ -107,37 +106,36 @@ function buildTradeRowHtml(dateStr, trade, tradeIndex) {
     const sh = sheetOf(trade);
     const net = Number(trade.net);
     const profitClass = Number.isFinite(net) && net < 0 ? 'datagrid-profit datagrid-profit--loss' : 'datagrid-profit';
-    let profitCell = '<td>—</td>';
-    if (Number.isFinite(net)) {
-        let inner = formatMoney(net);
-        if (sh.altPv != null && String(sh.altPv).trim() !== '') {
-            inner += ` <span class="datagrid-profit-sep">/</span> ${esc(String(sh.altPv).trim())}`;
-        }
-        profitCell = `<td class="${profitClass}">${inner}</td>`;
-    }
+    const profitCell = Number.isFinite(net)
+        ? `<td class="${profitClass}">${formatMoney(net)}</td>`
+        : '<td>—</td>';
 
     const typeLabel = sh.tradeType || trade.type || '';
-    const pvVal = sh.pv != null && sh.pv !== '' ? sh.pv : '—';
+    const profitRisk = nonEmpty(sh.profitRisk);
+    const pvVal = nonEmpty(sh.pv);
+    const altPv = nonEmpty(sh.altPv);
     const exc = Array.isArray(sh.exceptions) ? sh.exceptions.join(', ') : (sh.exception || '');
     const comment = sh.traderComment || '';
     const exitV = sh.exit || '';
     const team = sh.teamLeadComment || '';
     const paper = sh.paperType || '';
     const period = sh.period || '';
-    const growth = sh.growthPct != null && sh.growthPct !== '' ? sh.growthPct : '—';
-    const risk = sh.riskUsd != null && sh.riskUsd !== '' ? sh.riskUsd : '—';
-    const cons = sh.consolidateCents != null && sh.consolidateCents !== '' ? sh.consolidateCents : '—';
-    const entry = trade.entry != null && trade.entry !== '' ? trade.entry : (sh.entryPrice ?? '—');
-    const stop = trade.stop != null && trade.stop !== '' ? trade.stop : (sh.stopPrice ?? '—');
-    const shares = trade.qty != null && trade.qty !== '' ? trade.qty : (sh.qtyShares ?? '—');
-    const calc = sh.qtySharesCalc != null && sh.qtySharesCalc !== '' ? sh.qtySharesCalc : shares;
+    const growth = nonEmpty(sh.growthPct);
+    const risk = nonEmpty(sh.riskUsd);
+    const cons = nonEmpty(sh.consolidateCents);
+    const entry = nonEmpty(trade.entry, nonEmpty(sh.entryPrice));
+    const stop = nonEmpty(trade.stop, nonEmpty(sh.stopPrice));
+    const shares = nonEmpty(trade.qty, nonEmpty(sh.qtyShares));
+    const calc = nonEmpty(sh.qtySharesCalc, shares);
 
     return `<tr class="trade-data-row" data-date="${esc(dateStr)}" data-trade-index="${tradeIndex}" title="Відкрити цю угоду в журналі">
         <td>${esc(timeFromOpened(trade.opened))}</td>
         <td class="datagrid-ticker">${esc((trade.symbol || '?').toString().toUpperCase())}</td>
         <td>${typeLabel ? badge('datagrid-badge datagrid-badge--type', typeLabel) : '—'}</td>
         ${profitCell}
+        <td>${esc(String(profitRisk))}</td>
         <td>${esc(String(pvVal))}</td>
+        <td>${esc(String(altPv))}</td>
         <td>${exc ? badge('datagrid-badge datagrid-badge--exception', exc) : '—'}</td>
         <td class="datagrid-truncate" title="${esc(comment)}">${esc(comment) || '—'}</td>
         <td>${exitV ? badge('datagrid-badge datagrid-badge--exit', exitV) : '—'}</td>
@@ -211,7 +209,7 @@ export function renderTradesDatagrid() {
     const rows = ensureRowsCache();
     if (rows.length === 0) {
         tbody.innerHTML =
-            '<tr><td class="datagrid-empty" colspan="18">Немає угод у журналі. Імпортуйте Fondexx або додайте дані.</td></tr>';
+            `<tr><td class="datagrid-empty" colspan="${DATAGRID_COLSPAN}">Немає угод у журналі. Імпортуйте Fondexx або додайте дані.</td></tr>`;
         updateDatagridToolbar(0, 0);
         return;
     }
@@ -225,7 +223,7 @@ export function renderTradesDatagrid() {
     for (let i = 0; i < visibleRows.length; i++) {
         const { dateStr, trade } = visibleRows[i];
         if (dateStr !== prevDate) {
-            html += `<tr class="date-group-row"><td colspan="18">${esc(formatDateHeader(dateStr))}</td></tr>`;
+            html += `<tr class="date-group-row"><td colspan="${DATAGRID_COLSPAN}">${esc(formatDateHeader(dateStr))}</td></tr>`;
             prevDate = dateStr;
         }
         html += buildTradeRowHtml(dateStr, trade, visibleRows[i].tradeIndex);

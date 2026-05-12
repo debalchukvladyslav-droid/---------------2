@@ -14,6 +14,14 @@
                     </div>
                 </section>
 
+                <button type="button" id="sheet-google-panel-toggle" class="sheet-google-toggle" aria-expanded="false">
+                    <span>
+                        <strong>Google Sheets</strong>
+                        <small>Мапінг, прев’ю таблиці та автосинхронізація</small>
+                    </span>
+                    <span id="sheet-google-panel-state" class="sheet-google-toggle__state">Показати</span>
+                </button>
+
                 <!-- Стан 1: неавторизований -->
                 <section id="sheet-state-connect" class="sheet-card sheet-card--hero" aria-labelledby="sheet-connect-title">
                     <div class="sheet-drive-icon" aria-hidden="true">
@@ -104,26 +112,6 @@
                                 </div>
                             </div>
 
-                            <div class="sheet-smart-row" data-smart-field="time">
-                                <div class="sheet-smart-row__left">
-                                    <span class="sheet-smart-row__label">Час угоди</span>
-                                    <span class="sheet-smart-row__hint">Для точнішого зіставлення з угодою в журналі.</span>
-                                </div>
-                                <div class="sheet-smart-row__right">
-                                    <div class="sheet-input-group" data-mode="select">
-                                        <select id="sheet-smart-time" class="sheet-input-group__select" aria-label="Колонка для часу угоди">
-                                            <option value="">Виберіть колонку...</option>
-                                            <option value="Date">Date</option>
-                                            <option value="Time">Time</option>
-                                            <option value="Ticker">Ticker</option>
-                                            <option value="Profit/Loss">Profit/Loss</option>
-                                        </select>
-                                        <button type="button" class="sheet-input-group__toggle" data-action="sheet-toggle-mapping" title="Вручну">✍️</button>
-                                        <input type="text" id="sheet-smart-time-manual" class="sheet-input-group__manual" placeholder="Напр. B" autocomplete="off" aria-label="Час угоди вручну">
-                                    </div>
-                                </div>
-                            </div>
-
                             <div class="sheet-smart-row" data-smart-field="symbol">
                                 <div class="sheet-smart-row__left">
                                     <span class="sheet-smart-row__label">Тікер (symbol)</span>
@@ -146,8 +134,8 @@
 
                             <div class="sheet-smart-row" data-smart-field="tradeType">
                                 <div class="sheet-smart-row__left">
-                                    <span class="sheet-smart-row__label">Тип угоди</span>
-                                    <span class="sheet-smart-row__hint">Напр. шорт, виключення, памп-тренд…</span>
+                                    <span class="sheet-smart-row__label">Класифікація</span>
+                                    <span class="sheet-smart-row__hint">Можна вибрати кілька колонок кліками по таблиці або ввести через кому.</span>
                                 </div>
                                 <div class="sheet-smart-row__right">
                                     <div class="sheet-input-group" data-mode="select">
@@ -166,8 +154,8 @@
 
                             <div class="sheet-smart-row" data-smart-field="profit">
                                 <div class="sheet-smart-row__left">
-                                    <span class="sheet-smart-row__label">Профіт від угоди</span>
-                                    <span class="sheet-smart-row__hint">Чистий результат угоди у вашій таблиці.</span>
+                                    <span class="sheet-smart-row__label">Профіт ($)</span>
+                                    <span class="sheet-smart-row__hint">Грошовий результат угоди для зіставлення з Trades.</span>
                                 </div>
                                 <div class="sheet-smart-row__right">
                                     <div class="sheet-input-group" data-mode="select">
@@ -184,9 +172,29 @@
                                 </div>
                             </div>
 
+                            <div class="sheet-smart-row" data-smart-field="profitRisk">
+                                <div class="sheet-smart-row__left">
+                                    <span class="sheet-smart-row__label">Профіт в ризиках</span>
+                                    <span class="sheet-smart-row__hint">Основний R-показник угоди з Google-таблиці.</span>
+                                </div>
+                                <div class="sheet-smart-row__right">
+                                    <div class="sheet-input-group" data-mode="select">
+                                        <select id="sheet-smart-profit-risk" class="sheet-input-group__select" aria-label="Колонка для профіту в ризиках">
+                                            <option value="">Виберіть колонку...</option>
+                                            <option value="Date">Date</option>
+                                            <option value="Ticker">Ticker</option>
+                                            <option value="Profit/Loss">Profit/Loss</option>
+                                            <option value="Notes">Notes</option>
+                                        </select>
+                                        <button type="button" class="sheet-input-group__toggle" data-action="sheet-toggle-mapping" title="Вручну">✍️</button>
+                                        <input type="text" id="sheet-smart-profit-risk-manual" class="sheet-input-group__manual" placeholder="Напр. C або D" autocomplete="off" aria-label="Профіт в ризиках вручну">
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="sheet-smart-row" data-smart-field="pv">
                                 <div class="sheet-smart-row__left">
-                                    <span class="sheet-smart-row__label">PV / PV</span>
+                                    <span class="sheet-smart-row__label">PV=PV</span>
                                     <span class="sheet-smart-row__hint">Показник PV=PV з журналу.</span>
                                 </div>
                                 <div class="sheet-smart-row__right">
@@ -229,7 +237,7 @@
                             <div class="sheet-smart-row" data-smart-field="altPv">
                                 <div class="sheet-smart-row__left">
                                     <span class="sheet-smart-row__label">Alt PV</span>
-                                    <span class="sheet-smart-row__hint">Другий показник у колонці «Профіт / AltPV».</span>
+                                    <span class="sheet-smart-row__hint">Альтернативний вихід / варіант запису для себе.</span>
                                 </div>
                                 <div class="sheet-smart-row__right">
                                     <div class="sheet-input-group" data-mode="select">

@@ -22,14 +22,15 @@ const SESSION_GOOGLE = 'sheet_google_connected';
 const SESSION_SPREADSHEET_ID = 'sheet_spreadsheet_id';
 const SESSION_SPREADSHEET_TITLE = 'sheet_spreadsheet_title';
 const SESSION_SHEET_TITLE = 'sheet_selected_sheet_title';
+const GOOGLE_PANEL_OPEN_KEY = 'tj_google_sheet_panel_open';
 
 /** Колонки таблиці / trade.sheet для статистики та datagrid (порядок = у формі). */
 const SMART_KEYS = [
     'date',
-    'time',
     'symbol',
     'tradeType',
     'profit',
+    'profitRisk',
     'pv',
     'altPv',
     'exceptions',
@@ -49,9 +50,9 @@ const SMART_KEYS = [
 const QUICK_MAPPING_KEYS = [
     'date',
     'symbol',
-    'time',
     'tradeType',
     'profit',
+    'profitRisk',
     'pv',
     'exceptions',
     'altPv',
@@ -69,6 +70,7 @@ const QUICK_MAPPING_KEYS = [
 ];
 
 const REQUIRED_MAPPING_KEYS = ['date', 'symbol'];
+const MULTI_MAPPING_KEYS = new Set(['tradeType', 'exceptions']);
 
 /** Перший рядок даних угод у Google Sheets (1-based). */
 const SHEET_DATA_FIRST_ROW = 6;
@@ -133,9 +135,43 @@ let _sheetGridBindingsReady = false;
 let _sheetGridZoom = 1;
 let _sheetSessionRestoreStarted = false;
 let _sheetSelectionRefreshQueued = false;
+let _sheetGooglePanelBindingReady = false;
 
 function el(id) {
     return document.getElementById(id);
+}
+
+function isGoogleSheetPanelOpen() {
+    return localStorage.getItem(GOOGLE_PANEL_OPEN_KEY) === '1';
+}
+
+function setGoogleSheetPanelOpen(open) {
+    if (open) localStorage.setItem(GOOGLE_PANEL_OPEN_KEY, '1');
+    else localStorage.setItem(GOOGLE_PANEL_OPEN_KEY, '0');
+    syncSheetWorkspaceVisibility();
+}
+
+function syncGoogleSheetPanelToggle() {
+    const open = isGoogleSheetPanelOpen();
+    const toggle = el('sheet-google-panel-toggle');
+    const stateLabel = el('sheet-google-panel-state');
+    if (toggle) {
+        toggle.classList.toggle('is-open', open);
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    if (stateLabel) stateLabel.textContent = open ? 'Сховати' : 'Показати';
+}
+
+function bindGoogleSheetPanelToggle() {
+    if (_sheetGooglePanelBindingReady) return;
+    _sheetGooglePanelBindingReady = true;
+    document.addEventListener('click', (event) => {
+        const toggle = event.target?.closest?.('#sheet-google-panel-toggle');
+        if (!toggle) return;
+        const nextOpen = !isGoogleSheetPanelOpen();
+        setGoogleSheetPanelOpen(nextOpen);
+        if (nextOpen) initSheetTableView({ forceGoogleRestore: true });
+    });
 }
 
 /** A → 0, B → 1, Z → 25, AA → 26. */
@@ -235,6 +271,13 @@ function smartFieldAnchorLabel(field) {
     return first;
 }
 
+function smartFieldChipValue(field) {
+    const ranges = smartFieldRanges(field);
+    if (ranges.length) return ranges.join(', ');
+    const raw = readSmartRowValue(field);
+    return raw ? String(raw).trim() : '';
+}
+
 function renderMappingStatus() {
     const host = el('sheet-mapping-status');
     if (!host) return;
@@ -253,7 +296,7 @@ function renderMappingStatus() {
         label.textContent = smartFieldLabel(field);
 
         const value = document.createElement('span');
-        const anchorLabel = smartFieldAnchorLabel(field);
+        const anchorLabel = smartFieldChipValue(field);
         value.className = 'sheet-mapping-chip__value';
         value.textContent = anchorLabel || (REQUIRED_MAPPING_KEYS.includes(field) ? 'потрібно' : 'порожньо');
         button.classList.toggle('is-empty', !anchorLabel);
@@ -347,6 +390,35 @@ function setSmartAnchor(field, ref) {
     else delete _sheetSmartAnchors[field];
     updateGridPickerMeta();
     refreshSheetGridSelectionClasses();
+}
+
+function setChipManualMapping(field) {
+    if (!field) return;
+    const current = readSmartRowValue(field);
+    const label = smartFieldLabel(field);
+    const next = window.prompt(`${label}: введіть літеру колонки${MULTI_MAPPING_KEYS.has(field) ? ' або кілька через кому' : ''}`, current || '');
+    if (next == null) return;
+    setSmartRowValue(field, next.trim(), true);
+    delete _sheetSmartAnchors[field];
+    updateGridPickerMeta();
+    refreshSheetGridSelectionClasses();
+    persistSheetMappingDraft();
+}
+
+function toggleMultiMappingColumn(field, colLetter) {
+    const parts = String(readSmartRowValue(field) || '')
+        .split(',')
+        .map((v) => v.trim().toUpperCase())
+        .filter(Boolean);
+    const normalized = String(colLetter || '').trim().toUpperCase();
+    if (!normalized) return '';
+    const next = parts.includes(normalized)
+        ? parts.filter((part) => part !== normalized)
+        : [...parts, normalized];
+    const value = next.join(', ');
+    setSmartRowValue(field, value, true);
+    delete _sheetSmartAnchors[field];
+    return value;
 }
 
 function persistSheetMappingDraft() {
@@ -626,6 +698,7 @@ export function clearGoogleSheetSession() {
 export function syncSheetWorkspaceVisibility() {
     const connected = (localStorage.getItem(SESSION_GOOGLE) || sessionStorage.getItem(SESSION_GOOGLE)) === '1';
     const fileOk = !!(localStorage.getItem(SESSION_SPREADSHEET_ID) || sessionStorage.getItem(SESSION_SPREADSHEET_ID));
+    const panelOpen = isGoogleSheetPanelOpen();
 
     const s1 = el('sheet-state-connect');
     const s2 = el('sheet-state-workspace');
@@ -633,11 +706,12 @@ export function syncSheetWorkspaceVisibility() {
     const mapping = el('sheet-smart-mapping');
     const tabPicker = el('sheet-tab-picker');
 
-    if (s1) s1.hidden = connected;
-    if (s2) s2.hidden = !connected;
-    if (fileCard) fileCard.hidden = !connected || !fileOk;
-    if (mapping) mapping.hidden = !connected || !fileOk;
-    if (tabPicker && (!connected || !fileOk)) tabPicker.hidden = true;
+    syncGoogleSheetPanelToggle();
+    if (s1) s1.hidden = !panelOpen || connected;
+    if (s2) s2.hidden = !panelOpen || !connected;
+    if (fileCard) fileCard.hidden = !panelOpen || !connected || !fileOk;
+    if (mapping) mapping.hidden = !panelOpen || !connected || !fileOk;
+    if (tabPicker && (!panelOpen || !connected || !fileOk)) tabPicker.hidden = true;
 }
 
 function getKnownColumnValues() {
@@ -716,6 +790,20 @@ function parseExceptionColumnIndices(raw) {
         if (idx >= 0) out.push(idx);
     }
     return out;
+}
+
+function parseColumnIndices(raw) {
+    return String(raw || '')
+        .split(',')
+        .map((p) => smartValueToColumnIndex(p.trim()))
+        .filter((idx) => idx >= 0);
+}
+
+function joinedCells(row, indices = []) {
+    return indices
+        .map((ix) => String(getCell(row, ix)).trim())
+        .filter(Boolean)
+        .join('; ');
 }
 
 function getCell(row, colIdx) {
@@ -825,10 +913,11 @@ function isLikelyTicker(v) {
  */
 function parseSheetGridToTrades(values, smartColumns, spreadsheetId, startRow = SHEET_DATA_FIRST_ROW) {
     const dateIdx = smartValueToColumnIndex(smartColumns.date || '');
-    const timeIdx = smartValueToColumnIndex(smartColumns.time || '');
     const symIdx = smartValueToColumnIndex(smartColumns.symbol || '');
     const profitIdx = smartValueToColumnIndex(smartColumns.profit || '');
+    const profitRiskIdx = smartValueToColumnIndex(smartColumns.profitRisk || '');
     const typeIdx = smartValueToColumnIndex(smartColumns.tradeType || '');
+    const typeMultiIdx = parseColumnIndices(smartColumns.tradeType || '');
     const pvIdx = smartValueToColumnIndex(smartColumns.pv || '');
     const altPvIdx = smartValueToColumnIndex(smartColumns.altPv || '');
     const exModeManual = typeof smartColumns.exceptions === 'string' && smartColumns.exceptions.includes(',');
@@ -871,13 +960,14 @@ function parseSheetGridToTrades(values, smartColumns, spreadsheetId, startRow = 
         if (!isLikelyTicker(symRaw)) continue;
 
         const symbol = String(symRaw).trim().toUpperCase();
-        const parsedTime = sheetsCellToTimeString(timeIdx >= 0 ? getCell(row, timeIdx) : dateRaw);
-        const timeStr = parsedTime || '09:30:00';
+        const timeStr = '09:30:00';
         const profitRaw = profitIdx >= 0 ? getCell(row, profitIdx) : '';
         const hasProfitCell = profitRaw != null && String(profitRaw).trim() !== '';
         const net = hasProfitCell ? parseMoneyCell(profitRaw) : 0;
         const gross = net;
-        const typeCell = typeIdx >= 0 ? String(getCell(row, typeIdx)).trim() : '';
+        const typeCell = typeMultiIdx.length > 1
+            ? joinedCells(row, typeMultiIdx)
+            : (typeIdx >= 0 ? String(getCell(row, typeIdx)).trim() : '');
 
         let exceptionStr = '';
         if (exSelectIdx >= 0) {
@@ -903,10 +993,10 @@ function parseSheetGridToTrades(values, smartColumns, spreadsheetId, startRow = 
             source: 'google',
             spreadsheetId,
             sheetRow: excelRow,
-            sheetTime: parsedTime || undefined,
             sheetNet: hasProfitCell ? net : undefined,
             sheetGross: hasProfitCell ? gross : undefined,
             tradeType: typeCell || undefined,
+            profitRisk: cellStr(row, profitRiskIdx) || undefined,
             pv: pvCell !== '' && pvCell != null ? String(pvCell) : undefined,
             altPv: altPvStr || undefined,
             exception: exceptionStr || undefined,
@@ -985,7 +1075,7 @@ function findSheetMatchIndex(existingTrades, incomingTrade, usedIndices) {
         const okByPnl = hasPnl && pnlDiff <= pnlTolerance(incomingNet);
         const noSheetYet = !trade?.sheet || trade.sheet.source !== 'google';
         const existingMin = tradeTimeMinutes(trade?.opened);
-        const incomingMin = incomingTrade?.sheet?.sheetTime ? tradeTimeMinutes(incomingTrade.opened) : null;
+        const incomingMin = null;
         const timeDiff = existingMin != null && incomingMin != null ? Math.abs(existingMin - incomingMin) : null;
         if (timeDiff != null && timeDiff > 90) return;
         candidates.push({
@@ -1002,7 +1092,7 @@ function enrichTradeWithSheet(existingTrade, incomingTrade) {
     const sheet = {
         ...(existingTrade.sheet && typeof existingTrade.sheet === 'object' ? existingTrade.sheet : {}),
         ...(incomingTrade.sheet || {}),
-        matchedBy: incomingTrade.sheet?.sheetTime ? 'date+ticker+pnl+time' : 'date+ticker+pnl',
+        matchedBy: 'date+ticker+pnl',
         fondexxType: existingTrade.sheet?.fondexxType || existingTrade.type || undefined,
     };
 
@@ -1355,10 +1445,6 @@ function bindSheetGridPicker() {
         const chip = event.target?.closest?.('[data-sheet-map-field]');
         if (chip) {
             setActiveGridField(chip.dataset.sheetMapField || 'date');
-            document.querySelector(`[data-smart-field="${chip.dataset.sheetMapField}"]`)?.scrollIntoView({
-                behavior: 'smooth',
-                block: 'center',
-            });
             return;
         }
 
@@ -1375,10 +1461,21 @@ function bindSheetGridPicker() {
         const rowNumber = Number(cell.dataset.rowNumber || 0);
         if (!colLetter || !rowNumber) return;
 
-        setSmartRowValue(field, colLetter, false);
-        setSmartAnchor(field, `${colLetter}${rowNumber}`);
+        if (MULTI_MAPPING_KEYS.has(field)) {
+            toggleMultiMappingColumn(field, colLetter);
+        } else {
+            setSmartRowValue(field, colLetter, false);
+            setSmartAnchor(field, `${colLetter}${rowNumber}`);
+        }
         persistSheetMappingDraft();
         focusNextUnmappedField(field);
+    });
+
+    document.addEventListener('dblclick', (event) => {
+        const chip = event.target?.closest?.('[data-sheet-map-field]');
+        if (!chip) return;
+        event.preventDefault();
+        setChipManualMapping(chip.dataset.sheetMapField || '');
     });
 
     document.addEventListener('focusin', (event) => {
@@ -1470,6 +1567,7 @@ function applyConfigToForm(cfg) {
 let _sheetFormHydratedFromStorage = false;
 
 export function initSheetTableView(options = {}) {
+    bindGoogleSheetPanelToggle();
     bindSheetGridPicker();
     syncSheetWorkspaceVisibility();
     applySheetGridZoom();
@@ -1480,6 +1578,10 @@ export function initSheetTableView(options = {}) {
     }
 
     const isImportTabActive = !!el('view-table')?.classList.contains('active');
+    if (!isGoogleSheetPanelOpen() && !options?.forceGoogleRestore) {
+        stopSheetAutoSync();
+        return;
+    }
     if (options?.deferGoogleRestore && !isImportTabActive) {
         ensureSheetAutoSyncFromConfig();
         return;

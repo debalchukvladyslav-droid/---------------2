@@ -53,9 +53,23 @@ function parseExceptionColumnIndices(raw) {
         .filter((idx) => idx >= 0);
 }
 
+function parseColumnIndices(raw) {
+    return String(raw || '')
+        .split(',')
+        .map((p) => smartValueToColumnIndex(p.trim()))
+        .filter((idx) => idx >= 0);
+}
+
 function getCell(row, colIdx) {
     if (colIdx < 0 || !Array.isArray(row)) return '';
     return row[colIdx] != null && row[colIdx] !== '' ? row[colIdx] : '';
+}
+
+function joinedCells(row, indices = []) {
+    return indices
+        .map((ix) => String(getCell(row, ix)).trim())
+        .filter(Boolean)
+        .join('; ');
 }
 
 function cellStr(row, colIdx) {
@@ -132,10 +146,11 @@ export function isValidIsoDateString(iso) {
 
 export function parseSheetGridToTrades(values, smartColumns, spreadsheetId, startRow = SHEET_DATA_FIRST_ROW) {
     const dateIdx = smartValueToColumnIndex(smartColumns.date || '');
-    const timeIdx = smartValueToColumnIndex(smartColumns.time || '');
     const symIdx = smartValueToColumnIndex(smartColumns.symbol || '');
     const profitIdx = smartValueToColumnIndex(smartColumns.profit || '');
+    const profitRiskIdx = smartValueToColumnIndex(smartColumns.profitRisk || '');
     const typeIdx = smartValueToColumnIndex(smartColumns.tradeType || '');
+    const typeMultiIdx = parseColumnIndices(smartColumns.tradeType || '');
     const pvIdx = smartValueToColumnIndex(smartColumns.pv || '');
     const altPvIdx = smartValueToColumnIndex(smartColumns.altPv || '');
     const exModeManual = typeof smartColumns.exceptions === 'string' && smartColumns.exceptions.includes(',');
@@ -176,13 +191,14 @@ export function parseSheetGridToTrades(values, smartColumns, spreadsheetId, star
         if (!activeDate || symRaw === '' || symRaw == null || !isLikelyTicker(symRaw)) continue;
 
         const symbol = String(symRaw).trim().toUpperCase();
-        const parsedTime = sheetsCellToTimeString(timeIdx >= 0 ? getCell(row, timeIdx) : dateRaw);
-        const timeStr = parsedTime || '09:30:00';
+        const timeStr = '09:30:00';
         const profitRaw = profitIdx >= 0 ? getCell(row, profitIdx) : '';
         const hasProfitCell = profitRaw != null && String(profitRaw).trim() !== '';
         const net = hasProfitCell ? parseMoneyCell(profitRaw) : 0;
         const gross = net;
-        const typeCell = typeIdx >= 0 ? String(getCell(row, typeIdx)).trim() : '';
+        const typeCell = typeMultiIdx.length > 1
+            ? joinedCells(row, typeMultiIdx)
+            : (typeIdx >= 0 ? String(getCell(row, typeIdx)).trim() : '');
 
         let exceptionStr = '';
         if (exSelectIdx >= 0) {
@@ -204,10 +220,10 @@ export function parseSheetGridToTrades(values, smartColumns, spreadsheetId, star
             source: 'google',
             spreadsheetId,
             sheetRow: excelRow,
-            sheetTime: parsedTime || undefined,
             sheetNet: hasProfitCell ? net : undefined,
             sheetGross: hasProfitCell ? gross : undefined,
             tradeType: typeCell || undefined,
+            profitRisk: cellStr(row, profitRiskIdx) || undefined,
             pv: pvCell !== '' && pvCell != null ? String(pvCell) : undefined,
             altPv: altPvStr || undefined,
             exception: exceptionStr || undefined,
@@ -250,4 +266,3 @@ export function parseSheetGridToTrades(values, smartColumns, spreadsheetId, star
     const tradeCount = dates.reduce((n, d) => n + outByDay[d].length, 0);
     return { outByDay, dateAnchors, stats: { tradeCount, dayCount: dates.length } };
 }
-

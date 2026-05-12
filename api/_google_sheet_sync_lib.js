@@ -272,7 +272,7 @@ function findSheetMatchIndex(existingTrades, incomingTrade, usedIndices) {
         const okByPnl = hasPnl && pnlDiff <= pnlTolerance(incomingNet);
         const noSheetYet = !trade?.sheet || trade.sheet.source !== 'google';
         const existingMin = tradeTimeMinutes(trade?.opened);
-        const incomingMin = incomingTrade?.sheet?.sheetTime ? tradeTimeMinutes(incomingTrade.opened) : null;
+        const incomingMin = null;
         const timeDiff = existingMin != null && incomingMin != null ? Math.abs(existingMin - incomingMin) : null;
         if (timeDiff != null && timeDiff > 90) return;
         candidates.push({
@@ -296,7 +296,7 @@ function enrichTradeWithSheet(existingTrade, incomingTrade) {
         sheet: {
             ...(existingTrade.sheet && typeof existingTrade.sheet === 'object' ? existingTrade.sheet : {}),
             ...(incomingTrade.sheet || {}),
-            matchedBy: incomingTrade.sheet?.sheetTime ? 'date+ticker+pnl+time' : 'date+ticker+pnl',
+            matchedBy: 'date+ticker+pnl',
             fondexxType: existingTrade.sheet?.fondexxType || existingTrade.type || undefined,
         },
     };

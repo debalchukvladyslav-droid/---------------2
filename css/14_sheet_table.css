@@ -258,6 +258,55 @@ body[data-theme="light"] .btn-google-signin {
     border-radius: var(--radius-md, 10px);
 }
 
+.sheet-google-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md, 10px);
+    background: var(--bg-panel);
+    color: var(--text-main);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.sheet-google-toggle:hover {
+    border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+    background: color-mix(in srgb, var(--accent) 5%, var(--bg-panel));
+}
+
+.sheet-google-toggle span:first-child {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.sheet-google-toggle strong {
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+
+.sheet-google-toggle small {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+
+.sheet-google-toggle__state {
+    flex: 0 0 auto;
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-main);
+    color: var(--accent);
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
 .sheet-smart-head {
     margin-bottom: 4px;
 }
@@ -534,6 +583,11 @@ body[data-theme="light"] .btn-google-signin {
     display: flex;
     flex-direction: column;
     gap: 0;
+}
+
+.sheet-smart-form .sheet-smart-row,
+.sheet-smart-form .sheet-smart-section-title {
+    display: none;
 }
 
 .sheet-smart-row {
