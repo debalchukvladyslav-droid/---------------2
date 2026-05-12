@@ -23,7 +23,7 @@ export default async function handler(req, res) {
     const authResult = await verifySupabaseAuth(req);
     if (!authResult.ok) return res.status(authResult.status).json({ message: authResult.message });
 
-    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    const GEMINI_API_KEY = getGeminiApiKey();
     if (!GEMINI_API_KEY) return res.status(500).json({ message: 'GEMINI_API_KEY not configured on server' });
 
     const { payload, model: rawModel } = req.body || {};
@@ -35,12 +35,16 @@ export default async function handler(req, res) {
         : DEFAULT_MODEL;
 
     const url = `${GEMINI_BASE}/${model}:generateContent?key=${GEMINI_API_KEY}`;
+    const referer = getGeminiReferer(req);
 
     let geminiRes;
     try {
         geminiRes = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                ...(referer ? { Referer: referer, Origin: new URL(referer).origin } : {}),
+            },
             body: JSON.stringify(payload),
             signal: AbortSignal.timeout(25000),
         });
@@ -63,6 +67,40 @@ export default async function handler(req, res) {
     if (!text) return res.status(502).json({ message: 'Empty response from Gemini' });
 
     return res.status(200).json({ text });
+}
+
+function getGeminiApiKey() {
+    return [
+        process.env.GEMINI_API_KEY,
+        process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+        process.env.GOOGLE_AI_API_KEY,
+        process.env.GEMINI_KEY,
+    ]
+        .map((value) => String(value || '').trim())
+        .find(Boolean) || '';
+}
+
+function getGeminiReferer(req) {
+    const raw = [
+        process.env.GEMINI_REFERER,
+        process.env.APP_PUBLIC_URL,
+        process.env.NEXT_PUBLIC_SITE_URL,
+        req.headers.origin,
+        process.env.VERCEL_PROJECT_PRODUCTION_URL,
+        process.env.VERCEL_URL,
+        'https://traderjournal-six.vercel.app',
+    ]
+        .map((value) => String(value || '').trim())
+        .find(Boolean);
+
+    if (!raw) return '';
+    const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    try {
+        const url = new URL(withProtocol);
+        return `${url.origin}/`;
+    } catch {
+        return '';
+    }
 }
 
 function getAllowedOrigins() {

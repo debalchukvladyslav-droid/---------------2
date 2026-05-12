@@ -107,12 +107,16 @@ Deno.serve(async (req) => {
 
     const model = typeof rawModel === 'string' && ALLOWED_MODELS.has(rawModel) ? rawModel : DEFAULT_MODEL;
     const url = `${GEMINI_BASE}/${model}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+    const referer = getGeminiReferer(req);
 
     let geminiRes: Response;
     try {
         geminiRes = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                ...(referer ? { Referer: referer, Origin: new URL(referer).origin } : {}),
+            },
             body: JSON.stringify(payload),
             signal: AbortSignal.timeout(25000),
         });
@@ -141,3 +145,23 @@ Deno.serve(async (req) => {
     if (!text) return json({ message: 'Empty response from Gemini' }, 502, req);
     return json({ text }, 200, req);
 });
+
+function getGeminiReferer(req: Request): string {
+    const raw = [
+        Deno.env.get('GEMINI_REFERER'),
+        Deno.env.get('APP_PUBLIC_URL'),
+        req.headers.get('Origin'),
+        'https://traderjournal-six.vercel.app',
+    ]
+        .map((value) => String(value || '').trim())
+        .find(Boolean);
+
+    if (!raw) return '';
+    const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    try {
+        const url = new URL(withProtocol);
+        return `${url.origin}/`;
+    } catch {
+        return '';
+    }
+}

@@ -45,7 +45,7 @@ export async function callGeminiViaProxy(payload, model = DEFAULT_MODEL) {
             body: JSON.stringify({ payload, model }),
             signal: controller.signal,
         });
-        if (res.status === 404) {
+        if (res.status === 404 || res.status === 403) {
             res = await fetch(PROXY_FALLBACK, {
                 method: 'POST',
                 headers,
