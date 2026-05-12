@@ -5,7 +5,7 @@ import { loadTradeDays } from './storage.js';
 import { safeExternalUrl, sanitizeHTML } from './sanitize.js';
 
 const CLIENT_CACHE_TTL_MS = 2 * 60 * 1000;
-const NEWS_CACHE_VERSION = 'uk-v5';
+const NEWS_CACHE_VERSION = 'uk-v6';
 const NEWS_PROXY_FALLBACK = 'https://traderjournal-six.vercel.app/api/news';
 let _newsCache = { key: '', ts: 0, payload: null };
 let _newsPromise = null;
@@ -197,6 +197,9 @@ async function translateNewsPayload(payload) {
     const items = Array.isArray(payload?.items) ? payload.items.slice(0, 24) : [];
     if (!items.length) return payload;
     if (items.every((item) => cleanNewsDisplayTitle(item?.titleUk))) return payload;
+    if (payload?.translation?.ok === false) {
+        console.warn('[News] server translation skipped:', payload.translation.reason || 'unknown reason');
+    }
 
     try {
         const key = getGeminiKeys()[0];

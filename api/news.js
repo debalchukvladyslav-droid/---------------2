@@ -247,8 +247,18 @@ function normalizeHttpUrl(value) {
 
 async function translatePayloadUk(payload) {
     const items = Array.isArray(payload?.items) ? payload.items : [];
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey || !items.length) return payload;
+    const apiKey = getGeminiApiKey();
+    if (!items.length) return payload;
+    if (!apiKey) {
+        return {
+            ...payload,
+            translation: {
+                ok: false,
+                provider: 'gemini',
+                reason: 'Gemini API key is not configured on server',
+            },
+        };
+    }
 
     try {
         const source = items.map((item, index) => ({
@@ -286,6 +296,17 @@ async function translatePayloadUk(payload) {
             },
         };
     }
+}
+
+function getGeminiApiKey() {
+    return [
+        process.env.GEMINI_API_KEY,
+        process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+        process.env.GOOGLE_AI_API_KEY,
+        process.env.GEMINI_KEY,
+    ]
+        .map((value) => String(value || '').trim())
+        .find(Boolean) || '';
 }
 
 async function callGeminiNewsTranslator(apiKey, source) {
