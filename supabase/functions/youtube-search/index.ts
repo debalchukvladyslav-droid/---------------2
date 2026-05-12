@@ -95,16 +95,50 @@ Deno.serve(async (req) => {
     u.searchParams.set('relevanceLanguage', 'en');
     u.searchParams.set('key', key);
 
+    const referer = getGoogleApiReferer(req);
     let yRes: Response;
     try {
-        yRes = await fetch(u.toString(), { signal: AbortSignal.timeout(12000) });
+        yRes = await fetch(u.toString(), {
+            headers: referer ? { Referer: referer, Origin: new URL(referer).origin } : {},
+            signal: AbortSignal.timeout(12000),
+        });
     } catch (e) {
         return json({ message: (e as Error).message || 'YouTube fetch failed' }, 502, req);
     }
 
     const data = await yRes.json();
+    if (!yRes.ok) {
+        const err = data?.error as { message?: string; status?: string; errors?: Array<{ reason?: string; message?: string }> } | undefined;
+        return json({
+            message: err?.message || `YouTube API error ${yRes.status}`,
+            code: err?.status || err?.errors?.[0]?.reason || `YOUTUBE_${yRes.status}`,
+            error: data?.error || null,
+        }, yRes.status, req);
+    }
+
     return new Response(JSON.stringify(data), {
-        status: yRes.ok ? 200 : yRes.status,
+        status: 200,
         headers: { ...cors(req), 'Content-Type': 'application/json' },
     });
 });
+
+function getGoogleApiReferer(req: Request): string {
+    const raw = [
+        Deno.env.get('YOUTUBE_REFERER'),
+        Deno.env.get('GEMINI_REFERER'),
+        Deno.env.get('APP_PUBLIC_URL'),
+        req.headers.get('Origin'),
+        'https://traderjournal-six.vercel.app',
+    ]
+        .map((value) => String(value || '').trim())
+        .find(Boolean);
+
+    if (!raw) return '';
+    const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    try {
+        const url = new URL(withProtocol);
+        return `${url.origin}/`;
+    } catch {
+        return '';
+    }
+}

@@ -24,7 +24,10 @@ async function youtubeSearchViaEdge(query) {
         body: JSON.stringify({ query }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.message || `YouTube proxy: ${res.status}`);
+    if (!res.ok) {
+        const detail = data?.code ? `${data.message || 'YouTube API error'} (${data.code})` : data?.message;
+        throw new Error(detail || `YouTube proxy: ${res.status}`);
+    }
     return data;
 }
 
@@ -223,10 +226,20 @@ Setup tags: ${tags.slice(0, 8).join(', ') || 'none'}
 Playbook: ${playbook.map(p => p.name).slice(0, 5).join(', ') || 'none'}
 Recent sessions: ${recentDays.join(' | ') || 'no data'}
 
-Generate exactly 3 different English YouTube search queries:
-1. One query for the trader's weakest point.
-2. One query about trading psychology or discipline.
-3. One surprising adjacent-field query useful for trader decision-making.
+Generate exactly 3 different English YouTube search queries for a serious active stock trader.
+Prioritize practical videos with charts, examples, or trade reviews. Avoid generic motivation, beginner definitions, and generic FOMO/discipline topics unless the profile clearly demands it.
+
+The 3 queries must cover different training lanes:
+1. Setup/pattern mechanics: a concrete pattern, entry model, or chart structure relevant to the profile.
+2. Execution and risk: entries, stops, scaling, risk-reward, avoiding late entries, or trade management.
+3. Market context and catalyst reading: news catalyst, gapper behavior, volume, float, SEC filings, VWAP, tape/level 2, or post-news continuation.
+
+Make the queries specific enough for YouTube search, 5-10 words each. Good style examples:
+- "small cap gapper VWAP rejection short strategy"
+- "opening range breakdown day trading examples"
+- "news catalyst stock trading trade review"
+- "parabolic short risk management live trading"
+- "low float offering dilution trading strategy"
 
 Return only a JSON array of strings.`;
 
@@ -245,7 +258,11 @@ Return only a JSON array of strings.`;
         } catch {
             queries = [];
         }
-        if (!queries.length) queries = ['prop trading psychology', 'day trading mistakes', 'trading discipline'];
+        if (!queries.length) queries = [
+            'small cap gapper VWAP rejection short strategy',
+            'opening range breakdown day trading examples',
+            'news catalyst stock trading trade review',
+        ];
 
         const allVideos = [];
         let fallbackReason = null;
