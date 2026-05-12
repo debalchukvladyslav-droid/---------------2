@@ -1,4 +1,10 @@
 {
+  "crons": [
+    {
+      "path": "/api/cron/sync-google-sheets",
+      "schedule": "0 20 * * *"
+    }
+  ],
   "rewrites": [
     { "source": "/config.js", "destination": "/api/client-config.js" },
     { "source": "/dashboard", "destination": "/index.html" },

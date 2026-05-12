@@ -1553,6 +1553,30 @@ function collectFormConfig() {
 const BTN_DEFAULT = 'Зберегти мапінг і синхронізувати угоди';
 const BTN_LOADING = 'Синхронізація…';
 
+async function persistServerSheetSyncConfig(cfg) {
+    try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        const token = data?.session?.access_token || '';
+        if (!token) return;
+
+        const response = await fetch('/api/google-sheet-sync-config', {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ config: cfg }),
+        });
+        if (!response.ok) {
+            const text = await response.text().catch(() => '');
+            throw new Error(text || `HTTP ${response.status}`);
+        }
+    } catch (e) {
+        console.warn('[Google Sheets] server sync config save failed:', e?.message || e);
+    }
+}
+
 export async function saveSheetMapping() {
     if (!canMutateSheetSync()) return;
 
@@ -1567,6 +1591,7 @@ export async function saveSheetMapping() {
         const cfg = collectFormConfig();
         localStorage.setItem(LS_KEY, JSON.stringify(cfg));
         _sheetFormHydratedFromStorage = true;
+        void persistServerSheetSyncConfig(cfg);
 
         await executeSyncWithCfg(cfg, { quiet: false });
         ensureSheetAutoSyncFromConfig();
