@@ -434,6 +434,67 @@ const TAB_DISPOSERS = {
     stats: () => disposeStatsView(),
     trades: () => disposeTradesView(),
 };
+const TAB_LOADING_TITLES = {
+    dash: 'Готуємо головну',
+    calendar: 'Готуємо календар',
+    stats: 'Готуємо статистику',
+    trades: 'Готуємо угоди',
+    datagrid: 'Готуємо таблицю угод',
+    table: 'Готуємо імпорт',
+    screens: 'Готуємо скріншоти',
+    ai: 'Готуємо AI',
+    'mentor-review': 'Готуємо ревʼю',
+    playbook: 'Готуємо плейбук',
+    learn: 'Готуємо навчання',
+    settings: 'Готуємо налаштування',
+    admin: 'Готуємо адмін-панель',
+};
+let mainTabSwitchToken = 0;
+
+function nextPaint() {
+    return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function ensureViewLoader(view, tab) {
+    let loader = view.querySelector(':scope > .view-loader');
+    if (!loader) {
+        loader = document.createElement('div');
+        loader.className = 'view-loader';
+        loader.setAttribute('role', 'status');
+        loader.setAttribute('aria-live', 'polite');
+        loader.innerHTML = `
+            <div class="view-loader-box">
+                <div class="view-loader-mark" aria-hidden="true"><span class="view-loader-ring"></span></div>
+                <p class="view-loader-title"></p>
+                <p class="view-loader-subtitle">Завантажуємо дані та збираємо інтерфейс</p>
+                <div class="view-loader-lines" aria-hidden="true">
+                    <span class="view-loader-line"></span>
+                    <span class="view-loader-line"></span>
+                    <span class="view-loader-line"></span>
+                </div>
+            </div>`;
+        view.prepend(loader);
+    }
+    const title = loader.querySelector('.view-loader-title');
+    if (title) title.textContent = TAB_LOADING_TITLES[tab] || 'Готуємо вкладку';
+    return loader;
+}
+
+function setViewLoading(view, tab, isLoading) {
+    if (!view) return;
+    if (isLoading) {
+        ensureViewLoader(view, tab);
+        view.classList.add('app-view-loading');
+        view.setAttribute('aria-busy', 'true');
+    } else {
+        view.classList.remove('app-view-loading');
+        view.removeAttribute('aria-busy');
+    }
+}
 
 function deactivateMainView(view, nextTab) {
     if (!view) return;
@@ -449,6 +510,7 @@ function deactivateMainView(view, nextTab) {
         }
     }
     view.classList.remove('active');
+    setViewLoading(view, prevTab, false);
     view.style.display = 'none';
     view.setAttribute('aria-hidden', 'true');
     view.inert = true;
@@ -464,6 +526,47 @@ function activateMainView(view, tab, previousTab) {
         bubbles: true,
         detail: { tab, previousTab },
     }));
+}
+
+async function runMainTabWork(tab) {
+    const tasks = [];
+    if (tab === 'stats' && window.refreshStatsView) {
+        // РЎРєРёРґР°С”РјРѕ all-time С„С–Р»СЊС‚СЂ РїСЂРё РїРѕРІРµСЂРЅРµРЅРЅС– РЅР° РІРєР»Р°РґРєСѓ вЂ” С‰РѕР± РЅРµ С‚СЂРёРіРµСЂРёР»Рѕ РІР°Р¶РєРµ Р·Р°РІР°РЅС‚Р°Р¶РµРЅРЅСЏ
+        if (state.activeFilters?.some(f => f.type === 'all-time')) {
+            state.activeFilters = [];
+        }
+        tasks.push(Promise.resolve(window.refreshStatsView()));
+    }
+    if (tab === 'trades') {
+        if (window.populateDateSelect) tasks.push(Promise.resolve(window.populateDateSelect()));
+        if (window.populateSymbolSelect && window.state?.selectedDateStr) {
+            tasks.push(Promise.resolve(window.populateSymbolSelect(window.state.selectedDateStr)));
+        }
+    }
+    if (tab === 'table' && window.initSheetTableView) tasks.push(Promise.resolve(window.initSheetTableView()));
+    if (tab === 'datagrid' && window.renderTradesDatagrid) tasks.push(Promise.resolve(window.renderTradesDatagrid()));
+    if (tab === 'dash') {
+        if (window.renderDashboardNews) tasks.push(Promise.resolve(window.renderDashboardNews()));
+        if (window.renderMarketSentiment) tasks.push(Promise.resolve(window.renderMarketSentiment()));
+        tasks.push(Promise.resolve(refreshDashMiniEquityChartTheme()));
+    }
+    if (tab === 'screens') {
+        if (window.updateDriveUI) tasks.push(Promise.resolve(window.updateDriveUI()));
+        if (window.restoreScreensDistributionState) tasks.push(Promise.resolve(window.restoreScreensDistributionState()));
+        const settingsPanel = document.getElementById('screens-settings-panel');
+        if (settingsPanel && !settingsPanel.classList.contains('initially-hidden') && window.loadLatestImageForOCR) {
+            tasks.push(Promise.resolve(window.loadLatestImageForOCR()));
+        }
+        if (window.syncDriveScreenshots) tasks.push(Promise.resolve(window.syncDriveScreenshots(true)));
+        if (window.refreshReviewRequestButtons) tasks.push(Promise.resolve(window.refreshReviewRequestButtons()));
+    }
+    if (tab === 'calendar' && window.refreshReviewRequestButtons) tasks.push(Promise.resolve(window.refreshReviewRequestButtons()));
+    if (tab === 'playbook' && window.renderPlaybook) tasks.push(Promise.resolve(window.renderPlaybook()));
+    if (tab === 'learn' && window.renderLearnCache) tasks.push(Promise.resolve(window.renderLearnCache()));
+    if (tab === 'admin' && window.renderAdminPanel) tasks.push(Promise.resolve(window.renderAdminPanel()));
+    if (tab === 'mentor-review' && window.refreshMentorReviewQueue) tasks.push(Promise.resolve(window.refreshMentorReviewQueue()));
+
+    await Promise.allSettled(tasks);
 }
 
 function getDashboardGreetingName() {
@@ -544,11 +647,12 @@ function updateRouteForTab(tab, mode = 'push') {
     }
 }
 
-export function switchMainTab(tab, options = {}) {
+export async function switchMainTab(tab, options = {}) {
     if (!document.getElementById('view-' + tab)) tab = 'dash';
     const previousView = document.querySelector('.view-content.active');
     const previousTab = previousView?.id?.replace(/^view-/, '') || '';
     if (previousTab === tab) return;
+    const switchToken = ++mainTabSwitchToken;
     if (options.updateRoute !== false) updateRouteForTab(tab, options.historyMode);
     // Очищаємо старі активні стани
     document.querySelectorAll('.main-tab-btn, .more-tab-item, .sidebar-nav-item').forEach(b => b.classList.remove('active'));
@@ -566,6 +670,7 @@ export function switchMainTab(tab, options = {}) {
     
     let view = document.getElementById('view-' + tab);
     activateMainView(view, tab, previousTab);
+    setViewLoading(view, tab, true);
 
     // Оновлюємо bottom nav
     document.querySelectorAll('.mobile-nav-btn').forEach(b => {
@@ -583,45 +688,17 @@ export function switchMainTab(tab, options = {}) {
     // Оновлюємо заголовки
     refreshCurrentMainTitle();
 
-    if (tab === 'stats' && window.refreshStatsView) {
-        // Скидаємо all-time фільтр при поверненні на вкладку — щоб не тригерило важке завантаження
-        if (state.activeFilters?.some(f => f.type === 'all-time')) {
-            state.activeFilters = [];
-        }
-        window.refreshStatsView();
-    }
-    if (tab === 'trades') {
-        if (window.populateDateSelect) window.populateDateSelect();
-        // Auto-populate pills for the currently selected calendar date
-        if (window.populateSymbolSelect && window.state?.selectedDateStr) {
-            window.populateSymbolSelect(window.state.selectedDateStr);
-        }
-    }
-    if (tab === 'table' && window.initSheetTableView) window.initSheetTableView();
-    if (tab === 'datagrid' && window.renderTradesDatagrid) window.renderTradesDatagrid();
-    if (tab === 'dash') {
-        if (window.renderDashboardNews) window.renderDashboardNews();
-        if (window.renderMarketSentiment) window.renderMarketSentiment();
-        refreshDashMiniEquityChartTheme();
-    }
-    if (tab === 'screens') {
-        if (window.updateDriveUI) window.updateDriveUI();
-        if (window.restoreScreensDistributionState) window.restoreScreensDistributionState();
-        const settingsPanel = document.getElementById('screens-settings-panel');
-        if (settingsPanel && !settingsPanel.classList.contains('initially-hidden') && window.loadLatestImageForOCR) {
-            window.loadLatestImageForOCR();
-        }
-        if (window.syncDriveScreenshots) window.syncDriveScreenshots(true);
-        if (window.refreshReviewRequestButtons) window.refreshReviewRequestButtons();
-    }
-    if (tab === 'calendar' && window.refreshReviewRequestButtons) window.refreshReviewRequestButtons();
-    if (tab === 'playbook' && window.renderPlaybook) window.renderPlaybook();
-    if (tab === 'learn' && window.renderLearnCache) window.renderLearnCache();
+    let activeSosBtn = document.getElementById('sos-btn');
+    if (activeSosBtn) activeSosBtn.style.display = tab === 'dash' ? 'flex' : 'none';
 
-    if (tab === 'admin' && window.renderAdminPanel) window.renderAdminPanel();
-    if (tab === 'mentor-review' && window.refreshMentorReviewQueue) void window.refreshMentorReviewQueue();
-    let sosBtn = document.getElementById('sos-btn');
-    if (sosBtn) sosBtn.style.display = tab === 'dash' ? 'flex' : 'none';
+    const startedAt = performance.now();
+    await nextPaint();
+    await runMainTabWork(tab);
+    const elapsed = performance.now() - startedAt;
+    if (elapsed < 260) await delay(260 - elapsed);
+    if (switchToken === mainTabSwitchToken && view?.classList.contains('active')) {
+        setViewLoading(view, tab, false);
+    }
 }
 
 export function syncMainTabFromRoute() {
