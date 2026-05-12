@@ -196,6 +196,7 @@ async function fetchDashboardNews(force = false) {
 async function translateNewsPayload(payload) {
     const items = Array.isArray(payload?.items) ? payload.items.slice(0, 24) : [];
     if (!items.length) return payload;
+    if (items.every((item) => cleanNewsDisplayTitle(item?.titleUk))) return payload;
 
     try {
         const key = getGeminiKeys()[0];

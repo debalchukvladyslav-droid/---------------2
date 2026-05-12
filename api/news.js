@@ -1,4 +1,6 @@
 const FINNHUB_BASE = 'https://finnhub.io/api/v1';
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+const GEMINI_NEWS_MODEL = 'gemini-2.5-flash-lite';
 const MAX_TICKERS = 8;
 const MAX_NEWS_ITEMS = 24;
 const CACHE_TTL_MS = 2 * 60 * 1000;
@@ -57,13 +59,13 @@ export default async function handler(req, res) {
             .sort((a, b) => b.windowScore - a.windowScore || b.eventScore - a.eventScore || b.datetime - a.datetime)
             .slice(0, 16);
 
-        const payload = {
+        const payload = await translatePayloadUk({
             provider: 'finnhub',
             tickers,
             newsWindow: fromTs && toTs ? { fromTs, toTs, matched: windowTickerItems.length } : null,
             items: [...generalItems, ...tickerItems].slice(0, MAX_NEWS_ITEMS),
             updatedAt: new Date().toISOString(),
-        };
+        });
         cache.set(cacheKey, { ts: Date.now(), payload });
         return res.status(200).json(payload);
     } catch (error) {
@@ -241,6 +243,99 @@ function normalizeHttpUrl(value) {
     } catch {
         return '';
     }
+}
+
+async function translatePayloadUk(payload) {
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey || !items.length) return payload;
+
+    try {
+        const source = items.map((item, index) => ({
+            index,
+            section: item.section || 'general',
+            tickers: Array.isArray(item.related) ? item.related.slice(0, 4) : [],
+            source: item.source || '',
+            datetime: item.datetime || null,
+            title: String(item.title || '').slice(0, 260),
+            summary: String(item.summary || '').slice(0, 520),
+        }));
+
+        const text = await callGeminiNewsTranslator(apiKey, source);
+        const match = text.match(/\[[\s\S]*\]/);
+        const translated = match ? JSON.parse(match[0]) : [];
+        if (!Array.isArray(translated) || translated.length !== items.length) {
+            return { ...payload, translation: { ok: false, provider: 'gemini', reason: 'Unexpected translation shape' } };
+        }
+
+        return {
+            ...payload,
+            translation: { ok: true, provider: 'gemini', model: GEMINI_NEWS_MODEL },
+            items: items.map((item, index) => ({
+                ...item,
+                titleUk: cleanServerNewsTitle(translated[index]) || item.titleUk || '',
+            })),
+        };
+    } catch (error) {
+        return {
+            ...payload,
+            translation: {
+                ok: false,
+                provider: 'gemini',
+                reason: error?.message || String(error),
+            },
+        };
+    }
+}
+
+async function callGeminiNewsTranslator(apiKey, source) {
+    const url = `${GEMINI_BASE}/${GEMINI_NEWS_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            systemInstruction: {
+                parts: [{
+                    text: [
+                        'Ти редактор live-стрічки для трейдера.',
+                        'Переклади/стисло перепиши кожну новину українською до 130 символів.',
+                        'Зберігай тикери, назви компаній, цифри, FDA/SEC, фази trial, offering, guidance, contract, lawsuit.',
+                        'Не вигадуй фактів. Якщо каталізатор неясний, передай конкретний заголовок, а не службову фразу.',
+                        'Не пиши "ринкова новина", "новина без каталізатора", "подія зі стрічки" без конкретики.',
+                        'Відповідай тільки JSON масивом рядків у тому самому порядку.',
+                    ].join(' '),
+                }],
+            },
+            contents: [{ parts: [{ text: JSON.stringify(source) }] }],
+            generationConfig: {
+                temperature: 0.2,
+                responseMimeType: 'application/json',
+            },
+        }),
+        signal: AbortSignal.timeout(18000),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+        throw new Error(data?.error?.message || `Gemini error ${response.status}`);
+    }
+    const parts = data?.candidates?.[0]?.content?.parts;
+    const text = Array.isArray(parts)
+        ? parts.map((part) => (typeof part.text === 'string' ? part.text : '')).join('').trim()
+        : '';
+    if (!text) throw new Error('Empty Gemini translation');
+    return text;
+}
+
+function cleanServerNewsTitle(value) {
+    const title = String(value || '')
+        .replace(/\s+/g, ' ')
+        .replace(/^[\s"'“”'`-]+|[\s"'“”'`-]+$/g, '')
+        .trim();
+    if (!title) return '';
+    if (/новин[а-яіїєґ\s-]*(без|нема).{0,32}(катал|catalyst)/i.test(title)) return '';
+    if (/без\s+(точного\s+)?(каталізатора|каталiзатора|catalyst)/i.test(title)) return '';
+    if (/no\s+(clear\s+)?catalyst|news\s+without\s+(a\s+)?catalyst/i.test(title)) return '';
+    return title.slice(0, 150);
 }
 
 async function verifySupabaseAuth(req) {
