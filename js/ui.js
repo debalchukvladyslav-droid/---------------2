@@ -2,7 +2,9 @@
 import { state } from './state.js';
 import { saveToLocal } from './storage.js';
 import { showToast, showConfirm } from './utils.js';
-import { refreshDashMiniEquityChartTheme } from './dash_mini_chart.js';
+import { disposeDashMiniEquityChart, refreshDashMiniEquityChartTheme } from './dash_mini_chart.js';
+import { disposeStatsView } from './stats.js';
+import { disposeTradesView } from './trades_view2.js';
 
 let isThemeUIInitialized = false;
 let selectedDashGreetingIndex = null;
@@ -427,6 +429,43 @@ const TAB_ROUTES = {
     admin: '/admin',
 };
 
+const TAB_DISPOSERS = {
+    dash: () => disposeDashMiniEquityChart(),
+    stats: () => disposeStatsView(),
+    trades: () => disposeTradesView(),
+};
+
+function deactivateMainView(view, nextTab) {
+    if (!view) return;
+    const prevTab = view.id?.replace(/^view-/, '') || '';
+    const wasActive = view.classList.contains('active');
+    if (wasActive && prevTab) {
+        view.dispatchEvent(new CustomEvent('app:view-leave', {
+            bubbles: true,
+            detail: { tab: prevTab, nextTab },
+        }));
+        try { TAB_DISPOSERS[prevTab]?.(); } catch (error) {
+            console.warn(`[UI] cleanup for ${prevTab} failed:`, error);
+        }
+    }
+    view.classList.remove('active');
+    view.style.display = 'none';
+    view.setAttribute('aria-hidden', 'true');
+    view.inert = true;
+}
+
+function activateMainView(view, tab, previousTab) {
+    if (!view) return;
+    view.classList.add('active');
+    view.style.display = 'flex';
+    view.setAttribute('aria-hidden', 'false');
+    view.inert = false;
+    view.dispatchEvent(new CustomEvent('app:view-enter', {
+        bubbles: true,
+        detail: { tab, previousTab },
+    }));
+}
+
 function getDashboardGreetingName() {
     const profileFirstName = document.getElementById('sidebar-pf-fname')?.value?.trim();
     if (profileFirstName) return profileFirstName;
@@ -507,12 +546,14 @@ function updateRouteForTab(tab, mode = 'push') {
 
 export function switchMainTab(tab, options = {}) {
     if (!document.getElementById('view-' + tab)) tab = 'dash';
+    const previousView = document.querySelector('.view-content.active');
+    const previousTab = previousView?.id?.replace(/^view-/, '') || '';
+    if (previousTab === tab) return;
     if (options.updateRoute !== false) updateRouteForTab(tab, options.historyMode);
     // Очищаємо старі активні стани
     document.querySelectorAll('.main-tab-btn, .more-tab-item, .sidebar-nav-item').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.view-content').forEach(v => {
-        v.classList.remove('active');
-        v.style.display = 'none';
+        deactivateMainView(v, tab);
     });
     
     // Активуємо кнопку в лівому меню
@@ -524,10 +565,7 @@ export function switchMainTab(tab, options = {}) {
     if(btn) btn.classList.add('active');
     
     let view = document.getElementById('view-' + tab);
-    if(view) {
-        view.classList.add('active');
-        view.style.display = 'flex';
-    }
+    activateMainView(view, tab, previousTab);
 
     // Оновлюємо bottom nav
     document.querySelectorAll('.mobile-nav-btn').forEach(b => {
@@ -564,6 +602,7 @@ export function switchMainTab(tab, options = {}) {
     if (tab === 'dash') {
         if (window.renderDashboardNews) window.renderDashboardNews();
         if (window.renderMarketSentiment) window.renderMarketSentiment();
+        refreshDashMiniEquityChartTheme();
     }
     if (tab === 'screens') {
         if (window.updateDriveUI) window.updateDriveUI();

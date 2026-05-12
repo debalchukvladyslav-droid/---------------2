@@ -295,6 +295,8 @@ let _autoSyncInterval = null;
 export function startDriveAutoSync() {
     if (_autoSyncInterval) clearInterval(_autoSyncInterval);
     _autoSyncInterval = setInterval(() => {
+        if (!document.getElementById('view-screens')?.classList.contains('active')) return;
+        if (document.visibilityState !== 'visible') return;
         if (state.appData?.settings?.driveFolderId &&
             state.CURRENT_VIEWED_USER === state.USER_DOC_NAME &&
             !_syncInProgress) {

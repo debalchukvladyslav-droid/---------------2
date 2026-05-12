@@ -41,6 +41,23 @@ export function clearStatsCache(docName) {
     }
 }
 
+export function disposeStatsView() {
+    [
+        'pnlChartInstance',
+        'daysChartInstance',
+        'winLossChartInstance',
+        'mistakeChartInstance',
+        'comparePnlChartInstance',
+        'compareDaysChartInstance',
+        'compareWinLossChartInstance',
+    ].forEach((key) => {
+        if (state[key]) {
+            try { state[key].destroy(); } catch (_) {}
+            state[key] = null;
+        }
+    });
+}
+
 function journalRowToEntry(row) {
     const metrics = row?.daily_metrics && typeof row.daily_metrics === 'object' ? row.daily_metrics : {};
     return {

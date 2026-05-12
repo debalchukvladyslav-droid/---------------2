@@ -103,6 +103,7 @@ export function ensureSheetAutoSyncFromConfig() {
     if (!(localStorage.getItem(SESSION_SPREADSHEET_ID) || sessionStorage.getItem(SESSION_SPREADSHEET_ID))) return;
     const min = clampSheetIntervalMin(cfg.autoSync.intervalMinutes);
     _sheetAutoTimer = setInterval(() => {
+        if (!document.getElementById('view-table')?.classList.contains('active')) return;
         if (document.visibilityState !== 'visible') return;
         if (_sheetSyncInProgress) return;
         if (typeof navigator !== 'undefined' && navigator.onLine === false) return;

@@ -5,6 +5,13 @@ import { ensureChartJs } from './vendor_loader.js';
 let _miniChart = null;
 let _lastMiniChartArgs = null;
 
+export function disposeDashMiniEquityChart() {
+    if (_miniChart) {
+        try { _miniChart.destroy(); } catch (_) {}
+        _miniChart = null;
+    }
+}
+
 const equityLastPointPlugin = {
     id: 'equityLastPoint',
     afterDatasetsDraw(chart) {

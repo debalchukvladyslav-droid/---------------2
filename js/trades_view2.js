@@ -20,6 +20,9 @@ let lwChartsReady = null;
 let _storyPanelOpen = false;
 let _tradeDaysLoadPromise = null;
 let _tradeDaysLoadUserId = null;
+let _resizeObserver = null;
+let _chartBuildToken = 0;
+const _storyObservers = new Set();
 
 // Активна угода для поточного дня { symbol, dateStr, tradeIndex }
 let _activeTrade = null;
@@ -219,15 +222,54 @@ function _selectTrade(dateStr, tradeIndex) {
         });
     }
 
-    // Destroy previous chart completely — wipes all series, markers, and HTML overlays
+    disposeTradesView({ keepActiveTrade: true, keepContainer: true });
+
+    renderTradeInfoBar([trade]);
+    buildLWChart(trade.symbol, dateStr, [trade]);
+}
+
+export function disposeTradesView(options = {}) {
+    _chartBuildToken++;
+    if (_resizeObserver) {
+        try { _resizeObserver.disconnect(); } catch (_) {}
+        _resizeObserver = null;
+    }
+    for (const observer of _storyObservers) {
+        try { observer.disconnect(); } catch (_) {}
+    }
+    _storyObservers.clear();
+    if (_fsChangeHandler) {
+        document.removeEventListener('fullscreenchange', _fsChangeHandler);
+        _fsChangeHandler = null;
+    }
     if (lwChart) {
         try { lwChart.remove(); } catch (_) {}
         lwChart = null;
         candleSeries = null;
     }
+    _storyPanelOpen = false;
+    if (!options.keepActiveTrade) _activeTrade = null;
 
-    renderTradeInfoBar([trade]);
-    buildLWChart(trade.symbol, dateStr, [trade]);
+    const wrapper = document.getElementById('tv-widget-container');
+    if (wrapper) {
+        wrapper.classList.remove('tv-fullscreen');
+        wrapper.querySelectorAll('#ts-ai-btn, #ts-show-btn, #ts-fullscreen-btn, #ts-summary-panel, .ts-pin').forEach(el => el.remove());
+    }
+
+    if (!options.keepContainer) {
+        const container = document.getElementById('tradingview-widget');
+        if (container) {
+            container.innerHTML = '';
+            container.style.display = 'none';
+        }
+        const bar = document.getElementById('trade-info-bar');
+        if (bar) {
+            bar.innerHTML = '';
+            bar.style.display = 'none';
+        }
+        const placeholder = document.getElementById('tv-placeholder');
+        if (placeholder) placeholder.style.display = 'flex';
+    }
 }
 
 export function loadTradeChart(symbol, dateStr) {
@@ -341,6 +383,7 @@ function calcVWAP(candles) {
 }
 
 async function buildLWChart(symbol, dateStr, trades) {
+    const buildToken = ++_chartBuildToken;
     const placeholder = document.getElementById('tv-placeholder');
     const container   = document.getElementById('tradingview-widget');
     if (!container) return;
@@ -353,11 +396,13 @@ async function buildLWChart(symbol, dateStr, trades) {
     if (old) old.remove();
 
     await ensureLightweightCharts();
+    if (buildToken !== _chartBuildToken || !document.getElementById('view-trades')?.classList.contains('active')) return;
 
     let candles = [];
     try {
         candles = await fetchYahooCandles(symbol, dateStr);
     } catch(e) {
+        if (buildToken !== _chartBuildToken || !document.getElementById('view-trades')?.classList.contains('active')) return;
         container.textContent = '';
         const errDiv = document.createElement('div');
         const isPlanLimit = e?.code === 'POLYGON_PLAN_TIMEFRAME' || /plan doesn't include this data timeframe|тариф Polygon/i.test(String(e?.message || ''));
@@ -368,6 +413,7 @@ async function buildLWChart(symbol, dateStr, trades) {
         container.appendChild(errDiv);
         return;
     }
+    if (buildToken !== _chartBuildToken || !document.getElementById('view-trades')?.classList.contains('active')) return;
 
     if (!candles.length) {
         container.textContent = '';
@@ -513,10 +559,13 @@ async function buildLWChart(symbol, dateStr, trades) {
     window._candleSeries = candleSeries;
 
     // Resize observer
-    const ro = new ResizeObserver(() => {
+    if (_resizeObserver) {
+        try { _resizeObserver.disconnect(); } catch (_) {}
+    }
+    _resizeObserver = new ResizeObserver(() => {
         if (lwChart) lwChart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
     });
-    ro.observe(container);
+    _resizeObserver.observe(container);
 
     // ZOOM FIX: після setData — скидаємо до дефолтного масштабу без fitContent
     // Показуємо весь торговий день без автозуму на угоду
@@ -874,4 +923,5 @@ function _ensureStoryButton(container, trades, candles, dateStr) {
         }
     });
     mo.observe(wrapper, { childList: true });
+    _storyObservers.add(mo);
 }
