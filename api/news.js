@@ -311,9 +311,13 @@ function getGeminiApiKey() {
 
 async function callGeminiNewsTranslator(apiKey, source) {
     const url = `${GEMINI_BASE}/${GEMINI_NEWS_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const referer = getGeminiReferer();
     const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+            ...(referer ? { Referer: referer, Origin: new URL(referer).origin } : {}),
+        },
         body: JSON.stringify({
             systemInstruction: {
                 parts: [{
@@ -345,6 +349,29 @@ async function callGeminiNewsTranslator(apiKey, source) {
         : '';
     if (!text) throw new Error('Empty Gemini translation');
     return text;
+}
+
+function getGeminiReferer() {
+    const raw = [
+        process.env.GEMINI_REFERER,
+        process.env.NEWS_GEMINI_REFERER,
+        process.env.APP_PUBLIC_URL,
+        process.env.NEXT_PUBLIC_SITE_URL,
+        process.env.VERCEL_PROJECT_PRODUCTION_URL,
+        process.env.VERCEL_URL,
+        'https://traderjournal-six.vercel.app',
+    ]
+        .map((value) => String(value || '').trim())
+        .find(Boolean);
+
+    if (!raw) return '';
+    const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    try {
+        const url = new URL(withProtocol);
+        return `${url.origin}/`;
+    } catch {
+        return '';
+    }
 }
 
 function cleanServerNewsTitle(value) {
