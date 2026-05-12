@@ -185,22 +185,22 @@ function showConfirmModal(message, onConfirm) {
 
 export function saveVisualOCRSettings() {
     if (state.pendingOCRRect) {
+        if (state.pendingOCRRect.width < 24 || state.pendingOCRRect.height < 12) {
+            showToast('OCR-зона занадто мала. Виділіть ширшу область з тікером.');
+            return;
+        }
         state.appData.settings.ocrRect = state.pendingOCRRect;
-        saveToLocal().then(() => {
+        saveToLocal().then(async () => {
             showToast('Зону успішно збережено!');
-            let imagesToShow = state.currentUnassignedImages.slice(0, state.unassignedVisibleCount);
-            for (let img of imagesToShow) { 
-                let encodedPath = encodeURIComponent(img); let cleanPath = decodeURIComponent(encodedPath); 
-                state.appData.tickers[cleanPath] = null; 
-                runOCR(encodedPath, true); 
-            }
+            const paths = new Set(state.currentUnassignedImages.slice(0, state.unassignedVisibleCount));
             if (state.appData.journal[state.selectedDateStr] && state.appData.journal[state.selectedDateStr].screenshots) {
                 let sc = state.appData.journal[state.selectedDateStr].screenshots; let assigned = [...sc.good, ...sc.normal, ...sc.bad, ...sc.error];
-                for (let img of assigned) { 
-                    let encodedPath = encodeURIComponent(img); let cleanPath = decodeURIComponent(encodedPath); 
-                    state.appData.tickers[cleanPath] = null; 
-                    runOCR(encodedPath, true); 
-                }
+                assigned.forEach(img => paths.add(img));
+            }
+            for (let img of paths) {
+                let encodedPath = encodeURIComponent(img); let cleanPath = decodeURIComponent(encodedPath);
+                state.appData.tickers[cleanPath] = null;
+                await runOCR(encodedPath, true);
             }
         });
     } else { showToast('Спочатку виділіть зону на картинці.'); }
@@ -281,6 +281,10 @@ const TICKER_GARBAGE = new Set([
     'CALL','PUT','EXP','ITM','OTM','ATM','THEO','DELTA','GAMMA','THETA',
     'AFTER','HOURS','MARKET','LIMIT','STOP','ORDER','FILLED','CANCEL'
 ]);
+const MIN_OCR_ZONE_WIDTH = 24;
+const MIN_OCR_ZONE_HEIGHT = 12;
+const MIN_OCR_CANVAS_WIDTH = 32;
+const MIN_OCR_CANVAS_HEIGHT = 24;
 
 function normalizeTicker(value) {
     return String(value || '').toUpperCase().replace(/[^A-Z]/g, '');
@@ -404,19 +408,25 @@ function applyContrast(canvas, { threshold = 128, invert = false } = {}) {
 
 function buildAutoOCRZones(iw, ih) {
     const clampZone = (x, y, w, h) => {
-        const left = Math.max(0, Math.round(x));
-        const top = Math.max(0, Math.round(y));
+        if (iw < MIN_OCR_ZONE_WIDTH || ih < MIN_OCR_ZONE_HEIGHT) return null;
+        const left = Math.min(Math.max(0, iw - MIN_OCR_ZONE_WIDTH), Math.max(0, Math.round(x)));
+        const top = Math.min(Math.max(0, ih - MIN_OCR_ZONE_HEIGHT), Math.max(0, Math.round(y)));
+        const availableW = Math.max(0, iw - left);
+        const availableH = Math.max(0, ih - top);
+        const width = Math.min(availableW, Math.max(MIN_OCR_ZONE_WIDTH, Math.round(w)));
+        const height = Math.min(availableH, Math.max(MIN_OCR_ZONE_HEIGHT, Math.round(h)));
+        if (width < MIN_OCR_ZONE_WIDTH || height < MIN_OCR_ZONE_HEIGHT) return null;
         return {
             x: left,
             y: top,
-            w: Math.max(20, Math.min(iw - left, Math.round(w))),
-            h: Math.max(20, Math.min(ih - top, Math.round(h))),
+            w: width,
+            h: height,
         };
     };
 
     const zones = [];
     const custom = state.appData?.settings?.ocrRect;
-    if (custom && custom.width > 10 && custom.height > 10) {
+    if (custom && custom.width >= MIN_OCR_ZONE_WIDTH && custom.height >= MIN_OCR_ZONE_HEIGHT) {
         zones.push(clampZone(custom.left, custom.top, custom.width, custom.height));
         zones.push(clampZone(custom.left - custom.width * 0.12, custom.top - custom.height * 0.25, custom.width * 1.25, custom.height * 1.45));
     }
@@ -432,6 +442,7 @@ function buildAutoOCRZones(iw, ih) {
 
     const seen = new Set();
     return zones.filter(zone => {
+        if (!zone) return false;
         const key = `${zone.x}:${zone.y}:${zone.w}:${zone.h}`;
         if (seen.has(key)) return false;
         seen.add(key);
@@ -459,6 +470,7 @@ function cloneCanvas(canvas) {
 
 function makeOCRVariants(imgObj, zone, scale = 4) {
     const base = makeScaledCanvas(imgObj, zone, scale);
+    if (base.width < MIN_OCR_CANVAS_WIDTH || base.height < MIN_OCR_CANVAS_HEIGHT) return [];
     return [
         base,
         applyContrast(cloneCanvas(base), { threshold: 115 }),
@@ -499,6 +511,7 @@ export async function runOCR(encodedPath, force = false) {
             const zone = zones[zoneIndex];
             const zoneWeight = Math.max(0.65, 1.45 - zoneIndex * 0.12);
             const variants = makeOCRVariants(imgObj, zone, zoneIndex < 2 ? 5 : 4);
+            if (!variants.length) continue;
 
             for (const canvas of variants) {
                 const { data } = await Tesseract.recognize(canvas, 'eng', {
