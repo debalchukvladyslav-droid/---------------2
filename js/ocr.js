@@ -285,6 +285,8 @@ const MIN_OCR_ZONE_WIDTH = 24;
 const MIN_OCR_ZONE_HEIGHT = 12;
 const MIN_OCR_CANVAS_WIDTH = 32;
 const MIN_OCR_CANVAS_HEIGHT = 24;
+const MIN_TRADED_TICKER_SCORE = 85;
+const MIN_FREE_OCR_SCORE = 80;
 
 function normalizeTicker(value) {
     return String(value || '').toUpperCase().replace(/[^A-Z]/g, '');
@@ -328,6 +330,25 @@ function tradeTickersForPath(path) {
     (day.traded_tickers || []).forEach(t => { const n = normalizeTicker(t); if (n) set.add(n); });
     (day.trades || []).forEach(t => { const n = normalizeTicker(t.symbol); if (n) set.add(n); });
     return Array.from(set);
+}
+
+function tickerFromScreenshotPath(path, tradedTickers = []) {
+    const traded = tradedTickers.map(normalizeTicker).filter(Boolean);
+    if (!traded.length) return '';
+    const fileName = String(path || '').split(/[\\/]/).pop() || '';
+    const tokens = fileName
+        .toUpperCase()
+        .split(/[^A-Z0-9]+/)
+        .map(normalizeOCRTicker)
+        .filter(Boolean);
+    const exact = traded.filter(ticker => tokens.includes(ticker));
+    return exact.length === 1 ? exact[0] : '';
+}
+
+function confidentTickerFromContext(path, tradedTickers = []) {
+    const traded = tradedTickers.map(normalizeTicker).filter(Boolean);
+    if (traded.length === 1) return traded[0];
+    return tickerFromScreenshotPath(path, traded);
 }
 
 function addCandidate(scores, ticker, points, opts = {}) {
@@ -375,12 +396,16 @@ function mergeScores(target, source) {
 function bestTickerFromScores(scores, tradedTickers = []) {
     const traded = tradedTickers.map(normalizeTicker).filter(Boolean);
     const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
-    if (!sorted.length) return traded.length === 1 ? traded[0] : '???';
+    if (!sorted.length) return '???';
 
     const [best, bestScore] = sorted[0];
     const secondScore = sorted[1]?.[1] || 0;
-    if (traded.includes(best) || bestScore >= 45 || bestScore >= secondScore * 1.35) return best;
-    return traded.length === 1 ? traded[0] : '???';
+    if (traded.length) {
+        if (traded.includes(best) && (bestScore >= MIN_TRADED_TICKER_SCORE || (secondScore > 0 && bestScore >= 45 && bestScore >= secondScore * 1.35))) return best;
+        return '???';
+    }
+    if (bestScore >= MIN_FREE_OCR_SCORE || (secondScore > 0 && bestScore >= 45 && bestScore >= secondScore * 1.6)) return best;
+    return '???';
 }
 
 // Вирізаємо зону з зображення для OCR
@@ -480,15 +505,24 @@ function makeOCRVariants(imgObj, zone, scale = 4) {
 }
 
 export async function runOCR(encodedPath, force = false) {
+    const safePath = decodeURIComponent(encodedPath);
+    const existing = state.appData.tickers[safePath];
+    if (!force && existing && existing !== '???' && normalizeTicker(existing) && !TICKER_GARBAGE.has(normalizeTicker(existing))) { updateBadgeUI(encodedPath, false); return; }
+    const traded = tradeTickersForPath(safePath);
+    const contextTicker = confidentTickerFromContext(safePath, traded);
+    if (contextTicker && (force || !existing || existing === '???' || TICKER_GARBAGE.has(normalizeTicker(existing)))) {
+        state.appData.tickers[safePath] = contextTicker;
+        saveToLocal();
+        updateBadgeUI(encodedPath, false);
+        return contextTicker;
+    }
     try {
         await ensureTesseract();
     } catch (error) {
         console.warn('[OCR] Tesseract lazy-load failed:', error);
         return;
     }
-    const safePath = decodeURIComponent(encodedPath);
-    const existing = state.appData.tickers[safePath];
-    if (!force && existing && existing !== '???' && existing !== '⏳' && !TICKER_GARBAGE.has(normalizeTicker(existing))) { updateBadgeUI(encodedPath, false); return; }
+    if (!force && existing && existing !== '???' && normalizeTicker(existing) && !TICKER_GARBAGE.has(normalizeTicker(existing))) { updateBadgeUI(encodedPath, false); return; }
 
     try {
         updateBadgeUI(encodedPath, true);
@@ -502,8 +536,6 @@ export async function runOCR(encodedPath, force = false) {
         const ih = imgObj.naturalHeight;
 
         const zones = buildAutoOCRZones(iw, ih);
-
-        const traded = tradeTickersForPath(safePath);
 
         const totalScores = {};
         let ticker = '???';
