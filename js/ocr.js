@@ -287,6 +287,8 @@ const MIN_OCR_CANVAS_WIDTH = 32;
 const MIN_OCR_CANVAS_HEIGHT = 24;
 const MIN_TRADED_TICKER_SCORE = 85;
 const MIN_FREE_OCR_SCORE = 80;
+const OCR_CONFIDENT_SCORE = 220;
+const OCR_MAX_RAW_TEXT_LOG = 90;
 
 function normalizeTicker(value) {
     return String(value || '').toUpperCase().replace(/[^A-Z]/g, '');
@@ -305,6 +307,46 @@ function normalizeOCRTicker(value) {
         .replace(/7/g, 'T')
         .replace(/8/g, 'B')
         .replace(/[^A-Z]/g, '');
+}
+
+function uniqueTickers(values = []) {
+    return Array.from(new Set(values.map(normalizeTicker).filter(Boolean)));
+}
+
+function compactOCRText(value) {
+    return normalizeOCRTicker(String(value || ''));
+}
+
+function editDistance(a, b) {
+    const left = String(a || '');
+    const right = String(b || '');
+    if (left === right) return 0;
+    if (!left) return right.length;
+    if (!right) return left.length;
+    const prev = Array.from({ length: right.length + 1 }, (_, i) => i);
+    const curr = Array(right.length + 1).fill(0);
+    for (let i = 1; i <= left.length; i++) {
+        curr[0] = i;
+        for (let j = 1; j <= right.length; j++) {
+            curr[j] = Math.min(
+                prev[j] + 1,
+                curr[j - 1] + 1,
+                prev[j - 1] + (left[i - 1] === right[j - 1] ? 0 : 1),
+            );
+        }
+        for (let j = 0; j <= right.length; j++) prev[j] = curr[j];
+    }
+    return prev[right.length];
+}
+
+function isNearTickerMatch(word, ticker) {
+    if (!word || !ticker) return false;
+    if (word === ticker) return true;
+    if (word.length < 2 || ticker.length < 2) return false;
+    if (word.includes(ticker) || ticker.includes(word)) return Math.min(word.length, ticker.length) >= 2;
+    const distance = editDistance(word, ticker);
+    if (ticker.length <= 3) return distance <= 1 && word.length === ticker.length;
+    return distance <= 1 || (ticker.length >= 5 && distance <= 2);
 }
 
 function validTickerWord(w, { allowSingle = false, trusted = false } = {}) {
@@ -330,6 +372,10 @@ function tradeTickersForPath(path) {
     (day.traded_tickers || []).forEach(t => { const n = normalizeTicker(t); if (n) set.add(n); });
     (day.trades || []).forEach(t => { const n = normalizeTicker(t.symbol); if (n) set.add(n); });
     return Array.from(set);
+}
+
+function taggedTickersForPath(path) {
+    return uniqueTickers(state.appData?.screenTags?.[path] || []);
 }
 
 function tickerFromScreenshotPath(path, tradedTickers = []) {
@@ -360,6 +406,7 @@ function scoreTickerCandidates(rawText, tradedTickers = [], ocrWords = [], zoneW
     const clean = String(rawText || '').toUpperCase().replace(/[^A-Z0-9@$!|\s.-]/g, ' ');
     const words = clean.split(/\s+/).map(normalizeOCRTicker).filter(w => validTickerWord(w));
     const traded = tradedTickers.map(normalizeTicker).filter(Boolean);
+    const compact = compactOCRText(rawText);
     const highConfidence = (ocrWords || [])
         .map(w => ({ text: normalizeOCRTicker(w.text), confidence: Number(w.confidence) || 0 }))
         .filter(w => validTickerWord(w.text, { allowSingle: traded.includes(w.text), trusted: traded.includes(w.text) }));
@@ -373,6 +420,12 @@ function scoreTickerCandidates(rawText, tradedTickers = [], ocrWords = [], zoneW
         if (wordSet.has(w)) addCandidate(scores, w, 120 * zoneWeight, trusted);
         if (highConfidence.some(item => item.text === w && item.confidence >= 35)) addCandidate(scores, w, 160 * zoneWeight, trusted);
         if (words.some(word => word.includes(w) || w.includes(word))) addCandidate(scores, w, 45 * zoneWeight, trusted);
+        if (compact.includes(w)) addCandidate(scores, w, 130 * zoneWeight, trusted);
+        if (words.some(word => isNearTickerMatch(word, w))) addCandidate(scores, w, 70 * zoneWeight, trusted);
+        const bestConfidence = highConfidence
+            .filter(item => isNearTickerMatch(item.text, w))
+            .reduce((max, item) => Math.max(max, item.confidence), 0);
+        if (bestConfidence >= 30) addCandidate(scores, w, (70 + bestConfidence) * zoneWeight, trusted);
     }
 
     for (const w of words) addCandidate(scores, w, 18 * zoneWeight);
@@ -408,6 +461,50 @@ function bestTickerFromScores(scores, tradedTickers = []) {
     return '???';
 }
 
+function topTickerRows(scores, tradedTickers = [], limit = 8) {
+    const traded = new Set(tradedTickers.map(normalizeTicker).filter(Boolean));
+    return Object.entries(scores)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, limit)
+        .map(([ticker, score], index) => ({
+            rank: index + 1,
+            ticker,
+            score: Math.round(score),
+            inTrades: traded.has(ticker) ? 'yes' : 'no',
+        }));
+}
+
+function logTickerCandidates(label, scores, tradedTickers = [], limit = 8) {
+    const rows = topTickerRows(scores, tradedTickers, limit);
+    if (!rows.length) {
+        console.log(`[OCR] ${label}: candidates not found`);
+        return;
+    }
+    console.log(`[OCR] ${label}: possible ticker candidates`);
+    console.table(rows);
+}
+
+function tickerConfidence(scores, ticker, tradedTickers = []) {
+    if (!ticker || ticker === '???') return { ok: false, score: 0, secondScore: 0, matchedTrades: false };
+    const traded = tradedTickers.map(normalizeTicker).filter(Boolean);
+    const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+    const score = Math.round(scores[ticker] || 0);
+    const secondScore = Math.round(sorted.find(([candidate]) => candidate !== ticker)?.[1] || 0);
+    const matchedTrades = traded.includes(ticker);
+    const ok = matchedTrades
+        ? score >= OCR_CONFIDENT_SCORE || (score >= MIN_TRADED_TICKER_SCORE && score >= secondScore * 1.35)
+        : traded.length === 0 && (score >= MIN_FREE_OCR_SCORE && score >= secondScore * 1.6);
+    return { ok, score, secondScore, matchedTrades };
+}
+
+function ocrVariantPlan(zone) {
+    const isGridZone = String(zone.label || '').startsWith('grid-');
+    if (zone.phase === 1) return { scale: 5, variants: ['base', 'dark', 'light'] };
+    if (zone.phase === 2) return { scale: 4, variants: ['base', 'dark'] };
+    if (isGridZone) return { scale: 3, variants: ['base'] };
+    return { scale: 3, variants: ['base', 'dark'] };
+}
+
 // Вирізаємо зону з зображення для OCR
 function cropCanvas(imgObj, x, y, w, h) {
     const canvas = document.createElement('canvas');
@@ -432,7 +529,7 @@ function applyContrast(canvas, { threshold = 128, invert = false } = {}) {
 }
 
 function buildAutoOCRZones(iw, ih) {
-    const clampZone = (x, y, w, h, label = 'auto') => {
+    const clampZone = (x, y, w, h, label = 'auto', phase = 2, baseWeight = 1) => {
         if (iw < MIN_OCR_ZONE_WIDTH || ih < MIN_OCR_ZONE_HEIGHT) return null;
         const left = Math.min(Math.max(0, iw - MIN_OCR_ZONE_WIDTH), Math.max(0, Math.round(x)));
         const top = Math.min(Math.max(0, ih - MIN_OCR_ZONE_HEIGHT), Math.max(0, Math.round(y)));
@@ -447,14 +544,16 @@ function buildAutoOCRZones(iw, ih) {
             w: width,
             h: height,
             label,
+            phase,
+            baseWeight,
         };
     };
 
     const zones = [];
     const custom = state.appData?.settings?.ocrRect;
     if (custom && custom.width >= MIN_OCR_ZONE_WIDTH && custom.height >= MIN_OCR_ZONE_HEIGHT) {
-        zones.push(clampZone(custom.left, custom.top, custom.width, custom.height, 'saved'));
-        zones.push(clampZone(custom.left - custom.width * 0.12, custom.top - custom.height * 0.25, custom.width * 1.25, custom.height * 1.45, 'saved-expanded'));
+        zones.push(clampZone(custom.left, custom.top, custom.width, custom.height, 'saved', 1, 1.55));
+        zones.push(clampZone(custom.left - custom.width * 0.12, custom.top - custom.height * 0.25, custom.width * 1.25, custom.height * 1.45, 'saved-expanded', 1, 1.35));
     }
 
     const cornerW = iw * 0.34;
@@ -464,26 +563,26 @@ function buildAutoOCRZones(iw, ih) {
 
     zones.push(
         // Platform headers and chart-title areas.
-        clampZone(0, 0, iw * 0.28, ih * 0.09, 'top-left-tight'),
-        clampZone(0, 0, iw * 0.42, ih * 0.14, 'top-left-wide'),
-        clampZone(0, 0, iw, ih * 0.16, 'top-strip'),
-        clampZone(iw * 0.18, 0, iw * 0.42, ih * 0.12, 'top-center'),
-        clampZone(0, ih * 0.05, iw * 0.5, ih * 0.16, 'upper-left'),
-        clampZone(0, 0, iw, ih * 0.28, 'upper-band'),
+        clampZone(0, 0, iw * 0.28, ih * 0.09, 'top-left-tight', 1, 1.55),
+        clampZone(0, 0, iw * 0.42, ih * 0.14, 'top-left-wide', 1, 1.45),
+        clampZone(0, 0, iw, ih * 0.16, 'top-strip', 1, 1.2),
+        clampZone(iw * 0.18, 0, iw * 0.42, ih * 0.12, 'top-center', 1, 1.25),
+        clampZone(0, ih * 0.05, iw * 0.5, ih * 0.16, 'upper-left', 1, 1.25),
+        clampZone(0, 0, iw, ih * 0.28, 'upper-band', 2, 1.05),
 
         // Corners and bottom strips catch moved/floating chart headers.
-        clampZone(iw - cornerW, 0, cornerW, cornerH, 'top-right'),
-        clampZone(0, ih - cornerH, cornerW, cornerH, 'bottom-left'),
-        clampZone(iw - cornerW, ih - cornerH, cornerW, cornerH, 'bottom-right'),
-        clampZone(0, ih - stripH, iw, stripH, 'bottom-strip'),
+        clampZone(iw - cornerW, 0, cornerW, cornerH, 'top-right', 2, 1.0),
+        clampZone(0, ih - cornerH, cornerW, cornerH, 'bottom-left', 2, 0.95),
+        clampZone(iw - cornerW, ih - cornerH, cornerW, cornerH, 'bottom-right', 2, 0.95),
+        clampZone(0, ih - stripH, iw, stripH, 'bottom-strip', 2, 0.9),
 
         // Side panels where watchlist/order widgets often show the active symbol.
-        clampZone(0, 0, sideW, ih, 'left-panel'),
-        clampZone(iw - sideW, 0, sideW, ih, 'right-panel'),
-        clampZone(iw * 0.34, 0, iw * 0.32, ih * 0.18, 'center-top'),
-        clampZone(iw * 0.25, ih * 0.18, iw * 0.5, ih * 0.18, 'chart-upper-center'),
-        clampZone(iw * 0.25, ih * 0.42, iw * 0.5, ih * 0.18, 'chart-center'),
-        clampZone(iw * 0.25, ih * 0.68, iw * 0.5, ih * 0.18, 'chart-lower-center'),
+        clampZone(0, 0, sideW, ih, 'left-panel', 2, 0.85),
+        clampZone(iw - sideW, 0, sideW, ih, 'right-panel', 2, 0.85),
+        clampZone(iw * 0.34, 0, iw * 0.32, ih * 0.18, 'center-top', 2, 0.95),
+        clampZone(iw * 0.25, ih * 0.18, iw * 0.5, ih * 0.18, 'chart-upper-center', 2, 0.8),
+        clampZone(iw * 0.25, ih * 0.42, iw * 0.5, ih * 0.18, 'chart-center', 3, 0.65),
+        clampZone(iw * 0.25, ih * 0.68, iw * 0.5, ih * 0.18, 'chart-lower-center', 3, 0.65),
     );
 
     // Coarse full-screen sweep. These are lower priority, but remove the need
@@ -498,6 +597,8 @@ function buildAutoOCRZones(iw, ih) {
                 iw / gridCols,
                 ih / gridRows,
                 `grid-${row}-${col}`,
+                3,
+                0.55,
             ));
         }
     }
@@ -530,46 +631,84 @@ function cloneCanvas(canvas) {
     return copy;
 }
 
-function makeOCRVariants(imgObj, zone, scale = 4) {
+function makeOCRVariants(imgObj, zone, scale = 4, names = null) {
     const base = makeScaledCanvas(imgObj, zone, scale);
     if (base.width < MIN_OCR_CANVAS_WIDTH || base.height < MIN_OCR_CANVAS_HEIGHT) return [];
-    if (String(zone.label || '').startsWith('grid-')) {
-        return [
-            base,
-            applyContrast(cloneCanvas(base), { threshold: 128 }),
-        ];
+    const makeVariant = (name) => {
+        if (name === 'base') return base;
+        if (name === 'dark') return applyContrast(cloneCanvas(base), { threshold: 115 });
+        if (name === 'light') return applyContrast(cloneCanvas(base), { threshold: 145 });
+        if (name === 'invert') return applyContrast(cloneCanvas(base), { threshold: 135, invert: true });
+        return null;
+    };
+    if (Array.isArray(names) && names.length) {
+        return names.map(makeVariant).filter(Boolean);
     }
     return [
-        base,
-        applyContrast(cloneCanvas(base), { threshold: 115 }),
-        applyContrast(cloneCanvas(base), { threshold: 145 }),
-        applyContrast(cloneCanvas(base), { threshold: 135, invert: true }),
+        makeVariant('base'),
+        makeVariant('dark'),
+        makeVariant('light'),
+        makeVariant('invert'),
     ];
 }
 
 export async function runOCR(encodedPath, force = false) {
     const safePath = decodeURIComponent(encodedPath);
+    const screenshotDate = findScreenshotDate(safePath);
+    console.groupCollapsed(`[OCR ticker] ${safePath}`);
+    console.log('[OCR] start', { path: safePath, date: screenshotDate, force });
+    const finishOCRLog = (result) => {
+        console.groupEnd();
+        return result;
+    };
     const existing = state.appData.tickers[safePath];
-    if (!force && existing && existing !== '???' && normalizeTicker(existing) && !TICKER_GARBAGE.has(normalizeTicker(existing))) { updateBadgeUI(encodedPath, false); return; }
+    console.log('[OCR] saved ticker before scan:', existing || '(empty)');
+    if (!force && existing && existing !== '???' && normalizeTicker(existing) && !TICKER_GARBAGE.has(normalizeTicker(existing))) {
+        console.log('[OCR] skipped: valid saved ticker is already present:', existing);
+        updateBadgeUI(encodedPath, false);
+        return finishOCRLog();
+    }
     const traded = tradeTickersForPath(safePath);
+    console.log('[OCR] tickers from Trades for this day:', traded.length ? traded : '(none)');
+    const tagged = taggedTickersForPath(safePath);
+    console.log('[OCR] manual screen tags:', tagged.length ? tagged : '(none)');
+    const trustedTags = tagged.filter(ticker => !traded.length || traded.includes(ticker));
+    if (trustedTags.length === 1) {
+        console.log('[OCR] resolved from manual tag:', trustedTags[0]);
+        state.appData.tickers[safePath] = trustedTags[0];
+        saveToLocal();
+        updateBadgeUI(encodedPath, false);
+        return finishOCRLog(trustedTags[0]);
+    }
     const contextTicker = confidentTickerFromContext(safePath, traded);
     if (contextTicker && (force || !existing || existing === '???' || TICKER_GARBAGE.has(normalizeTicker(existing)))) {
+        console.log('[OCR] context match without image OCR:', {
+            ticker: contextTicker,
+            reason: traded.length === 1 ? 'only one ticker in Trades for this day' : 'ticker found in screenshot filename',
+        });
         state.appData.tickers[safePath] = contextTicker;
         saveToLocal();
         updateBadgeUI(encodedPath, false);
-        return contextTicker;
+        return finishOCRLog(contextTicker);
     }
     try {
+        console.log('[OCR] loading Tesseract...');
         await ensureTesseract();
+        console.log('[OCR] Tesseract ready');
     } catch (error) {
         console.warn('[OCR] Tesseract lazy-load failed:', error);
-        return;
+        return finishOCRLog();
     }
-    if (!force && existing && existing !== '???' && normalizeTicker(existing) && !TICKER_GARBAGE.has(normalizeTicker(existing))) { updateBadgeUI(encodedPath, false); return; }
+    if (!force && existing && existing !== '???' && normalizeTicker(existing) && !TICKER_GARBAGE.has(normalizeTicker(existing))) {
+        console.log('[OCR] skipped after Tesseract load: valid saved ticker is already present:', existing);
+        updateBadgeUI(encodedPath, false);
+        return finishOCRLog();
+    }
 
     try {
         updateBadgeUI(encodedPath, true);
         const src = await getStorageUrl(safePath);
+        console.log('[OCR] image URL resolved:', src ? 'ok' : 'empty');
 
         const imgObj = new Image();
         imgObj.crossOrigin = 'Anonymous';
@@ -579,40 +718,107 @@ export async function runOCR(encodedPath, force = false) {
         const ih = imgObj.naturalHeight;
 
         const zones = buildAutoOCRZones(iw, ih);
+        console.log('[OCR] image loaded:', { width: iw, height: ih });
+        console.log('[OCR] zones to scan:', zones.map((z, i) => ({
+            index: i + 1,
+            label: z.label,
+            x: z.x,
+            y: z.y,
+            w: z.w,
+            h: z.h,
+            phase: z.phase,
+            weight: z.baseWeight,
+        })));
 
         const totalScores = {};
         let ticker = '???';
-        for (let zoneIndex = 0; zoneIndex < zones.length; zoneIndex++) {
-            const zone = zones[zoneIndex];
-            const isGridZone = String(zone.label || '').startsWith('grid-');
-            const zoneWeight = isGridZone ? 0.7 : Math.max(0.65, 1.45 - zoneIndex * 0.08);
-            const variants = makeOCRVariants(imgObj, zone, zoneIndex < 2 ? 5 : (isGridZone ? 3 : 4));
-            if (!variants.length) continue;
+        let scannedZones = 0;
+        const phaseNames = {
+            1: 'fast header/title scan',
+            2: 'expanded panels/corners scan',
+            3: 'full-screen fallback sweep',
+        };
 
-            for (const canvas of variants) {
-                const { data } = await Tesseract.recognize(canvas, 'eng', {
-                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@$!| ',
-                    tessedit_pageseg_mode: zone.h < ih * 0.12 ? '7' : '6',
-                    preserve_interword_spaces: '1',
-                });
+        for (const phase of [1, 2, 3]) {
+            const phaseZones = zones.filter(zone => zone.phase === phase);
+            if (!phaseZones.length) continue;
+            console.groupCollapsed(`[OCR] phase ${phase}: ${phaseNames[phase]} (${phaseZones.length} zones)`);
 
-                mergeScores(totalScores, scoreTickerCandidates(data.text || '', traded, data.words || [], zoneWeight));
+            for (const zone of phaseZones) {
+                scannedZones++;
+                const plan = ocrVariantPlan(zone);
+                const zoneWeight = Number((zone.baseWeight || 1).toFixed(2));
+                const variants = makeOCRVariants(imgObj, zone, plan.scale, plan.variants);
+                if (!variants.length) continue;
+
+                const zoneScores = {};
+                const textSnippets = [];
+                for (const canvas of variants) {
+                    const { data } = await Tesseract.recognize(canvas, 'eng', {
+                        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@$!| ',
+                        tessedit_pageseg_mode: zone.h < ih * 0.12 ? '7' : '6',
+                        preserve_interword_spaces: '1',
+                    });
+
+                    const rawText = String(data.text || '').replace(/\s+/g, ' ').trim();
+                    if (rawText) textSnippets.push(rawText.slice(0, OCR_MAX_RAW_TEXT_LOG));
+                    mergeScores(zoneScores, scoreTickerCandidates(data.text || '', traded, data.words || [], zoneWeight));
+                }
+
+                mergeScores(totalScores, zoneScores);
+                if (Object.keys(zoneScores).length) {
+                    console.log(`[OCR] zone "${zone.label}"`, {
+                        phase,
+                        weight: zoneWeight,
+                        variants: variants.length,
+                        text: textSnippets.slice(0, 2),
+                    });
+                    logTickerCandidates(`zone "${zone.label}"`, zoneScores, traded, 5);
+                } else {
+                    console.log(`[OCR] zone "${zone.label}": no usable ticker-like words`);
+                }
+
+                ticker = bestTickerFromScores(totalScores, traded);
+                const confidence = tickerConfidence(totalScores, ticker, traded);
+                if (confidence.ok) {
+                    console.log('[OCR] early stop: confident ticker found', { ticker, ...confidence });
+                    break;
+                }
             }
 
-            ticker = bestTickerFromScores(totalScores, traded);
-            if (ticker !== '???' && traded.includes(ticker) && (totalScores[ticker] || 0) >= 220) break;
+            console.log(`[OCR] phase ${phase} summary after ${scannedZones} scanned zones`);
+            logTickerCandidates(`phase ${phase} cumulative`, totalScores, traded, 8);
+            console.groupEnd();
+
+            const confidence = tickerConfidence(totalScores, ticker, traded);
+            if (confidence.ok) break;
         }
 
         if (ticker === '???') ticker = bestTickerFromScores(totalScores, traded);
 
+        logTickerCandidates('final', totalScores, traded, 10);
+        if (ticker === '???') {
+            console.log('[OCR] final result: ???', {
+                reason: traded.length
+                    ? 'no OCR candidate was confident enough and matched Trades'
+                    : 'no confident OCR candidate found; import Trades first for stronger validation',
+            });
+        } else {
+            console.log('[OCR] final result:', {
+                ticker,
+                score: Math.round(totalScores[ticker] || 0),
+                matchedTrades: traded.includes(ticker),
+            });
+        }
+
         state.appData.tickers[safePath] = ticker;
         saveToLocal();
         updateBadgeUI(encodedPath, false);
-        return ticker;
+        return finishOCRLog(ticker);
     } catch (e) {
         console.error('Помилка OCR:', e);
         state.appData.tickers[safePath] = '???';
         updateBadgeUI(encodedPath, false);
-        return '???';
+        return finishOCRLog('???');
     }
 }
