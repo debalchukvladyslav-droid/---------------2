@@ -3,7 +3,7 @@ import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { showToast } from './utils.js';
 import { loadTeams } from './teams.js';
-import { getSupabaseStorageUrl, uploadToSupabaseStorage } from './supabase_storage.js';
+import { getSupabaseStorageUrl } from './supabase_storage.js';
 
 const DEFAULT_TEAM_LABEL = 'Без куща';
 
@@ -31,7 +31,8 @@ function paintSidebarAvatar(el, p) {
     if (url) {
         const img = document.createElement('img');
         img.className = 'sidebar-account-avatar-img';
-        const needsResolve = !/^https?:\/\//i.test(url) || url.includes('/storage/v1/object/');
+        const isInlineImage = /^data:image\/(?:png|jpe?g|webp);base64,/i.test(url);
+        const needsResolve = !isInlineImage && (!/^https?:\/\//i.test(url) || url.includes('/storage/v1/object/'));
         img.src = needsResolve ? '' : url;
         img.alt = '';
         img.referrerPolicy = 'no-referrer';
@@ -190,7 +191,11 @@ function renderAvatarCropTransform() {
     img.style.transform = `translate(-50%, -50%) translate(${_avatarCrop.x}px, ${_avatarCrop.y}px) scale(${_avatarCrop.zoom})`;
 }
 
-function getAvatarCropBlob() {
+async function getAvatarCropBlob() {
+    return getAvatarCropCanvasBlob();
+}
+
+function getAvatarCropCanvasBlob() {
     return new Promise((resolve, reject) => {
         const crop = _avatarCrop;
         const img = document.getElementById('sidebar-avatar-crop-img');
@@ -199,7 +204,7 @@ function getAvatarCropBlob() {
             resolve(null);
             return;
         }
-        const out = 512;
+        const out = 384;
         const canvas = document.createElement('canvas');
         canvas.width = out;
         canvas.height = out;
@@ -224,19 +229,27 @@ function getAvatarCropBlob() {
         canvas.toBlob((blob) => {
             if (blob) resolve(blob);
             else reject(new Error('Could not prepare avatar image'));
-        }, 'image/webp', 0.9);
+        }, 'image/webp', 0.86);
     });
 }
 
-async function uploadCroppedAvatar() {
+function blobToDataUrl(blob) {
+    if (!blob) return Promise.resolve('');
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(reader.error || new Error('Could not read avatar image'));
+        reader.readAsDataURL(blob);
+    });
+}
+
+async function getAvatarCropDataUrl() {
     const blob = await getAvatarCropBlob();
-    if (!blob) return '';
-    const userId = state.myUserId || (await supabase.auth.getUser())?.data?.user?.id || '';
-    if (!userId) throw new Error('Missing user id');
-    const file = new File([blob], 'avatar.webp', { type: 'image/webp' });
-    const path = `avatars/${userId}/avatar.webp`;
-    await uploadToSupabaseStorage(path, file, { contentType: 'image/webp' });
-    return path;
+    return blobToDataUrl(blob);
+}
+
+async function uploadCroppedAvatar() {
+    return getAvatarCropDataUrl();
 }
 
 function bindOnce() {

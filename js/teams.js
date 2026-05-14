@@ -62,7 +62,8 @@ function appendTeamAvatar(parent, profile, fallbackNick, { loading = false, ment
     if (url) {
         const img = document.createElement('img');
         img.className = baseClass + ' team-member-avatar-img';
-        const needsResolve = !/^https?:\/\//i.test(url) || url.includes('/storage/v1/object/');
+        const isInlineImage = /^data:image\/(?:png|jpe?g|webp);base64,/i.test(url);
+        const needsResolve = !isInlineImage && (!/^https?:\/\//i.test(url) || url.includes('/storage/v1/object/'));
         img.src = needsResolve ? '' : url;
         img.alt = '';
         img.referrerPolicy = 'no-referrer';
