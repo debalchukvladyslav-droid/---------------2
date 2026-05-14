@@ -432,7 +432,7 @@ function applyContrast(canvas, { threshold = 128, invert = false } = {}) {
 }
 
 function buildAutoOCRZones(iw, ih) {
-    const clampZone = (x, y, w, h) => {
+    const clampZone = (x, y, w, h, label = 'auto') => {
         if (iw < MIN_OCR_ZONE_WIDTH || ih < MIN_OCR_ZONE_HEIGHT) return null;
         const left = Math.min(Math.max(0, iw - MIN_OCR_ZONE_WIDTH), Math.max(0, Math.round(x)));
         const top = Math.min(Math.max(0, ih - MIN_OCR_ZONE_HEIGHT), Math.max(0, Math.round(y)));
@@ -446,29 +446,66 @@ function buildAutoOCRZones(iw, ih) {
             y: top,
             w: width,
             h: height,
+            label,
         };
     };
 
     const zones = [];
     const custom = state.appData?.settings?.ocrRect;
     if (custom && custom.width >= MIN_OCR_ZONE_WIDTH && custom.height >= MIN_OCR_ZONE_HEIGHT) {
-        zones.push(clampZone(custom.left, custom.top, custom.width, custom.height));
-        zones.push(clampZone(custom.left - custom.width * 0.12, custom.top - custom.height * 0.25, custom.width * 1.25, custom.height * 1.45));
+        zones.push(clampZone(custom.left, custom.top, custom.width, custom.height, 'saved'));
+        zones.push(clampZone(custom.left - custom.width * 0.12, custom.top - custom.height * 0.25, custom.width * 1.25, custom.height * 1.45, 'saved-expanded'));
     }
 
+    const cornerW = iw * 0.34;
+    const cornerH = ih * 0.16;
+    const stripH = ih * 0.16;
+    const sideW = iw * 0.28;
+
     zones.push(
-        clampZone(0, 0, iw * 0.28, ih * 0.09),
-        clampZone(0, 0, iw * 0.42, ih * 0.14),
-        clampZone(0, 0, iw, ih * 0.16),
-        clampZone(iw * 0.18, 0, iw * 0.42, ih * 0.12),
-        clampZone(0, ih * 0.05, iw * 0.5, ih * 0.16),
-        clampZone(0, 0, iw, ih * 0.28),
+        // Platform headers and chart-title areas.
+        clampZone(0, 0, iw * 0.28, ih * 0.09, 'top-left-tight'),
+        clampZone(0, 0, iw * 0.42, ih * 0.14, 'top-left-wide'),
+        clampZone(0, 0, iw, ih * 0.16, 'top-strip'),
+        clampZone(iw * 0.18, 0, iw * 0.42, ih * 0.12, 'top-center'),
+        clampZone(0, ih * 0.05, iw * 0.5, ih * 0.16, 'upper-left'),
+        clampZone(0, 0, iw, ih * 0.28, 'upper-band'),
+
+        // Corners and bottom strips catch moved/floating chart headers.
+        clampZone(iw - cornerW, 0, cornerW, cornerH, 'top-right'),
+        clampZone(0, ih - cornerH, cornerW, cornerH, 'bottom-left'),
+        clampZone(iw - cornerW, ih - cornerH, cornerW, cornerH, 'bottom-right'),
+        clampZone(0, ih - stripH, iw, stripH, 'bottom-strip'),
+
+        // Side panels where watchlist/order widgets often show the active symbol.
+        clampZone(0, 0, sideW, ih, 'left-panel'),
+        clampZone(iw - sideW, 0, sideW, ih, 'right-panel'),
+        clampZone(iw * 0.34, 0, iw * 0.32, ih * 0.18, 'center-top'),
+        clampZone(iw * 0.25, ih * 0.18, iw * 0.5, ih * 0.18, 'chart-upper-center'),
+        clampZone(iw * 0.25, ih * 0.42, iw * 0.5, ih * 0.18, 'chart-center'),
+        clampZone(iw * 0.25, ih * 0.68, iw * 0.5, ih * 0.18, 'chart-lower-center'),
     );
+
+    // Coarse full-screen sweep. These are lower priority, but remove the need
+    // for a manually selected OCR zone when the ticker is in an unusual place.
+    const gridCols = 3;
+    const gridRows = 3;
+    for (let row = 0; row < gridRows; row++) {
+        for (let col = 0; col < gridCols; col++) {
+            zones.push(clampZone(
+                iw * col / gridCols,
+                ih * row / gridRows,
+                iw / gridCols,
+                ih / gridRows,
+                `grid-${row}-${col}`,
+            ));
+        }
+    }
 
     const seen = new Set();
     return zones.filter(zone => {
         if (!zone) return false;
-        const key = `${zone.x}:${zone.y}:${zone.w}:${zone.h}`;
+        const key = `${Math.round(zone.x / 8)}:${Math.round(zone.y / 8)}:${Math.round(zone.w / 8)}:${Math.round(zone.h / 8)}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
@@ -496,6 +533,12 @@ function cloneCanvas(canvas) {
 function makeOCRVariants(imgObj, zone, scale = 4) {
     const base = makeScaledCanvas(imgObj, zone, scale);
     if (base.width < MIN_OCR_CANVAS_WIDTH || base.height < MIN_OCR_CANVAS_HEIGHT) return [];
+    if (String(zone.label || '').startsWith('grid-')) {
+        return [
+            base,
+            applyContrast(cloneCanvas(base), { threshold: 128 }),
+        ];
+    }
     return [
         base,
         applyContrast(cloneCanvas(base), { threshold: 115 }),
@@ -541,8 +584,9 @@ export async function runOCR(encodedPath, force = false) {
         let ticker = '???';
         for (let zoneIndex = 0; zoneIndex < zones.length; zoneIndex++) {
             const zone = zones[zoneIndex];
-            const zoneWeight = Math.max(0.65, 1.45 - zoneIndex * 0.12);
-            const variants = makeOCRVariants(imgObj, zone, zoneIndex < 2 ? 5 : 4);
+            const isGridZone = String(zone.label || '').startsWith('grid-');
+            const zoneWeight = isGridZone ? 0.7 : Math.max(0.65, 1.45 - zoneIndex * 0.08);
+            const variants = makeOCRVariants(imgObj, zone, zoneIndex < 2 ? 5 : (isGridZone ? 3 : 4));
             if (!variants.length) continue;
 
             for (const canvas of variants) {
