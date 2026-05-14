@@ -165,15 +165,17 @@ export function updateDashboardWidgets(year, month) {
     const prefix = `${mk}-`;
     const journal = state.appData?.journal || {};
 
-    let totalPnl = 0, wins = 0, losses = 0, totalTrades = 0;
+    let totalPnl = 0, wins = 0, losses = 0, tradingDays = 0, totalTrades = 0;
     let totalGross = 0, totalLoss = 0;
 
     for (const [dateKey, day] of Object.entries(journal)) {
         if (!day || !dateKey.startsWith(prefix) || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) continue;
+        const trades = Array.isArray(day.trades) ? day.trades : [];
+        totalTrades += trades.length;
         const pnl = getEffectiveDayPnl(day);
         if (!Number.isFinite(pnl) || pnl === 0) continue;
         totalPnl += pnl;
-        totalTrades++;
+        tradingDays++;
         if (pnl > 0) {
             wins++;
             totalGross += pnl;
@@ -189,7 +191,7 @@ export function updateDashboardWidgets(year, month) {
         else totalLoss += Math.abs(monthAdjustment.pnl);
     }
 
-    const winrate = totalTrades > 0 ? (wins / totalTrades) * 100 : 0;
+    const winrate = tradingDays > 0 ? (wins / tradingDays) * 100 : 0;
     const pf = totalLoss > 0 ? totalGross / totalLoss : (totalGross > 0 ? 99 : 0);
 
     const pnlEl = document.getElementById('pro-total-pnl');
