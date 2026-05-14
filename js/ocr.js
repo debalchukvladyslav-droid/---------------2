@@ -279,7 +279,8 @@ const TICKER_GARBAGE = new Set([
     'OPEN','CLOSE','HIGH','LOW','LAST','MARK','BID','ASK','VOL','HALT',
     'CHART','SCAN','TRADE','LEVEL','PRICE','SIZE','TIME','DATE','BETA',
     'CALL','PUT','EXP','ITM','OTM','ATM','THEO','DELTA','GAMMA','THETA',
-    'AFTER','HOURS','MARKET','LIMIT','STOP','ORDER','FILLED','CANCEL'
+    'AFTER','HOURS','MARKET','LIMIT','STOP','ORDER','FILLED','CANCEL',
+    'IOA','LOA','LIO','IO','OA','OBEOE'
 ]);
 const MIN_OCR_ZONE_WIDTH = 24;
 const MIN_OCR_ZONE_HEIGHT = 12;
@@ -349,6 +350,25 @@ function isNearTickerMatch(word, ticker) {
     return distance <= 1 || (ticker.length >= 5 && distance <= 2);
 }
 
+function ocrConfusionVariants(word) {
+    const value = normalizeOCRTicker(word);
+    if (value.length < 2 || value.length > 5) return [];
+    const out = new Set();
+    for (let i = 0; i < value.length; i++) {
+        const ch = value[i];
+        const replacements = {
+            M: ['N'],
+            N: ['M'],
+            B: ['E'],
+            E: ['B'],
+        }[ch] || [];
+        replacements.forEach((replacement) => {
+            out.add(value.slice(0, i) + replacement + value.slice(i + 1));
+        });
+    }
+    return Array.from(out).filter(v => v !== value && validTickerWord(v));
+}
+
 function validTickerWord(w, { allowSingle = false, trusted = false } = {}) {
     const minLen = allowSingle ? 1 : 2;
     if (w.length < minLen || w.length > 5 || !/^[A-Z]+$/.test(w)) return false;
@@ -402,9 +422,62 @@ function addCandidate(scores, ticker, points, opts = {}) {
     scores[ticker] = (scores[ticker] || 0) + points;
 }
 
+function exchangeHeaderTickers(rawText) {
+    const text = String(rawText || '').toUpperCase();
+    const out = new Set();
+    const primaryHeaderPattern = /^\s*([A-Z0-9@$!|]{2,6})\s+(?:\d+\s+)?(?:D|DAY|M|MIN|H|HR|W|WK)\b[^\n\r]{0,80}\[\s*(?:NASDAQ|NYSE|AMEX|ARCA|OTC)\s*\]/gm;
+    let match = null;
+    while ((match = primaryHeaderPattern.exec(text))) {
+        const ticker = normalizeOCRTicker(match[1]);
+        if (validTickerWord(ticker)) out.add(ticker);
+    }
+    const exchangePattern = /\b([A-Z0-9@$!|]{2,6})\s+(?:[0-9]+\s*)?(?:D|DAY|M|MIN)?\s*(?:\d+\s*)?(?:M|MIN)?\s*\[\s*(?:NASDAQ|NYSE|AMEX|ARCA|OTC)\s*\]/g;
+    while ((match = exchangePattern.exec(text))) {
+        const ticker = normalizeOCRTicker(match[1]);
+        if (validTickerWord(ticker)) out.add(ticker);
+    }
+    const compactPattern = /\b([A-Z0-9@$!|]{2,6})\b(?=[^\n]{0,20}\[\s*(?:NASDAQ|NYSE|AMEX|ARCA|OTC)\s*\])/g;
+    while ((match = compactPattern.exec(text))) {
+        const ticker = normalizeOCRTicker(match[1]);
+        if (validTickerWord(ticker)) out.add(ticker);
+    }
+    return Array.from(out);
+}
+
+function primaryHeaderTickers(rawText) {
+    const text = String(rawText || '').toUpperCase();
+    const out = new Set();
+    const patterns = [
+        /^\s*([A-Z0-9@$!|]{2,6})\s+(?:\d+\s+)?(?:D|DAY|M|MIN|H|HR|W|WK)\b/gm,
+        /^\s*([A-Z0-9@$!|]{2,6})\s+\d+\s+(?:D|DAY|M|MIN)\s+\d+\s*(?:M|MIN)?\b/gm,
+    ];
+    for (const pattern of patterns) {
+        let match = null;
+        while ((match = pattern.exec(text))) {
+            const ticker = normalizeOCRTicker(match[1]);
+            if (validTickerWord(ticker)) out.add(ticker);
+        }
+    }
+    return Array.from(out);
+}
+
+function leadingTickerWords(rawText) {
+    return String(rawText || '')
+        .toUpperCase()
+        .split(/[\n\r]+/)
+        .slice(0, 2)
+        .flatMap(line => line.trim().split(/\s+/).slice(0, 2))
+        .map(normalizeOCRTicker)
+        .filter(w => validTickerWord(w));
+}
+
 function scoreTickerCandidates(rawText, tradedTickers = [], ocrWords = [], zoneWeight = 1) {
     const clean = String(rawText || '').toUpperCase().replace(/[^A-Z0-9@$!|\s.-]/g, ' ');
     const words = clean.split(/\s+/).map(normalizeOCRTicker).filter(w => validTickerWord(w));
+    const wordVariants = Array.from(new Set(words.flatMap(ocrConfusionVariants)));
+    const exchangeTickers = exchangeHeaderTickers(rawText);
+    const primaryTickers = primaryHeaderTickers(rawText);
+    const leadingTickers = leadingTickerWords(rawText);
     const traded = tradedTickers.map(normalizeTicker).filter(Boolean);
     const compact = compactOCRText(rawText);
     const highConfidence = (ocrWords || [])
@@ -422,6 +495,7 @@ function scoreTickerCandidates(rawText, tradedTickers = [], ocrWords = [], zoneW
         if (words.some(word => word.includes(w) || w.includes(word))) addCandidate(scores, w, 45 * zoneWeight, trusted);
         if (compact.includes(w)) addCandidate(scores, w, 130 * zoneWeight, trusted);
         if (words.some(word => isNearTickerMatch(word, w))) addCandidate(scores, w, 70 * zoneWeight, trusted);
+        if (wordVariants.includes(w)) addCandidate(scores, w, 110 * zoneWeight, trusted);
         const bestConfidence = highConfidence
             .filter(item => isNearTickerMatch(item.text, w))
             .reduce((max, item) => Math.max(max, item.confidence), 0);
@@ -429,6 +503,10 @@ function scoreTickerCandidates(rawText, tradedTickers = [], ocrWords = [], zoneW
     }
 
     for (const w of words) addCandidate(scores, w, 18 * zoneWeight);
+    for (const w of wordVariants) addCandidate(scores, w, 10 * zoneWeight);
+    for (const w of primaryTickers) addCandidate(scores, w, 360 * zoneWeight);
+    for (const w of exchangeTickers) addCandidate(scores, w, 260 * zoneWeight);
+    for (const w of leadingTickers) addCandidate(scores, w, 55 * zoneWeight);
     for (const w of highConfidence) addCandidate(scores, w.text, Math.max(12, w.confidence / 2) * zoneWeight);
 
     Object.keys(scores).forEach(ticker => {
@@ -448,15 +526,27 @@ function mergeScores(target, source) {
 
 function bestTickerFromScores(scores, tradedTickers = []) {
     const traded = tradedTickers.map(normalizeTicker).filter(Boolean);
-    const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+    const sorted = Object.entries(scores)
+        .filter(([ticker]) => validTickerWord(ticker, { trusted: traded.includes(ticker) }))
+        .sort((a, b) => b[1] - a[1]);
     if (!sorted.length) return '???';
+
+    if (traded.length) {
+        const tradedSorted = sorted.filter(([ticker]) => traded.includes(ticker));
+        if (!tradedSorted.length) return '???';
+        const [bestTraded, bestTradedScore] = tradedSorted[0];
+        const secondTradedScore = tradedSorted[1]?.[1] || 0;
+        if (
+            bestTradedScore >= MIN_TRADED_TICKER_SCORE
+            || (secondTradedScore > 0 && bestTradedScore >= 45 && bestTradedScore >= secondTradedScore * 1.25)
+        ) {
+            return bestTraded;
+        }
+        return '???';
+    }
 
     const [best, bestScore] = sorted[0];
     const secondScore = sorted[1]?.[1] || 0;
-    if (traded.length) {
-        if (traded.includes(best) && (bestScore >= MIN_TRADED_TICKER_SCORE || (secondScore > 0 && bestScore >= 45 && bestScore >= secondScore * 1.35))) return best;
-        return '???';
-    }
     if (bestScore >= MIN_FREE_OCR_SCORE || (secondScore > 0 && bestScore >= 45 && bestScore >= secondScore * 1.6)) return best;
     return '???';
 }
@@ -464,6 +554,7 @@ function bestTickerFromScores(scores, tradedTickers = []) {
 function topTickerRows(scores, tradedTickers = [], limit = 8) {
     const traded = new Set(tradedTickers.map(normalizeTicker).filter(Boolean));
     return Object.entries(scores)
+        .filter(([ticker]) => validTickerWord(ticker, { trusted: traded.has(ticker) }))
         .sort((a, b) => b[1] - a[1])
         .slice(0, limit)
         .map(([ticker, score], index) => ({
@@ -487,7 +578,9 @@ function logTickerCandidates(label, scores, tradedTickers = [], limit = 8) {
 function tickerConfidence(scores, ticker, tradedTickers = []) {
     if (!ticker || ticker === '???') return { ok: false, score: 0, secondScore: 0, matchedTrades: false };
     const traded = tradedTickers.map(normalizeTicker).filter(Boolean);
-    const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+    const sorted = Object.entries(scores)
+        .filter(([candidate]) => !traded.length || traded.includes(candidate))
+        .sort((a, b) => b[1] - a[1]);
     const score = Math.round(scores[ticker] || 0);
     const secondScore = Math.round(sorted.find(([candidate]) => candidate !== ticker)?.[1] || 0);
     const matchedTrades = traded.includes(ticker);
