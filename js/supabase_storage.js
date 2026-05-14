@@ -46,6 +46,14 @@ function getPathCandidates(storagePath) {
         ];
     }
 
+    if (path.startsWith('avatars/')) {
+        return [
+            { bucket: 'avatars', objectPath: path.replace(/^avatars\//, '') },
+            { bucket: 'assets', objectPath: path },
+            { bucket: 'files', objectPath: path },
+        ];
+    }
+
     return [
         { bucket: 'assets', objectPath: path },
         { bucket: 'files', objectPath: path },

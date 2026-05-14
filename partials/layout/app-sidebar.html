@@ -106,8 +106,28 @@
                 </div>
                 <div class="sidebar-pf-section">
                     <div class="sidebar-pf-section-title">Аватар</div>
-                    <p class="sidebar-pf-hint">Емодзі або посилання на зображення (https…). Бачать у панелі «Команда».</p>
+                    <p class="sidebar-pf-hint">Оберіть фото, відцентруйте його у колі та налаштуйте масштаб. Бачать у панелі «Команда».</p>
                     <input type="hidden" id="sidebar-pf-emoji" value="">
+                    <input type="hidden" id="sidebar-pf-avatar-url" value="">
+                    <input type="file" id="sidebar-pf-avatar-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+                    <div class="sidebar-avatar-picker">
+                        <button type="button" class="sidebar-avatar-pick-btn" id="sidebar-pf-avatar-pick">
+                            <span class="ti-icon ti-image" aria-hidden="true"></span>
+                            <span>Вибрати зображення</span>
+                        </button>
+                        <div class="sidebar-avatar-cropper" id="sidebar-avatar-cropper" hidden>
+                            <div class="sidebar-avatar-crop-stage" id="sidebar-avatar-crop-stage" aria-label="Область кадрування аватара">
+                                <img id="sidebar-avatar-crop-img" alt="">
+                                <div class="sidebar-avatar-crop-ring" aria-hidden="true"></div>
+                            </div>
+                            <div class="sidebar-avatar-zoom-row">
+                                <span class="sidebar-avatar-zoom-icon" aria-hidden="true">−</span>
+                                <input type="range" id="sidebar-avatar-zoom" min="1" max="3" step="0.01" value="1" aria-label="Масштаб аватара">
+                                <span class="sidebar-avatar-zoom-icon" aria-hidden="true">+</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="sidebar-pf-hint sidebar-pf-hint--compact">Або швидко оберіть емодзі:</p>
                     <div class="sidebar-pf-emoji-grid" id="sidebar-pf-emoji-grid">
                         <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F600;" title="Смайл">&#x1F600;</button>
                         <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F98A;" title="Лис">&#x1F98A;</button>
@@ -121,7 +141,6 @@
                         <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F48E;" title="Діамант">&#x1F48E;</button>
                         <button type="button" class="sidebar-pf-emoji-btn" data-emoji="&#x1F680;" title="Ракета">&#x1F680;</button>
                     </div>
-                    <input type="url" id="sidebar-pf-avatar-url" class="sidebar-pf-url sidebar-pf-input" placeholder="https://… зображення аватара" autocomplete="off">
                     <button type="button" class="btn-secondary sidebar-pf-clear-avatar" id="sidebar-pf-avatar-clear">Скинути іконку (ініціали)</button>
                 </div>
                 <button type="button" class="btn-primary sidebar-pf-save" id="sidebar-pf-save">Зберегти зміни</button>

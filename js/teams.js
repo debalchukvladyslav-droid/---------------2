@@ -1,6 +1,7 @@
 import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { showToast, showConfirm, showPrompt } from './utils.js';
+import { getSupabaseStorageUrl } from './supabase_storage.js';
 
 const DEFAULT_TEAM = 'Без куща';
 const EXTRA_TEAMS_KEY = 'pj:extra-teams';
@@ -58,10 +59,10 @@ function appendTeamAvatar(parent, profile, fallbackNick, { loading = false, ment
     const st = profileSettings(profile);
     const url = (st.avatar_url || '').trim();
     const emoji = (st.avatar_emoji || '').trim().slice(0, 8);
-    if (/^https?:\/\//i.test(url)) {
+    if (url) {
         const img = document.createElement('img');
         img.className = baseClass + ' team-member-avatar-img';
-        img.src = url;
+        img.src = /^https?:\/\//i.test(url) ? url : '';
         img.alt = '';
         img.referrerPolicy = 'no-referrer';
         img.loading = 'lazy';
@@ -69,6 +70,11 @@ function appendTeamAvatar(parent, profile, fallbackNick, { loading = false, ment
             img.replaceWith(makeTeamAvatarFallback(profile, fallbackNick, baseClass));
         });
         parent.appendChild(img);
+        if (!img.src) {
+            getSupabaseStorageUrl(url)
+                .then((resolved) => { if (resolved) img.src = resolved; })
+                .catch(() => img.replaceWith(makeTeamAvatarFallback(profile, fallbackNick, baseClass)));
+        }
         return;
     }
     if (emoji) {
