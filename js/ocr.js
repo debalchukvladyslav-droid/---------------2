@@ -386,12 +386,42 @@ function findScreenshotDate(path) {
     return state.selectedDateStr;
 }
 
-function tradeTickersForPath(path) {
-    const day = state.appData?.journal?.[findScreenshotDate(path)] || {};
+function addDays(dateStr, days) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || ''))) return '';
+    const d = new Date(`${dateStr}T00:00:00`);
+    d.setDate(d.getDate() + days);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function tickersForDay(dateStr) {
+    const day = state.appData?.journal?.[dateStr] || {};
     const set = new Set();
     (day.traded_tickers || []).forEach(t => { const n = normalizeTicker(t); if (n) set.add(n); });
     (day.trades || []).forEach(t => { const n = normalizeTicker(t.symbol); if (n) set.add(n); });
     return Array.from(set);
+}
+
+function tradeTickerContextForPath(path, maxDays = 3) {
+    const screenshotDate = findScreenshotDate(path);
+    const byDate = [];
+    const all = new Set();
+    for (let offset = -maxDays; offset <= maxDays; offset++) {
+        const dateStr = addDays(screenshotDate, offset);
+        if (!dateStr) continue;
+        const tickers = tickersForDay(dateStr);
+        if (!tickers.length) continue;
+        byDate.push({ date: dateStr, offset, tickers });
+        tickers.forEach(ticker => all.add(ticker));
+    }
+    return {
+        screenshotDate,
+        tickers: Array.from(all),
+        byDate,
+    };
+}
+
+function tradeTickersForPath(path) {
+    return tradeTickerContextForPath(path).tickers;
 }
 
 function taggedTickersForPath(path) {
@@ -761,8 +791,15 @@ export async function runOCR(encodedPath, force = false) {
         updateBadgeUI(encodedPath, false);
         return finishOCRLog();
     }
-    const traded = tradeTickersForPath(safePath);
-    console.log('[OCR] tickers from Trades for this day:', traded.length ? traded : '(none)');
+    const tradeContext = tradeTickerContextForPath(safePath, 3);
+    const traded = tradeContext.tickers;
+    console.log('[OCR] screenshot date:', tradeContext.screenshotDate);
+    console.log('[OCR] tickers from Trades window (-3..+3 days):', traded.length ? traded : '(none)');
+    console.table(tradeContext.byDate.map(row => ({
+        date: row.date,
+        offset: row.offset,
+        tickers: row.tickers.join(', '),
+    })));
     const tagged = taggedTickersForPath(safePath);
     console.log('[OCR] manual screen tags:', tagged.length ? tagged : '(none)');
     const trustedTags = tagged.filter(ticker => !traded.length || traded.includes(ticker));
