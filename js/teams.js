@@ -62,7 +62,8 @@ function appendTeamAvatar(parent, profile, fallbackNick, { loading = false, ment
     if (url) {
         const img = document.createElement('img');
         img.className = baseClass + ' team-member-avatar-img';
-        img.src = /^https?:\/\//i.test(url) ? url : '';
+        const needsResolve = !/^https?:\/\//i.test(url) || url.includes('/storage/v1/object/');
+        img.src = needsResolve ? '' : url;
         img.alt = '';
         img.referrerPolicy = 'no-referrer';
         img.loading = 'lazy';
@@ -70,9 +71,12 @@ function appendTeamAvatar(parent, profile, fallbackNick, { loading = false, ment
             img.replaceWith(makeTeamAvatarFallback(profile, fallbackNick, baseClass));
         });
         parent.appendChild(img);
-        if (!img.src) {
+        if (needsResolve) {
             getSupabaseStorageUrl(url)
-                .then((resolved) => { if (resolved) img.src = resolved; })
+                .then((resolved) => {
+                    if (resolved) img.src = resolved;
+                    else img.replaceWith(makeTeamAvatarFallback(profile, fallbackNick, baseClass));
+                })
                 .catch(() => img.replaceWith(makeTeamAvatarFallback(profile, fallbackNick, baseClass)));
         }
         return;

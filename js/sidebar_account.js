@@ -31,7 +31,8 @@ function paintSidebarAvatar(el, p) {
     if (url) {
         const img = document.createElement('img');
         img.className = 'sidebar-account-avatar-img';
-        img.src = /^https?:\/\//i.test(url) ? url : '';
+        const needsResolve = !/^https?:\/\//i.test(url) || url.includes('/storage/v1/object/');
+        img.src = needsResolve ? '' : url;
         img.alt = '';
         img.referrerPolicy = 'no-referrer';
         img.loading = 'lazy';
@@ -41,9 +42,15 @@ function paintSidebarAvatar(el, p) {
         });
         el.appendChild(img);
         el.classList.add('has-image');
-        if (!img.src) {
+        if (needsResolve) {
             getSupabaseStorageUrl(url)
-                .then((resolved) => { if (resolved) img.src = resolved; })
+                .then((resolved) => {
+                    if (resolved) img.src = resolved;
+                    else {
+                        el.innerHTML = '';
+                        el.textContent = initialsFromProfile(p);
+                    }
+                })
                 .catch(() => {
                     el.innerHTML = '';
                     el.textContent = initialsFromProfile(p);

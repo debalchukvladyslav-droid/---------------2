@@ -11,7 +11,7 @@ function getSupabaseUrlCandidate(value) {
     try {
         const url = new URL(value);
         if (!url.hostname.includes('.supabase.co')) return null;
-        const match = url.pathname.match(/\/storage\/v1\/object\/(?:sign|public|authenticated)\/([^/]+)\/(.+)$/);
+        const match = url.pathname.match(/\/storage\/v1\/object\/(?:(?:sign|public|authenticated)\/)?([^/]+)\/(.+)$/);
         if (!match) return null;
         return {
             bucket: decodeURIComponent(match[1]),
@@ -49,8 +49,6 @@ function getPathCandidates(storagePath) {
     if (path.startsWith('avatars/')) {
         return [
             { bucket: 'avatars', objectPath: path.replace(/^avatars\//, '') },
-            { bucket: 'assets', objectPath: path },
-            { bucket: 'files', objectPath: path },
         ];
     }
 
@@ -77,10 +75,13 @@ async function createFirstSignedUrl(candidates, ttl = DEFAULT_SIGNED_URL_TTL) {
 export async function getSupabaseStorageUrl(pathOrUrl, ttl = DEFAULT_SIGNED_URL_TTL) {
     const value = normalizePath(pathOrUrl);
     if (!value) return '';
-    if (/^https?:\/\//i.test(value) && !value.includes('firebasestorage') && !getSupabaseUrlCandidate(value)) return value;
+    const supabaseUrlCandidate = getSupabaseUrlCandidate(value);
+    if (/^https?:\/\//i.test(value) && !value.includes('firebasestorage') && !supabaseUrlCandidate) return value;
 
     const signed = await createFirstSignedUrl(getPathCandidates(value), ttl);
-    return signed?.url || value;
+    if (signed?.url) return signed.url;
+    if (supabaseUrlCandidate || value.replace(/^\/+/, '').startsWith('avatars/')) return '';
+    return value;
 }
 
 export async function uploadToSupabaseStorage(storagePath, file, options = {}) {
