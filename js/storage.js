@@ -256,6 +256,7 @@ export async function saveSettings() {
             errorTypes: Array.isArray(state.appData.errorTypes) ? state.appData.errorTypes : [],
             learnCache: state.appData.learnCache && typeof state.appData.learnCache === 'object' ? state.appData.learnCache : null,
             tickers: state.appData.tickers && typeof state.appData.tickers === 'object' ? state.appData.tickers : {},
+            screenMeta: state.appData.screenMeta && typeof state.appData.screenMeta === 'object' ? state.appData.screenMeta : {},
             tradeTypes: Array.isArray(state.appData.tradeTypes) ? state.appData.tradeTypes : [],
             unassignedImages: Array.isArray(state.appData.unassignedImages) ? state.appData.unassignedImages : [],
             screenTags: state.appData.screenTags && typeof state.appData.screenTags === 'object' ? state.appData.screenTags : {},
@@ -312,6 +313,10 @@ export async function loadSettings() {
             if (incoming.tickers && typeof incoming.tickers === 'object') {
                 state.appData.tickers = incoming.tickers;
                 delete incoming.tickers;
+            }
+            if (incoming.screenMeta && typeof incoming.screenMeta === 'object') {
+                state.appData.screenMeta = incoming.screenMeta;
+                delete incoming.screenMeta;
             }
             if (Array.isArray(incoming.tradeTypes)) {
                 state.appData.tradeTypes = incoming.tradeTypes;
@@ -928,6 +933,7 @@ export async function resetProfileData(userId, nick = '') {
                 errorTypes: clean.errorTypes,
                 learnCache: null,
                 tickers: {},
+                screenMeta: {},
                 tradeTypes: clean.tradeTypes,
                 unassignedImages: [],
                 screenTags: {},

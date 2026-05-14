@@ -186,7 +186,7 @@ export async function syncDriveScreenshots(silent = false) {
         } else {
             const listUrl = new URL('https://www.googleapis.com/drive/v3/files');
             listUrl.searchParams.set('q', `'${folderId}' in parents and mimeType contains 'image/'`);
-            listUrl.searchParams.set('fields', 'files(id,name,modifiedTime,size)');
+            listUrl.searchParams.set('fields', 'files(id,name,createdTime,modifiedTime,size)');
             listUrl.searchParams.set('orderBy', 'modifiedTime desc');
             listUrl.searchParams.set('pageSize', '20');
             const resp = await fetch(listUrl.toString(), { headers: { Authorization: `Bearer ${token}` } });
@@ -233,6 +233,15 @@ export async function syncDriveScreenshots(silent = false) {
             await uploadToSupabaseStorage(storagePath, blob, { contentType: blob.type });
             if (!state.appData.unassignedImages) state.appData.unassignedImages = [];
             state.appData.unassignedImages.push(storagePath);
+            if (!state.appData.screenMeta || typeof state.appData.screenMeta !== 'object') state.appData.screenMeta = {};
+            state.appData.screenMeta[storagePath] = {
+                ...(state.appData.screenMeta[storagePath] || {}),
+                source: 'drive',
+                createdAt: file.createdTime || file.modifiedTime || new Date().toISOString(),
+                driveModifiedTime: file.modifiedTime || null,
+                driveId: file.id,
+                driveName: file.name,
+            };
             newCount++;
             if (statusEl) statusEl.textContent = `⏳ Завантажено ${newCount}...`;
             showGlobalLoader('drive-sync', `Завантажено ${newCount}...`);

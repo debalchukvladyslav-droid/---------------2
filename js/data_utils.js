@@ -41,6 +41,7 @@ export function getDefaultAppData() {
         weeklyComments: {},
         settings: getDefaultSettings(),
         tickers: {},
+        screenMeta: {},
         unassignedImages: [],
         tradeTypes: ["Шорт", "Виключення", "Виключення фіолетова"]
     };
@@ -136,6 +137,7 @@ export function normalizeAppData(rawData) {
         weeklyComments: safeData.weeklyComments && typeof safeData.weeklyComments === 'object' ? safeData.weeklyComments : {},
         settings: normalizedSettings,
         tickers: safeData.tickers && typeof safeData.tickers === 'object' ? safeData.tickers : {},
+        screenMeta: safeData.screenMeta && typeof safeData.screenMeta === 'object' ? safeData.screenMeta : {},
         unassignedImages: sanitizeStringArray(safeData.unassignedImages)
     };
 }

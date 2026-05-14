@@ -167,6 +167,21 @@ function unassignedScreenshots() {
     return (state.appData?.unassignedImages || []).map(path => ({ path, category: 'unassigned' }));
 }
 
+function ensureScreenMeta(path, patch = {}) {
+    if (!path) return null;
+    if (!state.appData.screenMeta || typeof state.appData.screenMeta !== 'object') state.appData.screenMeta = {};
+    const prev = state.appData.screenMeta[path] && typeof state.appData.screenMeta[path] === 'object'
+        ? state.appData.screenMeta[path]
+        : {};
+    const createdAt = patch.createdAt || prev.createdAt || new Date().toISOString();
+    state.appData.screenMeta[path] = {
+        ...prev,
+        ...patch,
+        createdAt,
+    };
+    return state.appData.screenMeta[path];
+}
+
 export function findScreenshotsForTicker(dateStr, symbol) {
     const wanted = normalizeTicker(symbol);
     if (!dateStr || !wanted) return [];
@@ -576,6 +591,7 @@ export function assignImage(encodedPath, category) {
     }
     
     state.appData.journal[state.selectedDateStr].screenshots[category].push(url); 
+    ensureScreenMeta(url, { assignedDate: state.selectedDateStr });
     
     let unassignedIdx = state.appData.unassignedImages.indexOf(url);
     if(unassignedIdx > -1) state.appData.unassignedImages.splice(unassignedIdx, 1);
@@ -980,6 +996,10 @@ window.addEventListener('paste', async function(e) {
 
         if (!state.appData.unassignedImages) state.appData.unassignedImages = [];
         state.appData.unassignedImages.push(filename);
+        ensureScreenMeta(filename, {
+            source: 'paste',
+            createdAt: new Date().toISOString(),
+        });
         await saveSettings();
         loadImages();
         showGlobalLoader('upload-screen', 'Скріншот завантажено', { type: 'success' });

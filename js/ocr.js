@@ -286,10 +286,9 @@ const MIN_OCR_ZONE_WIDTH = 24;
 const MIN_OCR_ZONE_HEIGHT = 12;
 const MIN_OCR_CANVAS_WIDTH = 32;
 const MIN_OCR_CANVAS_HEIGHT = 24;
-const MIN_TRADED_TICKER_SCORE = 85;
 const MIN_FREE_OCR_SCORE = 80;
-const OCR_CONFIDENT_SCORE = 220;
 const OCR_MAX_RAW_TEXT_LOG = 90;
+const OCR_TOP_CANDIDATES_LIMIT = 3;
 
 function normalizeTicker(value) {
     return String(value || '').toUpperCase().replace(/[^A-Z]/g, '');
@@ -312,10 +311,6 @@ function normalizeOCRTicker(value) {
 
 function uniqueTickers(values = []) {
     return Array.from(new Set(values.map(normalizeTicker).filter(Boolean)));
-}
-
-function compactOCRText(value) {
-    return normalizeOCRTicker(String(value || ''));
 }
 
 function editDistance(a, b) {
@@ -386,6 +381,28 @@ function findScreenshotDate(path) {
     return state.selectedDateStr;
 }
 
+function ymdFromDate(value) {
+    const d = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function screenshotCreatedDate(path) {
+    const meta = state.appData?.screenMeta?.[path];
+    const fromMeta = meta?.createdAt ? ymdFromDate(meta.createdAt) : '';
+    if (fromMeta) return { date: fromMeta, source: 'screenMeta.createdAt', raw: meta.createdAt };
+
+    const fileName = String(path || '').split(/[\\/]/).pop() || '';
+    const timestampMatch = fileName.match(/(?:^|_)(1[5-9]\d{11}|2\d{12})(?=\.|_|-)/);
+    if (timestampMatch) {
+        const fromTimestamp = ymdFromDate(Number(timestampMatch[1]));
+        if (fromTimestamp) return { date: fromTimestamp, source: 'filename timestamp', raw: timestampMatch[1] };
+    }
+
+    const assignedDate = findScreenshotDate(path);
+    return { date: assignedDate, source: 'assigned journal date fallback', raw: assignedDate };
+}
+
 function addDays(dateStr, days) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || ''))) return '';
     const d = new Date(`${dateStr}T00:00:00`);
@@ -402,7 +419,8 @@ function tickersForDay(dateStr) {
 }
 
 function tradeTickerContextForPath(path, maxDays = 3) {
-    const screenshotDate = findScreenshotDate(path);
+    const created = screenshotCreatedDate(path);
+    const screenshotDate = created.date;
     const byDate = [];
     const all = new Set();
     for (let offset = -maxDays; offset <= maxDays; offset++) {
@@ -415,6 +433,8 @@ function tradeTickerContextForPath(path, maxDays = 3) {
     }
     return {
         screenshotDate,
+        dateSource: created.source,
+        dateRaw: created.raw,
         tickers: Array.from(all),
         byDate,
     };
@@ -509,28 +529,11 @@ function scoreTickerCandidates(rawText, tradedTickers = [], ocrWords = [], zoneW
     const primaryTickers = primaryHeaderTickers(rawText);
     const leadingTickers = leadingTickerWords(rawText);
     const traded = tradedTickers.map(normalizeTicker).filter(Boolean);
-    const compact = compactOCRText(rawText);
     const highConfidence = (ocrWords || [])
         .map(w => ({ text: normalizeOCRTicker(w.text), confidence: Number(w.confidence) || 0 }))
         .filter(w => validTickerWord(w.text, { allowSingle: traded.includes(w.text), trusted: traded.includes(w.text) }));
 
     const scores = {};
-    const wordSet = new Set(words);
-
-    // Збіг з traded_tickers — найвищий пріоритет, бо це реальний список торгованих символів за день.
-    for (const w of traded) {
-        const trusted = { allowSingle: true, trusted: true };
-        if (wordSet.has(w)) addCandidate(scores, w, 120 * zoneWeight, trusted);
-        if (highConfidence.some(item => item.text === w && item.confidence >= 35)) addCandidate(scores, w, 160 * zoneWeight, trusted);
-        if (words.some(word => word.includes(w) || w.includes(word))) addCandidate(scores, w, 45 * zoneWeight, trusted);
-        if (compact.includes(w)) addCandidate(scores, w, 130 * zoneWeight, trusted);
-        if (words.some(word => isNearTickerMatch(word, w))) addCandidate(scores, w, 70 * zoneWeight, trusted);
-        if (wordVariants.includes(w)) addCandidate(scores, w, 110 * zoneWeight, trusted);
-        const bestConfidence = highConfidence
-            .filter(item => isNearTickerMatch(item.text, w))
-            .reduce((max, item) => Math.max(max, item.confidence), 0);
-        if (bestConfidence >= 30) addCandidate(scores, w, (70 + bestConfidence) * zoneWeight, trusted);
-    }
 
     for (const w of words) addCandidate(scores, w, 18 * zoneWeight);
     for (const w of wordVariants) addCandidate(scores, w, 10 * zoneWeight);
@@ -540,7 +543,6 @@ function scoreTickerCandidates(rawText, tradedTickers = [], ocrWords = [], zoneW
     for (const w of highConfidence) addCandidate(scores, w.text, Math.max(12, w.confidence / 2) * zoneWeight);
 
     Object.keys(scores).forEach(ticker => {
-        if (traded.includes(ticker)) scores[ticker] += 80;
         if (ticker.length >= 3 && ticker.length <= 4) scores[ticker] += 14;
         if (ticker.length === 5) scores[ticker] += 4;
     });
@@ -562,17 +564,9 @@ function bestTickerFromScores(scores, tradedTickers = []) {
     if (!sorted.length) return '???';
 
     if (traded.length) {
-        const tradedSorted = sorted.filter(([ticker]) => traded.includes(ticker));
-        if (!tradedSorted.length) return '???';
-        const [bestTraded, bestTradedScore] = tradedSorted[0];
-        const secondTradedScore = tradedSorted[1]?.[1] || 0;
-        if (
-            bestTradedScore >= MIN_TRADED_TICKER_SCORE
-            || (secondTradedScore > 0 && bestTradedScore >= 45 && bestTradedScore >= secondTradedScore * 1.25)
-        ) {
-            return bestTraded;
-        }
-        return '???';
+        const topOcr = sorted.slice(0, OCR_TOP_CANDIDATES_LIMIT);
+        const matchedTop = topOcr.find(([ticker]) => traded.includes(ticker));
+        if (matchedTop) return matchedTop[0];
     }
 
     const [best, bestScore] = sorted[0];
@@ -609,14 +603,15 @@ function tickerConfidence(scores, ticker, tradedTickers = []) {
     if (!ticker || ticker === '???') return { ok: false, score: 0, secondScore: 0, matchedTrades: false };
     const traded = tradedTickers.map(normalizeTicker).filter(Boolean);
     const sorted = Object.entries(scores)
-        .filter(([candidate]) => !traded.length || traded.includes(candidate))
+        .filter(([candidate]) => validTickerWord(candidate, { trusted: traded.includes(candidate) }))
         .sort((a, b) => b[1] - a[1]);
     const score = Math.round(scores[ticker] || 0);
     const secondScore = Math.round(sorted.find(([candidate]) => candidate !== ticker)?.[1] || 0);
     const matchedTrades = traded.includes(ticker);
-    const ok = matchedTrades
-        ? score >= OCR_CONFIDENT_SCORE || (score >= MIN_TRADED_TICKER_SCORE && score >= secondScore * 1.35)
-        : traded.length === 0 && (score >= MIN_FREE_OCR_SCORE && score >= secondScore * 1.6);
+    const topOcr = sorted.slice(0, OCR_TOP_CANDIDATES_LIMIT).map(([candidate]) => candidate);
+    const ok = traded.length
+        ? topOcr.includes(ticker) && matchedTrades
+        : score >= MIN_FREE_OCR_SCORE && (secondScore === 0 || score >= secondScore * 1.6);
     return { ok, score, secondScore, matchedTrades };
 }
 
@@ -793,7 +788,11 @@ export async function runOCR(encodedPath, force = false) {
     }
     const tradeContext = tradeTickerContextForPath(safePath, 3);
     const traded = tradeContext.tickers;
-    console.log('[OCR] screenshot date:', tradeContext.screenshotDate);
+    console.log('[OCR] screenshot date:', {
+        date: tradeContext.screenshotDate,
+        source: tradeContext.dateSource,
+        raw: tradeContext.dateRaw,
+    });
     console.log('[OCR] tickers from Trades window (-3..+3 days):', traded.length ? traded : '(none)');
     console.table(tradeContext.byDate.map(row => ({
         date: row.date,
@@ -927,10 +926,16 @@ export async function runOCR(encodedPath, force = false) {
         if (ticker === '???') ticker = bestTickerFromScores(totalScores, traded);
 
         logTickerCandidates('final', totalScores, traded, 10);
+        const finalTop3 = topTickerRows(totalScores, traded, OCR_TOP_CANDIDATES_LIMIT);
+        const matchedTop3 = finalTop3.find(row => row.inTrades === 'yes') || null;
+        console.log('[OCR] final top-3 OCR candidates checked against Trades:', {
+            top3: finalTop3,
+            firstTop3TradeMatch: matchedTop3?.ticker || '(none)',
+        });
         if (ticker === '???') {
             console.log('[OCR] final result: ???', {
                 reason: traded.length
-                    ? 'no OCR candidate was confident enough and matched Trades'
+                    ? 'no OCR top-3 candidate matched Trades and OCR was not confident enough alone'
                     : 'no confident OCR candidate found; import Trades first for stronger validation',
             });
         } else {
@@ -938,6 +943,9 @@ export async function runOCR(encodedPath, force = false) {
                 ticker,
                 score: Math.round(totalScores[ticker] || 0),
                 matchedTrades: traded.includes(ticker),
+                selectionRule: traded.includes(ticker)
+                    ? 'selected because it was inside OCR top-3 and exists in Trades'
+                    : 'selected by OCR score; no OCR top-3 candidate matched Trades',
             });
         }
 
