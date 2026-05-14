@@ -421,8 +421,20 @@ function tickersForDay(dateStr) {
 function tradeTickerContextForPath(path, maxDays = 3) {
     const created = screenshotCreatedDate(path);
     const screenshotDate = created.date;
+    const reliableDate = created.source !== 'assigned journal date fallback';
     const byDate = [];
     const all = new Set();
+    if (!reliableDate) {
+        return {
+            screenshotDate,
+            dateSource: created.source,
+            dateRaw: created.raw,
+            reliableDate,
+            disabledReason: 'No real screenshot creation date is stored for this image, so Trades matching is disabled to avoid matching old screenshots with new trades.',
+            tickers: [],
+            byDate,
+        };
+    }
     for (let offset = -maxDays; offset <= maxDays; offset++) {
         const dateStr = addDays(screenshotDate, offset);
         if (!dateStr) continue;
@@ -435,6 +447,8 @@ function tradeTickerContextForPath(path, maxDays = 3) {
         screenshotDate,
         dateSource: created.source,
         dateRaw: created.raw,
+        reliableDate,
+        disabledReason: '',
         tickers: Array.from(all),
         byDate,
     };
@@ -615,6 +629,48 @@ function tickerConfidence(scores, ticker, tradedTickers = []) {
     return { ok, score, secondScore, matchedTrades };
 }
 
+function quickPhaseDecision(scores, tradedTickers = [], phase = 1) {
+    const top = topTickerRows(scores, tradedTickers, OCR_TOP_CANDIDATES_LIMIT);
+    if (!top.length) {
+        return { stop: false, ticker: '???', reason: 'no ticker candidates yet', top };
+    }
+
+    const tradeMatch = top.find(row => row.inTrades === 'yes');
+    if (tradeMatch) {
+        return {
+            stop: true,
+            ticker: tradeMatch.ticker,
+            reason: `OCR top-${OCR_TOP_CANDIDATES_LIMIT} matched Trades`,
+            top,
+        };
+    }
+
+    const best = top[0];
+    const secondScore = top[1]?.score || 0;
+    const scoreGate = phase === 1 ? 120 : 70;
+    const leadGate = phase === 1 ? 1.35 : 1.18;
+    const hasStrongLead = secondScore === 0 || best.score >= secondScore * leadGate;
+    if (best.score >= scoreGate && hasStrongLead) {
+        return {
+            stop: true,
+            ticker: best.ticker,
+            reason: `strong OCR candidate after phase ${phase}`,
+            top,
+        };
+    }
+
+    if (phase >= 2 && best.score >= 45) {
+        return {
+            stop: true,
+            ticker: best.ticker,
+            reason: 'usable early OCR candidate; skipped slow full-screen sweep',
+            top,
+        };
+    }
+
+    return { stop: false, ticker: best.ticker, reason: 'candidate still weak; continue scanning', top };
+}
+
 function ocrVariantPlan(zone) {
     const isGridZone = String(zone.label || '').startsWith('grid-');
     if (zone.phase === 1) return { scale: 5, variants: ['base', 'dark', 'light'] };
@@ -792,13 +848,18 @@ export async function runOCR(encodedPath, force = false) {
         date: tradeContext.screenshotDate,
         source: tradeContext.dateSource,
         raw: tradeContext.dateRaw,
+        reliable: tradeContext.reliableDate,
     });
-    console.log('[OCR] tickers from Trades window (-3..+3 days):', traded.length ? traded : '(none)');
-    console.table(tradeContext.byDate.map(row => ({
-        date: row.date,
-        offset: row.offset,
-        tickers: row.tickers.join(', '),
-    })));
+    if (tradeContext.reliableDate) {
+        console.log('[OCR] tickers from Trades window (-3..+3 days):', traded.length ? traded : '(none)');
+        console.table(tradeContext.byDate.map(row => ({
+            date: row.date,
+            offset: row.offset,
+            tickers: row.tickers.join(', '),
+        })));
+    } else {
+        console.warn('[OCR] Trades matching disabled:', tradeContext.disabledReason);
+    }
     const tagged = taggedTickersForPath(safePath);
     console.log('[OCR] manual screen tags:', tagged.length ? tagged : '(none)');
     const trustedTags = tagged.filter(ticker => !traded.length || traded.includes(ticker));
@@ -918,6 +979,19 @@ export async function runOCR(encodedPath, force = false) {
             console.log(`[OCR] phase ${phase} summary after ${scannedZones} scanned zones`);
             logTickerCandidates(`phase ${phase} cumulative`, totalScores, traded, 8);
             console.groupEnd();
+
+            const quickDecision = quickPhaseDecision(totalScores, traded, phase);
+            console.log('[OCR] phase stop check:', {
+                phase,
+                stop: quickDecision.stop,
+                selected: quickDecision.ticker,
+                reason: quickDecision.reason,
+                top3: quickDecision.top,
+            });
+            if (quickDecision.stop) {
+                ticker = quickDecision.ticker;
+                break;
+            }
 
             const confidence = tickerConfidence(totalScores, ticker, traded);
             if (confidence.ok) break;

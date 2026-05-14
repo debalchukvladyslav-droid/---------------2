@@ -22,6 +22,29 @@ let _gsiIniting = null;
 let _syncInProgress = false;
 let _driveFilesCache = null;
 
+function driveScreenMetaFromFile(file, prev = {}) {
+    const createdAt = file.createdTime || file.modifiedTime || prev.createdAt || new Date().toISOString();
+    return {
+        ...prev,
+        source: 'drive',
+        createdAt,
+        driveCreatedTime: file.createdTime || null,
+        driveModifiedTime: file.modifiedTime || null,
+        driveId: file.id,
+        driveName: file.name,
+    };
+}
+
+function upsertDriveScreenMeta(storagePath, file) {
+    if (!storagePath || !file?.id) return false;
+    if (!state.appData.screenMeta || typeof state.appData.screenMeta !== 'object') state.appData.screenMeta = {};
+    const prev = state.appData.screenMeta[storagePath] || {};
+    const next = driveScreenMetaFromFile(file, prev);
+    const changed = JSON.stringify(prev) !== JSON.stringify(next);
+    if (changed) state.appData.screenMeta[storagePath] = next;
+    return changed;
+}
+
 function driveAccessTokenStorageKey() {
     return state.myUserId ? `pj:driveAT:${state.myUserId}` : null;
 }
@@ -188,7 +211,7 @@ export async function syncDriveScreenshots(silent = false) {
             listUrl.searchParams.set('q', `'${folderId}' in parents and mimeType contains 'image/'`);
             listUrl.searchParams.set('fields', 'files(id,name,createdTime,modifiedTime,size)');
             listUrl.searchParams.set('orderBy', 'modifiedTime desc');
-            listUrl.searchParams.set('pageSize', '20');
+            listUrl.searchParams.set('pageSize', '100');
             const resp = await fetch(listUrl.toString(), { headers: { Authorization: `Bearer ${token}` } });
             const data = await resp.json();
             if (!data.files) {
@@ -209,19 +232,34 @@ export async function syncDriveScreenshots(silent = false) {
             }
         }
 
-        const newFiles = files.filter(file => {
-            if (!/^[a-zA-Z0-9_-]+$/.test(file.id)) return false;
+        const fileRecords = files.map(file => {
+            if (!/^[a-zA-Z0-9_-]+$/.test(file.id)) return null;
             const variants = buildScreenshotPathVariants(`${file.id}_${file.name}`);
-            return variants.every(path => !existingPaths.has(path) && !ignored.has(path));
-        });
+            const existingPath = variants.find(path => existingPaths.has(path)) || '';
+            return {
+                file,
+                variants,
+                existingPath,
+                storagePath: existingPath || buildScreenshotPath(`${file.id}_${file.name}`),
+            };
+        }).filter(Boolean);
+
+        let metaUpdatedCount = 0;
+        for (const record of fileRecords) {
+            if (!record.existingPath || ignored.has(record.existingPath)) continue;
+            if (upsertDriveScreenMeta(record.existingPath, record.file)) metaUpdatedCount++;
+        }
+
+        const newFiles = fileRecords.filter(record =>
+            !record.existingPath && record.variants.every(path => !ignored.has(path))
+        );
 
         let newCount = 0;
-        await Promise.all(newFiles.map(async (file) => {
+        await Promise.all(newFiles.map(async ({ file, storagePath }) => {
             if (file.size && parseInt(file.size) > MAX_FILE_SIZE_BYTES) {
                 console.warn(`Drive: пропускаємо ${file.name} — розмір перевищує ліміт`);
                 return;
             }
-            const storagePath = buildScreenshotPath(`${file.id}_${file.name}`);
             const fileUrl = new URL(`https://www.googleapis.com/drive/v3/files/${file.id}`);
             fileUrl.searchParams.set('alt', 'media');
             const fileResp = await fetch(fileUrl.toString(), { headers: { Authorization: `Bearer ${token}` } });
@@ -233,27 +271,30 @@ export async function syncDriveScreenshots(silent = false) {
             await uploadToSupabaseStorage(storagePath, blob, { contentType: blob.type });
             if (!state.appData.unassignedImages) state.appData.unassignedImages = [];
             state.appData.unassignedImages.push(storagePath);
-            if (!state.appData.screenMeta || typeof state.appData.screenMeta !== 'object') state.appData.screenMeta = {};
-            state.appData.screenMeta[storagePath] = {
-                ...(state.appData.screenMeta[storagePath] || {}),
-                source: 'drive',
-                createdAt: file.createdTime || file.modifiedTime || new Date().toISOString(),
-                driveModifiedTime: file.modifiedTime || null,
-                driveId: file.id,
-                driveName: file.name,
-            };
+            upsertDriveScreenMeta(storagePath, file);
             newCount++;
             if (statusEl) statusEl.textContent = `⏳ Завантажено ${newCount}...`;
             showGlobalLoader('drive-sync', `Завантажено ${newCount}...`);
         }));
 
-        if (newCount > 0) {
+        if (metaUpdatedCount > 0) {
+            console.log('[Drive] updated screenshot dates from Google Drive metadata:', metaUpdatedCount);
+        }
+
+        if (newCount > 0 || metaUpdatedCount > 0) {
             _driveFilesCache = null;
             await saveSettings();
-            loadImages();
+            if (newCount > 0) loadImages();
+        }
+
+        if (newCount > 0) {
             showGlobalLoader('drive-sync', `Синхронізовано ${newCount} скрінів`, { type: 'success' });
             hideGlobalLoader('drive-sync', 1400);
             showToast(`✅ Синхронізовано ${newCount} нових скрінів!`);
+        } else if (metaUpdatedCount > 0 && !silent) {
+            showGlobalLoader('drive-sync', `Оновлено дати ${metaUpdatedCount} скрінів`, { type: 'success' });
+            hideGlobalLoader('drive-sync', 1200);
+            showToast(`✅ Оновлено дати ${metaUpdatedCount} скрінів з Google Drive`);
         } else if (!silent) {
             showGlobalLoader('drive-sync', 'Нових скрінів немає', { type: 'success' });
             hideGlobalLoader('drive-sync', 1200);
@@ -262,7 +303,9 @@ export async function syncDriveScreenshots(silent = false) {
             hideGlobalLoader('drive-sync');
         }
 
-        if (statusEl) statusEl.textContent = newCount > 0 ? `✅ +${newCount} нових` : '✅ Актуально';
+        if (statusEl) statusEl.textContent = newCount > 0
+            ? `✅ +${newCount} нових`
+            : metaUpdatedCount > 0 ? `✅ Дати +${metaUpdatedCount}` : '✅ Актуально';
     } catch (e) {
         console.error('Drive sync error:', e);
         showGlobalLoader('drive-sync', 'Помилка синхронізації', { type: 'error' });
