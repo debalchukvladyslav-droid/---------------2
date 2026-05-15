@@ -499,3 +499,23 @@ export function refreshDashboardNews() {
     _newsCache = { key: '', ts: 0, payload: null };
     return renderDashboardNews({ force: true });
 }
+
+export async function refreshLiveNewsModal() {
+    const button = document.getElementById('live-news-refresh');
+    const list = document.getElementById('live-news-list');
+    if (button) {
+        button.disabled = true;
+        button.classList.add('is-loading');
+    }
+    if (list) {
+        list.innerHTML = '<div class="live-news-empty">Оновлюємо live-стрічку...</div>';
+    }
+    try {
+        await refreshDashboardNews();
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.classList.remove('is-loading');
+        }
+    }
+}

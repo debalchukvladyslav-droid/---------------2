@@ -67,7 +67,10 @@
                 <div class="live-news-kicker">Live</div>
                 <h2 id="live-news-title" class="live-news-title">Новини зі стрічки</h2>
             </div>
-            <button type="button" class="live-news-close" data-action="live-news-close" aria-label="Закрити">×</button>
+            <div class="live-news-actions">
+                <button type="button" class="live-news-refresh" id="live-news-refresh" data-action="live-news-refresh" title="Оновити новини" aria-label="Оновити новини">↻</button>
+                <button type="button" class="live-news-close" data-action="live-news-close" aria-label="Закрити">×</button>
+            </div>
         </div>
         <div id="live-news-list" class="live-news-list"></div>
     </div>

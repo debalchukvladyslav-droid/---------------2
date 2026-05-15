@@ -197,6 +197,7 @@ function activateAction(action, trigger, event = null) {
         'session-modal-check': () => window.checkSessionModalReadiness?.(),
         'session-modal-save': () => window.saveSessionModal?.(),
         'live-news-open': () => window.openLiveNewsModal?.(),
+        'live-news-refresh': () => window.refreshLiveNewsModal?.(),
         'live-news-close': () => window.closeLiveNewsModal?.(),
         'live-news-backdrop': () => {
             if (event?.target !== trigger) return false;

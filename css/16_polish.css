@@ -936,7 +936,14 @@ body {
     font-size: 1.05rem;
 }
 
-.live-news-close {
+.live-news-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.live-news-close,
+.live-news-refresh {
     width: 34px;
     height: 34px;
     display: inline-flex;
@@ -952,7 +959,18 @@ body {
     line-height: 1;
 }
 
-.live-news-close:hover {
+.live-news-refresh {
+    font-size: 1rem;
+    font-weight: 800;
+}
+
+.live-news-refresh.is-loading {
+    opacity: 0.65;
+    cursor: wait;
+}
+
+.live-news-close:hover,
+.live-news-refresh:hover {
     color: var(--text-main);
     background: var(--bg-hover);
 }
