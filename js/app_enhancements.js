@@ -396,12 +396,17 @@ function bindDeclarativeActions() {
     });
 }
 
-async function initEnhancements() {
+function refreshDomEnhancements() {
     setExternalLinkDefaults();
     enhanceIconButtons();
     guardLargeImports();
     improveResetCodeInput();
     trackDayFormChanges();
+    addLiveRegions();
+}
+
+async function initEnhancements() {
+    refreshDomEnhancements();
     if (!globalEnhancementsReady) addKeyboardShortcuts();
     addLiveRegions();
     if (!globalEnhancementsReady) bindDeclarativeActions();
@@ -419,14 +424,8 @@ async function initEnhancements() {
         setExternalLinkDefaults();
         enhanceIconButtons();
         });
-        document.addEventListener('app:shell-ready', () => {
-            setExternalLinkDefaults();
-            enhanceIconButtons();
-            guardLargeImports();
-            improveResetCodeInput();
-            trackDayFormChanges();
-            addLiveRegions();
-        });
+        document.addEventListener('app:shell-ready', refreshDomEnhancements);
+        document.addEventListener('app:view-partial-ready', refreshDomEnhancements);
     }
 
     window.setTimeout(() => {

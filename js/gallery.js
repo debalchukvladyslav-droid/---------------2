@@ -240,7 +240,7 @@ export function ensureDayStructure(d) {
 export async function renderUnassignedUI() {
     let container = document.getElementById('unassigned-container');
     let titleEl = document.getElementById('unassigned-title');
-    if (!titleEl) return;
+    if (!container || !titleEl) return;
 
     let hintHTML = '<span style="font-size: 0.85rem; color: var(--text-muted); font-weight: normal; margin-left: 10px;">(або вставте картинку через Ctrl+V)</span>';
 
@@ -340,6 +340,7 @@ export function loadMoreUnassigned() {
 export async function renderAssignedScreens() {
     let screens = state.appData.journal[state.selectedDateStr]?.screenshots || { good:[], normal:[], bad:[], error:[] }; 
     const assignedContainer = document.getElementById('assigned-container');
+    if (!assignedContainer) return;
     assignedContainer.innerHTML = '';
     let count = 0; let currentDayImages = [];
 

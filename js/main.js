@@ -47,7 +47,12 @@ async function ensureAppShellLoaded() {
     if (!appShellPromise) {
         appShellPromise = (async () => {
             showGlobalLoader('app-shell', 'Завантаження інтерфейсу...');
-            await loadPartials();
+            const shellHosts = Array.from(document.querySelectorAll('[data-partial]'))
+                .filter((host) => {
+                    const url = String(host.getAttribute('data-partial') || '');
+                    return !url.startsWith('partials/views/') || url === 'partials/views/dashboard-view.html';
+                });
+            await Promise.all(shellHosts.map((host) => loadPartials(host)));
             initBackgroundControls();
             if (!appShellEventsReady) {
                 initGlobalAppEvents({ shiftDate, closeSOSModal });

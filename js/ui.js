@@ -7,6 +7,7 @@ import { disposeStatsView } from './stats.js';
 import { disposeTradesView } from './trades_view2.js';
 import { disposeScreensView } from './gallery.js';
 import { disposeTradesDatagrid } from './trades_datagrid.js';
+import { loadPartials } from './partials.js';
 
 let isThemeUIInitialized = false;
 let selectedDashGreetingIndex = null;
@@ -431,6 +432,22 @@ const TAB_ROUTES = {
     admin: '/admin',
 };
 
+const TAB_PARTIALS = {
+    dash: 'partials/views/dashboard-view.html',
+    calendar: 'partials/views/calendar-view.html',
+    stats: 'partials/views/stats-view.html',
+    trades: 'partials/views/trades-view.html',
+    datagrid: 'partials/views/datagrid-view.html',
+    table: 'partials/views/sheet-import-view.html',
+    screens: 'partials/views/screens-view.html',
+    ai: 'partials/views/ai-view.html',
+    'mentor-review': 'partials/views/mentor-review-view.html',
+    playbook: 'partials/views/playbook-view.html',
+    learn: 'partials/views/learn-view.html',
+    settings: 'partials/views/settings-view.html',
+    admin: 'partials/views/admin-panel.html',
+};
+
 const TAB_DISPOSERS = {
     dash: () => disposeDashMiniEquityChart(),
     stats: () => disposeStatsView(),
@@ -652,8 +669,22 @@ function updateRouteForTab(tab, mode = 'push') {
     }
 }
 
+async function ensureMainTabPartial(tab) {
+    if (document.getElementById('view-' + tab)) return true;
+    const url = TAB_PARTIALS[tab];
+    if (!url) return false;
+    const host = document.querySelector(`[data-partial="${url}"]`);
+    if (!host) return false;
+    await loadPartials(host);
+    document.dispatchEvent(new CustomEvent('app:view-partial-ready', { detail: { tab } }));
+    return !!document.getElementById('view-' + tab);
+}
+
 export async function switchMainTab(tab, options = {}) {
-    if (!document.getElementById('view-' + tab)) tab = 'dash';
+    if (!await ensureMainTabPartial(tab)) {
+        tab = 'dash';
+        await ensureMainTabPartial(tab);
+    }
     const previousView = document.querySelector('.view-content.active');
     const previousTab = previousView?.id?.replace(/^view-/, '') || '';
     if (previousTab === tab) return;
