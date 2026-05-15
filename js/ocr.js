@@ -4,11 +4,15 @@ import { saveToLocal } from './storage.js';
 import { getImgUrl, getStorageUrl } from './gallery.js';
 import { ensureTesseract } from './vendor_loader.js';
 
+let ocrDrawingReady = false;
+
 export function setupOCRDrawing() {
     let container = document.getElementById('ocr-setup-container'); 
     let wrapper = document.getElementById('ocr-zoom-wrapper');
     let img = document.getElementById('ocr-setup-img'); 
     let box = document.getElementById('ocr-selection-box');
+    if (!container || !wrapper || !img || !box || ocrDrawingReady) return;
+    ocrDrawingReady = true;
     let isDraggingOCR = false, dragStartX = 0, dragStartY = 0;
     
     container.addEventListener('contextmenu', e => e.preventDefault());
@@ -83,6 +87,7 @@ export async function loadLatestImageForOCR() {
         if (latestImg) {
             let src = await getStorageUrl(latestImg);
             let imgEl = document.getElementById('ocr-setup-img');
+            if (!ocrContainer || !statusEl || !imgEl) return;
 
             imgEl.onerror = function() {
                 imgEl.src = '';

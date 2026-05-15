@@ -572,6 +572,7 @@ async function runMainTabWork(tab) {
         tasks.push(Promise.resolve(refreshDashMiniEquityChartTheme()));
     }
     if (tab === 'screens') {
+        if (window.setupOCRDrawing) window.setupOCRDrawing();
         if (window.updateDriveUI) tasks.push(Promise.resolve(window.updateDriveUI()));
         if (window.restoreScreensDistributionState) tasks.push(Promise.resolve(window.restoreScreensDistributionState()));
         if (window.loadImages) tasks.push(Promise.resolve(window.loadImages()));
