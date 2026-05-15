@@ -237,5 +237,17 @@ export function renderTradesDatagrid() {
     });
 }
 
+export function disposeTradesDatagrid() {
+    const tbody = document.getElementById('datagrid-body');
+    if (tbody) tbody.innerHTML = '';
+
+    const summary = document.getElementById('datagrid-summary');
+    if (summary) summary.textContent = 'Завантаження...';
+
+    const moreBtn = document.getElementById('datagrid-load-more');
+    if (moreBtn) moreBtn.hidden = true;
+}
+
 window.renderTradesDatagrid = renderTradesDatagrid;
 window.requestTradesDatagridRefresh = requestTradesDatagridRefresh;
+window.disposeTradesDatagrid = disposeTradesDatagrid;

@@ -12,7 +12,7 @@ import { applyTheme, saveThemeSettings, switchTab, toggleMobileSidebar, switchMa
 import { shiftDate, selectDateFromInput, saveEntry, renderView, selectDate, updateAutoFlags, initSelectors, renderSidebarTradesList } from './calendar.js';
 import { toggleStatsDropdown, toggleTree, toggleStatsFilter, refreshStatsView, closeStatsDropdown, renderStatsSourceSelector, selectStatsSource, renderTradeTypeSelector, selectTradeTypeFilter, toggleStatsEquityMode, toggleStatsCompareMode, closeStatsCompareMode } from './stats.js';
 import { renderErrorsList, addNewErrorType, deleteErrorType, renderChecklistDisplay, renderSettingsChecklist, addNewChecklistItem, deleteChecklistItem, saveChecklist, renderSidebarSliders, renderSettingsSliders, addNewSliderItem, deleteSliderItem, saveSlidersSettings, renderSettingsTradeTypes, addNewTradeType, deleteTradeType, saveTradeTypes, renderMyTradeTypes, addMyTradeType, deleteMyTradeType, saveMyTradeTypes, renderSettingsSituations, addPlaybookSituation, deletePlaybookSituation, savePlaybookSituations } from './settings.js';
-import { openZoom, closeZoom, openOriginal, zoomStep, loadMoreUnassigned, assignImage, removeAssignedImage, deleteFileFromPC, loadImages, renderAssignedScreens, openScreenshotForTrade } from './gallery.js';
+import { openZoom, closeZoom, openOriginal, zoomStep, loadMoreUnassigned, assignImage, removeAssignedImage, deleteFileFromPC, loadImages, renderAssignedScreens, disposeScreensView, openScreenshotForTrade } from './gallery.js';
 import { getAIAdvice, analyzeChart, analyzeTagPatterns, openSOSModal, closeSOSModal, sendSOSMessage, sendDataChatMessage, renderAIAdviceUI, loadAIChatHistory, switchAITab, bookmarkAIChat, renderSavedAIChats, deleteSavedAI } from './ai.js';
 import { cleanupUnusedAIRequests } from './ai/client.js';
 import { setupOCRDrawing, loadLatestImageForOCR, saveVisualOCRSettings, editTicker, forceScan, updateBadgeUI, runOCR } from './ocr.js';
@@ -25,7 +25,7 @@ import { initMentorReviewUI, refreshMentorReviewQueue, setMentorReviewNavBadges 
 
 import { initTradesView, populateDateSelect, populateSymbolSelect, loadTradeChart, openTradesAtDayIndex } from './trades_view2.js';
 import { initSheetTableView, saveSheetMapping } from './sheet_table.js';
-import { renderTradesDatagrid, TRADE_TYPES } from './trades_datagrid.js';
+import { renderTradesDatagrid, disposeTradesDatagrid, TRADE_TYPES } from './trades_datagrid.js';
 import { initNotifications } from './notifications.js';
 import { submitReviewRequest, refreshReviewRequestButtons } from './review_requests.js';
 import { showToast } from './utils.js';
@@ -36,10 +36,34 @@ import { renderMarketSentiment, refreshMarketSentiment, openMarketSentimentSourc
 import { loadPartials } from './partials.js';
 import { applyPersistedBackground, initBackgroundControls } from './backgrounds.js';
 import { initGlobalAppEvents } from './app_events.js';
+import { showGlobalLoader, hideGlobalLoader } from './loading.js';
 
-await loadPartials();
-initBackgroundControls();
-initGlobalAppEvents({ shiftDate, closeSOSModal });
+let appShellPromise = null;
+let appShellEventsReady = false;
+
+await loadPartials(document.querySelector('[data-partial="partials/modals/auth-overlay.html"]'));
+
+async function ensureAppShellLoaded() {
+    if (!appShellPromise) {
+        appShellPromise = (async () => {
+            showGlobalLoader('app-shell', 'Завантаження інтерфейсу...');
+            await loadPartials();
+            initBackgroundControls();
+            if (!appShellEventsReady) {
+                initGlobalAppEvents({ shiftDate, closeSOSModal });
+                appShellEventsReady = true;
+            }
+            document.dispatchEvent(new CustomEvent('app:shell-ready'));
+            hideGlobalLoader('app-shell');
+        })().catch((error) => {
+            showGlobalLoader('app-shell', `Помилка інтерфейсу: ${error?.message || error}`, { type: 'error' });
+            hideGlobalLoader('app-shell', 2800);
+            appShellPromise = null;
+            throw error;
+        });
+    }
+    return appShellPromise;
+}
 
 // 2. ПРОКИДАННЯ ФУНКЦІЙ ДЛЯ HTML (window)
 window.toggleRightSidebar = function() {
@@ -158,6 +182,7 @@ window.removeAssignedImage = removeAssignedImage;
 window.deleteFileFromPC = deleteFileFromPC;
 window.loadImages = loadImages;
 window.renderAssignedScreens = renderAssignedScreens;
+window.disposeScreensView = disposeScreensView;
 window.openScreenshotForTrade = openScreenshotForTrade;
 window.submitReviewRequest = submitReviewRequest;
 window.refreshReviewRequestButtons = refreshReviewRequestButtons;
@@ -595,12 +620,14 @@ async function bootApp(user) {
     setCurrentViewedUserId(user.id || null);
     await resolveViewedUserId(state.CURRENT_VIEWED_USER);
 
-    document.getElementById('auth-overlay').style.display = 'none';
-    const errEl = document.getElementById('auth-error');
-    if (errEl) errEl.style.display = 'none';
-
     startInitTimeout();
     try {
+        await ensureAppShellLoaded();
+
+        document.getElementById('auth-overlay').style.display = 'none';
+        const errEl = document.getElementById('auth-error');
+        if (errEl) errEl.style.display = 'none';
+
         await loadTeams();
         await loadMentorStatusForAccount();
         await initializeApp();
@@ -763,4 +790,5 @@ initSheetTableView({ deferGoogleRestore: true });
 window.initSheetTableView = initSheetTableView;
 window.saveSheetMapping = saveSheetMapping;
 window.renderTradesDatagrid = renderTradesDatagrid;
+window.disposeTradesDatagrid = disposeTradesDatagrid;
 window.TRADE_TYPES = TRADE_TYPES;

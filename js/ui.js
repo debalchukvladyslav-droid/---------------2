@@ -5,6 +5,8 @@ import { showToast, showConfirm } from './utils.js';
 import { disposeDashMiniEquityChart, refreshDashMiniEquityChartTheme } from './dash_mini_chart.js';
 import { disposeStatsView } from './stats.js';
 import { disposeTradesView } from './trades_view2.js';
+import { disposeScreensView } from './gallery.js';
+import { disposeTradesDatagrid } from './trades_datagrid.js';
 
 let isThemeUIInitialized = false;
 let selectedDashGreetingIndex = null;
@@ -433,6 +435,8 @@ const TAB_DISPOSERS = {
     dash: () => disposeDashMiniEquityChart(),
     stats: () => disposeStatsView(),
     trades: () => disposeTradesView(),
+    datagrid: () => disposeTradesDatagrid(),
+    screens: () => disposeScreensView(),
 };
 const TAB_LOADING_TITLES = {
     dash: 'Готуємо головну',
@@ -553,6 +557,7 @@ async function runMainTabWork(tab) {
     if (tab === 'screens') {
         if (window.updateDriveUI) tasks.push(Promise.resolve(window.updateDriveUI()));
         if (window.restoreScreensDistributionState) tasks.push(Promise.resolve(window.restoreScreensDistributionState()));
+        if (window.loadImages) tasks.push(Promise.resolve(window.loadImages()));
         const settingsPanel = document.getElementById('screens-settings-panel');
         if (settingsPanel && !settingsPanel.classList.contains('initially-hidden') && window.loadLatestImageForOCR) {
             tasks.push(Promise.resolve(window.loadLatestImageForOCR()));

@@ -2,7 +2,10 @@ const PARTIAL_ATTR = 'data-partial';
 let partialsPromise = null;
 
 async function doLoadPartials(root = document) {
-    const hosts = Array.from(root.querySelectorAll(`[${PARTIAL_ATTR}]`));
+    const hosts = [
+        ...(root?.matches?.(`[${PARTIAL_ATTR}]`) ? [root] : []),
+        ...Array.from(root.querySelectorAll?.(`[${PARTIAL_ATTR}]`) || []),
+    ];
     if (!hosts.length) return;
 
     await Promise.all(hosts.map(async (host) => {

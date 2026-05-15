@@ -520,6 +520,25 @@ export async function loadImages() {
     }
 }
 
+export function disposeScreensView() {
+    const assignedContainer = document.getElementById('assigned-container');
+    if (assignedContainer) assignedContainer.innerHTML = '';
+
+    const unassignedContainer = document.getElementById('unassigned-container');
+    if (unassignedContainer) unassignedContainer.innerHTML = '';
+
+    const searchResults = document.getElementById('tag-search-results');
+    if (searchResults) searchResults.innerHTML = '';
+
+    const suggestions = document.getElementById('tag-search-suggestions');
+    if (suggestions) suggestions.innerHTML = '';
+
+    const ocrImg = document.getElementById('ocr-setup-img');
+    if (ocrImg) ocrImg.removeAttribute('src');
+
+    closeZoomPreview();
+}
+
 function showConfirmModal(message, onConfirm) {
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:99999;';

@@ -1,9 +1,11 @@
 import { showToast } from './utils.js';
-import { loadPartials } from './partials.js';
 
 const MAX_IMPORT_SIZE_MB = 35;
 let dayFormDirty = false;
 let offlineBanner = null;
+let globalEnhancementsReady = false;
+let dayFormTrackingReady = false;
+let networkListenersReady = false;
 
 function markBusy(button, duration = 900) {
     if (!button || button.dataset.busy === 'true') return;
@@ -52,8 +54,10 @@ function improveResetCodeInput() {
 }
 
 function trackDayFormChanges() {
+    if (dayFormTrackingReady) return;
     const sidebar = document.getElementById('form-sidebar');
     if (!sidebar) return;
+    dayFormTrackingReady = true;
 
     sidebar.addEventListener('input', (event) => {
         const target = event.target;
@@ -392,26 +396,37 @@ function bindDeclarativeActions() {
 }
 
 async function initEnhancements() {
-    await loadPartials();
     setExternalLinkDefaults();
     enhanceIconButtons();
     guardLargeImports();
     improveResetCodeInput();
     trackDayFormChanges();
-    addKeyboardShortcuts();
+    if (!globalEnhancementsReady) addKeyboardShortcuts();
     addLiveRegions();
-    bindDeclarativeActions();
+    if (!globalEnhancementsReady) bindDeclarativeActions();
+    globalEnhancementsReady = true;
     setNetworkState();
 
-    window.addEventListener('online', () => {
+    if (!networkListenersReady) {
+        networkListenersReady = true;
+        window.addEventListener('online', () => {
         setNetworkState();
         showToast('Інтернет знову є');
     });
-    window.addEventListener('offline', setNetworkState);
-    document.addEventListener('DOMContentLoaded', () => {
+        window.addEventListener('offline', setNetworkState);
+        document.addEventListener('DOMContentLoaded', () => {
         setExternalLinkDefaults();
         enhanceIconButtons();
-    });
+        });
+        document.addEventListener('app:shell-ready', () => {
+            setExternalLinkDefaults();
+            enhanceIconButtons();
+            guardLargeImports();
+            improveResetCodeInput();
+            trackDayFormChanges();
+            addLiveRegions();
+        });
+    }
 
     window.setTimeout(() => {
         if (window.renderView) window.renderView();
