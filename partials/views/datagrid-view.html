@@ -5,10 +5,21 @@
                 <div class="datagrid-period-panel" aria-label="Період таблиці угод">
                     <div class="datagrid-month-nav">
                         <button type="button" class="datagrid-period-icon" data-datagrid-period="prev-month" aria-label="Попередній місяць">‹</button>
-                        <label class="datagrid-month-field">
+                        <div class="datagrid-month-field datagrid-month-picker">
                             <span>Місяць</span>
-                            <input type="month" id="datagrid-month" class="datagrid-month-input">
-                        </label>
+                            <button type="button" id="datagrid-month-trigger" class="datagrid-month-trigger" aria-haspopup="dialog" aria-expanded="false">
+                                <span id="datagrid-month-label">Місяць</span>
+                                <span class="datagrid-month-caret" aria-hidden="true">▾</span>
+                            </button>
+                            <div id="datagrid-month-popover" class="datagrid-month-popover" role="dialog" aria-label="Вибір місяця" hidden>
+                                <div class="datagrid-month-popover-head">
+                                    <button type="button" class="datagrid-month-year-btn" data-datagrid-month-year="-1" aria-label="Попередній рік">‹</button>
+                                    <strong id="datagrid-month-popover-year">2026</strong>
+                                    <button type="button" class="datagrid-month-year-btn" data-datagrid-month-year="1" aria-label="Наступний рік">›</button>
+                                </div>
+                                <div id="datagrid-month-grid" class="datagrid-month-grid" role="listbox" aria-label="Місяці"></div>
+                            </div>
+                        </div>
                         <button type="button" class="datagrid-period-icon" data-datagrid-period="next-month" aria-label="Наступний місяць">›</button>
                     </div>
                     <div class="datagrid-range-fields">

@@ -24,11 +24,22 @@ const UK_MONTHS_GEN = [
     'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня',
 ];
 
+const UK_MONTHS_PERIOD = [
+    'січень', 'лютий', 'березень', 'квітень', 'травень', 'червень',
+    'липень', 'серпень', 'вересень', 'жовтень', 'листопад', 'грудень',
+];
+
+const UK_MONTHS_SHORT = [
+    'Січ', 'Лют', 'Бер', 'Кві', 'Тра', 'Чер',
+    'Лип', 'Сер', 'Вер', 'Жов', 'Лис', 'Гру',
+];
+
 let _datagridRowsCache = [];
 let _datagridVisibleCount = DATAGRID_PAGE_SIZE;
 let _datagridDirty = true;
 let _datagridBindingsReady = false;
 let _datagridPeriod = { mode: 'month', from: '', to: '' };
+let _datagridPickerYear = null;
 
 function esc(s) {
     const d = document.createElement('div');
@@ -57,7 +68,7 @@ function formatDateLabel(dateStr) {
 function formatMonthLabel(monthKey) {
     const m = /^(\d{4})-(\d{2})$/.exec(monthKey || '');
     if (!m) return monthKey || '';
-    const monthName = UK_MONTHS_GEN[parseInt(m[2], 10) - 1] ?? m[2];
+    const monthName = UK_MONTHS_PERIOD[parseInt(m[2], 10) - 1] ?? m[2];
     return `${monthName} ${m[1]}`;
 }
 
@@ -128,12 +139,13 @@ function getDatagridPeriodLabel() {
 }
 
 function syncDatagridPeriodControls() {
-    const monthInput = document.getElementById('datagrid-month');
+    const monthLabel = document.getElementById('datagrid-month-label');
     const fromInput = document.getElementById('datagrid-date-from');
     const toInput = document.getElementById('datagrid-date-to');
-    if (monthInput) monthInput.value = getDatagridMonthKey();
+    if (monthLabel) monthLabel.textContent = formatMonthLabel(getDatagridMonthKey());
     if (fromInput) fromInput.value = _datagridPeriod.from || '';
     if (toInput) toInput.value = _datagridPeriod.to || '';
+    renderDatagridMonthPicker();
 
     document.querySelectorAll('.datagrid-period-chip[data-datagrid-period]').forEach((btn) => {
         const action = btn.getAttribute('data-datagrid-period');
@@ -143,6 +155,44 @@ function syncDatagridPeriodControls() {
             (action === 'all' && _datagridPeriod.mode === 'all');
         btn.classList.toggle('active', active);
     });
+}
+
+function closeDatagridMonthPicker() {
+    const popover = document.getElementById('datagrid-month-popover');
+    const trigger = document.getElementById('datagrid-month-trigger');
+    if (popover) popover.hidden = true;
+    if (trigger) trigger.setAttribute('aria-expanded', 'false');
+}
+
+function toggleDatagridMonthPicker(forceOpen = null) {
+    const popover = document.getElementById('datagrid-month-popover');
+    const trigger = document.getElementById('datagrid-month-trigger');
+    if (!popover || !trigger) return;
+    const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : popover.hidden;
+    if (shouldOpen) {
+        const current = getDatagridMonthKey();
+        _datagridPickerYear = Number(current.slice(0, 4)) || getCurrentMonthDate().getFullYear();
+        renderDatagridMonthPicker();
+    }
+    popover.hidden = !shouldOpen;
+    trigger.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+}
+
+function renderDatagridMonthPicker() {
+    const grid = document.getElementById('datagrid-month-grid');
+    const yearEl = document.getElementById('datagrid-month-popover-year');
+    if (!grid || !yearEl) return;
+
+    const currentMonth = getDatagridMonthKey();
+    const year = _datagridPickerYear || Number(currentMonth.slice(0, 4)) || getCurrentMonthDate().getFullYear();
+    yearEl.textContent = String(year);
+    grid.innerHTML = UK_MONTHS_SHORT
+        .map((label, index) => {
+            const monthKey = `${year}-${pad2(index + 1)}`;
+            const active = monthKey === currentMonth;
+            return `<button type="button" class="datagrid-month-option${active ? ' active' : ''}" data-datagrid-month-value="${monthKey}" role="option" aria-selected="${active ? 'true' : 'false'}">${esc(label)}</button>`;
+        })
+        .join('');
 }
 
 function ensureDatagridPeriodReady() {
@@ -291,6 +341,33 @@ function bindDatagridControls() {
     if (_datagridBindingsReady) return;
     _datagridBindingsReady = true;
     document.addEventListener('click', (event) => {
+        const monthTrigger = event.target?.closest?.('#datagrid-month-trigger');
+        if (monthTrigger) {
+            toggleDatagridMonthPicker();
+            return;
+        }
+
+        const yearBtn = event.target?.closest?.('[data-datagrid-month-year]');
+        if (yearBtn) {
+            const delta = Number(yearBtn.getAttribute('data-datagrid-month-year') || 0);
+            const current = getDatagridMonthKey();
+            _datagridPickerYear = (_datagridPickerYear || Number(current.slice(0, 4)) || getCurrentMonthDate().getFullYear()) + delta;
+            renderDatagridMonthPicker();
+            return;
+        }
+
+        const monthOption = event.target?.closest?.('[data-datagrid-month-value]');
+        if (monthOption) {
+            setDatagridMonth(monthOption.getAttribute('data-datagrid-month-value') || '');
+            closeDatagridMonthPicker();
+            renderTradesDatagrid();
+            return;
+        }
+
+        if (!event.target?.closest?.('.datagrid-month-picker')) {
+            closeDatagridMonthPicker();
+        }
+
         const row = event.target?.closest?.('.trade-data-row[data-date][data-trade-index]');
         if (row) {
             const dateStr = row.getAttribute('data-date') || '';
@@ -327,17 +404,16 @@ function bindDatagridControls() {
 
     document.addEventListener('change', (event) => {
         const target = event.target;
-        if (target?.id === 'datagrid-month') {
-            setDatagridMonth(target.value);
-            renderTradesDatagrid();
-            return;
-        }
         if (target?.id === 'datagrid-date-from' || target?.id === 'datagrid-date-to') {
             const from = document.getElementById('datagrid-date-from')?.value || '';
             const to = document.getElementById('datagrid-date-to')?.value || '';
             setDatagridRange(from, to, 'custom');
             renderTradesDatagrid();
         }
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeDatagridMonthPicker();
     });
 }
 
