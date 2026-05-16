@@ -161,7 +161,7 @@ function renderTradeDateCalendar(activeDate = '') {
     if (!grid || !label) return;
     updateTradeDateTrigger(activeDate);
 
-    setTradeDateCalendarMonth(activeDate || _tradeDates[0]);
+    if (!_tradeDateCalendarMonth) setTradeDateCalendarMonth(activeDate || _tradeDates[0]);
     const { year, month } = _tradeDateCalendarMonth;
     const monthName = new Intl.DateTimeFormat('uk-UA', { month: 'long', year: 'numeric' }).format(new Date(year, month, 1));
     label.textContent = monthName.charAt(0).toUpperCase() + monthName.slice(1);
