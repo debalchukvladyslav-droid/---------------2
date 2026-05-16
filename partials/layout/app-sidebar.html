@@ -81,29 +81,6 @@
                 </span>
             </button>
             <div class="sidebar-account-dropdown" id="sidebar-account-dropdown" hidden>
-                <div class="sidebar-pf-section sidebar-account-actions-section">
-                    <div class="sidebar-pf-section-title">Налаштування</div>
-                    <p class="sidebar-pf-hint">Акаунт, ризик і система</p>
-                    <div class="sidebar-account-actions">
-                        <button type="button" class="btn-secondary sidebar-account-action-btn" data-tab="settings">Відкрити налаштування</button>
-                        <button type="button" class="btn-primary sidebar-account-logout-btn" data-action="logout">Вийти з акаунту</button>
-                    </div>
-                </div>
-                <div class="sidebar-pf-section">
-                    <div class="sidebar-pf-section-title">Акаунт</div>
-                    <div class="sidebar-pf-label">Логін (нік)</div>
-                    <div class="sidebar-pf-readonly" id="sidebar-pf-nick">—</div>
-                    <div class="sidebar-pf-label">Кущ</div>
-                    <div class="sidebar-pf-readonly" id="sidebar-pf-team-display">—</div>
-                    <p class="sidebar-pf-mini-hint">Зміну куща та ролі виконує адміністратор у вкладці «Адмін».</p>
-                </div>
-                <div class="sidebar-pf-section">
-                    <div class="sidebar-pf-section-title">Ім’я для команди</div>
-                    <div class="sidebar-pf-label">Ім'я</div>
-                    <input type="text" id="sidebar-pf-fname" class="sidebar-pf-input" autocomplete="given-name" placeholder="Ім'я">
-                    <div class="sidebar-pf-label">Прізвище</div>
-                    <input type="text" id="sidebar-pf-lname" class="sidebar-pf-input" autocomplete="family-name" placeholder="Прізвище">
-                </div>
                 <div class="sidebar-pf-section">
                     <div class="sidebar-pf-section-title">Аватар</div>
                     <p class="sidebar-pf-hint">Оберіть фото, відцентруйте його у колі та налаштуйте масштаб. Бачать у панелі «Команда».</p>
@@ -143,7 +120,27 @@
                     </div>
                     <button type="button" class="btn-secondary sidebar-pf-clear-avatar" id="sidebar-pf-avatar-clear">Скинути іконку (ініціали)</button>
                 </div>
+                <div class="sidebar-pf-section">
+                    <div class="sidebar-pf-section-title">Акаунт</div>
+                    <div class="sidebar-pf-label">Логін (нік)</div>
+                    <div class="sidebar-pf-readonly" id="sidebar-pf-nick">—</div>
+                    <div class="sidebar-pf-label">Кущ</div>
+                    <div class="sidebar-pf-readonly" id="sidebar-pf-team-display">—</div>
+                    <p class="sidebar-pf-mini-hint">Зміну куща та ролі виконує адміністратор у вкладці «Адмін».</p>
+                </div>
+                <div class="sidebar-pf-section">
+                    <div class="sidebar-pf-section-title">Ім’я для команди</div>
+                    <div class="sidebar-pf-label">Ім'я</div>
+                    <input type="text" id="sidebar-pf-fname" class="sidebar-pf-input" autocomplete="given-name" placeholder="Ім'я">
+                    <div class="sidebar-pf-label">Прізвище</div>
+                    <input type="text" id="sidebar-pf-lname" class="sidebar-pf-input" autocomplete="family-name" placeholder="Прізвище">
+                </div>
                 <button type="button" class="btn-primary sidebar-pf-save" id="sidebar-pf-save">Зберегти зміни</button>
+                <div class="sidebar-pf-section sidebar-account-actions-section">
+                    <div class="sidebar-account-actions">
+                        <button type="button" class="btn-primary sidebar-account-logout-btn" data-action="logout">Вийти з акаунту</button>
+                    </div>
+                </div>
             </div>
         </div>
 
