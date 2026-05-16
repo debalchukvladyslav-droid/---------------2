@@ -1449,7 +1449,8 @@ body {
 }
 
 .stats-insights-list,
-.stats-breakdown-list {
+.stats-breakdown-list,
+.stats-trade-type-insights-list {
     display: grid;
     gap: 8px;
 }
@@ -1481,6 +1482,78 @@ body {
 .stats-insight--good .stats-insight-dot { background: var(--profit); }
 .stats-insight--warn .stats-insight-dot { background: var(--gold); }
 .stats-insight--bad .stats-insight-dot { background: var(--loss); }
+
+.stats-trade-type-card {
+    padding: 10px;
+    border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-panel) 72%, transparent);
+}
+
+.stats-trade-type-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 7px;
+}
+
+.stats-trade-type-name {
+    min-width: 0;
+    color: var(--text-main);
+    font-size: 0.82rem;
+    font-weight: 800;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.stats-trade-type-pnl {
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.stats-trade-type-pnl.positive { color: var(--profit); }
+.stats-trade-type-pnl.negative { color: var(--loss); }
+
+.stats-trade-type-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.stats-trade-type-metrics span {
+    color: var(--text-muted);
+    font-size: 0.66rem;
+    line-height: 1.2;
+}
+
+.stats-trade-type-bar {
+    height: 4px;
+    margin-bottom: 8px;
+    overflow: hidden;
+    border-radius: 99px;
+    background: color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.stats-trade-type-bar-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+}
+
+.stats-trade-type-card--good .stats-trade-type-bar-fill { background: var(--profit); }
+.stats-trade-type-card--warn .stats-trade-type-bar-fill { background: var(--gold); }
+.stats-trade-type-card--bad .stats-trade-type-bar-fill { background: var(--loss); }
+
+.stats-trade-type-advice {
+    color: color-mix(in srgb, var(--text-main) 84%, var(--text-muted));
+    font-size: 0.72rem;
+    line-height: 1.35;
+}
 
 .stats-compare-grid {
     display: grid;

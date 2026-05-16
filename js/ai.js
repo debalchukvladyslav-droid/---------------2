@@ -4,6 +4,7 @@ import { saveJournalData, saveToLocal, markJournalDayDirty } from './storage.js'
 import { getImgUrl, getStorageUrl } from './gallery.js';
 import { getGeminiKeys, callGemini, callGeminiViaProxy, callGeminiJSON, sleep } from './ai/client.js';
 import { sanitizeHTML, sanitizeRichHTML } from './sanitize.js';
+import { buildTradeTypeAIContext, buildDayTradeTypeAIContext } from './trade_type_analysis.js';
 
 export { getGeminiKeys, callGemini, callGeminiViaProxy, callGeminiJSON, sleep };
 
@@ -65,7 +66,9 @@ export async function getAIAdvice() {
     let params = []; document.querySelectorAll('.daily-param-check:checked').forEach(cb => { let f = state.appData.settings.checklist.find(p => p.id === cb.value); if(f) params.push(f.name); });
     let slidersText = []; document.querySelectorAll('.slider-input').forEach(el => { let f = state.appData.settings.sliders.find(p => p.id === el.getAttribute('data-id')); if(f) slidersText.push(`${f.name}: ${el.value}/10`); });
     
-    let promptText = `Ось мій звіт за торговий день:\nPnL: ${pnl}$\nВідмітки: ${params.length > 0 ? params.join(', ') : 'Немає'}\nПомилки: ${errs.length > 0 ? errs.join(', ') : 'Немає'}\nМій стан: ${slidersText.join(', ')}\nМої думки: "${notes}"${window.getPlaybookContext ? window.getPlaybookContext() : ''}`;
+    const currentDay = state.appData.journal[state.selectedDateStr] || {};
+    const tradeTypeContext = `${buildDayTradeTypeAIContext(currentDay)}${buildTradeTypeAIContext(state.appData.journal || {}, { tradeTypes: state.appData.tradeTypes, recentDays: 90, limit: 6 })}`;
+    let promptText = `Ось мій звіт за торговий день:\nPnL: ${pnl}$\nВідмітки: ${params.length > 0 ? params.join(', ') : 'Немає'}\nПомилки: ${errs.length > 0 ? errs.join(', ') : 'Немає'}\nМій стан: ${slidersText.join(', ')}\nМої думки: "${notes}"\n${tradeTypeContext}${window.getPlaybookContext ? window.getPlaybookContext() : ''}`;
     
     try {
         let advice = await callGemini(key, { systemInstruction: { parts: [{ text: "Ти мій напарник по пропу і строгий ризик-менеджер. Спілкуйся українською, коротко (3-4 речення), прямо і по суті, без офіціозу. Використовуй звичайний трейдерський сленг (тільт, фомо, дейлос, профіт). Якщо я порушив систему або поплив емоційно — спокійно, але жорстко ткни в це носом, спираючись на звіт, щоб я зробив висновки. Якщо день ідеально зелений і без косяків — не розводь дифірамби, просто скажи щось типу: 'Нормально відпрацював, систему дотримав. Завтра головне не зловити корону і не лудоманіти, тримай ризики'." }] }, contents: [{ parts: [{ text: promptText }] }] });
@@ -132,11 +135,12 @@ export async function analyzeTagPatterns() {
     const statsText = Object.entries(tagStats).map(([tag, s]) =>
         `"${tag}": ${s.days} днів, сумарний PnL: ${s.totalPnl.toFixed(2)}$, мінусових днів: ${s.minusDays} з ${s.days}`
     ).join('\n');
+    const tradeTypeContext = buildTradeTypeAIContext(journal, { tradeTypes: state.appData.tradeTypes, recentDays: 120, limit: 6 });
 
     try {
         const aiText = await callGemini(getGeminiKeys()[0], {
             systemInstruction: { parts: [{ text: 'Ти строгий трейдинг-ментор. Аналізуй патерни тегів сетапів. Якщо якийсь тег переважно мінусовий — скажи прямо. Відповідай українською, коротко і по суті.' }] },
-            contents: [{ parts: [{ text: `Ось статистика моїх сетапів по тегах:\n${statsText}\n\nЗнайди проблемні патерни і дай конкретні висновки.` }] }]
+            contents: [{ parts: [{ text: `Ось статистика моїх сетапів по тегах:\n${statsText}\n${tradeTypeContext}\n\nЗнайди проблемні патерни і дай конкретні висновки. Обов'язково зв'яжи висновки з типами входу, якщо дані показують різницю між ними.` }] }]
         });
         chatBox.removeChild(typingDiv);
         const aiMsgDiv = document.createElement('div');
@@ -173,6 +177,7 @@ export async function analyzeChart(encodedPath, cleanId) {
         const mimeType = blob.type && blob.type.startsWith('image/') ? blob.type : 'image/jpeg';
         let base64data = await new Promise((resolve) => { let reader = new FileReader(); reader.onloadend = () => resolve(reader.result.split(',')[1]); reader.readAsDataURL(blob); });
         
+        const tradeTypeContext = buildTradeTypeAIContext(state.appData.journal || {}, { tradeTypes: state.appData.tradeTypes, recentDays: 90, limit: 6 });
         let prompt = `Ти — професійний проп-трейдер. Проаналізуй цей графік.
 
 КОНТЕКСТ ТРЕЙДЕРА (дуже важливо враховувати):
@@ -184,6 +189,7 @@ export async function analyzeChart(encodedPath, cleanId) {
 - Не роби висновок про напрямок угоди тільки по кольору свічок — дивись на стрілки і структуру
 - Детальніше розглядай рух після входу в позицію
 - Сітка фібоначі служить тільки консолідацією
+${tradeTypeContext}
 
 ЩО АНАЛІЗУВАТИ НАСАМПЕРЕД — ВІЗУАЛЬНИЙ ПАТЕРН:
 1. Опиши форму руху ціни ДО входу: як виглядає структура (консолідація, пробій, відкат, імпульс, флет, клин тощо)
@@ -275,8 +281,9 @@ export async function sendDataChatMessage() {
     try {
         const journalData = JSON.stringify(state.appData.journal);
         const screenTagsData = JSON.stringify(state.appData.screenTags || {});
+        const tradeTypeContext = buildTradeTypeAIContext(state.appData.journal || {}, { tradeTypes: state.appData.tradeTypes, recentDays: 120, limit: 8 });
         const playbookContext = window.getPlaybookContext ? window.getPlaybookContext() : '';
-        const promptText = `Ось дані журналу: ${journalData}\n\nТеги скріншотів: ${screenTagsData}${playbookContext}\n\nВідповідай коротко українською. Запит: ${userText}`;
+        const promptText = `Ось дані журналу: ${journalData}\n\nТеги скріншотів: ${screenTagsData}${tradeTypeContext}${playbookContext}\n\nВідповідай коротко українською. Коли питання стосується результату, обов'язково враховуй різні типи входу як різні логіки. Запит: ${userText}`;
 
         const aiResponseText = await callGemini(key, {
             systemInstruction: { parts: [{ text: "Ти професійний трейдинг-ментор. Пиши коротко українською." }] },

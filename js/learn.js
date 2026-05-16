@@ -3,6 +3,7 @@ import { state } from './state.js';
 import { supabase, SUPABASE_URL } from './supabase.js';
 import { callGemini, getGeminiKeys } from './ai.js';
 import { appendTextWithLineBreaks, normalizeHttpUrl } from './utils.js';
+import { buildTradeTypeAIContext } from './trade_type_analysis.js';
 
 const MAX_QUERIES = 3;
 
@@ -213,6 +214,11 @@ export async function loadLearnContent() {
         const errors = state.appData.errorTypes || [];
         const tags = state.appData.screenTags ? [...new Set(Object.values(state.appData.screenTags).flat())] : [];
         const playbook = state.appData.playbook || [];
+        const tradeTypeContext = buildTradeTypeAIContext(state.appData.journal || {}, {
+            tradeTypes: state.appData.tradeTypes,
+            recentDays: 120,
+            limit: 6,
+        });
         const recentDays = Object.entries(state.appData.journal || {})
             .filter(([d, v]) => d.match(/^\d{4}-\d{2}-\d{2}$/) && v.pnl !== null && v.pnl !== undefined)
             .sort((a, b) => b[0].localeCompare(a[0]))
@@ -225,9 +231,11 @@ Common mistakes: ${errors.slice(0, 5).join(', ') || 'none'}
 Setup tags: ${tags.slice(0, 8).join(', ') || 'none'}
 Playbook: ${playbook.map(p => p.name).slice(0, 5).join(', ') || 'none'}
 Recent sessions: ${recentDays.join(' | ') || 'no data'}
+${tradeTypeContext}
 
 Generate exactly 3 different English YouTube search queries for a serious active stock trader.
 Prioritize practical videos with charts, examples, or trade reviews. Avoid generic motivation, beginner definitions, and generic FOMO/discipline topics unless the profile clearly demands it.
+Use the trade type analysis to choose topics: strengthen the best entry logic and fix the weakest entry logic.
 
 The 3 queries must cover different training lanes:
 1. Setup/pattern mechanics: a concrete pattern, entry model, or chart structure relevant to the profile.

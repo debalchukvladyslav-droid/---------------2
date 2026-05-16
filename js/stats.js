@@ -5,6 +5,7 @@ import { applyAutoTradeTypesData, DEFAULT_TRADE_TYPES, normalizeAppData, getDefa
 import { loadMonth, loadAllMonths, getCurrentViewedUserId, resolveViewedUserId } from './storage.js';
 import { escapeHtml } from './utils.js';
 import { ensureChartJs } from './vendor_loader.js';
+import { buildTradeTypeInsightRows } from './trade_type_analysis.js';
 
 // ─── STATS CACHE ───────────────────────────────────────────────────────────────────────────────
 // Module-level Map survives filter switches and profile switches within the
@@ -2511,6 +2512,51 @@ function renderStatsInsights({
     `).join('');
 }
 
+function renderStatsTradeTypeInsights({ journal, filters, tradeTypes, settings = {} }) {
+    const container = document.getElementById('stats-trade-type-insights-list');
+    if (!container) return;
+
+    const periodDates = new Set(filterEntriesByStatsFilters(buildStatsEntriesFromJournal(journal), filters || []).map((entry) => entry.dateStr));
+    const scopedJournal = {};
+    for (const [dateStr, entry] of Object.entries(journal || {})) {
+        if (!periodDates.size || periodDates.has(dateStr)) scopedJournal[dateStr] = entry;
+    }
+    const rows = buildTradeTypeInsightRows(scopedJournal, {
+        tradeTypes: tradeTypes || state.currentStatsContext.tradeTypes || state.appData.tradeTypes || DEFAULT_TRADE_TYPES,
+    });
+
+    if (!rows.length) {
+        container.innerHTML = '<div class="stats-empty-note">Немає даних по типах входу для поточного періоду.</div>';
+        return;
+    }
+
+    const maxAbsPnl = Math.max(...rows.map(row => Math.abs(row.pnl)), 1);
+    container.innerHTML = rows.slice(0, 5).map((row) => {
+        const { advice } = row;
+        const tone = advice.tone === 'focus' || advice.tone === 'asymmetry' ? 'good' : advice.tone === 'reduce' || advice.tone === 'risk' ? 'bad' : 'warn';
+        const pf = row.profitFactor === Infinity ? '∞' : row.profitFactor.toFixed(2);
+        const pnlClass = row.pnl >= 0 ? 'positive' : 'negative';
+        const barWidth = Math.max(8, Math.min(100, Math.round((Math.abs(row.pnl) / maxAbsPnl) * 100)));
+        return `
+            <div class="stats-trade-type-card stats-trade-type-card--${tone}">
+                <div class="stats-trade-type-head">
+                    <div class="stats-trade-type-name">${escapeHtml(row.type)}</div>
+                    <div class="stats-trade-type-pnl ${pnlClass}">${fmtMoney(row.pnl)}</div>
+                </div>
+                <div class="stats-trade-type-metrics">
+                    <span>${row.days} дн.</span>
+                    <span>WR ${row.winRate.toFixed(0)}%</span>
+                    <span>PF ${escapeHtml(pf)}</span>
+                </div>
+                <div class="stats-trade-type-bar" aria-hidden="true">
+                    <div class="stats-trade-type-bar-fill" style="width:${barWidth}%"></div>
+                </div>
+                <div class="stats-trade-type-advice">${escapeHtml(advice.text)}</div>
+            </div>
+        `;
+    }).join('');
+}
+
 export function renderStatsTab() {
     if (typeof Chart === 'undefined') {
         ensureChartJs()
@@ -2655,6 +2701,12 @@ export function renderStatsTab() {
         avgLoss,
         totalPnl,
         equityAnalysis,
+        settings: state.currentStatsContext.settings || {},
+    });
+    renderStatsTradeTypeInsights({
+        journal: statsJournal,
+        filters: state.activeFilters || [],
+        tradeTypes: state.currentStatsContext.tradeTypes || state.appData.tradeTypes || DEFAULT_TRADE_TYPES,
         settings: state.currentStatsContext.settings || {},
     });
     const longHorizon = !!equityAnalysis.longHorizon;

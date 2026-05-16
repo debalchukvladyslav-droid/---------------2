@@ -33,6 +33,7 @@ import { connectGoogleDrive, syncDriveScreenshots, updateDriveUI, disconnectGoog
 import { initPlaybookChart } from './playbook_chart.js';
 import { renderDashboardNews, refreshDashboardNews, refreshLiveNewsModal, openLiveNewsModal, closeLiveNewsModal } from './news.js';
 import { renderMarketSentiment, refreshMarketSentiment, openMarketSentimentSource } from './market_sentiment.js';
+import { buildTradeTypeAIContext } from './trade_type_analysis.js';
 import { loadPartials } from './partials.js';
 import { applyPersistedBackground, initBackgroundControls } from './backgrounds.js';
 import { initGlobalAppEvents } from './app_events.js';
@@ -339,7 +340,8 @@ window.checkSessionModalReadiness = async function() {
             .filter(([d, v]) => d.match(/^\d{4}-\d{2}-\d{2}$/) && v.pnl !== null && v.pnl !== undefined)
             .sort((a, b) => b[0].localeCompare(a[0])).slice(0, 5)
             .map(([d, v]) => `${d}: PnL=${v.pnl}$, помилки=${(v.errors||[]).join(',') || 'немає'}`).join('\n');
-        const prompt = `Початок дня. Ціль: ${goal || 'не вказана'}. План: ${plan || 'не вказаний'}. Сетапи: ${setups.join(', ') || 'не обрані'}. Готовність: ${readiness}/10.\n\nОстанні 5 сесій:\n${recentDays || 'немає даних'}\n\nДай коротке спостереження (3-4 речення).`;
+        const tradeTypeContext = buildTradeTypeAIContext(state.appData.journal || {}, { tradeTypes: state.appData.tradeTypes, recentDays: 90, limit: 5 });
+        const prompt = `Початок дня. Ціль: ${goal || 'не вказана'}. План: ${plan || 'не вказаний'}. Сетапи: ${setups.join(', ') || 'не обрані'}. Готовність: ${readiness}/10.\n\nОстанні 5 сесій:\n${recentDays || 'немає даних'}\n${tradeTypeContext}\n\nДай коротке спостереження (3-4 речення). Врахуй, які типи входу зараз тягнуть результат, а які краще фільтрувати.`;
         const res = await callGemini(getGeminiKeys()[0], {
             systemInstruction: { parts: [{ text: 'Ти досвідчений напарник-трейдер. Говориш коротко, по-людськи, українською.' }] },
             contents: [{ parts: [{ text: prompt }] }]
@@ -389,7 +391,8 @@ window.checkSessionReadiness = async function() {
             .sort((a, b) => b[0].localeCompare(a[0])).slice(0, 5)
             .map(([d, v]) => `${d}: PnL=${v.pnl}$, помилки=${(v.errors||[]).join(',') || 'немає'}, готовність=${v.sessionReadiness || '-'}/10`)
             .join('\n');
-        const prompt = `Початок дня. Ось мій стан і контекст:\nЦіль: ${goal || 'не вказана'}\nПлан: ${plan || 'не вказаний'}\nСетапи: ${setups.join(', ') || 'не обрані'}\nГотовність: ${readiness}/10\nСтан: ${sliders.join(', ')}\n\nОстанні 5 сесій:\n${recentDays || 'немає даних'}\n\nДай коротке спостереження (3-4 речення).`;
+        const tradeTypeContext = buildTradeTypeAIContext(state.appData.journal || {}, { tradeTypes: state.appData.tradeTypes, recentDays: 90, limit: 5 });
+        const prompt = `Початок дня. Ось мій стан і контекст:\nЦіль: ${goal || 'не вказана'}\nПлан: ${plan || 'не вказаний'}\nСетапи: ${setups.join(', ') || 'не обрані'}\nГотовність: ${readiness}/10\nСтан: ${sliders.join(', ')}\n\nОстанні 5 сесій:\n${recentDays || 'немає даних'}\n${tradeTypeContext}\n\nДай коротке спостереження (3-4 речення). Врахуй, на яких типах входу сьогодні краще робити акцент, а які не форсити.`;
         const res = await callGemini(getGeminiKeys()[0], {
             systemInstruction: { parts: [{ text: 'Ти досвідчений напарник-трейдер. Говориш коротко, по-людськи, українською. Не командуєш і не лякаєш.' }] },
             contents: [{ parts: [{ text: prompt }] }]

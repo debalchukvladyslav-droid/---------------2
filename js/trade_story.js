@@ -1,5 +1,7 @@
 // === js/trade_story.js ===
 import { callGeminiJSON } from './ai.js';
+import { state } from './state.js';
+import { buildTradeSpecificTypeAIContext } from './trade_type_analysis.js';
 
 // ─── Part 1: Quant Analytics ──────────────────────────────────────────────────
 
@@ -221,6 +223,7 @@ export function buildTradeContext(trade, candles, dateStr) {
 
     return {
         symbol: trade.symbol, type: trade.type, dateStr,
+        rawTrade: trade,
         entry: trade.entry, exit: trade.exit, qty: trade.qty, net: trade.net, gross: trade.gross,
         openedStr: trade.opened, closedStr: trade.closed,
         tsEntry, tsExit,
@@ -302,6 +305,10 @@ export function buildStoryPrompt(ctx) {
 
     const lines = [
         `You are a professional prop trader analyst. Analyze this ${dir} trade on ${ctx.symbol} and return ONLY valid JSON. All text fields MUST be in Ukrainian.`,
+        '',
+        '## TRADER ENTRY TYPE SYSTEM',
+        buildTradeSpecificTypeAIContext(ctx.rawTrade || {}, state.appData?.journal || {}),
+        'Use this context to judge whether the trade matches the logic of its entry type. Do not grade every entry type with the same rules.',
         '',
         '## TRADE DATA',
         `Symbol: ${ctx.symbol} | Direction: ${dir} | Date: ${ctx.dateStr}`,
