@@ -624,6 +624,7 @@ async function bootApp(user) {
     startInitTimeout();
     try {
         await ensureAppShellLoaded();
+        initNotifications();
 
         document.getElementById('auth-overlay').style.display = 'none';
         const errEl = document.getElementById('auth-error');

@@ -234,7 +234,7 @@ async function fetchGoogleUserEmail(token, opts = {}) {
     }
 }
 
-function onTokenSuccess(resp) {
+function onTokenSuccess(resp, options = {}) {
     if (resp.error) {
         showToast('Google OAuth: ' + (resp.error_description || resp.error));
         return;
@@ -246,11 +246,18 @@ function onTokenSuccess(resp) {
     localStorage.setItem('sheet_google_connected', '1');
     applyAccessTokenToGapiClient(accessToken);
     void (async () => {
-        const email = await fetchGoogleUserEmail(accessToken);
+        const email = await fetchGoogleUserEmail(accessToken, { silent401: !!options.silent });
         setGoogleAccountEmail(email || 'Google акаунт');
         syncSheetWorkspaceVisibility();
-        showToast('Увійшли через Google.');
+        if (!options.silent) showToast('Увійшли через Google.');
     })();
+}
+
+function hasCurrentGoogleGrant() {
+    return (
+        localStorage.getItem(userStorageKey(SCOPES_VERSION_KEY)) === OAUTH_SCOPES_VERSION ||
+        sessionStorage.getItem(SCOPES_VERSION_KEY) === OAUTH_SCOPES_VERSION
+    );
 }
 
 function ensureTokenClient() {
@@ -264,15 +271,26 @@ function ensureTokenClient() {
     });
 }
 
+async function requestAccessToken(prompt = '', options = {}) {
+    await ensureTokenClient();
+    return new Promise((resolve, reject) => {
+        tokenClient.callback = (resp) => {
+            if (resp?.error) {
+                reject(new Error(resp.error_description || resp.error));
+                return;
+            }
+            onTokenSuccess(resp, options);
+            resolve(resp.access_token || '');
+        };
+        tokenClient.requestAccessToken({ prompt });
+    });
+}
+
 /** Кнопка «Увійти через Google». */
 export async function handleAuthClick() {
     try {
         await ensureGapiClientAndPicker();
-        await ensureTokenClient();
-        const hasPreviousGrant =
-            localStorage.getItem(userStorageKey(SCOPES_VERSION_KEY)) === OAUTH_SCOPES_VERSION ||
-            sessionStorage.getItem(SCOPES_VERSION_KEY) === OAUTH_SCOPES_VERSION;
-        tokenClient.requestAccessToken({ prompt: hasPreviousGrant ? '' : 'consent' });
+        await requestAccessToken(hasCurrentGoogleGrant() ? '' : 'consent');
     } catch (e) {
         console.error(e);
         showToast(
@@ -440,9 +458,6 @@ export async function googleSheetsLogout() {
 }
 
 export async function restoreGoogleSession() {
-    const tok = readStoredGoogleToken();
-    if (!tok) return;
-
     const scopeVer = localStorage.getItem(userStorageKey(SCOPES_VERSION_KEY)) || sessionStorage.getItem(SCOPES_VERSION_KEY);
     if (scopeVer !== OAUTH_SCOPES_VERSION) {
         console.warn(
@@ -454,6 +469,18 @@ export async function restoreGoogleSession() {
 
     try {
         await ensureGapiClientAndPicker();
+        let tok = readStoredGoogleToken();
+        const wasConnected = (localStorage.getItem('sheet_google_connected') || sessionStorage.getItem('sheet_google_connected')) === '1';
+        if (!tok && wasConnected && hasCurrentGoogleGrant()) {
+            try {
+                tok = await requestAccessToken('', { silent: true });
+            } catch (error) {
+                console.warn('[Google Sheets] silent token refresh failed:', error?.message || error);
+                syncSheetWorkspaceVisibility();
+                return;
+            }
+        }
+        if (!tok) return;
         accessToken = tok;
         sessionStorage.setItem(TOKEN_STORAGE_KEY, tok);
         sessionStorage.setItem(SCOPES_VERSION_KEY, OAUTH_SCOPES_VERSION);

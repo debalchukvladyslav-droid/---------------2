@@ -134,6 +134,7 @@ function activateAction(action, trigger, event = null) {
         'mobile-more-toggle': () => window.toggleMobileMoreMenu?.(),
         'right-sidebar-toggle': () => window.toggleRightSidebar?.(),
         'team-sidebar-open': () => window.openTeamSidebar?.(),
+        'notifications-toggle': () => window.toggleNotificationPanel?.(),
         'zoom-close': () => window.closeZoom?.(event),
         'zoom-prev': () => window.zoomStep?.(-1),
         'zoom-next': () => window.zoomStep?.(1),

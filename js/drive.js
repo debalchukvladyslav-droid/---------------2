@@ -49,6 +49,10 @@ function driveAccessTokenStorageKey() {
     return state.myUserId ? `pj:driveAT:${state.myUserId}` : null;
 }
 
+function driveGrantStorageKey() {
+    return state.myUserId ? `pj:driveGrant:${state.myUserId}` : null;
+}
+
 function persistDriveAccessToken(token, expiresInSec) {
     const k = driveAccessTokenStorageKey();
     if (!k || !token) return;
@@ -56,6 +60,8 @@ function persistDriveAccessToken(token, expiresInSec) {
     const expiresAt = Date.now() + sec * 1000 - 90_000;
     try {
         localStorage.setItem(k, JSON.stringify({ token, expiresAt }));
+        const grantKey = driveGrantStorageKey();
+        if (grantKey) localStorage.setItem(grantKey, '1');
     } catch (_) {}
 }
 
@@ -66,6 +72,21 @@ function clearDriveAccessTokenStorage() {
             localStorage.removeItem(k);
         } catch (_) {}
     }
+}
+
+function clearDriveGrantStorage() {
+    clearDriveAccessTokenStorage();
+    const k = driveGrantStorageKey();
+    if (k) {
+        try {
+            localStorage.removeItem(k);
+        } catch (_) {}
+    }
+}
+
+function hasPreviousDriveGrant() {
+    const k = driveGrantStorageKey();
+    return !!(k && localStorage.getItem(k) === '1');
 }
 
 /** Відновлює OAuth access token після перезавантаження (поки не прострочений). */
@@ -126,7 +147,7 @@ async function initGsi() {
     return _gsiIniting;
 }
 
-function requestNewToken(onSuccess, onError) {
+function requestNewToken(onSuccess, onError, options = {}) {
     if (!_tokenClient) { onError(new Error('Google Sign-In ще не ініціалізовано. Спробуйте ще раз.')); return; }
     _tokenClient.callback = (resp) => {
         if (resp.error) { onError(new Error(resp.error)); return; }
@@ -134,7 +155,13 @@ function requestNewToken(onSuccess, onError) {
         persistDriveAccessToken(resp.access_token, resp.expires_in);
         onSuccess(_accessToken);
     };
-    _tokenClient.requestAccessToken({ prompt: '' });
+    _tokenClient.requestAccessToken({ prompt: options.prompt ?? '' });
+}
+
+function requestDriveToken(options = {}) {
+    return new Promise((resolve, reject) => {
+        requestNewToken(resolve, reject, options);
+    });
 }
 
 export async function connectGoogleDrive() {
@@ -148,7 +175,8 @@ export async function connectGoogleDrive() {
     if (_accessToken) { openFolderPicker(_accessToken); return; }
     requestNewToken(
         (token) => openFolderPicker(token),
-        (e) => showToast('❌ Помилка авторизації: ' + (e.message || e))
+        (e) => showToast('❌ Помилка авторизації: ' + (e.message || e)),
+        { prompt: hasPreviousDriveGrant() ? '' : 'consent' }
     );
 }
 
@@ -175,9 +203,14 @@ function openFolderPicker(token) {
 }
 
 async function getTokenSilently() {
-    // Повертаємо тільки існуючий токен — не запитуємо новий автоматично.
-    // Новий токен видається тільки через явний клік користувача (connectGoogleDrive).
-    return _accessToken || null;
+    if (_accessToken) return _accessToken;
+    if (!hasPreviousDriveGrant()) return null;
+    try {
+        return await requestDriveToken({ prompt: '' });
+    } catch (error) {
+        console.warn('[Drive] silent token refresh failed:', error?.message || error);
+        return null;
+    }
 }
 
 export async function syncDriveScreenshots(silent = false) {
@@ -362,7 +395,7 @@ export async function disconnectGoogleDrive() {
         google.accounts.oauth2.revoke(_accessToken);
     }
     _accessToken = null;
-    clearDriveAccessTokenStorage();
+    clearDriveGrantStorage();
     _driveFilesCache = null;
     state.appData.settings.driveFolderId = null;
     state.appData.settings.driveFolderName = null;

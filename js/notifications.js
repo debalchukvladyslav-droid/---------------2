@@ -169,6 +169,14 @@ function closeNotificationPanel() {
     document.getElementById('notif-dropdown-backdrop')?.classList.remove('visible');
 }
 
+export function toggleNotificationPanel() {
+    const panel = document.getElementById('notif-dropdown');
+    const backdrop = document.getElementById('notif-dropdown-backdrop');
+    const open = panel?.classList.toggle('open');
+    backdrop?.classList.toggle('visible', !!open);
+    if (open) renderDropdown();
+}
+
 function openNotificationHref(href) {
     const tabs = {
         'tab:dash': 'dash',
@@ -288,20 +296,20 @@ export function initNotifications() {
     };
     window.requestNotificationPermission = requestNotificationPermission;
     window.scanJournalForNotifications = scanJournalForNotifications;
+    window.toggleNotificationPanel = toggleNotificationPanel;
 
     function closePanel() {
         closeNotificationPanel();
     }
-    function togglePanel() {
-        const open = panel?.classList.toggle('open');
-        backdrop?.classList.toggle('visible', !!open);
-        if (open) renderDropdown();
-    }
 
-    bell?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        togglePanel();
-    });
+    if (bell && !bell.dataset.notifBound) {
+        bell.dataset.notifBound = 'true';
+        bell.addEventListener('click', (e) => {
+            if (bell.dataset.action) return;
+            e.stopPropagation();
+            toggleNotificationPanel();
+        });
+    }
     backdrop?.addEventListener('click', closePanel);
     document.getElementById('notif-close-btn')?.addEventListener('click', closePanel);
     document.getElementById('notif-mark-all')?.addEventListener('click', () => {
