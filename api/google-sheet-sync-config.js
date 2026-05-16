@@ -26,9 +26,14 @@ export default async function handler(req, res) {
         const cfg = body.config && typeof body.config === 'object' ? body.config : body;
         const spreadsheetId = String(cfg.spreadsheetId || '').trim();
         const sheetTitle = String(cfg.sheetTitle || '').trim();
+        const legacyColumns = cfg.columns && typeof cfg.columns === 'object' ? cfg.columns : {};
+        const smartColumns = cfg.smartColumns && typeof cfg.smartColumns === 'object'
+            ? { ...legacyColumns, ...cfg.smartColumns }
+            : { ...legacyColumns };
+        cfg.smartColumns = smartColumns;
 
         if (!spreadsheetId) return sendJson(res, 400, { ok: false, error: 'Missing spreadsheetId' });
-        if (!cfg.smartColumns?.date || !cfg.smartColumns?.symbol) {
+        if (!smartColumns.date || !smartColumns.symbol) {
             return sendJson(res, 400, { ok: false, error: 'Missing date/symbol mapping' });
         }
 
@@ -54,4 +59,3 @@ export default async function handler(req, res) {
         return sendJson(res, 500, { ok: false, error: error?.message || String(error) });
     }
 }
-

@@ -1390,6 +1390,13 @@ function readSmartRowValue(key) {
     return (sel?.value || '').trim();
 }
 
+function readSmartColumnForConfig(key) {
+    const value = readSmartRowValue(key);
+    if (value) return value;
+    const anchor = parseCellReference(_sheetSmartAnchors?.[key]);
+    return anchor?.letter || '';
+}
+
 function setSmartRowValue(key, value, preferManual) {
     const row = document.querySelector(`[data-smart-field="${key}"]`);
     if (!row) return;
@@ -1622,7 +1629,7 @@ export async function handleSheetTabChange(selectEl) {
 function collectFormConfig() {
     const smartColumns = {};
     SMART_KEYS.forEach((k) => {
-        smartColumns[k] = readSmartRowValue(k);
+        smartColumns[k] = readSmartColumnForConfig(k);
     });
 
     const spreadsheetId = localStorage.getItem(SESSION_SPREADSHEET_ID) || sessionStorage.getItem(SESSION_SPREADSHEET_ID) || '';
@@ -1652,11 +1659,19 @@ function collectFormConfig() {
     };
 }
 
+function validateSheetMappingConfig(cfg) {
+    const missing = [];
+    if (!cfg?.smartColumns?.date) missing.push('Дата');
+    if (!cfg?.smartColumns?.symbol) missing.push('Тікер');
+    return missing;
+}
+
 const BTN_DEFAULT = 'Зберегти мапінг і синхронізувати угоди';
 const BTN_LOADING = 'Синхронізація…';
 
 async function persistServerSheetSyncConfig(cfg) {
     try {
+        if (validateSheetMappingConfig(cfg).length) return;
         const { data, error } = await supabase.auth.getSession();
         if (error) throw error;
         const token = data?.session?.access_token || '';
@@ -1691,6 +1706,12 @@ export async function saveSheetMapping() {
 
     try {
         const cfg = collectFormConfig();
+        const missing = validateSheetMappingConfig(cfg);
+        if (missing.length) {
+            showToast(`Заповніть обов’язковий мапінг: ${missing.join(', ')}.`);
+            return;
+        }
+
         localStorage.setItem(LS_KEY, JSON.stringify(cfg));
         _sheetFormHydratedFromStorage = true;
         void persistServerSheetSyncConfig(cfg);
