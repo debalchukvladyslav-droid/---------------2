@@ -28,6 +28,7 @@ let _datagridRowsCache = [];
 let _datagridVisibleCount = DATAGRID_PAGE_SIZE;
 let _datagridDirty = true;
 let _datagridBindingsReady = false;
+let _datagridPeriod = { mode: 'month', from: '', to: '' };
 
 function esc(s) {
     const d = document.createElement('div');
@@ -43,6 +44,97 @@ function formatDateHeader(dateStr) {
     const y = m[1];
     const monthName = UK_MONTHS_GEN[mo] ?? m[2];
     return `${day} ${monthName} ${y}`;
+}
+
+function pad2(value) {
+    return String(value).padStart(2, '0');
+}
+
+function toDateKey(date) {
+    return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+function monthKeyFromDate(date) {
+    return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}`;
+}
+
+function getCurrentMonthDate() {
+    const base = state.todayObj instanceof Date ? state.todayObj : new Date();
+    return new Date(base.getFullYear(), base.getMonth(), 1);
+}
+
+function getMonthRange(date) {
+    const first = new Date(date.getFullYear(), date.getMonth(), 1);
+    const last = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+    return { from: toDateKey(first), to: toDateKey(last) };
+}
+
+function shiftMonthKey(monthKey, offset) {
+    const match = /^(\d{4})-(\d{2})$/.exec(monthKey || '');
+    const base = match
+        ? new Date(Number(match[1]), Number(match[2]) - 1 + offset, 1)
+        : getCurrentMonthDate();
+    return monthKeyFromDate(base);
+}
+
+function getDatagridMonthKey() {
+    if (_datagridPeriod.mode === 'month' && _datagridPeriod.from) return _datagridPeriod.from.slice(0, 7);
+    return monthKeyFromDate(getCurrentMonthDate());
+}
+
+function setDatagridMonth(monthKey) {
+    const match = /^(\d{4})-(\d{2})$/.exec(monthKey || '');
+    const base = match ? new Date(Number(match[1]), Number(match[2]) - 1, 1) : getCurrentMonthDate();
+    _datagridPeriod = { mode: 'month', ...getMonthRange(base) };
+    _datagridVisibleCount = DATAGRID_PAGE_SIZE;
+    syncDatagridPeriodControls();
+}
+
+function setDatagridRange(from, to, mode = 'custom') {
+    let cleanFrom = /^\d{4}-\d{2}-\d{2}$/.test(from || '') ? from : '';
+    let cleanTo = /^\d{4}-\d{2}-\d{2}$/.test(to || '') ? to : '';
+    if (cleanFrom && cleanTo && cleanFrom > cleanTo) {
+        const tmp = cleanFrom;
+        cleanFrom = cleanTo;
+        cleanTo = tmp;
+    }
+    _datagridPeriod = { mode, from: cleanFrom, to: cleanTo };
+    _datagridVisibleCount = DATAGRID_PAGE_SIZE;
+    syncDatagridPeriodControls();
+}
+
+function getDatagridPeriodLabel() {
+    if (_datagridPeriod.mode === 'all') return 'за весь період';
+    if (_datagridPeriod.mode === 'month' && _datagridPeriod.from) return `за ${_datagridPeriod.from.slice(0, 7)}`;
+    if (_datagridPeriod.from && _datagridPeriod.to) return `${_datagridPeriod.from} - ${_datagridPeriod.to}`;
+    if (_datagridPeriod.from) return `з ${_datagridPeriod.from}`;
+    if (_datagridPeriod.to) return `до ${_datagridPeriod.to}`;
+    return 'за обраний період';
+}
+
+function syncDatagridPeriodControls() {
+    const monthInput = document.getElementById('datagrid-month');
+    const fromInput = document.getElementById('datagrid-date-from');
+    const toInput = document.getElementById('datagrid-date-to');
+    if (monthInput) monthInput.value = getDatagridMonthKey();
+    if (fromInput) fromInput.value = _datagridPeriod.from || '';
+    if (toInput) toInput.value = _datagridPeriod.to || '';
+
+    document.querySelectorAll('.datagrid-period-chip[data-datagrid-period]').forEach((btn) => {
+        const action = btn.getAttribute('data-datagrid-period');
+        const active =
+            (action === 'current-month' && _datagridPeriod.mode === 'month' && getDatagridMonthKey() === monthKeyFromDate(getCurrentMonthDate())) ||
+            (action === 'prev-30' && _datagridPeriod.mode === 'prev-30') ||
+            (action === 'all' && _datagridPeriod.mode === 'all');
+        btn.classList.toggle('active', active);
+    });
+}
+
+function ensureDatagridPeriodReady() {
+    if (_datagridPeriod.mode === 'month' && !_datagridPeriod.from && !_datagridPeriod.to) {
+        const range = getMonthRange(getCurrentMonthDate());
+        _datagridPeriod = { mode: 'month', ...range };
+    }
 }
 
 function timeFromOpened(opened) {
@@ -95,6 +187,17 @@ function ensureRowsCache() {
     _datagridRowsCache = collectRows();
     _datagridDirty = false;
     return _datagridRowsCache;
+}
+
+function filterRowsByPeriod(rows) {
+    if (_datagridPeriod.mode === 'all') return rows;
+    const from = _datagridPeriod.from || '';
+    const to = _datagridPeriod.to || '';
+    return rows.filter(({ dateStr }) => {
+        if (from && dateStr < from) return false;
+        if (to && dateStr > to) return false;
+        return true;
+    });
 }
 
 function badge(htmlClass, text) {
@@ -152,13 +255,13 @@ function buildTradeRowHtml(dateStr, trade, tradeIndex) {
     </tr>`;
 }
 
-function updateDatagridToolbar(total, visible) {
+function updateDatagridToolbar(total, visible, allTotal = total) {
     const summary = document.getElementById('datagrid-summary');
     const moreBtn = document.getElementById('datagrid-load-more');
     if (summary) {
         summary.textContent = total > 0
-            ? `Показано ${Math.min(visible, total)} з ${total} угод`
-            : 'Немає угод у журналі';
+            ? `Показано ${Math.min(visible, total)} з ${total} угод ${getDatagridPeriodLabel()}${allTotal > total ? ` · всього ${allTotal}` : ''}`
+            : `Немає угод ${getDatagridPeriodLabel()}`;
     }
     if (moreBtn) {
         const canLoadMore = visible < total;
@@ -181,10 +284,45 @@ function bindDatagridControls() {
             return;
         }
 
+        const periodBtn = event.target?.closest?.('[data-datagrid-period]');
+        if (periodBtn) {
+            const action = periodBtn.getAttribute('data-datagrid-period');
+            if (action === 'prev-month') {
+                setDatagridMonth(shiftMonthKey(getDatagridMonthKey(), -1));
+            } else if (action === 'next-month') {
+                setDatagridMonth(shiftMonthKey(getDatagridMonthKey(), 1));
+            } else if (action === 'current-month') {
+                setDatagridMonth(monthKeyFromDate(getCurrentMonthDate()));
+            } else if (action === 'prev-30') {
+                const end = state.todayObj instanceof Date ? state.todayObj : new Date();
+                const start = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 29);
+                setDatagridRange(toDateKey(start), toDateKey(end), 'prev-30');
+            } else if (action === 'all') {
+                setDatagridRange('', '', 'all');
+            }
+            renderTradesDatagrid();
+            return;
+        }
+
         const btn = event.target?.closest?.('#datagrid-load-more');
         if (!btn) return;
         _datagridVisibleCount += DATAGRID_PAGE_SIZE;
         renderTradesDatagrid();
+    });
+
+    document.addEventListener('change', (event) => {
+        const target = event.target;
+        if (target?.id === 'datagrid-month') {
+            setDatagridMonth(target.value);
+            renderTradesDatagrid();
+            return;
+        }
+        if (target?.id === 'datagrid-date-from' || target?.id === 'datagrid-date-to') {
+            const from = document.getElementById('datagrid-date-from')?.value || '';
+            const to = document.getElementById('datagrid-date-to')?.value || '';
+            setDatagridRange(from, to, 'custom');
+            renderTradesDatagrid();
+        }
     });
 }
 
@@ -202,15 +340,18 @@ export function requestTradesDatagridRefresh() {
 
 export function renderTradesDatagrid() {
     bindDatagridControls();
+    ensureDatagridPeriodReady();
+    syncDatagridPeriodControls();
 
     const tbody = document.getElementById('datagrid-body');
     if (!tbody) return;
 
-    const rows = ensureRowsCache();
+    const allRows = ensureRowsCache();
+    const rows = filterRowsByPeriod(allRows);
     if (rows.length === 0) {
         tbody.innerHTML =
-            `<tr><td class="datagrid-empty" colspan="${DATAGRID_COLSPAN}">Немає угод у журналі. Імпортуйте Fondexx або додайте дані.</td></tr>`;
-        updateDatagridToolbar(0, 0);
+            `<tr><td class="datagrid-empty" colspan="${DATAGRID_COLSPAN}">Немає угод ${esc(getDatagridPeriodLabel())}. Змініть місяць або виберіть ширший діапазон.</td></tr>`;
+        updateDatagridToolbar(0, 0, allRows.length);
         return;
     }
 
@@ -230,7 +371,7 @@ export function renderTradesDatagrid() {
     }
 
     tbody.innerHTML = html;
-    updateDatagridToolbar(rows.length, visibleLimit);
+    updateDatagridToolbar(rows.length, visibleLimit, allRows.length);
     requestAnimationFrame(() => {
         const container = document.querySelector('.datagrid-container');
         if (container) container.scrollTop = container.scrollHeight;
