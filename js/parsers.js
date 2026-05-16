@@ -1,7 +1,7 @@
 // === js/parsers.js ===
 import { state } from './state.js';
 import { saveJournalData, saveToLocal, markJournalDayDirty } from './storage.js';
-import { getDefaultDayEntry } from './data_utils.js';
+import { applyAutoTradeTypesData, getDefaultDayEntry } from './data_utils.js';
 import { ensureXlsx } from './vendor_loader.js';
 import { ecnFeeColumnIndex } from './parser_utils.js';
 
@@ -279,6 +279,7 @@ function recalculateDailyTotals(d) {
     if (f.tickers) f.tickers.forEach(t => existingTickers.add(t));
     if (p.tickers) p.tickers.forEach(t => existingTickers.add(t));
     entry.traded_tickers = Array.from(existingTickers);
+    applyAutoTradeTypesData(entry);
 }
 
 function normalizeTradeSymbol(value) {

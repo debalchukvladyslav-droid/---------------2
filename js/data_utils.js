@@ -30,9 +30,12 @@ export function getDefaultDayEntry() {
         fondexx: { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
         ppro: { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
         trades: [],
+        tradeTypesData: {},
         review_requests: {},
     };
 }
+
+export const DEFAULT_TRADE_TYPES = ['Шорт', 'Виключення', 'Фіолетова', 'Візуально'];
 
 export function getDefaultAppData() {
     return {
@@ -43,7 +46,7 @@ export function getDefaultAppData() {
         tickers: {},
         screenMeta: {},
         unassignedImages: [],
-        tradeTypes: ["Шорт", "Виключення", "Виключення фіолетова"]
+        tradeTypes: [...DEFAULT_TRADE_TYPES]
     };
 }
 export function sanitizeStringArray(value) {
@@ -67,12 +70,99 @@ export function normalizeTradeSource(source) {
     };
 }
 
+function normalizeTradeTypeText(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/ё/g, 'е')
+        .replace(/i/g, 'і')
+        .replace(/[^a-zа-яіїєґ0-9]+/gi, '');
+}
+
+export function classifyTradeTypeGroup(trade) {
+    const sheet = trade?.sheet && typeof trade.sheet === 'object' ? trade.sheet : {};
+    const rawType = sheet.tradeType || trade?.type || sheet.fondexxType || '';
+    const key = normalizeTradeTypeText(rawType);
+    if (!key) return null;
+
+    if (['шортнс', 'рпвиключення', 'виключення'].includes(key)) return 'Виключення';
+    if (['фіолетова', 'виключенняфіолетова'].includes(key)) return 'Фіолетова';
+    if (['візуально', 'виключеннявізуально', 'рпвізуально'].includes(key)) return 'Візуально';
+    if (key === 'шорт') return 'Шорт';
+    return null;
+}
+
+function parseTradeKf(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const match = String(value).replace(',', '.').match(/-?\d+(?:\.\d+)?/);
+    if (!match) return null;
+    const parsed = Number(match[0]);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function roundMetric(value) {
+    return Number.parseFloat((Number(value) || 0).toFixed(2));
+}
+
+export function buildAutoTradeTypesData(trades = []) {
+    const totals = Object.fromEntries(DEFAULT_TRADE_TYPES.map((type) => [type, { pnl: 0, kf: 0, count: 0, kfCount: 0 }]));
+    let hasAny = false;
+
+    trades.forEach((trade) => {
+        const group = classifyTradeTypeGroup(trade);
+        if (!group || !totals[group]) return;
+
+        const net = Number(trade?.net);
+        if (Number.isFinite(net)) {
+            totals[group].pnl += net;
+            hasAny = true;
+        }
+
+        const sheet = trade?.sheet && typeof trade.sheet === 'object' ? trade.sheet : {};
+        const kf = parseTradeKf(sheet.profitRisk ?? trade?.profitRisk ?? trade?.kf);
+        if (kf !== null) {
+            totals[group].kf += kf;
+            totals[group].kfCount++;
+            hasAny = true;
+        }
+
+        totals[group].count++;
+    });
+
+    if (!hasAny) return {};
+
+    return Object.fromEntries(DEFAULT_TRADE_TYPES.map((type) => {
+        const item = totals[type];
+        return [type, {
+            pnl: item.count ? roundMetric(item.pnl) : '',
+            kf: item.kfCount ? roundMetric(item.kf) : '',
+        }];
+    }));
+}
+
+export function applyAutoTradeTypesData(dayEntry) {
+    if (!dayEntry || typeof dayEntry !== 'object') return dayEntry;
+    const autoData = buildAutoTradeTypesData(Array.isArray(dayEntry.trades) ? dayEntry.trades : []);
+    dayEntry.tradeTypesData = {
+        ...(dayEntry.tradeTypesData && typeof dayEntry.tradeTypesData === 'object' ? dayEntry.tradeTypesData : {}),
+        ...autoData,
+    };
+    return dayEntry;
+}
+
+export function normalizeTradeTypesList(value) {
+    const incoming = Array.isArray(value) ? value.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()) : [];
+    const oldDefault = ['Шорт', 'Виключення', 'Виключення фіолетова'];
+    const isOnlyOldDefault = incoming.length === oldDefault.length && oldDefault.every((item, index) => incoming[index] === item);
+    const base = isOnlyOldDefault || incoming.length === 0 ? [] : incoming;
+    return [...new Set([...DEFAULT_TRADE_TYPES, ...base])];
+}
+
 export function normalizeDayEntry(entry) {
     const defaults = getDefaultDayEntry();
     const safeEntry = entry && typeof entry === 'object' ? entry : {};
     const screenshots = safeEntry.screenshots && typeof safeEntry.screenshots === 'object' ? safeEntry.screenshots : {};
 
-    return {
+    return applyAutoTradeTypesData({
         ...defaults,
         ...safeEntry,
         pnl: sanitizeNumberOrNull(safeEntry.pnl),
@@ -94,9 +184,11 @@ export function normalizeDayEntry(entry) {
         traded_tickers: sanitizeStringArray(safeEntry.traded_tickers),
         fondexx: normalizeTradeSource(safeEntry.fondexx),
         ppro: normalizeTradeSource(safeEntry.ppro),
+        tradeTypesData:
+            safeEntry.tradeTypesData && typeof safeEntry.tradeTypesData === 'object' ? { ...safeEntry.tradeTypesData } : {},
         review_requests:
             safeEntry.review_requests && typeof safeEntry.review_requests === 'object' ? { ...safeEntry.review_requests } : {},
-    };
+    });
 }
 
 export function normalizeAppData(rawData) {
@@ -138,6 +230,7 @@ export function normalizeAppData(rawData) {
         settings: normalizedSettings,
         tickers: safeData.tickers && typeof safeData.tickers === 'object' ? safeData.tickers : {},
         screenMeta: safeData.screenMeta && typeof safeData.screenMeta === 'object' ? safeData.screenMeta : {},
-        unassignedImages: sanitizeStringArray(safeData.unassignedImages)
+        unassignedImages: sanitizeStringArray(safeData.unassignedImages),
+        tradeTypes: normalizeTradeTypesList(safeData.tradeTypes)
     };
 }

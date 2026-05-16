@@ -1,7 +1,7 @@
 // === js/storage.js ===
 import { supabase } from './supabase.js';
 import { state } from './state.js';
-import { normalizeAppData, normalizeDayEntry, getDefaultAppData } from './data_utils.js';
+import { normalizeAppData, normalizeDayEntry, getDefaultAppData, normalizeTradeTypesList } from './data_utils.js';
 import { loadPlaybook } from './playbook.js';
 import { clearStatsCache } from './stats.js';
 import { uploadToSupabaseStorage, deleteFromSupabaseStorage, getSupabaseStorageUrl } from './supabase_storage.js';
@@ -319,7 +319,7 @@ export async function loadSettings() {
                 delete incoming.screenMeta;
             }
             if (Array.isArray(incoming.tradeTypes)) {
-                state.appData.tradeTypes = incoming.tradeTypes;
+                state.appData.tradeTypes = normalizeTradeTypesList(incoming.tradeTypes);
                 delete incoming.tradeTypes;
             }
             if (incoming.screenTags && typeof incoming.screenTags === 'object') {

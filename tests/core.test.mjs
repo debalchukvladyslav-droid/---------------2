@@ -22,7 +22,7 @@ globalThis.document = {
 };
 
 const { canAccessMentorReviewQueueState, isMentorViewingOtherJournalState } = await import('../js/access_control.js');
-const { normalizeAppData, normalizeDayEntry } = await import('../js/data_utils.js');
+const { buildAutoTradeTypesData, normalizeAppData, normalizeDayEntry } = await import('../js/data_utils.js');
 const { ecnFeeColumnIndex, parseSheetDateCellToIso } = await import('../js/parser_utils.js');
 const { sanitizeHTML, safeExternalUrl, sanitizeRichHTML } = await import('../js/sanitize.js');
 const { summarizeJournalPnl } = await import('../js/stats_math.js');
@@ -112,6 +112,23 @@ test('day entry normalization falls back for unsafe values', () => {
     assert.equal(entry.notes, '');
     assert.deepEqual(entry.sliders, {});
     assert.deepEqual(entry.review_requests, {});
+});
+
+test('auto trade type metrics group imported trades by default categories', () => {
+    const auto = buildAutoTradeTypesData([
+        { net: 10, type: 'шорт', sheet: { profitRisk: '1.5' } },
+        { net: -4, sheet: { tradeType: 'шортНС', profitRisk: '-0,4R' } },
+        { net: 6, sheet: { tradeType: 'РПвиключення', profitRisk: '0.6' } },
+        { net: 3, sheet: { tradeType: 'виключення-фіолетова', profitRisk: '0.3' } },
+        { net: 2, sheet: { tradeType: 'РПвізуально', profitRisk: '0.2' } },
+    ]);
+
+    assert.deepEqual(auto, {
+        'Шорт': { pnl: 10, kf: 1.5 },
+        'Виключення': { pnl: 2, kf: 0.2 },
+        'Фіолетова': { pnl: 3, kf: 0.3 },
+        'Візуально': { pnl: 2, kf: 0.2 },
+    });
 });
 
 test('sanitize helpers escape html and reject unsafe urls', () => {
