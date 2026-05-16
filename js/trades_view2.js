@@ -73,6 +73,7 @@ async function ensureTradeDaysLoaded() {
 }
 
 export async function populateDateSelect() {
+    bindTradeDateCalendar();
     const sel = document.getElementById('trades-date-select');
     if (!sel) return;
 
