@@ -689,7 +689,7 @@ export async function switchMainTab(tab, options = {}) {
         b.classList.toggle('active', b.dataset.tab === tab);
     });
     // Якщо активна вкладка в more menu — підсвічуємо кнопку Ще
-    const moreTabIds = ['trades', 'datagrid', 'table', 'calendar', 'playbook', 'learn', 'settings', 'mentor-review'];
+    const moreTabIds = ['trades', 'datagrid', 'table', 'calendar', /* 'playbook', */ 'learn', 'settings', 'mentor-review'];
     const moreBtn = document.querySelector('.mobile-nav-more-btn');
     if (moreBtn) moreBtn.classList.toggle('more-open', moreTabIds.includes(tab));
 

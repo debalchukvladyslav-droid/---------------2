@@ -954,10 +954,10 @@
 .sidebar-account-dropdown textarea { min-height: 72px; resize: vertical; }
 .sidebar-pf-save { margin-top: 6px; width: 100%; border-radius: 10px; }
 .sidebar-account-actions-section {
-    padding: 12px;
-    border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--accent) 6%, transparent);
+    padding: 0;
+    margin: 8px 0 0;
+    border: 0;
+    background: transparent;
 }
 .sidebar-account-actions-section .sidebar-pf-section-title {
     margin-bottom: 4px;
@@ -965,7 +965,7 @@
 .sidebar-account-actions {
     display: grid;
     gap: 8px;
-    margin-top: 10px;
+    margin-top: 0;
 }
 .sidebar-account-action-btn,
 .sidebar-account-logout-btn {
@@ -973,6 +973,17 @@
     margin: 0;
     justify-content: center;
     border-radius: 10px;
+}
+.sidebar-account-logout-btn.logout-danger-btn {
+    border: 1px solid color-mix(in srgb, var(--loss) 70%, transparent);
+    background: color-mix(in srgb, var(--loss) 88%, #000 12%);
+    color: #fff;
+    box-shadow: 0 10px 24px color-mix(in srgb, var(--loss) 22%, transparent);
+}
+.sidebar-account-logout-btn.logout-danger-btn:hover {
+    border-color: var(--loss);
+    background: var(--loss);
+    box-shadow: 0 12px 28px color-mix(in srgb, var(--loss) 30%, transparent);
 }
 
 /* === Адмін: картки користувачів === */
