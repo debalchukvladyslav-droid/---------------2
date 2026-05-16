@@ -1,7 +1,18 @@
 ﻿        <div id="view-trades" class="view-content trades-view">
             <!-- Панель вибору дня -->
             <div id="trades-selector-panel" class="trades-selector-panel">
-                <select id="trades-date-select" class="trade-date-select" data-action="trade-date-symbol-select">
+                <div class="trades-date-calendar" id="trades-date-calendar">
+                    <div class="trades-date-calendar-head">
+                        <button type="button" class="trades-date-nav" id="trades-date-prev" aria-label="Попередній місяць">‹</button>
+                        <button type="button" class="trades-date-month" id="trades-date-month" aria-live="polite">Місяць</button>
+                        <button type="button" class="trades-date-nav" id="trades-date-next" aria-label="Наступний місяць">›</button>
+                    </div>
+                    <div class="trades-date-weekdays" aria-hidden="true">
+                        <span>П</span><span>В</span><span>С</span><span>Ч</span><span>П</span><span>С</span><span>В</span>
+                    </div>
+                    <div class="trades-date-grid" id="trades-date-grid"></div>
+                </div>
+                <select id="trades-date-select" class="trade-date-select trade-date-select-hidden" data-action="trade-date-symbol-select" aria-hidden="true" tabindex="-1">
                     <option value="">— Оберіть день —</option>
                 </select>
             </div>

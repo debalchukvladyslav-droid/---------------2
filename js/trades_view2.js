@@ -22,6 +22,8 @@ let _tradeDaysLoadPromise = null;
 let _tradeDaysLoadUserId = null;
 let _resizeObserver = null;
 let _chartBuildToken = 0;
+let _tradeDateCalendarMonth = null;
+let _tradeDates = [];
 const _storyObservers = new Set();
 
 // Активна угода для поточного дня { symbol, dateStr, tradeIndex }
@@ -49,6 +51,7 @@ export function initTradesView() {
         wrapper.querySelector('#ts-show-btn')?.remove();
         wrapper.querySelector('#ts-fullscreen-btn')?.remove();
     }
+    bindTradeDateCalendar();
 }
 
 async function ensureTradeDaysLoaded() {
@@ -78,6 +81,7 @@ export async function populateDateSelect() {
     const dates = Object.keys(state.appData.journal)
         .filter(d => state.appData.journal[d].trades?.length > 0)
         .sort((a, b) => b.localeCompare(a));
+    _tradeDates = dates;
 
     sel.innerHTML = '<option value="">— Оберіть день —</option>';
     dates.forEach(d => {
@@ -95,8 +99,11 @@ export async function populateDateSelect() {
         : dates[0];
     if (dateToSelect) {
         sel.value = dateToSelect;
+        setTradeDateCalendarMonth(dateToSelect);
+        renderTradeDateCalendar(dateToSelect);
         renderPillNav(dateToSelect);
     } else {
+        renderTradeDateCalendar('');
         renderPillNav('');
     }
 }
@@ -112,9 +119,106 @@ export function populateSymbolSelect(dateStr) {
                 void populateDateSelect();
             }
             sel.value = dateStr;
+            setTradeDateCalendarMonth(dateStr);
+            renderTradeDateCalendar(dateStr);
         }
     }
     if (dateStr) renderPillNav(dateStr);
+}
+
+function parseDateParts(dateStr) {
+    const parts = String(dateStr || '').split('-').map(Number);
+    if (parts.length !== 3 || parts.some(n => !Number.isFinite(n))) return null;
+    return { year: parts[0], month: parts[1] - 1, day: parts[2] };
+}
+
+function formatDateKey(year, month, day) {
+    return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function setTradeDateCalendarMonth(dateStr) {
+    const parsed = parseDateParts(dateStr);
+    if (parsed) {
+        _tradeDateCalendarMonth = { year: parsed.year, month: parsed.month };
+        return;
+    }
+    if (!_tradeDateCalendarMonth) {
+        const now = new Date();
+        _tradeDateCalendarMonth = { year: now.getFullYear(), month: now.getMonth() };
+    }
+}
+
+function getTradeDaySummary(dateStr) {
+    const trades = state.appData.journal?.[dateStr]?.trades || [];
+    const net = trades.reduce((sum, trade) => sum + (Number(trade.net) || 0), 0);
+    return { count: trades.length, net };
+}
+
+function renderTradeDateCalendar(activeDate = '') {
+    const grid = document.getElementById('trades-date-grid');
+    const label = document.getElementById('trades-date-month');
+    if (!grid || !label) return;
+
+    setTradeDateCalendarMonth(activeDate || _tradeDates[0]);
+    const { year, month } = _tradeDateCalendarMonth;
+    const monthName = new Intl.DateTimeFormat('uk-UA', { month: 'long', year: 'numeric' }).format(new Date(year, month, 1));
+    label.textContent = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+
+    const firstDay = new Date(year, month, 1);
+    const firstWeekday = (firstDay.getDay() + 6) % 7;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const cells = [];
+
+    for (let i = 0; i < firstWeekday; i++) cells.push('<span class="trades-date-day is-empty"></span>');
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = formatDateKey(year, month, day);
+        const summary = getTradeDaySummary(dateStr);
+        const hasTrades = summary.count > 0;
+        const active = dateStr === activeDate;
+        const tone = hasTrades ? (summary.net >= 0 ? 'is-profit' : 'is-loss') : '';
+        const classes = [
+            'trades-date-day',
+            hasTrades ? 'has-trades' : 'is-disabled',
+            tone,
+            active ? 'is-active' : '',
+        ].filter(Boolean).join(' ');
+        const title = hasTrades
+            ? `${dateStr}: ${summary.net >= 0 ? '+' : ''}${summary.net.toFixed(0)}$, ${summary.count} угод`
+            : `${dateStr}: немає угод`;
+        cells.push(`<button type="button" class="${classes}" data-trades-calendar-date="${dateStr}" ${hasTrades ? '' : 'disabled'} title="${sanitizeHTML(title)}">${day}</button>`);
+    }
+
+    grid.innerHTML = cells.join('');
+}
+
+function shiftTradeDateCalendarMonth(delta) {
+    setTradeDateCalendarMonth(document.getElementById('trades-date-select')?.value || _tradeDates[0]);
+    const next = new Date(_tradeDateCalendarMonth.year, _tradeDateCalendarMonth.month + delta, 1);
+    _tradeDateCalendarMonth = { year: next.getFullYear(), month: next.getMonth() };
+    renderTradeDateCalendar(document.getElementById('trades-date-select')?.value || '');
+}
+
+function selectTradeCalendarDate(dateStr) {
+    const sel = document.getElementById('trades-date-select');
+    if (sel) sel.value = dateStr;
+    state.selectedDateStr = dateStr;
+    setTradeDateCalendarMonth(dateStr);
+    renderTradeDateCalendar(dateStr);
+    populateSymbolSelect(dateStr);
+}
+
+function bindTradeDateCalendar() {
+    const calendar = document.getElementById('trades-date-calendar');
+    if (!calendar || calendar.dataset.bound === 'true') return;
+    calendar.dataset.bound = 'true';
+    document.getElementById('trades-date-prev')?.addEventListener('click', () => shiftTradeDateCalendarMonth(-1));
+    document.getElementById('trades-date-next')?.addEventListener('click', () => shiftTradeDateCalendarMonth(1));
+    calendar.addEventListener('click', (event) => {
+        const button = event.target?.closest?.('[data-trades-calendar-date]');
+        if (!button || !calendar.contains(button) || button.disabled) return;
+        selectTradeCalendarDate(button.dataset.tradesCalendarDate);
+    });
 }
 
 // ─── Pill Navigation ──────────────────────────────────────────────────────────
