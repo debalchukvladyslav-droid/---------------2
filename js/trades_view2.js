@@ -24,6 +24,7 @@ let _resizeObserver = null;
 let _chartBuildToken = 0;
 let _tradeDateCalendarMonth = null;
 let _tradeDates = [];
+let _tradeDateCalendarGlobalBound = false;
 const _storyObservers = new Set();
 
 // Активна угода для поточного дня { symbol, dateStr, tradeIndex }
@@ -195,7 +196,7 @@ function renderTradeDateCalendar(activeDate = '') {
 }
 
 function shiftTradeDateCalendarMonth(delta) {
-    setTradeDateCalendarMonth(document.getElementById('trades-date-select')?.value || _tradeDates[0]);
+    if (!_tradeDateCalendarMonth) setTradeDateCalendarMonth(document.getElementById('trades-date-select')?.value || _tradeDates[0]);
     const next = new Date(_tradeDateCalendarMonth.year, _tradeDateCalendarMonth.month + delta, 1);
     _tradeDateCalendarMonth = { year: next.getFullYear(), month: next.getMonth() };
     renderTradeDateCalendar(document.getElementById('trades-date-select')?.value || '');
@@ -212,29 +213,53 @@ function selectTradeCalendarDate(dateStr) {
 }
 
 function bindTradeDateCalendar() {
+    if (!_tradeDateCalendarGlobalBound) {
+        _tradeDateCalendarGlobalBound = true;
+        document.addEventListener('click', (event) => {
+            const trigger = event.target?.closest?.('#trades-date-trigger');
+            if (trigger) {
+                event.preventDefault();
+                event.stopPropagation();
+                const calendar = document.getElementById('trades-date-calendar');
+                setTradeDateCalendarOpen(!!calendar?.hidden);
+                return;
+            }
+
+            const prev = event.target?.closest?.('#trades-date-prev');
+            if (prev) {
+                event.preventDefault();
+                event.stopPropagation();
+                shiftTradeDateCalendarMonth(-1);
+                return;
+            }
+
+            const next = event.target?.closest?.('#trades-date-next');
+            if (next) {
+                event.preventDefault();
+                event.stopPropagation();
+                shiftTradeDateCalendarMonth(1);
+                return;
+            }
+
+            const dayButton = event.target?.closest?.('[data-trades-calendar-date]');
+            if (dayButton) {
+                event.preventDefault();
+                event.stopPropagation();
+                if (!dayButton.disabled) selectTradeCalendarDate(dayButton.dataset.tradesCalendarDate);
+                return;
+            }
+
+            const picker = document.getElementById('trades-date-picker');
+            if (picker && !picker.contains(event.target)) setTradeDateCalendarOpen(false);
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') setTradeDateCalendarOpen(false);
+        });
+    }
+
     const calendar = document.getElementById('trades-date-calendar');
     if (!calendar || calendar.dataset.bound === 'true') return;
     calendar.dataset.bound = 'true';
-    document.getElementById('trades-date-trigger')?.addEventListener('click', (event) => {
-        event.stopPropagation();
-        setTradeDateCalendarOpen(calendar.hidden);
-    });
-    document.getElementById('trades-date-prev')?.addEventListener('click', () => shiftTradeDateCalendarMonth(-1));
-    document.getElementById('trades-date-next')?.addEventListener('click', () => shiftTradeDateCalendarMonth(1));
-    calendar.addEventListener('click', (event) => {
-        event.stopPropagation();
-        const button = event.target?.closest?.('[data-trades-calendar-date]');
-        if (!button || !calendar.contains(button) || button.disabled) return;
-        selectTradeCalendarDate(button.dataset.tradesCalendarDate);
-    });
-    document.addEventListener('click', (event) => {
-        const picker = document.getElementById('trades-date-picker');
-        if (!picker || picker.contains(event.target)) return;
-        setTradeDateCalendarOpen(false);
-    });
-    document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') setTradeDateCalendarOpen(false);
-    });
 }
 
 function setTradeDateCalendarOpen(open) {
