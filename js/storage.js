@@ -674,6 +674,10 @@ export async function initializeApp() {
             isViewingOwnProfile ? loadPlaybook() : Promise.resolve(),
         ]);
 
+        // Critical dashboard data: keep heavy trade views lazy, but make the
+        // home curve/recent trades complete immediately after login.
+        await loadTradeDays(nick, viewedUserId);
+
         if (state.selectedDateStr) {
             const selMk = monthKey(state.selectedDateStr);
             if (selMk !== currentMk && selMk !== prevMk) {
@@ -704,13 +708,13 @@ export async function initializeApp() {
         if (window.initSelectors) window.initSelectors();
         state.statsSourceSelection = { type: 'current', key: state.CURRENT_VIEWED_USER };
         if (window.applyTheme) window.applyTheme();
-        if (window.updateAutoFlags) window.updateAutoFlags().then(() => { if (window.renderView) window.renderView(); });
+        if (window.updateAutoFlags) await window.updateAutoFlags();
         if (window.renderErrorsList) window.renderErrorsList();
         if (window.renderSettingsChecklist) window.renderSettingsChecklist();
         if (window.renderSettingsSliders) window.renderSettingsSliders();
         if (window.renderMyTradeTypes) window.renderMyTradeTypes();
         if (window.loadImages) window.loadImages();
-        if (window.renderView) window.renderView();
+        if (window.renderView) await window.renderView();
         if (window.selectDate) window.selectDate(state.selectedDateStr);
         if (window.applyAccessRights) window.applyAccessRights();
         if (window.updateDriveUI) window.updateDriveUI();

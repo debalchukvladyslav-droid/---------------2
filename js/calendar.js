@@ -814,6 +814,10 @@ export async function renderView() {
         }
     }
 
+    const dashY = state.todayObj.getFullYear();
+    const dashM = state.todayObj.getMonth();
+    updateDashboardWidgets(dashY, dashM);
+
     const grid = document.getElementById('calendar-grid');
     if (!grid) return; // Якщо таблиці взагалі немає в HTML - виходимо
     
@@ -961,8 +965,6 @@ export async function renderView() {
     let commEl = document.getElementById('total-comm'); if(commEl) commEl.innerText = `${parseFloat(totalComm).toFixed(2)}$`;
     let locEl = document.getElementById('total-locates'); if(locEl) locEl.innerText = `${parseFloat(totalLocates).toFixed(2)}$`;
 
-    const dashY = state.todayObj.getFullYear();
-    const dashM = state.todayObj.getMonth();
     updateDashboardWidgets(dashY, dashM);
 }
 
