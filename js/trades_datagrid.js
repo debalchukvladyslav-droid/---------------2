@@ -46,6 +46,21 @@ function formatDateHeader(dateStr) {
     return `${day} ${monthName} ${y}`;
 }
 
+function formatDateLabel(dateStr) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr || '');
+    if (!m) return dateStr || '';
+    const day = parseInt(m[3], 10);
+    const monthName = UK_MONTHS_GEN[parseInt(m[2], 10) - 1] ?? m[2];
+    return `${day} ${monthName} ${m[1]}`;
+}
+
+function formatMonthLabel(monthKey) {
+    const m = /^(\d{4})-(\d{2})$/.exec(monthKey || '');
+    if (!m) return monthKey || '';
+    const monthName = UK_MONTHS_GEN[parseInt(m[2], 10) - 1] ?? m[2];
+    return `${monthName} ${m[1]}`;
+}
+
 function pad2(value) {
     return String(value).padStart(2, '0');
 }
@@ -105,10 +120,10 @@ function setDatagridRange(from, to, mode = 'custom') {
 
 function getDatagridPeriodLabel() {
     if (_datagridPeriod.mode === 'all') return 'за весь період';
-    if (_datagridPeriod.mode === 'month' && _datagridPeriod.from) return `за ${_datagridPeriod.from.slice(0, 7)}`;
-    if (_datagridPeriod.from && _datagridPeriod.to) return `${_datagridPeriod.from} - ${_datagridPeriod.to}`;
-    if (_datagridPeriod.from) return `з ${_datagridPeriod.from}`;
-    if (_datagridPeriod.to) return `до ${_datagridPeriod.to}`;
+    if (_datagridPeriod.mode === 'month' && _datagridPeriod.from) return `за ${formatMonthLabel(_datagridPeriod.from.slice(0, 7))}`;
+    if (_datagridPeriod.from && _datagridPeriod.to) return `з ${formatDateLabel(_datagridPeriod.from)} по ${formatDateLabel(_datagridPeriod.to)}`;
+    if (_datagridPeriod.from) return `з ${formatDateLabel(_datagridPeriod.from)}`;
+    if (_datagridPeriod.to) return `до ${formatDateLabel(_datagridPeriod.to)}`;
     return 'за обраний період';
 }
 
