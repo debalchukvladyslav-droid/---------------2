@@ -158,6 +158,7 @@ function renderTradeDateCalendar(activeDate = '') {
     const grid = document.getElementById('trades-date-grid');
     const label = document.getElementById('trades-date-month');
     if (!grid || !label) return;
+    updateTradeDateTrigger(activeDate);
 
     setTradeDateCalendarMonth(activeDate || _tradeDates[0]);
     const { year, month } = _tradeDateCalendarMonth;
@@ -205,6 +206,7 @@ function selectTradeCalendarDate(dateStr) {
     state.selectedDateStr = dateStr;
     setTradeDateCalendarMonth(dateStr);
     renderTradeDateCalendar(dateStr);
+    setTradeDateCalendarOpen(false);
     populateSymbolSelect(dateStr);
 }
 
@@ -212,13 +214,52 @@ function bindTradeDateCalendar() {
     const calendar = document.getElementById('trades-date-calendar');
     if (!calendar || calendar.dataset.bound === 'true') return;
     calendar.dataset.bound = 'true';
+    document.getElementById('trades-date-trigger')?.addEventListener('click', (event) => {
+        event.stopPropagation();
+        setTradeDateCalendarOpen(calendar.hidden);
+    });
     document.getElementById('trades-date-prev')?.addEventListener('click', () => shiftTradeDateCalendarMonth(-1));
     document.getElementById('trades-date-next')?.addEventListener('click', () => shiftTradeDateCalendarMonth(1));
     calendar.addEventListener('click', (event) => {
+        event.stopPropagation();
         const button = event.target?.closest?.('[data-trades-calendar-date]');
         if (!button || !calendar.contains(button) || button.disabled) return;
         selectTradeCalendarDate(button.dataset.tradesCalendarDate);
     });
+    document.addEventListener('click', (event) => {
+        const picker = document.getElementById('trades-date-picker');
+        if (!picker || picker.contains(event.target)) return;
+        setTradeDateCalendarOpen(false);
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') setTradeDateCalendarOpen(false);
+    });
+}
+
+function setTradeDateCalendarOpen(open) {
+    const calendar = document.getElementById('trades-date-calendar');
+    const trigger = document.getElementById('trades-date-trigger');
+    if (!calendar || !trigger) return;
+    calendar.hidden = !open;
+    trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) renderTradeDateCalendar(document.getElementById('trades-date-select')?.value || '');
+}
+
+function updateTradeDateTrigger(dateStr = '') {
+    const valueEl = document.getElementById('trades-date-trigger-value');
+    if (!valueEl) return;
+    if (!dateStr) {
+        valueEl.textContent = 'Оберіть день';
+        return;
+    }
+    const summary = getTradeDaySummary(dateStr);
+    const parsed = parseDateParts(dateStr);
+    const dateLabel = parsed
+        ? new Intl.DateTimeFormat('uk-UA', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(parsed.year, parsed.month, parsed.day))
+        : dateStr;
+    valueEl.textContent = summary.count
+        ? `${dateLabel} · ${summary.net >= 0 ? '+' : ''}${summary.net.toFixed(0)}$`
+        : dateLabel;
 }
 
 // ─── Pill Navigation ──────────────────────────────────────────────────────────
