@@ -1,7 +1,7 @@
 // === js/stats.js ===
 import { supabase } from './supabase.js';
 import { state } from './state.js';
-import { normalizeAppData, getDefaultAppData } from './data_utils.js';
+import { applyAutoTradeTypesData, DEFAULT_TRADE_TYPES, normalizeAppData, getDefaultAppData, normalizeTradeTypesList } from './data_utils.js';
 import { loadMonth, loadAllMonths, getCurrentViewedUserId, resolveViewedUserId } from './storage.js';
 import { escapeHtml } from './utils.js';
 import { ensureChartJs } from './vendor_loader.js';
@@ -60,7 +60,7 @@ export function disposeStatsView() {
 
 function journalRowToEntry(row) {
     const metrics = row?.daily_metrics && typeof row.daily_metrics === 'object' ? row.daily_metrics : {};
-    return {
+    return applyAutoTradeTypesData({
         pnl: row?.pnl ?? null,
         gross_pnl: row?.gross_pnl ?? null,
         commissions: row?.commissions ?? null,
@@ -85,7 +85,15 @@ function journalRowToEntry(row) {
         sessionAiResult: metrics.sessionAiResult ?? '',
         sessionDone: metrics.sessionDone ?? false,
         trades: metrics.trades || []
-    };
+    });
+}
+
+function prepareStatsJournal(journal = {}) {
+    const prepared = {};
+    for (const [dateStr, entry] of Object.entries(journal || {})) {
+        prepared[dateStr] = applyAutoTradeTypesData({ ...(entry || {}) });
+    }
+    return prepared;
 }
 
 async function getProfileForDocName(docName) {
@@ -582,12 +590,12 @@ export function selectTradeTypeFilter(type) {
 }
 
 function extractTradeTypesFromJournal(journal) {
-    const seen = new Set();
+    const seen = new Set(DEFAULT_TRADE_TYPES);
     for (const dateStr in journal || {}) {
         const entry = journal[dateStr];
         if (entry?.tradeTypesData) Object.keys(entry.tradeTypesData).forEach(type => seen.add(type));
     }
-    return Array.from(seen).sort((a, b) => a.localeCompare(b, 'uk'));
+    return normalizeTradeTypesList(Array.from(seen));
 }
 
 function normalizeCompareSourceSelection() {
@@ -611,8 +619,8 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
             const nick = cleanStatsNick(state.CURRENT_VIEWED_USER || state.USER_DOC_NAME);
             if (isStatsNickAllowed(nick.replace(/_stats$/, ''))) {
                 await loadAllMonths(state.CURRENT_VIEWED_USER, currentUserId);
-                journal = state.appData.journal || {};
-                tradeTypes = state.appData.tradeTypes || extractTradeTypesFromJournal(journal);
+                journal = prepareStatsJournal(state.appData.journal || {});
+                tradeTypes = normalizeTradeTypesList([...(state.appData.tradeTypes || []), ...extractTradeTypesFromJournal(journal)]);
                 settings = state.appData.settings || {};
             }
         } else if (sel.type === 'all') {
@@ -620,7 +628,7 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
             const cacheKey = '__compare_all__|all-time';
             const cached = _cacheGet(cacheKey);
             if (cached) {
-                journal = cached;
+                journal = prepareStatsJournal(cached);
             } else {
                 const journals = await Promise.all(allNicks.map(async (nick) => {
                     const k = `${nick}_stats|all-time`;
@@ -633,7 +641,7 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
                     _cacheSet(k, j);
                     return { journal: j, settings };
                 }));
-                journal = mergeJournals(journals);
+                journal = prepareStatsJournal(mergeJournals(journals));
                 _cacheSet(cacheKey, journal);
             }
             tradeTypes = extractTradeTypesFromJournal(journal);
@@ -641,7 +649,7 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
             const cacheKey = `__compare_team__${sel.key}|all-time`;
             const cached = _cacheGet(cacheKey);
             if (cached) {
-                journal = cached;
+                journal = prepareStatsJournal(cached);
             } else {
                 const journals = await Promise.all(getStatsNicksForGroup(sel.key).map(async (nick) => {
                     const k = `${nick}_stats|all-time`;
@@ -654,7 +662,7 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
                     _cacheSet(k, j);
                     return { journal: j, settings };
                 }));
-                journal = mergeJournals(journals);
+                journal = prepareStatsJournal(mergeJournals(journals));
                 _cacheSet(cacheKey, journal);
             }
             tradeTypes = extractTradeTypesFromJournal(journal);
@@ -667,10 +675,11 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
                 const cacheKey = `${nick}_stats|all-time`;
                 const cached = _cacheGet(cacheKey);
                 if (cached) {
-                    journal = cached;
+                    journal = prepareStatsJournal(cached);
                 } else {
                     const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
                     (snap.docs || []).forEach(d => { Object.assign(journal, d.data()); });
+                    journal = prepareStatsJournal(journal);
                     _cacheSet(cacheKey, journal);
                 }
             }
@@ -840,7 +849,7 @@ function mergeJournals(journals) {
     for (let j of journals) {
         if (!j || !j.journal) continue;
         for (let d in j.journal) {
-            let entry = j.journal[d];
+            let entry = applyAutoTradeTypesData({ ...(j.journal[d] || {}) });
             const entryPnl = getEffectiveStatsPnl(entry);
             if (entryPnl == null) continue;
             if (!merged[d]) merged[d] = { pnl: 0, commissions: 0, locates: 0, tradeTypesData: {}, __statsBreakevenBand: 0 };
@@ -1046,27 +1055,26 @@ export async function refreshStatsView() {
 
     if (requestId !== state.statsLoadRequestId) { if (overlay) overlay.style.display = 'none'; return; }
 
+    journal = prepareStatsJournal(journal);
+
     // Збираємо tradeTypes для поточного контексту
     let contextTradeTypes = [];
     let contextSettings = {};
     if (sel.type === 'current') {
         const currentNick = cleanStatsNick(state.CURRENT_VIEWED_USER || state.USER_DOC_NAME).replace(/_stats$/, '');
-        contextTradeTypes = isStatsNickAllowed(currentNick) ? (state.appData.tradeTypes || []) : [];
+        contextTradeTypes = isStatsNickAllowed(currentNick)
+            ? normalizeTradeTypesList([...(state.appData.tradeTypes || []), ...extractTradeTypesFromJournal(journal)])
+            : extractTradeTypesFromJournal(journal);
         contextSettings = isStatsNickAllowed(currentNick) ? (state.appData.settings || {}) : {};
     } else if (sel.type === 'trader') {
         const nick = cleanStatsNick(sel.key);
         if (isStatsNickAllowed(nick)) {
             const data = await getStatsDocData(`${nick}_stats`, filters);
-            contextTradeTypes = data.tradeTypes || [];
+            contextTradeTypes = normalizeTradeTypesList([...(data.tradeTypes || []), ...extractTradeTypesFromJournal(journal)]);
             contextSettings = data.settings || getStatsProfileSettingsByNick(nick);
         }
     } else {
-        const seen = new Set();
-        for (const d in journal) {
-            const entry = journal[d];
-            if (entry.tradeTypesData) Object.keys(entry.tradeTypesData).forEach(t => seen.add(t));
-        }
-        contextTradeTypes = Array.from(seen);
+        contextTradeTypes = extractTradeTypesFromJournal(journal);
     }
 
     if (requestId !== state.statsLoadRequestId) { if (overlay) overlay.style.display = 'none'; return; }
@@ -2514,31 +2522,8 @@ export function renderStatsTab() {
     const ttFilter = state.activeTradeTypeFilter;
     const isAllTime = state.activeFilters.some(f => f.type === 'all-time');
     const sel = state.statsSourceSelection;
-    let validEntries = [];
-    for (let d in statsJournal) {
-        let data = statsJournal[d];
-        if (!d.match(/^\d{4}-\d{2}-\d{2}$/)) continue;
-        let pnl;
-        if (ttFilter) {
-            let ttVal = data.tradeTypesData && data.tradeTypesData[ttFilter];
-            if (!ttVal || ttVal.pnl === '' || ttVal.pnl === undefined || ttVal.pnl === null) continue;
-            pnl = parseFloat(ttVal.pnl);
-        } else {
-            pnl = getEffectiveStatsPnl(data);
-            if (pnl == null) continue;
-        }
-        if (!isNaN(pnl)) {
-            let parts = d.split('-');
-            validEntries.push({
-                dateStr: d,
-                dateObj: new Date(parts[0], parts[1]-1, parts[2]),
-                pnl,
-                data,
-                breakevenBand: Number(data.__statsBreakevenBand),
-            });
-        }
-    }
-    validEntries.sort((a, b) => a.dateObj - b.dateObj);
+    statsJournal = prepareStatsJournal(statsJournal);
+    let validEntries = buildStatsEntriesFromJournal(statsJournal, ttFilter);
     renderStatsComparePanel(validEntries);
     
     let cssGreen = getComputedStyle(document.documentElement).getPropertyValue('--profit').trim() || '#10b981';
