@@ -2475,7 +2475,7 @@ function renderStatsInsights({
 
     if (winRateNumber < 45 && totalPnl < 0) insights.push({ tone: 'bad', text: 'Winrate і PnL одночасно слабкі: потрібен фільтр сетапів.' });
     if (Math.abs(equityAnalysis?.worstDrawdown || 0) > Math.abs(totalPnl) && totalPnl > 0) {
-        insights.push({ tone: 'warn', text: 'Max drawdown більший за поточний профіт: результат нестабільний.' });
+        insights.push({ tone: 'warn', text: 'Максимальний відкат більший за поточний профіт: результат нестабільний.' });
     }
 
     if (lastFive.length >= 3) {
