@@ -18,6 +18,12 @@ function isPureGoogleSheetTrade(trade) {
     return isGoogleSheetTrade(trade) && !trade.sheet?.matchedBy;
 }
 
+function visibleTradeRows(trades = []) {
+    return (Array.isArray(trades) ? trades : [])
+        .map((trade, index) => ({ trade, index }))
+        .filter(({ trade }) => !isPureGoogleSheetTrade(trade));
+}
+
 function sourceHasMoney(source) {
     return !!(
         Number(source?.gross)
@@ -170,8 +176,8 @@ export function updateDashboardWidgets(year, month) {
 
     for (const [dateKey, day] of Object.entries(journal)) {
         if (!day || !dateKey.startsWith(prefix) || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) continue;
-        const trades = Array.isArray(day.trades) ? day.trades : [];
-        totalTrades += trades.length;
+        const tradeRows = visibleTradeRows(day.trades);
+        totalTrades += tradeRows.length;
         const pnl = getEffectiveDayPnl(day);
         if (!Number.isFinite(pnl) || pnl === 0) continue;
         totalPnl += pnl;
@@ -216,8 +222,8 @@ export function updateDashboardWidgets(year, month) {
         const rows = [];
         for (const [date, day] of Object.entries(journal)) {
             if (!day || !date.startsWith(prefix) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
-            const trades = Array.isArray(day.trades) ? day.trades : [];
-            trades.forEach((t, idx) => {
+            const tradeRows = visibleTradeRows(day.trades);
+            tradeRows.forEach(({ trade: t, index: idx }) => {
                 const net = parseFloat(t.net);
                 if (!Number.isFinite(net)) return;
                 rows.push({ date, idx, sym: String(t.symbol || '?').toUpperCase(), net, type: String(t.type || '') });
@@ -344,7 +350,7 @@ export function renderSidebarTradesList(dateStr) {
     const empty = document.getElementById('trades-empty');
     if (!wrap) return;
     const day = state.appData.journal[dateStr];
-    const trades = Array.isArray(day?.trades) ? day.trades : [];
+    const trades = visibleTradeRows(day?.trades);
     if (trades.length === 0) {
         wrap.innerHTML = '';
         if (empty) empty.style.display = 'block';
@@ -352,7 +358,7 @@ export function renderSidebarTradesList(dateStr) {
     }
     if (empty) empty.style.display = 'none';
     wrap.innerHTML = trades
-        .map((t, i) => {
+        .map(({ trade: t, index }) => {
             const sym = sanitizeHTML(String(t.symbol || '?').toUpperCase());
             const net = parseFloat(t.net);
             const ok = Number.isFinite(net);
@@ -361,7 +367,7 @@ export function renderSidebarTradesList(dateStr) {
             const netStr = ok ? `${sign}$${net.toFixed(2)}` : '—';
             const typ = sanitizeHTML(String(t.type || ''));
             const hasScreen = findScreenshotsForTicker(dateStr, t.symbol).length > 0;
-            return `<button type="button" class="sidebar-trade-row" data-sb-trade-idx="${i}" title="${hasScreen ? 'Відкрити скрін угоди' : 'Скріна для цього тікера ще немає'}">
+            return `<button type="button" class="sidebar-trade-row" data-sb-trade-idx="${index}" title="${hasScreen ? 'Відкрити скрін угоди' : 'Скріна для цього тікера ще немає'}">
                 <span class="sidebar-trade-sym">${sym}${typ ? `<span class="sidebar-trade-type">${typ}</span>` : ''}<span class="sidebar-trade-type">${hasScreen ? 'скрін' : 'немає скріна'}</span></span>
                 <span class="sidebar-trade-net ${cls}">${netStr}</span>
             </button>`;
@@ -370,7 +376,7 @@ export function renderSidebarTradesList(dateStr) {
     wrap.querySelectorAll('.sidebar-trade-row').forEach((btn) => {
         btn.addEventListener('click', () => {
             const ix = parseInt(btn.getAttribute('data-sb-trade-idx') || '0', 10);
-            void openScreenshotForTrade(dateStr, trades[ix]);
+            void openScreenshotForTrade(dateStr, state.appData?.journal?.[dateStr]?.trades?.[ix]);
         });
     });
 }

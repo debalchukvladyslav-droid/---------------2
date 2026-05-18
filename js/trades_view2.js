@@ -14,6 +14,23 @@ function sanitizeHTML(str) {
     return div.innerHTML;
 }
 
+function isGoogleSheetTrade(trade) {
+    return !!(trade?.sheet && typeof trade.sheet === 'object' && trade.sheet.source === 'google');
+}
+
+function isPureGoogleSheetTrade(trade) {
+    return isGoogleSheetTrade(trade) && !trade.sheet?.matchedBy;
+}
+
+function visibleTradeRows(dateStr) {
+    const trades = Array.isArray(state.appData?.journal?.[dateStr]?.trades)
+        ? state.appData.journal[dateStr].trades
+        : [];
+    return trades
+        .map((trade, index) => ({ trade, index }))
+        .filter(({ trade }) => !isPureGoogleSheetTrade(trade));
+}
+
 let lwChart = null;
 let candleSeries = null;
 let lwChartsReady = null;
@@ -81,22 +98,22 @@ export async function populateDateSelect() {
     await ensureTradeDaysLoaded();
 
     const dates = Object.keys(state.appData.journal)
-        .filter(d => state.appData.journal[d].trades?.length > 0)
+        .filter(d => visibleTradeRows(d).length > 0)
         .sort((a, b) => b.localeCompare(a));
     _tradeDates = dates;
 
     sel.innerHTML = '<option value="">— Оберіть день —</option>';
     dates.forEach(d => {
-        const trades = state.appData.journal[d].trades;
-        const net = trades.reduce((s, t) => s + t.net, 0);
+        const rows = visibleTradeRows(d);
+        const net = rows.reduce((s, row) => s + (Number(row.trade.net) || 0), 0);
         const sign = net >= 0 ? '+' : '';
         const opt = document.createElement('option');
         opt.value = sanitizeHTML(d);
-        opt.textContent = `${d} (${sign}${net.toFixed(0)}$, ${trades.length} угод)`;
+        opt.textContent = `${d} (${sign}${net.toFixed(0)}$, ${rows.length} угод)`;
         sel.appendChild(opt);
     });
 
-    const dateToSelect = state.selectedDateStr && state.appData.journal[state.selectedDateStr]?.trades?.length > 0
+    const dateToSelect = state.selectedDateStr && visibleTradeRows(state.selectedDateStr).length > 0
         ? state.selectedDateStr
         : dates[0];
     if (dateToSelect) {
@@ -115,7 +132,7 @@ export function populateSymbolSelect(dateStr) {
     const sel = document.getElementById('trades-date-select');
     if (sel && dateStr) {
         // Add the date as an option if it has trades and isn't already present
-        const hasTrades = (state.appData.journal[dateStr]?.trades?.length > 0);
+        const hasTrades = visibleTradeRows(dateStr).length > 0;
         if (hasTrades) {
             if (!sel.querySelector(`option[value="${dateStr}"]`)) {
                 void populateDateSelect();
@@ -151,9 +168,9 @@ function setTradeDateCalendarMonth(dateStr) {
 }
 
 function getTradeDaySummary(dateStr) {
-    const trades = state.appData.journal?.[dateStr]?.trades || [];
-    const net = trades.reduce((sum, trade) => sum + (Number(trade.net) || 0), 0);
-    return { count: trades.length, net };
+    const rows = visibleTradeRows(dateStr);
+    const net = rows.reduce((sum, row) => sum + (Number(row.trade.net) || 0), 0);
+    return { count: rows.length, net };
 }
 
 function renderTradeDateCalendar(activeDate = '') {
@@ -295,8 +312,8 @@ function renderPillNav(dateStr) {
     if (!nav) return;
     nav.innerHTML = '';
 
-    const allTrades = (state.appData.journal[dateStr] || {}).trades || [];
-    if (!allTrades.length) {
+    const tradeRows = visibleTradeRows(dateStr);
+    if (!tradeRows.length) {
         // No trades for this date — clear the chart and info bar
         const placeholder = document.getElementById('tv-placeholder');
         const container   = document.getElementById('tradingview-widget');
@@ -326,7 +343,7 @@ function renderPillNav(dateStr) {
     }
 
     // Day summary label
-    const dayNet = allTrades.reduce((s, t) => s + t.net, 0);
+    const dayNet = tradeRows.reduce((s, row) => s + (Number(row.trade.net) || 0), 0);
     const dayLabel = document.createElement('span');
     dayLabel.style.cssText = 'font-size:0.75rem;color:var(--text-muted);white-space:nowrap;margin-right:4px;flex-shrink:0;';
     dayLabel.textContent = `${dateStr} · ${dayNet >= 0 ? '+' : ''}${dayNet.toFixed(0)}$`;
@@ -336,14 +353,14 @@ function renderPillNav(dateStr) {
     sep.style.cssText = 'width:1px;height:20px;background:var(--border);flex-shrink:0;margin:0 4px;';
     nav.appendChild(sep);
 
-    allTrades.forEach((trade, idx) => {
+    tradeRows.forEach(({ trade, index }) => {
         const isProfit = trade.net >= 0;
         const timeIn = trade.opened?.split(' ')[1] || trade.opened || '';
         const pill = document.createElement('button');
         pill.className = `trade-pill ${isProfit ? 'profit' : 'loss'}`;
-        pill.dataset.idx = idx;
+        pill.dataset.idx = index;
         pill.textContent = `${trade.symbol} ${trade.type === 'Short' ? '▼' : '▲'} ${timeIn} ${isProfit ? '+' : ''}${trade.net.toFixed(0)}$`;
-        pill.addEventListener('click', () => _selectTrade(dateStr, idx));
+        pill.addEventListener('click', () => _selectTrade(dateStr, index));
         nav.appendChild(pill);
     });
 
@@ -351,15 +368,15 @@ function renderPillNav(dateStr) {
     if (_activeTrade?.dateStr === dateStr) {
         _highlightPill(_activeTrade.tradeIndex);
     } else {
-        _selectTrade(dateStr, 0);
+        _selectTrade(dateStr, tradeRows[0].index);
     }
 }
 
 function _highlightPill(idx) {
     const nav = document.getElementById('trade-pill-nav');
     if (!nav) return;
-    nav.querySelectorAll('.trade-pill').forEach((p, i) => {
-        p.classList.toggle('active', i === idx);
+    nav.querySelectorAll('.trade-pill').forEach((p) => {
+        p.classList.toggle('active', Number(p.dataset.idx) === idx);
     });
 }
 
@@ -367,7 +384,13 @@ function _selectTrade(dateStr, tradeIndex) {
     const allTrades = (state.appData.journal[dateStr] || {}).trades || [];
     if (!allTrades.length) return;
 
-    const trade = allTrades[tradeIndex];
+    let trade = allTrades[tradeIndex];
+    if (isPureGoogleSheetTrade(trade)) {
+        const firstVisible = visibleTradeRows(dateStr)[0];
+        if (!firstVisible) return;
+        tradeIndex = firstVisible.index;
+        trade = firstVisible.trade;
+    }
     if (!trade) return;
 
     _activeTrade = { dateStr, tradeIndex };
@@ -447,8 +470,9 @@ export function loadTradeChart(symbol, dateStr) {
     if (!dateStr) dateStr = document.getElementById('trades-date-select')?.value;
     if (!dateStr || !symbol) return;
 
-    const allTrades = (state.appData.journal[dateStr] || {}).trades || [];
-    const idx = allTrades.findIndex(t => t.symbol === symbol);
+    const rows = visibleTradeRows(dateStr);
+    const match = rows.find(row => row.trade.symbol === symbol);
+    const idx = match?.index ?? -1;
     if (idx === -1) return;
 
     _selectTrade(dateStr, idx);
@@ -456,8 +480,10 @@ export function loadTradeChart(symbol, dateStr) {
 
 /** Відкрити вкладку «Угоди» і конкретну угоду дня (після імпорту Fondexx). */
 export async function openTradesAtDayIndex(dateStr, tradeIndex) {
-    if (!dateStr || !state.appData?.journal?.[dateStr]?.trades?.length) return;
-    const idx = Math.max(0, Math.min(parseInt(tradeIndex, 10) || 0, state.appData.journal[dateStr].trades.length - 1));
+    const rows = visibleTradeRows(dateStr);
+    if (!dateStr || !rows.length) return;
+    const rawIdx = parseInt(tradeIndex, 10) || 0;
+    const idx = rows.some(row => row.index === rawIdx) ? rawIdx : rows[Math.max(0, Math.min(rawIdx, rows.length - 1))].index;
     if (window.switchMainTab) window.switchMainTab('trades');
     await populateDateSelect();
     const sel = document.getElementById('trades-date-select');

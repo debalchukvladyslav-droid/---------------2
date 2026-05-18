@@ -221,6 +221,11 @@ function sheetOf(trade) {
     return trade && typeof trade.sheet === 'object' ? trade.sheet : {};
 }
 
+function isPureGoogleSheetTrade(trade) {
+    const sheet = sheetOf(trade);
+    return sheet.source === 'google' && !sheet.matchedBy;
+}
+
 function nonEmpty(value, fallback = '—') {
     return value != null && value !== '' ? value : fallback;
 }
@@ -236,6 +241,7 @@ function collectRows() {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
         const trades = Array.isArray(journal[dateStr]?.trades) ? journal[dateStr].trades : [];
         trades.forEach((t, tradeIndex) => {
+            if (isPureGoogleSheetTrade(t)) return;
             flat.push({ dateStr, trade: t, tradeIndex });
         });
     });

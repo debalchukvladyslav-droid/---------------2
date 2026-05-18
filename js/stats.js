@@ -1860,6 +1860,7 @@ function buildHourlyPnlBuckets(entries = [], tradeTypeFilter = null) {
     entries.forEach((entry) => {
         const trades = Array.isArray(entry?.data?.trades) ? entry.data.trades : [];
         trades.forEach((trade) => {
+            if (isPureGoogleSheetTrade(trade)) return;
             if (tradeTypeFilter && classifyTradeTypeGroup(trade) !== tradeTypeFilter) return;
             const hour = parseTradeOpenHour(trade?.opened);
             if (!buckets.has(hour)) return;
