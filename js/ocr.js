@@ -386,104 +386,8 @@ function findScreenshotDate(path) {
     return state.selectedDateStr;
 }
 
-function ymdFromDate(value) {
-    const d = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(d.getTime())) return '';
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function screenshotCreatedDate(path) {
-    const meta = state.appData?.screenMeta?.[path];
-    const fromMeta = meta?.createdAt ? ymdFromDate(meta.createdAt) : '';
-    if (fromMeta) return { date: fromMeta, source: 'screenMeta.createdAt', raw: meta.createdAt };
-
-    const fileName = String(path || '').split(/[\\/]/).pop() || '';
-    const timestampMatch = fileName.match(/(?:^|_)(1[5-9]\d{11}|2\d{12})(?=\.|_|-)/);
-    if (timestampMatch) {
-        const fromTimestamp = ymdFromDate(Number(timestampMatch[1]));
-        if (fromTimestamp) return { date: fromTimestamp, source: 'filename timestamp', raw: timestampMatch[1] };
-    }
-
-    const assignedDate = findScreenshotDate(path);
-    return { date: assignedDate, source: 'assigned journal date fallback', raw: assignedDate };
-}
-
-function addDays(dateStr, days) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || ''))) return '';
-    const d = new Date(`${dateStr}T00:00:00`);
-    d.setDate(d.getDate() + days);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function tickersForDay(dateStr) {
-    const day = state.appData?.journal?.[dateStr] || {};
-    const set = new Set();
-    (day.traded_tickers || []).forEach(t => { const n = normalizeTicker(t); if (n) set.add(n); });
-    (day.trades || []).forEach(t => { const n = normalizeTicker(t.symbol); if (n) set.add(n); });
-    return Array.from(set);
-}
-
-function tradeTickerContextForPath(path, maxDays = 3) {
-    const created = screenshotCreatedDate(path);
-    const screenshotDate = created.date;
-    const reliableDate = created.source !== 'assigned journal date fallback';
-    const byDate = [];
-    const all = new Set();
-    if (!reliableDate) {
-        return {
-            screenshotDate,
-            dateSource: created.source,
-            dateRaw: created.raw,
-            reliableDate,
-            disabledReason: 'No real screenshot creation date is stored for this image, so Trades matching is disabled to avoid matching old screenshots with new trades.',
-            tickers: [],
-            byDate,
-        };
-    }
-    for (let offset = -maxDays; offset <= maxDays; offset++) {
-        const dateStr = addDays(screenshotDate, offset);
-        if (!dateStr) continue;
-        const tickers = tickersForDay(dateStr);
-        if (!tickers.length) continue;
-        byDate.push({ date: dateStr, offset, tickers });
-        tickers.forEach(ticker => all.add(ticker));
-    }
-    return {
-        screenshotDate,
-        dateSource: created.source,
-        dateRaw: created.raw,
-        reliableDate,
-        disabledReason: '',
-        tickers: Array.from(all),
-        byDate,
-    };
-}
-
-function tradeTickersForPath(path) {
-    return tradeTickerContextForPath(path).tickers;
-}
-
 function taggedTickersForPath(path) {
     return uniqueTickers(state.appData?.screenTags?.[path] || []);
-}
-
-function tickerFromScreenshotPath(path, tradedTickers = []) {
-    const traded = tradedTickers.map(normalizeTicker).filter(Boolean);
-    if (!traded.length) return '';
-    const fileName = String(path || '').split(/[\\/]/).pop() || '';
-    const tokens = fileName
-        .toUpperCase()
-        .split(/[^A-Z0-9]+/)
-        .map(normalizeOCRTicker)
-        .filter(Boolean);
-    const exact = traded.filter(ticker => tokens.includes(ticker));
-    return exact.length === 1 ? exact[0] : '';
-}
-
-function confidentTickerFromContext(path, tradedTickers = []) {
-    const traded = tradedTickers.map(normalizeTicker).filter(Boolean);
-    if (traded.length === 1) return traded[0];
-    return tickerFromScreenshotPath(path, traded);
 }
 
 function addCandidate(scores, ticker, points, opts = {}) {
@@ -604,7 +508,7 @@ function topTickerRows(scores, tradedTickers = [], limit = 8) {
             rank: index + 1,
             ticker,
             score: Math.round(score),
-            inTrades: traded.has(ticker) ? 'yes' : 'no',
+            inContext: traded.has(ticker) ? 'yes' : 'no',
         }));
 }
 
@@ -619,19 +523,19 @@ function logTickerCandidates(label, scores, tradedTickers = [], limit = 8) {
 }
 
 function tickerConfidence(scores, ticker, tradedTickers = []) {
-    if (!ticker || ticker === '???') return { ok: false, score: 0, secondScore: 0, matchedTrades: false };
+    if (!ticker || ticker === '???') return { ok: false, score: 0, secondScore: 0, matchedContext: false };
     const traded = tradedTickers.map(normalizeTicker).filter(Boolean);
     const sorted = Object.entries(scores)
         .filter(([candidate]) => validTickerWord(candidate, { trusted: traded.includes(candidate) }))
         .sort((a, b) => b[1] - a[1]);
     const score = Math.round(scores[ticker] || 0);
     const secondScore = Math.round(sorted.find(([candidate]) => candidate !== ticker)?.[1] || 0);
-    const matchedTrades = traded.includes(ticker);
+    const matchedContext = traded.includes(ticker);
     const topOcr = sorted.slice(0, OCR_TOP_CANDIDATES_LIMIT).map(([candidate]) => candidate);
     const ok = traded.length
-        ? topOcr.includes(ticker) && matchedTrades
+        ? topOcr.includes(ticker) && matchedContext
         : score >= MIN_FREE_OCR_SCORE && (secondScore === 0 || score >= secondScore * 1.6);
-    return { ok, score, secondScore, matchedTrades };
+    return { ok, score, secondScore, matchedContext };
 }
 
 function quickPhaseDecision(scores, tradedTickers = [], phase = 1) {
@@ -640,12 +544,12 @@ function quickPhaseDecision(scores, tradedTickers = [], phase = 1) {
         return { stop: false, ticker: '???', reason: 'no ticker candidates yet', top };
     }
 
-    const tradeMatch = top.find(row => row.inTrades === 'yes');
-    if (tradeMatch) {
+    const contextMatch = top.find(row => row.inContext === 'yes');
+    if (contextMatch) {
         return {
             stop: true,
-            ticker: tradeMatch.ticker,
-            reason: `OCR top-${OCR_TOP_CANDIDATES_LIMIT} matched Trades`,
+            ticker: contextMatch.ticker,
+            reason: `OCR top-${OCR_TOP_CANDIDATES_LIMIT} matched trusted ticker context`,
             top,
         };
     }
@@ -847,44 +751,17 @@ export async function runOCR(encodedPath, force = false) {
         updateBadgeUI(encodedPath, false);
         return finishOCRLog();
     }
-    const tradeContext = tradeTickerContextForPath(safePath, 3);
-    const traded = tradeContext.tickers;
-    console.log('[OCR] screenshot date:', {
-        date: tradeContext.screenshotDate,
-        source: tradeContext.dateSource,
-        raw: tradeContext.dateRaw,
-        reliable: tradeContext.reliableDate,
-    });
-    if (tradeContext.reliableDate) {
-        console.log('[OCR] tickers from Trades window (-3..+3 days):', traded.length ? traded : '(none)');
-        console.table(tradeContext.byDate.map(row => ({
-            date: row.date,
-            offset: row.offset,
-            tickers: row.tickers.join(', '),
-        })));
-    } else {
-        console.warn('[OCR] Trades matching disabled:', tradeContext.disabledReason);
-    }
+    const traded = [];
+    console.log('[OCR] imported-trade ticker validation is disabled; OCR uses the screenshot image and manual screen tags only.');
     const tagged = taggedTickersForPath(safePath);
     console.log('[OCR] manual screen tags:', tagged.length ? tagged : '(none)');
-    const trustedTags = tagged.filter(ticker => !traded.length || traded.includes(ticker));
+    const trustedTags = tagged;
     if (trustedTags.length === 1) {
         console.log('[OCR] resolved from manual tag:', trustedTags[0]);
         state.appData.tickers[safePath] = trustedTags[0];
         saveToLocal();
         updateBadgeUI(encodedPath, false);
         return finishOCRLog(trustedTags[0]);
-    }
-    const contextTicker = confidentTickerFromContext(safePath, traded);
-    if (contextTicker && (force || !existing || existing === '???' || TICKER_GARBAGE.has(normalizeTicker(existing)))) {
-        console.log('[OCR] context match without image OCR:', {
-            ticker: contextTicker,
-            reason: traded.length === 1 ? 'only one ticker in Trades for this day' : 'ticker found in screenshot filename',
-        });
-        state.appData.tickers[safePath] = contextTicker;
-        saveToLocal();
-        updateBadgeUI(encodedPath, false);
-        return finishOCRLog(contextTicker);
     }
     try {
         console.log('[OCR] loading Tesseract...');
@@ -1006,25 +883,18 @@ export async function runOCR(encodedPath, force = false) {
 
         logTickerCandidates('final', totalScores, traded, 10);
         const finalTop3 = topTickerRows(totalScores, traded, OCR_TOP_CANDIDATES_LIMIT);
-        const matchedTop3 = finalTop3.find(row => row.inTrades === 'yes') || null;
-        console.log('[OCR] final top-3 OCR candidates checked against Trades:', {
+        console.log('[OCR] final top-3 OCR candidates:', {
             top3: finalTop3,
-            firstTop3TradeMatch: matchedTop3?.ticker || '(none)',
         });
         if (ticker === '???') {
             console.log('[OCR] final result: ???', {
-                reason: traded.length
-                    ? 'no OCR top-3 candidate matched Trades and OCR was not confident enough alone'
-                    : 'no confident OCR candidate found; import Trades first for stronger validation',
+                reason: 'no confident OCR candidate found',
             });
         } else {
             console.log('[OCR] final result:', {
                 ticker,
                 score: Math.round(totalScores[ticker] || 0),
-                matchedTrades: traded.includes(ticker),
-                selectionRule: traded.includes(ticker)
-                    ? 'selected because it was inside OCR top-3 and exists in Trades'
-                    : 'selected by OCR score; no OCR top-3 candidate matched Trades',
+                selectionRule: 'selected by OCR score only',
             });
         }
 
