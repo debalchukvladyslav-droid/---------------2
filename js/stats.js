@@ -1,7 +1,7 @@
 // === js/stats.js ===
 import { supabase } from './supabase.js';
 import { state } from './state.js';
-import { applyAutoTradeTypesData, DEFAULT_TRADE_TYPES, normalizeAppData, getDefaultAppData, normalizeTradeTypesList } from './data_utils.js';
+import { applyAutoTradeTypesData, DEFAULT_TRADE_TYPES, normalizeAppData, getDefaultAppData, normalizeTradeTypesList, classifyTradeTypeGroup } from './data_utils.js';
 import { loadMonth, loadAllMonths, getCurrentViewedUserId, resolveViewedUserId } from './storage.js';
 import { escapeHtml } from './utils.js';
 import { ensureChartJs } from './vendor_loader.js';
@@ -46,10 +46,12 @@ export function disposeStatsView() {
     [
         'pnlChartInstance',
         'daysChartInstance',
+        'hourlyChartInstance',
         'winLossChartInstance',
         'mistakeChartInstance',
         'comparePnlChartInstance',
         'compareDaysChartInstance',
+        'compareHourlyChartInstance',
         'compareWinLossChartInstance',
     ].forEach((key) => {
         if (state[key]) {
@@ -1845,6 +1847,87 @@ function buildStatsEntriesFromJournal(journal, tradeTypeFilter = null) {
     return entries;
 }
 
+function parseTradeOpenHour(opened) {
+    const match = /\b(\d{1,2}):\d{2}(?::\d{2})?\b/.exec(String(opened || ''));
+    if (!match) return null;
+    const hour = Number(match[1]);
+    return Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : null;
+}
+
+function buildHourlyPnlBuckets(entries = [], tradeTypeFilter = null) {
+    const buckets = new Map([4, 5, 6, 7, 8, 9].map(hour => [hour, { hour, pnl: 0, trades: 0 }]));
+
+    entries.forEach((entry) => {
+        const trades = Array.isArray(entry?.data?.trades) ? entry.data.trades : [];
+        trades.forEach((trade) => {
+            if (tradeTypeFilter && classifyTradeTypeGroup(trade) !== tradeTypeFilter) return;
+            const hour = parseTradeOpenHour(trade?.opened);
+            if (!buckets.has(hour)) return;
+            const net = Number(trade?.net);
+            if (!Number.isFinite(net)) return;
+            const bucket = buckets.get(hour);
+            bucket.pnl += net;
+            bucket.trades += 1;
+        });
+    });
+
+    return [4, 5, 6, 7, 8, 9]
+        .filter(hour => hour >= 6 || buckets.get(hour).trades > 0)
+        .map(hour => ({
+            ...buckets.get(hour),
+            label: String(hour).padStart(2, '0'),
+            pnl: parseFloat(buckets.get(hour).pnl.toFixed(2)),
+        }));
+}
+
+function renderStatsBarChart(canvasId, stateKey, labels, values, theme, options = {}) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    canvas.$statsGlowColor = theme.profit;
+    if (state[stateKey]) state[stateKey].destroy();
+    state[stateKey] = new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                data: values.map(v => parseFloat(Number(v || 0).toFixed(2))),
+                backgroundColor: values.map(v => v >= 0 ? statsColorWithAlpha(theme.profit, 0.82) : statsColorWithAlpha(theme.loss, 0.82)),
+                borderColor: values.map(v => v >= 0 ? theme.profit : theme.loss),
+                borderWidth: 2,
+                borderRadius: 5,
+                borderSkipped: false,
+            }],
+        },
+        plugins: [statsBarGlowPlugin],
+        options: {
+            animation: {
+                duration: 850,
+                easing: 'easeOutQuart',
+                delay: (context) => context.type === 'data' ? context.dataIndex * 80 : 0,
+            },
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => {
+                            const suffix = typeof options.tooltipSuffix === 'function'
+                                ? options.tooltipSuffix(ctx.dataIndex)
+                                : '';
+                            return ` ${fmtMoney(ctx.parsed.y)}${suffix}`;
+                        },
+                    },
+                },
+            },
+            scales: {
+                y: { grid: { color: theme.grid }, ticks: { color: theme.muted, callback: v => fmtMoneyAbs(v) } },
+                x: { grid: { display: false }, ticks: { color: theme.muted } },
+            },
+        },
+    });
+}
+
 function getStatsPeriodLabel(filters, emptyLabel = 'За весь час') {
     if (!filters || filters.length === 0) return emptyLabel;
     if (filters.some(filter => filter.type === 'all-time')) return 'За весь час';
@@ -1912,7 +1995,7 @@ function toggleStatsCompareFilter(type, val, labelName) {
     renderStatsTab();
 }
 
-function buildComparePaneSummary(entries, settings = {}) {
+function buildComparePaneSummary(entries, settings = {}, tradeTypeFilter = null) {
     let winDays = 0, lossDays = 0, beDays = 0;
     let grossProfit = 0, grossLoss = 0;
     let bestDay = 0, worstDay = 0;
@@ -1944,6 +2027,7 @@ function buildComparePaneSummary(entries, settings = {}) {
 
     const totalDays = winDays + lossDays + beDays;
     const totalPnl = parseFloat(periodSum.toFixed(2));
+    const hourlyBuckets = buildHourlyPnlBuckets(entries, tradeTypeFilter);
     return {
         totalPnl,
         winrate: totalDays ? (winDays / totalDays) * 100 : 0,
@@ -1959,6 +2043,7 @@ function buildComparePaneSummary(entries, settings = {}) {
         totalComm,
         totalLocates,
         dayTotals,
+        hourlyBuckets,
         periodLabels,
         periodCumData,
         settings,
@@ -1997,7 +2082,7 @@ function setCompareDelta(id, value, options = {}) {
 }
 
 function destroyCompareCharts() {
-    ['comparePnlChartInstance', 'compareDaysChartInstance', 'compareWinLossChartInstance'].forEach((key) => {
+    ['comparePnlChartInstance', 'compareDaysChartInstance', 'compareHourlyChartInstance', 'compareWinLossChartInstance'].forEach((key) => {
         if (state[key]) {
             state[key].destroy();
             state[key] = null;
@@ -2008,8 +2093,9 @@ function destroyCompareCharts() {
 function renderCompareCharts(entries, summary, theme, advancedEquityMode = false) {
     const pnlCanvas = document.getElementById('compare-pnlChart');
     const daysCanvas = document.getElementById('compare-daysChart');
+    const hourlyCanvas = document.getElementById('compare-hourlyChart');
     const pieCanvas = document.getElementById('compare-winLossChart');
-    if (!pnlCanvas || !daysCanvas || !pieCanvas) return;
+    if (!pnlCanvas || !daysCanvas || !hourlyCanvas || !pieCanvas) return;
 
     destroyCompareCharts();
     const equityAnalysis = buildStatsEquityAnalysis(entries, summary.periodCumData, summary.settings || {});
@@ -2180,6 +2266,15 @@ function renderCompareCharts(entries, summary, theme, advancedEquityMode = false
         }
     });
 
+    renderStatsBarChart(
+        'compare-hourlyChart',
+        'compareHourlyChartInstance',
+        summary.hourlyBuckets.map(row => row.label),
+        summary.hourlyBuckets.map(row => row.pnl),
+        theme,
+        { tooltipSuffix: index => `, ${summary.hourlyBuckets[index]?.trades || 0} угод` },
+    );
+
     pieCanvas.$statsGlowColor = theme.profit;
     state.compareWinLossChartInstance = new Chart(pieCanvas.getContext('2d'), {
         type: 'doughnut',
@@ -2342,8 +2437,8 @@ function renderStatsComparePanel(validEntries) {
 
     const baseEntries = filterEntriesByStatsFilters(validEntries, state.activeFilters);
     const compareEntries = filterEntriesByStatsFilters(compareValidEntries, state.statsCompareFilters || []);
-    const base = buildComparePaneSummary(baseEntries, state.currentStatsContext.settings || state.appData.settings || {});
-    const compare = buildComparePaneSummary(compareEntries, state.statsCompareContext.settings || {});
+    const base = buildComparePaneSummary(baseEntries, state.currentStatsContext.settings || state.appData.settings || {}, state.activeTradeTypeFilter);
+    const compare = buildComparePaneSummary(compareEntries, state.statsCompareContext.settings || {}, state.statsCompareTradeTypeFilter);
     const pfDelta = compare.pf - base.pf;
 
     const cssGreen = getComputedStyle(document.documentElement).getPropertyValue('--profit').trim() || '#10b981';
@@ -2892,6 +2987,16 @@ export function renderStatsTab() {
             }
         }
     });
+
+    const hourlyBuckets = buildHourlyPnlBuckets(filteredEntries, ttFilter);
+    renderStatsBarChart(
+        'hourlyChart',
+        'hourlyChartInstance',
+        hourlyBuckets.map(row => row.label),
+        hourlyBuckets.map(row => row.pnl),
+        statsChartTheme,
+        { tooltipSuffix: index => `, ${hourlyBuckets[index]?.trades || 0} угод` },
+    );
     
     const ctxPie = document.getElementById('winLossChart').getContext('2d');
     ctxPie.canvas.$statsGlowColor = cssGreen;
