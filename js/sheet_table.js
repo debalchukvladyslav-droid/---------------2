@@ -8,7 +8,6 @@
 import { showToast } from './utils.js';
 import { state } from './state.js';
 import { supabase } from './supabase.js';
-import { getDefaultDayEntry } from './data_utils.js';
 import { saveJournalData, markJournalDayDirty } from './storage.js';
 import { syncFondexxFromTradesForDay, logTradesImportConsole } from './parsers.js';
 import { clearStatsCache } from './stats.js';
@@ -1202,6 +1201,8 @@ function cleanupPreviousGoogleSheetImport(spreadsheetId) {
 function mergeGoogleSheetTradesIntoJournal(outByDay, spreadsheetId) {
     const cleanup = cleanupPreviousGoogleSheetImport(spreadsheetId);
     const touchedDates = new Set(cleanup.touchedDates);
+    let matchedSheetRows = 0;
+    let skippedSheetRows = 0;
 
     for (const dateStr of Object.keys(outByDay)) {
         if (!isValidIsoDateString(dateStr)) {
@@ -1210,32 +1211,37 @@ function mergeGoogleSheetTradesIntoJournal(outByDay, spreadsheetId) {
         }
         const incoming = outByDay[dateStr];
         if (!incoming.length) continue;
-        if (!state.appData.journal[dateStr]) state.appData.journal[dateStr] = getDefaultDayEntry();
-        const prev = Array.isArray(state.appData.journal[dateStr].trades)
-            ? state.appData.journal[dateStr].trades
-            : [];
+        const day = state.appData.journal[dateStr];
+        const prev = Array.isArray(day?.trades) ? day.trades : [];
         const kept = prev.filter((t) => !isPureGoogleSheetTrade(t, spreadsheetId));
+        if (!kept.length) {
+            skippedSheetRows += incoming.length;
+            continue;
+        }
         const usedIndices = new Set();
         const merged = [...kept];
-        const appended = [];
+        let matchedCount = 0;
 
         incoming.forEach((trade) => {
             const matchIndex = findSheetMatchIndex(merged, trade, usedIndices);
             if (matchIndex >= 0) {
                 merged[matchIndex] = enrichTradeWithSheet(merged[matchIndex], trade);
                 usedIndices.add(matchIndex);
+                matchedCount++;
+                matchedSheetRows++;
             } else {
-                appended.push(trade);
+                skippedSheetRows++;
             }
         });
 
-        state.appData.journal[dateStr].trades = [...merged, ...appended];
+        if (!matchedCount) continue;
+        state.appData.journal[dateStr].trades = merged;
         syncFondexxFromTradesForDay(dateStr);
         markJournalDayDirty(dateStr);
         touchedDates.add(dateStr);
     }
 
-    return { deletedDates: cleanup.deletedDates, touchedDates: [...touchedDates] };
+    return { deletedDates: cleanup.deletedDates, touchedDates: [...touchedDates], matchedSheetRows, skippedSheetRows };
 }
 
 async function deleteJournalDatesFromSupabase(dateStrs = []) {
@@ -1329,9 +1335,9 @@ async function executeSyncWithCfg(cfg, options = {}) {
         if (!quiet) {
             if (stats.tradeCount > 0) {
                 console.log(
-                    `[Google Sheets] Імпортовано у журнал: ${stats.tradeCount} угод у ${stats.dayCount} днях (рядки з ${startRow}).`,
+                    `[Google Sheets] Synced criteria: ${mergeResult.matchedSheetRows} sheet rows matched Trades; ${mergeResult.skippedSheetRows} sheet rows without Trades skipped.`,
                 );
-                showToast(`Синхронізовано: ${stats.tradeCount} угод у ${stats.dayCount} днях.`);
+                showToast(`Таблиця оновила критерії: ${mergeResult.matchedSheetRows}. Без Trades пропущено: ${mergeResult.skippedSheetRows}.`);
             } else {
                 console.warn(
                         '[Google Sheets] Угод не знайдено: перевірте дати в колонці дати та тікери з рядка ' +

@@ -394,6 +394,8 @@ export async function runGoogleSheetSync(config) {
 
     const touched = new Set();
     const deleted = [];
+    let matchedSheetRows = 0;
+    let skippedSheetRows = 0;
     for (const dateStr of Object.keys(journal)) {
         const day = journal[dateStr];
         const trades = Array.isArray(day.trades) ? day.trades : [];
@@ -413,23 +415,30 @@ export async function runGoogleSheetSync(config) {
         if (!isValidIsoDateString(dateStr)) continue;
         const incoming = parsed.outByDay[dateStr] || [];
         if (!incoming.length) continue;
-        const day = journal[dateStr] || defaultDayEntry();
-        const kept = Array.isArray(day.trades) ? day.trades.filter((t) => !isPureGoogleSheetTrade(t, spreadsheetId)) : [];
+        const day = journal[dateStr];
+        const kept = Array.isArray(day?.trades) ? day.trades.filter((t) => !isPureGoogleSheetTrade(t, spreadsheetId)) : [];
+        if (!kept.length) {
+            skippedSheetRows += incoming.length;
+            continue;
+        }
         const usedIndices = new Set();
         const merged = [...kept];
-        const appended = [];
+        let matchedCount = 0;
 
         for (const trade of incoming) {
             const matchIndex = findSheetMatchIndex(merged, trade, usedIndices);
             if (matchIndex >= 0) {
                 merged[matchIndex] = enrichTradeWithSheet(merged[matchIndex], trade);
                 usedIndices.add(matchIndex);
+                matchedCount++;
+                matchedSheetRows++;
             } else {
-                appended.push(trade);
+                skippedSheetRows++;
             }
         }
 
-        day.trades = [...merged, ...appended];
+        if (!matchedCount) continue;
+        day.trades = merged;
         syncTotalsFromTrades(day);
         journal[dateStr] = day;
         touched.add(dateStr);
@@ -472,6 +481,10 @@ export async function runGoogleSheetSync(config) {
         sheetTitle,
         touchedDates: rows.length,
         deletedDates: deleted.length,
-        stats: parsed.stats,
+        stats: {
+            ...parsed.stats,
+            matchedSheetRows,
+            skippedSheetRows,
+        },
     };
 }
