@@ -6,6 +6,7 @@ import { loadMonth, loadAllMonths, getCurrentViewedUserId, resolveViewedUserId }
 import { escapeHtml } from './utils.js';
 import { ensureChartJs } from './vendor_loader.js';
 import { buildTradeTypeInsightRows } from './trade_type_analysis.js';
+import { getEffectiveDayPnl, isPureGoogleSheetTrade } from './trade_filters.js';
 
 // ─── STATS CACHE ───────────────────────────────────────────────────────────────────────────────
 // Module-level Map survives filter switches and profile switches within the
@@ -150,50 +151,8 @@ function classifyStatsPnlDay(pnl, settings = {}, dateStr = '', explicitBand = nu
     return value > 0 ? 'win' : 'loss';
 }
 
-function isGoogleSheetTrade(trade) {
-    return !!(trade?.sheet && typeof trade.sheet === 'object' && trade.sheet.source === 'google');
-}
-
-function isPureGoogleSheetTrade(trade) {
-    return isGoogleSheetTrade(trade) && !trade.sheet?.matchedBy;
-}
-
-function sourceHasMoney(source) {
-    return !!(
-        Number(source?.gross)
-        || Number(source?.net)
-        || Number(source?.comm)
-        || Number(source?.locates)
-    );
-}
-
-function tradeMoneyTotals(trades = []) {
-    return trades.reduce((sum, trade) => {
-        sum.gross += Number(trade?.gross) || 0;
-        sum.net += Number(trade?.net) || 0;
-        sum.comm += Number(trade?.comm) || 0;
-        return sum;
-    }, { gross: 0, net: 0, comm: 0 });
-}
-
-function almostEqualMoney(a, b) {
-    return Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.01;
-}
-
-function isSheetOnlyPnl(entry = {}) {
-    const trades = Array.isArray(entry.trades) ? entry.trades : [];
-    if (!trades.length || !trades.every(isPureGoogleSheetTrade)) return false;
-    if (sourceHasMoney(entry.ppro)) return false;
-    const totals = tradeMoneyTotals(trades);
-    return almostEqualMoney(entry.fondexx?.gross, totals.gross)
-        && almostEqualMoney(entry.fondexx?.net, totals.net)
-        && almostEqualMoney(entry.fondexx?.comm, totals.comm);
-}
-
 function getEffectiveStatsPnl(entry = {}) {
-    if (isSheetOnlyPnl(entry)) return null;
-    const pnl = parseFloat(entry.pnl);
-    return Number.isFinite(pnl) ? pnl : null;
+    return getEffectiveDayPnl(entry);
 }
 
 async function fetchJournalRowsForDoc(docName, monthKeys = null, userId = null) {

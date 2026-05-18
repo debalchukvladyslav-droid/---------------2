@@ -7,6 +7,7 @@ import { saveJournalData, markJournalDayDirty, loadTradeDays } from './storage.j
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 import { findScreenshotsForTicker, openScreenshotForTrade } from './gallery.js';
 import { ensureLightweightCharts } from './vendor_loader.js';
+import { isPureGoogleSheetTrade, visibleTradeRowsForDate } from './trade_filters.js';
 
 function sanitizeHTML(str) {
     const div = document.createElement('div');
@@ -14,21 +15,8 @@ function sanitizeHTML(str) {
     return div.innerHTML;
 }
 
-function isGoogleSheetTrade(trade) {
-    return !!(trade?.sheet && typeof trade.sheet === 'object' && trade.sheet.source === 'google');
-}
-
-function isPureGoogleSheetTrade(trade) {
-    return isGoogleSheetTrade(trade) && !trade.sheet?.matchedBy;
-}
-
 function visibleTradeRows(dateStr) {
-    const trades = Array.isArray(state.appData?.journal?.[dateStr]?.trades)
-        ? state.appData.journal[dateStr].trades
-        : [];
-    return trades
-        .map((trade, index) => ({ trade, index }))
-        .filter(({ trade }) => !isPureGoogleSheetTrade(trade));
+    return visibleTradeRowsForDate(state.appData?.journal || {}, dateStr);
 }
 
 let lwChart = null;

@@ -12,6 +12,7 @@ import { saveJournalData, markJournalDayDirty } from './storage.js';
 import { syncFondexxFromTradesForDay, logTradesImportConsole } from './parsers.js';
 import { clearStatsCache } from './stats.js';
 import { parseSheetDateCellToIso } from './parser_utils.js';
+import { isPureGoogleSheetTrade } from './trade_filters.js';
 
 const LS_KEY = 'tj_google_sheet_import_v1';
 
@@ -1106,18 +1107,6 @@ function enrichTradeWithSheet(existingTrade, incomingTrade) {
     };
 }
 
-function isSameSpreadsheetGoogleTrade(trade, spreadsheetId) {
-    return !!(
-        trade?.sheet &&
-        trade.sheet.source === 'google' &&
-        String(trade.sheet.spreadsheetId || '') === String(spreadsheetId)
-    );
-}
-
-function isPureGoogleSheetTrade(trade, spreadsheetId) {
-    return isSameSpreadsheetGoogleTrade(trade, spreadsheetId) && !trade.sheet?.matchedBy;
-}
-
 function sumTradeMoney(trades = []) {
     return trades.reduce((sum, trade) => {
         sum.gross += Number(trade?.gross) || 0;
@@ -1179,10 +1168,11 @@ function cleanupPreviousGoogleSheetImport(spreadsheetId) {
         const clearSheetDerivedFondexx = nextTrades.length === 0 && fondexxLooksDerivedFromTrades(day.fondexx, removedTrades);
         day.trades = nextTrades;
         if (clearSheetDerivedFondexx) {
-            day.fondexx = { gross: 0, net: 0, comm: 0, locates: Number(day.fondexx?.locates) || 0, tickers: [] };
+            day.fondexx = { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] };
             day.pnl = null;
             day.gross_pnl = null;
             day.commissions = null;
+            day.locates = null;
         }
         syncFondexxFromTradesForDay(dateStr);
 

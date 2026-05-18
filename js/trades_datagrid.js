@@ -1,6 +1,7 @@
 // === js/trades_datagrid.js — horizontal trades table grouped by date ===
 
 import { state } from './state.js';
+import { isPureGoogleSheetTrade } from './trade_filters.js';
 
 const DATAGRID_PAGE_SIZE = 250;
 const DATAGRID_COLSPAN = 20;
@@ -215,15 +216,6 @@ function formatMoney(n) {
     if (!Number.isFinite(x)) return '—';
     const sign = x >= 0 ? '+' : '-';
     return `${sign}$${Math.abs(x).toFixed(0)}`;
-}
-
-function sheetOf(trade) {
-    return trade && typeof trade.sheet === 'object' ? trade.sheet : {};
-}
-
-function isPureGoogleSheetTrade(trade) {
-    const sheet = sheetOf(trade);
-    return sheet.source === 'google' && !sheet.matchedBy;
 }
 
 function nonEmpty(value, fallback = '—') {

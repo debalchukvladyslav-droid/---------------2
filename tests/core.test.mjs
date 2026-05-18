@@ -26,6 +26,7 @@ const { buildAutoTradeTypesData, normalizeAppData, normalizeDayEntry } = await i
 const { ecnFeeColumnIndex, parseSheetDateCellToIso } = await import('../js/parser_utils.js');
 const { sanitizeHTML, safeExternalUrl, sanitizeRichHTML } = await import('../js/sanitize.js');
 const { summarizeJournalPnl } = await import('../js/stats_math.js');
+const { getEffectiveDayPnl, isPureGoogleSheetTrade, visibleTradeRows } = await import('../js/trade_filters.js');
 
 test('parser utils find ECN fee columns across supported header names', () => {
     assert.equal(ecnFeeColumnIndex({ Symbol: 0, 'Ecn Fee': 4 }), 4);
@@ -136,4 +137,35 @@ test('sanitize helpers escape html and reject unsafe urls', () => {
     assert.equal(safeExternalUrl('javascript:alert(1)'), '#');
     assert.equal(safeExternalUrl('https://example.com/path'), 'https://example.com/path');
     assert.equal(sanitizeRichHTML('<script>alert(1)</script>'), '&lt;script&gt;alert(1)&lt;/script&gt;');
+});
+
+test('trade filters hide pure Google Sheet rows but keep matched trades', () => {
+    const realTrade = { symbol: 'AAPL', net: 10 };
+    const sheetOnly = { symbol: 'TSLA', net: 5, sheet: { source: 'google', spreadsheetId: 's1' } };
+    const matched = { symbol: 'NVDA', net: 7, sheet: { source: 'google', spreadsheetId: 's1', matchedBy: 'symbol-time' } };
+
+    assert.equal(isPureGoogleSheetTrade(sheetOnly), true);
+    assert.equal(isPureGoogleSheetTrade(sheetOnly, 'other-sheet'), false);
+    assert.equal(isPureGoogleSheetTrade(matched), false);
+    assert.deepEqual(visibleTradeRows([realTrade, sheetOnly, matched]).map((row) => row.index), [0, 2]);
+});
+
+test('sheet-only pnl is ignored for day-level stats', () => {
+    const sheetOnlyDay = {
+        pnl: 25,
+        fondexx: { gross: 30, net: 25, comm: 5, locates: 0 },
+        ppro: { gross: 0, net: 0, comm: 0, locates: 0 },
+        trades: [
+            { gross: 30, net: 25, comm: 5, sheet: { source: 'google', spreadsheetId: 's1' } },
+        ],
+    };
+    const matchedDay = {
+        ...sheetOnlyDay,
+        trades: [
+            { gross: 30, net: 25, comm: 5, sheet: { source: 'google', spreadsheetId: 's1', matchedBy: 'symbol-time' } },
+        ],
+    };
+
+    assert.equal(getEffectiveDayPnl(sheetOnlyDay), null);
+    assert.equal(getEffectiveDayPnl(matchedDay), 25);
 });

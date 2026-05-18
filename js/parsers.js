@@ -4,6 +4,7 @@ import { saveJournalData, saveToLocal, markJournalDayDirty } from './storage.js'
 import { applyAutoTradeTypesData, getDefaultDayEntry } from './data_utils.js';
 import { ensureXlsx } from './vendor_loader.js';
 import { ecnFeeColumnIndex } from './parser_utils.js';
+import { isPureGoogleSheetTrade } from './trade_filters.js';
 
 function showToast(text) {
     const t = document.createElement('div');
@@ -55,14 +56,6 @@ export function logTradesImportConsole(label, tradesByDate) {
     }
     console.groupEnd();
     return total;
-}
-
-function isGoogleSheetTrade(t) {
-    return !!(t && typeof t.sheet === 'object' && t.sheet.source === 'google');
-}
-
-function isPureGoogleSheetTrade(t) {
-    return isGoogleSheetTrade(t) && !t.sheet?.matchedBy;
 }
 
 function emptySourceTotals(locates = 0, tickers = []) {
