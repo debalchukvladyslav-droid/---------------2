@@ -42,7 +42,15 @@ function ensureSettingsCollections() {
 }
 
 function parseOptionalNumber(value) {
-    return value && !isNaN(value) ? parseFloat(value) : null;
+    const raw = String(value ?? '').trim();
+    if (!raw) return null;
+    const normalized = raw
+        .replace(/\s/g, '')
+        .replace(',', '.')
+        .replace(/^\+/, '');
+    if (!/^-?(?:\d+|\d*\.\d+)$/.test(normalized)) return null;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
 }
 
 function commitVisibleDayFormInputs() {

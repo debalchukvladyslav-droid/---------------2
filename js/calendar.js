@@ -76,6 +76,18 @@ function sanitizeHTML(str) {
     div.textContent = String(str ?? '');
     return div.innerHTML;
 }
+
+function parseDecimalInput(value) {
+    const raw = String(value ?? '').trim();
+    if (!raw) return null;
+    const normalized = raw
+        .replace(/\s/g, '')
+        .replace(',', '.')
+        .replace(/^\+/, '');
+    if (!/^-?(?:\d+|\d*\.\d+)$/.test(normalized)) return null;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+}
 function getRecentTradesEmptyStateHtml() {
     return `<div class="app-empty-state app-empty-state--compact">
         <div class="app-empty-state-title">Угод за цей місяць ще немає</div>
@@ -467,8 +479,8 @@ function fillSelectedDateUI(dateStr) {
             ttHtml += `
                 <div style="display: flex; gap: 5px; align-items: center;">
                     <label style="flex: 1; margin:0;">${safeTT}</label>
-                    <input type="number" step="0.01" class="tt-input-pnl" data-name="${safeTT}" placeholder="PnL $" value="${safePnl}" style="width: 70px; padding: 6px;">
-                    <input type="number" step="0.01" class="tt-input-kf" data-name="${safeTT}" placeholder="КФ" value="${safeKf}" style="width: 60px; padding: 6px;">
+                    <input type="text" inputmode="decimal" class="tt-input-pnl" data-name="${safeTT}" placeholder="PnL $" value="${safePnl}" style="width: 70px; padding: 6px;">
+                    <input type="text" inputmode="decimal" class="tt-input-kf" data-name="${safeTT}" placeholder="КФ" value="${safeKf}" style="width: 60px; padding: 6px;">
                 </div>`;
         });
         ttContainer.innerHTML = ttHtml;
@@ -537,9 +549,9 @@ export function saveEntry() {
     document.querySelectorAll('.tt-input-pnl').forEach(el => {
         let name = el.getAttribute('data-name');
         if (!name || FORBIDDEN_KEYS.has(name) || Object.prototype.hasOwnProperty.call(Object.prototype, name)) return;
-        let pnlVal = el.value;
+        let pnlVal = parseDecimalInput(el.value);
         let kfInput = document.querySelector(`.tt-input-kf[data-name="${CSS.escape(name)}"]`);
-        let kfVal = kfInput ? kfInput.value : '';
+        let kfVal = kfInput ? parseDecimalInput(kfInput.value) : null;
         ttData[name] = { pnl: pnlVal, kf: kfVal };
     });
 
@@ -566,11 +578,11 @@ export function saveEntry() {
 
     // Формуємо об'єкт дня (захист від NaN)
     let dayData = {
-        pnl: (pnlVal && !isNaN(pnlVal)) ? parseFloat(pnlVal) : null,
-        gross_pnl: (grossValRaw && !isNaN(grossValRaw)) ? parseFloat(grossValRaw) : null,
-        commissions: (commValRaw && !isNaN(commValRaw)) ? parseFloat(commValRaw) : null,
-        locates: (locValRaw && !isNaN(locValRaw)) ? parseFloat(locValRaw) : null,
-        kf: (kfValMain && !isNaN(kfValMain)) ? parseFloat(kfValMain) : null,
+        pnl: parseDecimalInput(pnlVal),
+        gross_pnl: parseDecimalInput(grossValRaw),
+        commissions: parseDecimalInput(commValRaw),
+        locates: parseDecimalInput(locValRaw),
+        kf: parseDecimalInput(kfValMain),
         notes: document.getElementById('trade-notes').value || "",
         errors: errors,
         checkedParams: checklist,

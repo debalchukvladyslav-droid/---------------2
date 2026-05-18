@@ -322,7 +322,7 @@ window.saveSessionModal = async function() {
 
 window.snoozeSessionModal = function() {
     document.getElementById('session-modal').style.display = 'none';
-    setTimeout(() => checkAndShowSessionModal(), 30 * 60 * 1000);
+    setTimeout(() => checkAndShowSessionModal(), 5 * 60 * 1000);
 };
 
 window.checkSessionModalReadiness = async function() {
