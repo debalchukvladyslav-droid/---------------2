@@ -25,6 +25,7 @@ const { canAccessMentorReviewQueueState, isMentorViewingOtherJournalState } = aw
 const { buildAutoTradeTypesData, normalizeAppData, normalizeDayEntry } = await import('../js/data_utils.js');
 const { ecnFeeColumnIndex, parseSheetDateCellToIso } = await import('../js/parser_utils.js');
 const { sanitizeHTML, safeExternalUrl, sanitizeRichHTML } = await import('../js/sanitize.js');
+const { enrichTradeWithSheet, findSheetMatchIndex, parseSheetGridToTrades } = await import('../js/sheet_sync_core.js');
 const { summarizeJournalPnl } = await import('../js/stats_math.js');
 const { getEffectiveDayPnl, isPureGoogleSheetTrade, visibleTradeRows } = await import('../js/trade_filters.js');
 const { parseDecimalInput } = await import('../js/utils.js');
@@ -177,4 +178,38 @@ test('sheet-only pnl is ignored for day-level stats', () => {
 
     assert.equal(getEffectiveDayPnl(sheetOnlyDay), null);
     assert.equal(getEffectiveDayPnl(matchedDay), 25);
+});
+
+test('google sheet rows enrich existing Trades instead of becoming sheet-only trades', () => {
+    const parsed = parseSheetGridToTrades(
+        [
+            ['4/1/2026', 'AAPL', 'Шорт', '120,50', '1,2R', 'PV ok'],
+            ['', 'TSLA', 'Шорт', '-25', '-0,3R', 'late'],
+        ],
+        {
+            date: 'A',
+            symbol: 'B',
+            tradeType: 'C',
+            profit: 'D',
+            profitRisk: 'E',
+            pv: 'F',
+        },
+        'sheet-1',
+        6,
+    );
+
+    const incoming = parsed.outByDay['2026-04-01'][0];
+    const existing = [
+        { symbol: 'AAPL', net: 121, opened: '2026-04-01 09:47:00', type: 'Fondexx', entry: 10, exit: 11, qty: 100 },
+    ];
+
+    const matchIndex = findSheetMatchIndex(existing, incoming, new Set());
+    const merged = enrichTradeWithSheet(existing[matchIndex], incoming);
+
+    assert.equal(parsed.stats.tradeCount, 2);
+    assert.equal(matchIndex, 0);
+    assert.equal(merged.type, 'Шорт');
+    assert.equal(merged.sheet.profitRisk, '1,2R');
+    assert.equal(merged.sheet.matchedBy, 'date+ticker+pnl');
+    assert.equal(isPureGoogleSheetTrade(merged), false);
 });
