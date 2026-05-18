@@ -1,4 +1,5 @@
 // === js/data_utils.js ===
+import { parseDecimalInput } from './utils.js';
 
 export function getDefaultSettings() {
     return {
@@ -55,8 +56,7 @@ export function sanitizeStringArray(value) {
 
 export function sanitizeNumberOrNull(value) {
     if (value === "" || value === null || value === undefined) return null;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
+    return parseDecimalInput(value);
 }
 
 export function normalizeTradeSource(source) {

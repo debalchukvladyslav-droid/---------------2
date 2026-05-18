@@ -27,6 +27,7 @@ const { ecnFeeColumnIndex, parseSheetDateCellToIso } = await import('../js/parse
 const { sanitizeHTML, safeExternalUrl, sanitizeRichHTML } = await import('../js/sanitize.js');
 const { summarizeJournalPnl } = await import('../js/stats_math.js');
 const { getEffectiveDayPnl, isPureGoogleSheetTrade, visibleTradeRows } = await import('../js/trade_filters.js');
+const { parseDecimalInput } = await import('../js/utils.js');
 
 test('parser utils find ECN fee columns across supported header names', () => {
     assert.equal(ecnFeeColumnIndex({ Symbol: 0, 'Ecn Fee': 4 }), 4);
@@ -84,7 +85,7 @@ test('journal normalization keeps valid days and sanitizes malformed fields', ()
     const appData = normalizeAppData({
         journal: {
             '2026-04-01': {
-                pnl: '42.25',
+                pnl: '42,25',
                 errors: ['FOMO', 123],
                 screenshots: { good: ['a.png'], bad: [false] },
                 fondexx: { gross: '100', net: '80', comm: '5', locates: '2', tickers: ['AAPL', 10] },
@@ -99,6 +100,14 @@ test('journal normalization keeps valid days and sanitizes malformed fields', ()
     assert.deepEqual(appData.journal['2026-04-01'].screenshots.good, ['a.png']);
     assert.deepEqual(appData.journal['2026-04-01'].screenshots.bad, []);
     assert.deepEqual(appData.journal['2026-04-01'].fondexx.tickers, ['AAPL']);
+});
+
+test('decimal parser accepts comma and dot inputs', () => {
+    assert.equal(parseDecimalInput('12.5'), 12.5);
+    assert.equal(parseDecimalInput('12,5'), 12.5);
+    assert.equal(parseDecimalInput(' +1 234,50 '), 1234.5);
+    assert.equal(parseDecimalInput(''), null);
+    assert.equal(parseDecimalInput('12,5,7'), null);
 });
 
 test('day entry normalization falls back for unsafe values', () => {

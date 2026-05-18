@@ -20,6 +20,18 @@ export function normalizeHttpUrl(value, fallback = '') {
     }
 }
 
+export function parseDecimalInput(value) {
+    const raw = String(value ?? '').trim();
+    if (!raw) return null;
+    const normalized = raw
+        .replace(/\s/g, '')
+        .replace(',', '.')
+        .replace(/^\+/, '');
+    if (!/^-?(?:\d+|\d*\.\d+)$/.test(normalized)) return null;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
 export function appendTextWithLineBreaks(parent, value) {
     const lines = String(value ?? '').split(/\r?\n/);
     lines.forEach((line, idx) => {

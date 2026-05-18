@@ -1,7 +1,7 @@
 // === js/calendar.js ===
 import { state } from './state.js';
 import { saveToLocal, loadMonth, loadDayDetails, markJournalDayDirty } from './storage.js';
-import { showPrompt, showToast } from './utils.js';
+import { parseDecimalInput, showPrompt, showToast } from './utils.js';
 import { isMentorViewingOtherJournal, canAccessMentorReviewQueue } from './auth.js';
 import { reviewReasonsForDay } from './review_signals.js';
 import { updateDashMiniEquityChart } from './dash_mini_chart.js';
@@ -26,17 +26,6 @@ function sanitizeHTML(str) {
     return div.innerHTML;
 }
 
-function parseDecimalInput(value) {
-    const raw = String(value ?? '').trim();
-    if (!raw) return null;
-    const normalized = raw
-        .replace(/\s/g, '')
-        .replace(',', '.')
-        .replace(/^\+/, '');
-    if (!/^-?(?:\d+|\d*\.\d+)$/.test(normalized)) return null;
-    const parsed = Number(normalized);
-    return Number.isFinite(parsed) ? parsed : null;
-}
 function getRecentTradesEmptyStateHtml() {
     return `<div class="app-empty-state app-empty-state--compact">
         <div class="app-empty-state-title">Угод за цей місяць ще немає</div>

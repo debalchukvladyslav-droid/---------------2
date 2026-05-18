@@ -1,7 +1,7 @@
 // === js/settings.js ===
 import { state } from './state.js';
 import { markJournalDayDirty, saveToLocal } from './storage.js';
-import { showToast, showConfirm } from './utils.js';
+import { parseDecimalInput, showToast, showConfirm } from './utils.js';
 
 function clearNode(node) {
     if (node) node.textContent = '';
@@ -41,18 +41,6 @@ function ensureSettingsCollections() {
     if (!Array.isArray(state.appData.tradeTypes)) state.appData.tradeTypes = [];
 }
 
-function parseOptionalNumber(value) {
-    const raw = String(value ?? '').trim();
-    if (!raw) return null;
-    const normalized = raw
-        .replace(/\s/g, '')
-        .replace(',', '.')
-        .replace(/^\+/, '');
-    if (!/^-?(?:\d+|\d*\.\d+)$/.test(normalized)) return null;
-    const parsed = Number(normalized);
-    return Number.isFinite(parsed) ? parsed : null;
-}
-
 function commitVisibleDayFormInputs() {
     if (!state.selectedDateStr || state.dayDetailsLoading) return;
     const pnlEl = document.getElementById('trade-pnl');
@@ -81,11 +69,11 @@ function commitVisibleDayFormInputs() {
     const oldData = state.appData.journal[state.selectedDateStr] || {};
     state.appData.journal[state.selectedDateStr] = {
         ...oldData,
-        pnl: parseOptionalNumber(pnlEl.value),
-        gross_pnl: parseOptionalNumber(document.getElementById('trade-gross')?.value),
-        commissions: parseOptionalNumber(document.getElementById('trade-comm')?.value),
-        locates: parseOptionalNumber(document.getElementById('trade-locates')?.value),
-        kf: parseOptionalNumber(document.getElementById('trade-kf')?.value),
+        pnl: parseDecimalInput(pnlEl.value),
+        gross_pnl: parseDecimalInput(document.getElementById('trade-gross')?.value),
+        commissions: parseDecimalInput(document.getElementById('trade-comm')?.value),
+        locates: parseDecimalInput(document.getElementById('trade-locates')?.value),
+        kf: parseDecimalInput(document.getElementById('trade-kf')?.value),
         notes: notesEl.value || '',
         errors: [...document.querySelectorAll('.error-checkbox:checked')].map((el) => el.value),
         checkedParams: checklist,

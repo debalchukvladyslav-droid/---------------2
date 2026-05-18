@@ -311,6 +311,27 @@ function isPureGoogleSheetTrade(trade, spreadsheetId) {
     );
 }
 
+function sumTradeMoney(trades = []) {
+    return trades.reduce((sum, trade) => {
+        sum.gross += Number(trade?.gross) || 0;
+        sum.net += Number(trade?.net) || 0;
+        sum.comm += Number(trade?.comm) || 0;
+        return sum;
+    }, { gross: 0, net: 0, comm: 0 });
+}
+
+function almostEqualMoney(a, b) {
+    return Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.01;
+}
+
+function fondexxLooksDerivedFromTrades(fondexx, trades) {
+    if (!fondexx || typeof fondexx !== 'object' || !Array.isArray(trades) || trades.length === 0) return false;
+    const totals = sumTradeMoney(trades);
+    return almostEqualMoney(fondexx.gross, totals.gross)
+        && almostEqualMoney(fondexx.net, totals.net)
+        && almostEqualMoney(fondexx.comm, totals.comm);
+}
+
 function tradeTickers(trades) {
     return Array.from(new Set((trades || []).map((t) => String(t?.symbol || '').trim()).filter(Boolean)));
 }
@@ -399,9 +420,18 @@ export async function runGoogleSheetSync(config) {
     for (const dateStr of Object.keys(journal)) {
         const day = journal[dateStr];
         const trades = Array.isArray(day.trades) ? day.trades : [];
+        const removedTrades = trades.filter((trade) => isPureGoogleSheetTrade(trade, spreadsheetId));
         const nextTrades = trades.filter((trade) => !isPureGoogleSheetTrade(trade, spreadsheetId));
         if (nextTrades.length === trades.length) continue;
+        const clearSheetDerivedFondexx = nextTrades.length === 0 && fondexxLooksDerivedFromTrades(day.fondexx, removedTrades);
         day.trades = nextTrades;
+        if (clearSheetDerivedFondexx) {
+            day.fondexx = { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] };
+            day.pnl = null;
+            day.gross_pnl = null;
+            day.commissions = null;
+            day.locates = null;
+        }
         syncTotalsFromTrades(day);
         if (isDayEmpty(day)) {
             delete journal[dateStr];
