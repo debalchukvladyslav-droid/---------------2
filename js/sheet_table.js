@@ -13,7 +13,11 @@ import { syncFondexxFromTradesForDay, logTradesImportConsole } from './parsers.j
 import { clearStatsCache } from './stats.js';
 import { parseSheetDateCellToIso } from './parser_utils.js';
 import { isPureGoogleSheetTrade } from './trade_filters.js';
-import { enrichTradeWithSheet, findSheetMatchIndex } from './sheet_sync_core.js';
+import {
+    enrichTradeWithSheet,
+    findSheetMatchIndex,
+    parseSheetGridToTrades as parseSheetGridToTradesCore,
+} from './sheet_sync_core.js';
 
 const LS_KEY = 'tj_google_sheet_import_v1';
 
@@ -1199,6 +1203,26 @@ function canMutateSheetSync(opts = {}) {
     return true;
 }
 
+function normalizeSmartColumnsForCore(smart = {}) {
+    const normalized = {};
+    Object.entries(smart || {}).forEach(([key, value]) => {
+        const raw = typeof value === 'string' ? value.trim() : '';
+        if (!raw) {
+            normalized[key] = '';
+            return;
+        }
+        normalized[key] = raw
+            .split(',')
+            .map((part) => {
+                const token = part.trim();
+                return token ? resolveMappingValueToSelectLetter(token) : '';
+            })
+            .filter(Boolean)
+            .join(',');
+    });
+    return normalized;
+}
+
 function cellStr(row, colIdx) {
     if (colIdx < 0 || !Array.isArray(row)) return '';
     const v = row[colIdx];
@@ -1240,7 +1264,8 @@ async function executeSyncWithCfg(cfg, options = {}) {
     try {
         const mod = await import('./google_sheet_connector.js');
         const values = await mod.fetchSpreadsheetValuesRange(spreadsheetId, `A${startRow}:ZZ2000`, cfg.sheetTitle || getSelectedSheetTitle());
-        const { outByDay, dateAnchors, stats } = parseSheetGridToTrades(values, smart, spreadsheetId, startRow);
+        const parsedSmart = normalizeSmartColumnsForCore(smart);
+        const { outByDay, dateAnchors, stats } = parseSheetGridToTradesCore(values, parsedSmart, spreadsheetId, startRow);
 
         if (!quiet) {
             console.group('[Google Sheets] Синхронізація');
