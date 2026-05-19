@@ -281,11 +281,73 @@ function setDriveServiceStatus(message, type = '') {
     status.dataset.state = type;
 }
 
+function extractDriveFolderId(value = '') {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const foldersMatch = raw.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+    if (foldersMatch?.[1]) return foldersMatch[1];
+    const idParamMatch = raw.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (idParamMatch?.[1]) return idParamMatch[1];
+    return /^[a-zA-Z0-9_-]+$/.test(raw) ? raw : '';
+}
+
+async function saveServiceFolderFromInput() {
+    const input = document.getElementById('drive-service-folder-input');
+    const folderId = extractDriveFolderId(input?.value || state.appData?.settings?.driveFolderId || '');
+    if (!folderId) return '';
+    if (!state.appData.settings) state.appData.settings = {};
+    if (state.appData.settings.driveFolderId !== folderId) {
+        state.appData.settings.driveFolderId = folderId;
+        state.appData.settings.driveFolderName = 'Service account folder';
+        _driveFilesCache = null;
+        await saveSettings();
+        updateDriveUI();
+    }
+    return folderId;
+}
+
+async function syncDriveScreenshotsFromServiceButton() {
+    console.info('[Drive test] service sync button clicked');
+    setDriveServiceStatus('Готуємо синхронізацію...', 'loading');
+    const folderId = await saveServiceFolderFromInput();
+    if (!folderId) {
+        setDriveServiceStatus('Вставте посилання або ID папки Google Drive.', 'error');
+        console.warn('[Drive test] service sync stopped: missing folderId');
+        return;
+    }
+    _serviceDriveAvailable = true;
+    await syncDriveScreenshots(false);
+}
+
+if (typeof document !== 'undefined') {
+    document.addEventListener('click', (event) => {
+        const trigger = event.target?.closest?.('[data-action="drive-service-sync"]');
+        if (!trigger) return;
+        event.preventDefault();
+        syncDriveScreenshotsFromServiceButton();
+    }, true);
+}
+
 export async function syncDriveScreenshots(silent = false) {
-    if (_syncInProgress) return;
-    if (state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) return;
+    if (_syncInProgress) {
+        setDriveServiceStatus('Синхронізація вже виконується...', 'loading');
+        console.warn('[Drive test] sync skipped: already in progress');
+        return;
+    }
+    if (state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) {
+        setDriveServiceStatus('Синхронізація доступна тільки у власному профілі.', 'error');
+        console.warn('[Drive test] sync skipped: not own profile', {
+            userDoc: state.USER_DOC_NAME,
+            currentView: state.CURRENT_VIEWED_USER,
+        });
+        return;
+    }
     const folderId = state.appData?.settings?.driveFolderId;
-    if (!folderId) return;
+    if (!folderId) {
+        setDriveServiceStatus('Вставте посилання або ID папки Google Drive.', 'error');
+        console.warn('[Drive test] sync skipped: missing folderId');
+        return;
+    }
 
     console.groupCollapsed('[Drive test] sync start');
     console.info('[Drive test] context:', {
@@ -544,11 +606,13 @@ export function updateDriveUI() {
     const info = document.getElementById('drive-folder-info');
     const disconnectBtn = document.getElementById('drive-disconnect-btn');
     const serviceEmailEl = document.getElementById('drive-service-email');
+    const serviceFolderInput = document.getElementById('drive-service-folder-input');
     if (!btn) return;
     if (serviceEmailEl) serviceEmailEl.textContent = SERVICE_ACCOUNT_EMAIL || 'service account email не налаштований';
 
     const folderId = state.appData.settings.driveFolderId;
     const folderName = state.appData.settings.driveFolderName;
+    if (serviceFolderInput && folderId && !serviceFolderInput.value) serviceFolderInput.value = folderId;
 
     if (folderId) {
         btn.textContent = '🔄 Змінити папку';

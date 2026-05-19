@@ -2395,6 +2395,17 @@ body {
     overflow-wrap: anywhere;
 }
 
+.drive-service-input {
+    width: 100%;
+    margin-top: 10px;
+    padding: 9px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-main);
+    color: var(--text-main);
+    font-size: 0.86rem;
+}
+
 .drive-service-status {
     display: block;
     margin-top: 8px;
