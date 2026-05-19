@@ -307,9 +307,133 @@ function renderMappingStatus() {
 
         button.append(label, value);
         fragment.appendChild(button);
+
+        if (field === 'exceptions') {
+            const addButton = document.createElement('button');
+            addButton.type = 'button';
+            addButton.className = 'sheet-mapping-add-btn sheet-mapping-add-btn--chip';
+            addButton.classList.toggle('is-armed', _sheetAddNextColumnForField === field);
+            addButton.dataset.action = 'sheet-add-mapping-column';
+            addButton.dataset.sheetMapField = field;
+            addButton.title = 'Додати ще одну колонку';
+            addButton.setAttribute('aria-label', 'Додати ще одну колонку до У чому виключення');
+            addButton.textContent = '+';
+            fragment.appendChild(addButton);
+        }
     });
 
     host.replaceChildren(fragment);
+}
+
+function getCurrentSpreadsheetId() {
+    return localStorage.getItem(SESSION_SPREADSHEET_ID) || sessionStorage.getItem(SESSION_SPREADSHEET_ID) || '';
+}
+
+function collectSheetRowsForCurrentSpreadsheet() {
+    const spreadsheetId = getCurrentSpreadsheetId();
+    const store = state.appData?.sheetRows && typeof state.appData.sheetRows === 'object'
+        ? state.appData.sheetRows
+        : {};
+    const byDay = spreadsheetId ? store[spreadsheetId] : null;
+    if (!byDay || typeof byDay !== 'object') return [];
+
+    return Object.keys(byDay)
+        .sort()
+        .flatMap((dateStr) => (Array.isArray(byDay[dateStr]) ? byDay[dateStr] : []).map((row) => ({ dateStr, row })));
+}
+
+function collectMatchedSheetRowKeys() {
+    const spreadsheetId = getCurrentSpreadsheetId();
+    const matched = new Set();
+    if (!spreadsheetId) return matched;
+
+    Object.entries(state.appData?.journal || {}).forEach(([dateStr, day]) => {
+        const trades = Array.isArray(day?.trades) ? day.trades : [];
+        trades.forEach((trade) => {
+            const sheet = trade?.sheet;
+            if (!sheet || sheet.source !== 'google') return;
+            if (sheet.spreadsheetId !== spreadsheetId) return;
+            if (sheet.sheetRow == null) return;
+            matched.add(`${dateStr}:${sheet.sheetRow}`);
+        });
+    });
+    return matched;
+}
+
+function formatSheetMoney(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return '';
+    const sign = n > 0 ? '+' : '';
+    return `${sign}${n.toFixed(2)}`;
+}
+
+function appendSheetRowsCell(tr, text, className = '') {
+    const td = document.createElement('td');
+    if (className) td.className = className;
+    td.textContent = text == null || text === '' ? '-' : String(text);
+    tr.appendChild(td);
+}
+
+function renderSheetRowsPanel() {
+    const panel = el('sheet-rows-panel');
+    const summary = el('sheet-rows-summary');
+    const list = el('sheet-rows-list');
+    if (!panel || !summary || !list) return;
+
+    const rows = collectSheetRowsForCurrentSpreadsheet();
+    panel.hidden = rows.length === 0;
+    list.replaceChildren();
+    if (!rows.length) {
+        summary.textContent = 'Після синхронізації тут будуть рядки з Google Sheets.';
+        return;
+    }
+
+    const matched = collectMatchedSheetRowKeys();
+    const matchedCount = rows.reduce((count, { dateStr, row }) => {
+        const key = `${dateStr}:${row?.sheet?.sheetRow}`;
+        return count + (matched.has(key) ? 1 : 0);
+    }, 0);
+    const auxiliaryCount = Math.max(0, rows.length - matchedCount);
+    summary.textContent = `Всього з таблиці: ${rows.length}. Оновлено Trades: ${matchedCount}. Без Trades: ${auxiliaryCount}.`;
+
+    const table = document.createElement('table');
+    table.className = 'sheet-rows-table';
+    const thead = document.createElement('thead');
+    const headRow = document.createElement('tr');
+    ['Дата', 'Рядок', 'Тікер', 'P/L', 'Класифікація', 'Статус', 'Виключення'].forEach((label) => {
+        const th = document.createElement('th');
+        th.textContent = label;
+        headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    rows.forEach(({ dateStr, row }) => {
+        const tr = document.createElement('tr');
+        const sheet = row?.sheet || {};
+        const key = `${dateStr}:${sheet.sheetRow}`;
+        const isMatched = matched.has(key);
+
+        appendSheetRowsCell(tr, dateStr);
+        appendSheetRowsCell(tr, sheet.sheetRow);
+        appendSheetRowsCell(tr, row?.symbol);
+        appendSheetRowsCell(tr, formatSheetMoney(row?.net));
+        appendSheetRowsCell(tr, sheet.tradeType || row?.type);
+
+        const statusCell = document.createElement('td');
+        const badge = document.createElement('span');
+        badge.className = 'sheet-rows-status';
+        badge.classList.toggle('is-matched', isMatched);
+        badge.textContent = isMatched ? 'у Trades' : 'допоміжно';
+        statusCell.appendChild(badge);
+        tr.appendChild(statusCell);
+
+        appendSheetRowsCell(tr, sheet.exception || (Array.isArray(sheet.exceptions) ? sheet.exceptions.join('; ') : ''));
+        tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    list.appendChild(table);
 }
 
 function updateSmartRangeHints() {
@@ -339,11 +463,11 @@ function updateGridPickerMeta() {
     if (activeEl) activeEl.textContent = smartFieldLabel(_sheetPreviewActiveField);
     if (startRowEl) startRowEl.textContent = String(deriveSheetStartRow());
     if (zoomEl) zoomEl.textContent = `${Math.round(_sheetGridZoom * 100)}%`;
+    updateSmartRangeHints();
+    renderMappingStatus();
     document.querySelectorAll('[data-action="sheet-add-mapping-column"][data-sheet-map-field]').forEach((button) => {
         button.classList.toggle('is-armed', button.dataset.sheetMapField === _sheetAddNextColumnForField);
     });
-    updateSmartRangeHints();
-    renderMappingStatus();
 }
 
 function applySheetGridZoom() {
@@ -701,6 +825,7 @@ export function rememberSpreadsheet(id, title) {
     const serviceWorkspaceInput = el('sheet-service-url-input-workspace');
     if (serviceInput && !serviceInput.value) serviceInput.value = id;
     if (serviceWorkspaceInput && !serviceWorkspaceInput.value) serviceWorkspaceInput.value = id;
+    renderSheetRowsPanel();
 }
 
 export function getSelectedSheetTitle() {
@@ -752,6 +877,7 @@ export function clearGoogleSheetSession() {
     const nameEl = el('sheet-selected-file-name');
     if (nameEl) nameEl.textContent = '—';
     setSpreadsheetSheets([]);
+    renderSheetRowsPanel();
 }
 
 export function syncSheetWorkspaceVisibility() {
@@ -771,6 +897,7 @@ export function syncSheetWorkspaceVisibility() {
     if (fileCard) fileCard.hidden = !panelOpen || !connected || !fileOk;
     if (mapping) mapping.hidden = !panelOpen || !connected || !fileOk;
     if (tabPicker && (!panelOpen || !connected || !fileOk)) tabPicker.hidden = true;
+    renderSheetRowsPanel();
 }
 
 function getKnownColumnValues() {
@@ -941,6 +1068,7 @@ async function executeSyncWithCfg(cfg, options = {}) {
         await deleteJournalDatesFromSupabase(mergeResult.deletedDates);
         await saveJournalData();
         await saveSettings();
+        renderSheetRowsPanel();
         try {
             clearStatsCache(state.USER_DOC_NAME);
         } catch (_) {
