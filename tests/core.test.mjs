@@ -216,7 +216,7 @@ test('google sheet rows enrich existing Trades instead of becoming sheet-only tr
     assert.equal(isPureGoogleSheetTrade(merged), false);
 });
 
-test('shared Google Sheet merge only updates existing Trades', () => {
+test('shared Google Sheet merge stores all rows but only updates existing Trades', () => {
     const journal = {
         '2026-04-01': {
             trades: [
@@ -242,11 +242,14 @@ test('shared Google Sheet merge only updates existing Trades', () => {
 
     const synced = [];
     const marked = [];
+    const sheetRowsStore = {};
     const result = mergeGoogleSheetTradesIntoJournal(journal, outByDay, 'sheet-1', {
+        sheetRowsStore,
         syncDayTotals: (dateStr) => synced.push(dateStr),
         markTouched: (dateStr) => marked.push(dateStr),
     });
 
+    assert.equal(result.importedSheetRows, 2);
     assert.equal(result.matchedSheetRows, 1);
     assert.equal(result.skippedSheetRows, 1);
     assert.deepEqual(result.touchedDates, ['2026-04-01']);
@@ -256,4 +259,7 @@ test('shared Google Sheet merge only updates existing Trades', () => {
     assert.equal(journal['2026-04-01'].trades[0].net, 10);
     assert.equal(journal['2026-04-01'].trades[0].sheet.pv, 'ok');
     assert.equal(journal['2026-04-02'].trades.length, 0);
+    assert.equal(sheetRowsStore['sheet-1']['2026-04-01'].length, 1);
+    assert.equal(sheetRowsStore['sheet-1']['2026-04-02'].length, 1);
+    assert.equal(sheetRowsStore['sheet-1']['2026-04-02'][0].symbol, 'TSLA');
 });

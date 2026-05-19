@@ -57,8 +57,32 @@ export function mergeGoogleSheetTradesIntoJournal(journal = {}, outByDay = {}, s
     const warnInvalidDate = typeof options.warnInvalidDate === 'function' ? options.warnInvalidDate : () => {};
     const deletedDates = [];
     const touchedDates = new Set();
+    const sheetRowsStore = options.sheetRowsStore && typeof options.sheetRowsStore === 'object'
+        ? options.sheetRowsStore
+        : null;
     let matchedSheetRows = 0;
     let skippedSheetRows = 0;
+    let importedSheetRows = 0;
+
+    if (sheetRowsStore && spreadsheetId) {
+        const nextRowsByDay = {};
+        for (const dateStr of Object.keys(outByDay || {})) {
+            if (!isValidIsoDateString(dateStr)) continue;
+            const rows = Array.isArray(outByDay[dateStr]) ? outByDay[dateStr] : [];
+            if (!rows.length) continue;
+            nextRowsByDay[dateStr] = rows.map((trade) => ({
+                symbol: trade.symbol || '',
+                opened: trade.opened || '',
+                net: Number(trade.net) || 0,
+                gross: Number(trade.gross) || 0,
+                comm: Number(trade.comm) || 0,
+                type: trade.type || '',
+                sheet: trade.sheet && typeof trade.sheet === 'object' ? { ...trade.sheet } : {},
+            }));
+            importedSheetRows += nextRowsByDay[dateStr].length;
+        }
+        sheetRowsStore[spreadsheetId] = nextRowsByDay;
+    }
 
     Object.keys(journal).forEach((dateStr) => {
         const day = journal[dateStr];
@@ -128,6 +152,7 @@ export function mergeGoogleSheetTradesIntoJournal(journal = {}, outByDay = {}, s
     return {
         deletedDates,
         touchedDates: [...touchedDates],
+        importedSheetRows,
         matchedSheetRows,
         skippedSheetRows,
     };

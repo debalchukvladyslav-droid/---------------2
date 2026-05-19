@@ -8,7 +8,7 @@
 import { showToast } from './utils.js';
 import { state } from './state.js';
 import { supabase } from './supabase.js';
-import { saveJournalData, markJournalDayDirty } from './storage.js';
+import { saveJournalData, saveSettings, markJournalDayDirty } from './storage.js';
 import { syncFondexxFromTradesForDay, logTradesImportConsole } from './parsers.js';
 import { clearStatsCache } from './stats.js';
 import { isPureGoogleSheetTrade } from './trade_filters.js';
@@ -918,12 +918,14 @@ async function executeSyncWithCfg(cfg, options = {}) {
         }
 
         const mergeResult = mergeSheetTradesIntoJournal(state.appData?.journal || {}, outByDay, spreadsheetId, {
+            sheetRowsStore: state.appData.sheetRows || (state.appData.sheetRows = {}),
             syncDayTotals: (dateStr) => syncFondexxFromTradesForDay(dateStr),
             markTouched: (dateStr) => markJournalDayDirty(dateStr),
             warnInvalidDate: (dateStr) => console.warn('[Google Sheets] Пропущено невалідну дату (не пишемо в журнал):', dateStr),
         });
         await deleteJournalDatesFromSupabase(mergeResult.deletedDates);
         await saveJournalData();
+        await saveSettings();
         try {
             clearStatsCache(state.USER_DOC_NAME);
         } catch (_) {
@@ -933,9 +935,9 @@ async function executeSyncWithCfg(cfg, options = {}) {
         if (!quiet) {
             if (stats.tradeCount > 0) {
                 console.log(
-                    `[Google Sheets] Synced criteria: ${mergeResult.matchedSheetRows} sheet rows matched Trades; ${mergeResult.skippedSheetRows} sheet rows without Trades skipped.`,
+                    `[Google Sheets] Imported ${mergeResult.importedSheetRows} sheet rows as auxiliary criteria; ${mergeResult.matchedSheetRows} matched Trades; ${mergeResult.skippedSheetRows} stored without Trades.`,
                 );
-                showToast(`Таблиця оновила критерії: ${mergeResult.matchedSheetRows}. Без Trades пропущено: ${mergeResult.skippedSheetRows}.`);
+                showToast(`Таблиця імпортована: ${mergeResult.importedSheetRows}. Оновлено Trades: ${mergeResult.matchedSheetRows}. Без Trades збережено допоміжно: ${mergeResult.skippedSheetRows}.`);
             } else {
                 console.warn(
                         '[Google Sheets] Угод не знайдено: перевірте дати в колонці дати та тікери з рядка ' +

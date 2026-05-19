@@ -267,6 +267,7 @@ export async function saveSettings() {
                 state.appData.screenDiscipline && typeof state.appData.screenDiscipline === 'object'
                     ? state.appData.screenDiscipline
                     : {},
+            sheetRows: state.appData.sheetRows && typeof state.appData.sheetRows === 'object' ? state.appData.sheetRows : {},
             weeklyComments:
                 state.appData.weeklyComments && typeof state.appData.weeklyComments === 'object' ? state.appData.weeklyComments : {},
         };
@@ -332,6 +333,10 @@ export async function loadSettings() {
             if (incoming.screenDiscipline && typeof incoming.screenDiscipline === 'object') {
                 state.appData.screenDiscipline = incoming.screenDiscipline;
                 delete incoming.screenDiscipline;
+            }
+            if (incoming.sheetRows && typeof incoming.sheetRows === 'object') {
+                state.appData.sheetRows = incoming.sheetRows;
+                delete incoming.sheetRows;
             }
             if (incoming.weeklyComments && typeof incoming.weeklyComments === 'object') {
                 state.appData.weeklyComments = incoming.weeklyComments;

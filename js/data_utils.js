@@ -47,6 +47,7 @@ export function getDefaultAppData() {
         tickers: {},
         screenMeta: {},
         unassignedImages: [],
+        sheetRows: {},
         tradeTypes: [...DEFAULT_TRADE_TYPES]
     };
 }
