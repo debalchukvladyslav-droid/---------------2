@@ -43,6 +43,11 @@ function excerptTooltip(text, maxLen) {
     return t.length <= maxLen ? t : t.slice(0, maxLen) + '…';
 }
 
+function formatStoredDecimal(value) {
+    const parsed = parseDecimalInput(value);
+    return parsed === null ? '' : parsed.toFixed(2);
+}
+
 export function getDaylossForMonth(year, monthIndex) {
     let key = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
     const monthly = state.appData?.settings?.monthlyDayloss ?? {};
@@ -345,10 +350,10 @@ function fillSelectedDateUI(dateStr) {
     const effectivePnl = getEffectiveDayPnl(dayData);
     const sheetOnlyPnl = isSheetOnlyPnl(dayData);
     document.getElementById('trade-pnl').value = effectivePnl !== null ? effectivePnl.toFixed(2) : '';
-    document.getElementById('trade-gross').value = !sheetOnlyPnl && dayData.gross_pnl !== undefined && dayData.gross_pnl !== null ? parseFloat(dayData.gross_pnl).toFixed(2) : '';
-    document.getElementById('trade-comm').value = !sheetOnlyPnl && dayData.commissions !== undefined && dayData.commissions !== null ? parseFloat(dayData.commissions).toFixed(2) : '';
-    document.getElementById('trade-locates').value = !sheetOnlyPnl && dayData.locates !== undefined && dayData.locates !== null ? parseFloat(dayData.locates).toFixed(2) : '';
-    document.getElementById('trade-kf').value = dayData.kf !== undefined && dayData.kf !== null ? parseFloat(dayData.kf).toFixed(2) : '';
+    document.getElementById('trade-gross').value = !sheetOnlyPnl ? formatStoredDecimal(dayData.gross_pnl) : '';
+    document.getElementById('trade-comm').value = !sheetOnlyPnl ? formatStoredDecimal(dayData.commissions) : '';
+    document.getElementById('trade-locates').value = !sheetOnlyPnl ? formatStoredDecimal(dayData.locates) : '';
+    document.getElementById('trade-kf').value = formatStoredDecimal(dayData.kf);
     document.getElementById('trade-notes').value = dayData.notes || '';
     document.getElementById('mentor-notes').value = dayData.mentor_comment || '';
     

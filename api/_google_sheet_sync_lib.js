@@ -6,6 +6,7 @@ import {
     parseSheetGridToTrades,
     SHEET_DATA_FIRST_ROW,
 } from '../js/sheet_sync_core.js';
+import { isPureGoogleSheetTrade } from '../js/trade_filters.js';
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets.readonly';
@@ -246,15 +247,6 @@ function dayToRow(userId, tradeDate, day) {
             review_requests: day.review_requests && typeof day.review_requests === 'object' ? day.review_requests : {},
         },
     };
-}
-
-function isPureGoogleSheetTrade(trade, spreadsheetId) {
-    return !!(
-        trade?.sheet &&
-        trade.sheet.source === 'google' &&
-        String(trade.sheet.spreadsheetId || '') === String(spreadsheetId) &&
-        !trade.sheet?.matchedBy
-    );
 }
 
 function sumTradeMoney(trades = []) {

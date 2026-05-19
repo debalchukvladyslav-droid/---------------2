@@ -178,6 +178,7 @@ test('sheet-only pnl is ignored for day-level stats', () => {
 
     assert.equal(getEffectiveDayPnl(sheetOnlyDay), null);
     assert.equal(getEffectiveDayPnl(matchedDay), 25);
+    assert.equal(getEffectiveDayPnl({ pnl: '12,50', trades: [] }), 12.5);
 });
 
 test('google sheet rows enrich existing Trades instead of becoming sheet-only trades', () => {

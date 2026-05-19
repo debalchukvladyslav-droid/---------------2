@@ -1,3 +1,5 @@
+import { parseDecimalInput } from './utils.js';
+
 export function isGoogleSheetTrade(trade) {
     return !!(trade?.sheet && typeof trade.sheet === 'object' && trade.sheet.source === 'google');
 }
@@ -52,6 +54,5 @@ export function isSheetOnlyPnl(day = {}) {
 
 export function getEffectiveDayPnl(day = {}) {
     if (isSheetOnlyPnl(day)) return null;
-    const pnl = parseFloat(day.pnl);
-    return Number.isFinite(pnl) ? pnl : null;
+    return parseDecimalInput(day.pnl);
 }

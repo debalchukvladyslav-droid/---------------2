@@ -3,7 +3,7 @@ import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { applyAutoTradeTypesData, DEFAULT_TRADE_TYPES, normalizeAppData, getDefaultAppData, normalizeTradeTypesList, classifyTradeTypeGroup } from './data_utils.js';
 import { loadMonth, loadAllMonths, getCurrentViewedUserId, resolveViewedUserId } from './storage.js';
-import { escapeHtml } from './utils.js';
+import { escapeHtml, parseDecimalInput } from './utils.js';
 import { ensureChartJs } from './vendor_loader.js';
 import { buildTradeTypeInsightRows } from './trade_type_analysis.js';
 import { getEffectiveDayPnl, isPureGoogleSheetTrade } from './trade_filters.js';
@@ -824,10 +824,10 @@ function mergeJournals(journals) {
                 : getStatsBreakevenBand(j.settings || {}, d);
             merged[d].__statsBreakevenBand = (Number(merged[d].__statsBreakevenBand) || 0) + entryBand;
             Object.entries(entry.tradeTypesData || {}).forEach(([type, typeData]) => {
-                const typePnl = parseFloat(typeData?.pnl);
+                const typePnl = parseStatsNumber(typeData?.pnl);
                 if (!Number.isFinite(typePnl)) return;
                 if (!merged[d].tradeTypesData[type]) merged[d].tradeTypesData[type] = { pnl: 0 };
-                merged[d].tradeTypesData[type].pnl = (parseFloat(merged[d].tradeTypesData[type].pnl) || 0) + typePnl;
+                merged[d].tradeTypesData[type].pnl = (parseStatsNumber(merged[d].tradeTypesData[type].pnl) || 0) + typePnl;
             });
         }
     }
@@ -1685,11 +1685,16 @@ function fmtPlainNumber(value) {
     return value.toFixed(2);
 }
 
+function parseStatsNumber(value) {
+    const parsed = parseDecimalInput(value);
+    return parsed === null ? NaN : parsed;
+}
+
 function getEntryCosts(entryData = {}) {
-    const directCommissions = parseFloat(entryData.commissions);
-    const directLocates = parseFloat(entryData.locates);
-    const sourceCommissions = (parseFloat(entryData.fondexx?.comm) || 0) + (parseFloat(entryData.ppro?.comm) || 0);
-    const sourceLocates = (parseFloat(entryData.fondexx?.locates) || 0) + (parseFloat(entryData.ppro?.locates) || 0);
+    const directCommissions = parseStatsNumber(entryData.commissions);
+    const directLocates = parseStatsNumber(entryData.locates);
+    const sourceCommissions = (parseStatsNumber(entryData.fondexx?.comm) || 0) + (parseStatsNumber(entryData.ppro?.comm) || 0);
+    const sourceLocates = (parseStatsNumber(entryData.fondexx?.locates) || 0) + (parseStatsNumber(entryData.ppro?.locates) || 0);
     return {
         commissions: Number.isFinite(directCommissions) && directCommissions !== 0 ? directCommissions : sourceCommissions,
         locates: Number.isFinite(directLocates) && directLocates !== 0 ? directLocates : sourceLocates,
@@ -1786,7 +1791,7 @@ function buildStatsEntriesFromJournal(journal, tradeTypeFilter = null) {
         if (tradeTypeFilter) {
             const typeData = data.tradeTypesData && data.tradeTypesData[tradeTypeFilter];
             if (!typeData || typeData.pnl === '' || typeData.pnl === undefined || typeData.pnl === null) continue;
-            pnl = parseFloat(typeData.pnl);
+            pnl = parseStatsNumber(typeData.pnl);
         } else {
             pnl = getEffectiveStatsPnl(data);
             if (pnl == null) continue;
