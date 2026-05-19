@@ -1960,7 +1960,7 @@ function toggleStatsCompareFilter(type, val, labelName) {
     renderStatsTab();
 }
 
-function buildComparePaneSummary(entries, settings = {}, tradeTypeFilter = null) {
+function buildComparePaneSummary(entries, settings = {}, tradeTypeFilter = null, filters = []) {
     let winDays = 0, lossDays = 0, beDays = 0;
     let grossProfit = 0, grossLoss = 0;
     let bestDay = 0, worstDay = 0;
@@ -1989,6 +1989,21 @@ function buildComparePaneSummary(entries, settings = {}, tradeTypeFilter = null)
         else if (dayClass === 'loss') { lossDays++; grossLoss += Math.abs(pnl); }
         else { beDays++; }
     });
+
+    if (!tradeTypeFilter) {
+        for (const monthKey of getAdjustmentMonthsForEntries(entries, filters || [], settings)) {
+            const adjustment = getFondexxMonthlyAdjustment(settings, monthKey);
+            periodSum += adjustment.pnl;
+            totalComm += adjustment.commissions;
+            totalLocates += adjustment.locates;
+            if (adjustment.pnl) {
+                periodCumData.push(parseFloat(periodSum.toFixed(2)));
+                periodLabels.push('Adj');
+                if (adjustment.pnl > bestDay) bestDay = adjustment.pnl;
+                if (adjustment.pnl < worstDay) worstDay = adjustment.pnl;
+            }
+        }
+    }
 
     const totalDays = winDays + lossDays + beDays;
     const totalPnl = parseFloat(periodSum.toFixed(2));
@@ -2402,8 +2417,8 @@ function renderStatsComparePanel(validEntries) {
 
     const baseEntries = filterEntriesByStatsFilters(validEntries, state.activeFilters);
     const compareEntries = filterEntriesByStatsFilters(compareValidEntries, state.statsCompareFilters || []);
-    const base = buildComparePaneSummary(baseEntries, state.currentStatsContext.settings || state.appData.settings || {}, state.activeTradeTypeFilter);
-    const compare = buildComparePaneSummary(compareEntries, state.statsCompareContext.settings || {}, state.statsCompareTradeTypeFilter);
+    const base = buildComparePaneSummary(baseEntries, state.currentStatsContext.settings || state.appData.settings || {}, state.activeTradeTypeFilter, state.activeFilters || []);
+    const compare = buildComparePaneSummary(compareEntries, state.statsCompareContext.settings || {}, state.statsCompareTradeTypeFilter, state.statsCompareFilters || []);
     const pfDelta = compare.pf - base.pf;
 
     const cssGreen = getComputedStyle(document.documentElement).getPropertyValue('--profit').trim() || '#10b981';
