@@ -734,7 +734,7 @@ export async function initializeApp() {
 export async function uploadBackground(file, userId) {
     const safeName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
     const storagePath = `backgrounds/${userId}/${safeName}`;
-    await uploadToSupabaseStorage(storagePath, file);
+    await uploadToSupabaseStorage(storagePath, file, { bucket: 'backgrounds' });
 
     if (!Array.isArray(state.appData.backgrounds)) state.appData.backgrounds = [];
     if (!state.appData.backgrounds.includes(storagePath)) {

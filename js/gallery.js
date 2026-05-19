@@ -1011,7 +1011,7 @@ window.addEventListener('paste', async function(e) {
         showGlobalLoader('upload-screen', 'Завантаження картинки в хмару...');
         const ext = file.type.includes('png') ? 'png' : 'jpg';
         const filename = buildScreenshotPath(`${Date.now()}.${ext}`);
-        await uploadToSupabaseStorage(filename, file);
+        await uploadToSupabaseStorage(filename, file, { bucket: 'screenshots' });
         // Зберігаємо шлях файлу (не URL) — URL генеруємо динамічно через SDK
 
         if (!state.appData.unassignedImages) state.appData.unassignedImages = [];

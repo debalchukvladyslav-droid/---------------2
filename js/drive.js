@@ -233,7 +233,7 @@ export async function syncDriveScreenshots(silent = false) {
         } else {
             const listUrl = new URL('https://www.googleapis.com/drive/v3/files');
             listUrl.searchParams.set('q', `'${folderId}' in parents and mimeType contains 'image/'`);
-            listUrl.searchParams.set('fields', 'files(id,name,createdTime,modifiedTime,size)');
+            listUrl.searchParams.set('fields', 'files(id,name,mimeType,createdTime,modifiedTime,size)');
             listUrl.searchParams.set('orderBy', 'modifiedTime desc');
             listUrl.searchParams.set('pageSize', '100');
             const resp = await fetch(listUrl.toString(), { headers: { Authorization: `Bearer ${token}` } });
@@ -287,26 +287,43 @@ export async function syncDriveScreenshots(silent = false) {
         );
 
         let newCount = 0;
+        let failedCount = 0;
         await Promise.all(newFiles.map(async ({ file, storagePath }) => {
             if (file.size && parseInt(file.size) > MAX_FILE_SIZE_BYTES) {
                 console.warn(`Drive: пропускаємо ${file.name} — розмір перевищує ліміт`);
                 return;
             }
-            const fileUrl = new URL(`https://www.googleapis.com/drive/v3/files/${file.id}`);
-            fileUrl.searchParams.set('alt', 'media');
-            const fileResp = await fetch(fileUrl.toString(), { headers: { Authorization: `Bearer ${token}` } });
-            const blob = await fileResp.blob();
-            if (blob.size > MAX_FILE_SIZE_BYTES) {
-                console.warn(`Drive: пропускаємо ${file.name} — blob перевищує ліміт`);
-                return;
+            try {
+                const fileUrl = new URL(`https://www.googleapis.com/drive/v3/files/${file.id}`);
+                fileUrl.searchParams.set('alt', 'media');
+                const fileResp = await fetch(fileUrl.toString(), { headers: { Authorization: `Bearer ${token}` } });
+                if (!fileResp.ok) {
+                    throw new Error(`Drive download failed (${fileResp.status})`);
+                }
+                const blob = await fileResp.blob();
+                if (blob.size > MAX_FILE_SIZE_BYTES) {
+                    console.warn(`Drive: пропускаємо ${file.name} — blob перевищує ліміт`);
+                    return;
+                }
+                await uploadToSupabaseStorage(storagePath, blob, {
+                    bucket: 'screenshots',
+                    contentType: blob.type || file.mimeType || 'application/octet-stream',
+                });
+                if (!state.appData.unassignedImages) state.appData.unassignedImages = [];
+                state.appData.unassignedImages.push(storagePath);
+                upsertDriveScreenMeta(storagePath, file);
+                newCount++;
+                if (statusEl) statusEl.textContent = `⏳ Завантажено ${newCount}...`;
+                showGlobalLoader('drive-sync', `Завантажено ${newCount}...`);
+            } catch (error) {
+                failedCount++;
+                console.warn('[Drive] screenshot upload skipped', {
+                    id: file.id,
+                    name: file.name,
+                    storagePath,
+                    message: error?.message || String(error),
+                });
             }
-            await uploadToSupabaseStorage(storagePath, blob, { contentType: blob.type });
-            if (!state.appData.unassignedImages) state.appData.unassignedImages = [];
-            state.appData.unassignedImages.push(storagePath);
-            upsertDriveScreenMeta(storagePath, file);
-            newCount++;
-            if (statusEl) statusEl.textContent = `⏳ Завантажено ${newCount}...`;
-            showGlobalLoader('drive-sync', `Завантажено ${newCount}...`);
         }));
 
         if (metaUpdatedCount > 0) {
@@ -319,7 +336,13 @@ export async function syncDriveScreenshots(silent = false) {
             if (newCount > 0) loadImages();
         }
 
-        if (newCount > 0) {
+        if (failedCount > 0) {
+            const message = `Google Drive: не завантажено ${failedCount} скрінів у Supabase Storage`;
+            showGlobalLoader('drive-sync', message, { type: newCount > 0 ? 'warning' : 'error' });
+            hideGlobalLoader('drive-sync', 2600);
+            if (statusEl) statusEl.textContent = `⚠️ Не завантажено ${failedCount}`;
+            if (!silent) showToast(message);
+        } else if (newCount > 0) {
             showGlobalLoader('drive-sync', `Синхронізовано ${newCount} скрінів`, { type: 'success' });
             hideGlobalLoader('drive-sync', 1400);
             showToast(`✅ Синхронізовано ${newCount} нових скрінів!`);
@@ -335,7 +358,7 @@ export async function syncDriveScreenshots(silent = false) {
             hideGlobalLoader('drive-sync');
         }
 
-        if (statusEl) statusEl.textContent = newCount > 0
+        if (!failedCount && statusEl) statusEl.textContent = newCount > 0
             ? `✅ +${newCount} нових`
             : metaUpdatedCount > 0 ? `✅ Дати +${metaUpdatedCount}` : '✅ Актуально';
     } catch (e) {

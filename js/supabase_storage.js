@@ -58,6 +58,24 @@ function getPathCandidates(storagePath) {
     ];
 }
 
+function applyCandidateOptions(candidates, options = {}) {
+    let filtered = candidates;
+    if (options.bucket) {
+        filtered = filtered.filter(candidate => candidate.bucket === options.bucket);
+    }
+    if (options.primaryOnly) {
+        filtered = filtered.slice(0, 1);
+    }
+    return filtered;
+}
+
+function storageErrorMessage(error, candidate) {
+    const detail = error?.message || error?.error_description || error?.name || 'unknown error';
+    const status = error?.statusCode || error?.status || '';
+    const where = candidate ? `${candidate.bucket}/${candidate.objectPath}` : 'unknown path';
+    return `Supabase storage upload failed (${where}${status ? `, ${status}` : ''}): ${detail}`;
+}
+
 async function createFirstSignedUrl(candidates, ttl = DEFAULT_SIGNED_URL_TTL) {
     for (const candidate of candidates) {
         const { data, error } = await supabase.storage
@@ -85,10 +103,11 @@ export async function getSupabaseStorageUrl(pathOrUrl, ttl = DEFAULT_SIGNED_URL_
 }
 
 export async function uploadToSupabaseStorage(storagePath, file, options = {}) {
-    const candidates = getPathCandidates(storagePath);
+    const candidates = applyCandidateOptions(getPathCandidates(storagePath), options);
     if (!candidates.length) throw new Error('Invalid Supabase storage path');
 
     let lastError = null;
+    let lastCandidate = null;
     for (const candidate of candidates) {
         const { error } = await supabase.storage
             .from(candidate.bucket)
@@ -103,9 +122,16 @@ export async function uploadToSupabaseStorage(storagePath, file, options = {}) {
         }
 
         lastError = error;
+        lastCandidate = candidate;
+        console.warn('[Storage] upload failed', {
+            bucket: candidate.bucket,
+            objectPath: candidate.objectPath,
+            statusCode: error?.statusCode || error?.status,
+            message: error?.message || error?.error_description || String(error || ''),
+        });
     }
 
-    throw lastError || new Error('Supabase storage upload failed');
+    throw new Error(storageErrorMessage(lastError, lastCandidate));
 }
 
 export async function deleteFromSupabaseStorage(storagePathOrUrl) {
