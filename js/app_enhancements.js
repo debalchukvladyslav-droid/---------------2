@@ -187,6 +187,7 @@ function activateAction(action, trigger, event = null) {
         'tag-search-clear': () => window.clearTagSearch?.(),
         'playbook-setup-add': () => window.addPlaybookSetup?.(),
         'drive-connect': () => window.connectGoogleDrive?.(),
+        'drive-service-sync': () => window.syncDriveScreenshots?.(false),
         'drive-disconnect': () => window.disconnectGoogleDrive?.(),
         'export-data': () => window.exportData?.(),
         'file-picker': () => document.getElementById(trigger?.dataset?.target || '')?.click(),

@@ -6,6 +6,18 @@ function pickEnv(...names) {
     return '';
 }
 
+function serviceAccountEmail() {
+    const direct = pickEnv('GOOGLE_SERVICE_ACCOUNT_EMAIL', 'GOOGLE_CLIENT_EMAIL');
+    if (direct) return direct;
+    const rawJson = pickEnv('GOOGLE_SERVICE_ACCOUNT_JSON');
+    if (!rawJson) return '';
+    try {
+        return JSON.parse(rawJson).client_email || '';
+    } catch (_) {
+        return '';
+    }
+}
+
 export default function handler(req, res) {
     const config = {
         supabaseUrl: pickEnv('SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL'),
@@ -16,6 +28,7 @@ export default function handler(req, res) {
         googleSheetsApiKey: pickEnv('GOOGLE_SHEETS_API_KEY'),
         googlePickerAppId: pickEnv('GOOGLE_PICKER_APP_ID', 'GOOGLE_CLOUD_PROJECT_NUMBER'),
         googleDriveClientId: pickEnv('GOOGLE_DRIVE_CLIENT_ID', 'GOOGLE_SHEETS_CLIENT_ID'),
+        googleServiceAccountEmail: serviceAccountEmail(),
     };
 
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');

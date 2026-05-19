@@ -11,6 +11,7 @@ import { supabase } from './supabase.js';
 
 const appConfig = window.TRADING_JOURNAL_CONFIG || {};
 const CLIENT_ID = String(appConfig.googleDriveClientId || appConfig.googleSheetsClientId || '').trim();
+const SERVICE_ACCOUNT_EMAIL = String(appConfig.googleServiceAccountEmail || '').trim();
 const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
 const DRIVE_FILES_CACHE_TTL = 60 * 1000;
@@ -273,6 +274,13 @@ async function listDriveFilesViaService(folderId) {
     return data.files || [];
 }
 
+function setDriveServiceStatus(message, type = '') {
+    const status = document.getElementById('drive-service-status');
+    if (!status) return;
+    status.textContent = message || '';
+    status.dataset.state = type;
+}
+
 export async function syncDriveScreenshots(silent = false) {
     if (_syncInProgress) return;
     if (state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) return;
@@ -293,6 +301,7 @@ export async function syncDriveScreenshots(silent = false) {
     showGlobalLoader('drive-sync', 'Синхронізація Google Drive...');
     const statusEl = document.getElementById('drive-sync-status');
     if (statusEl) statusEl.textContent = '⏳ Синхронізація...';
+    setDriveServiceStatus('Перевіряємо доступ service account до папки...', 'loading');
 
     try {
         let token = null;
@@ -318,6 +327,7 @@ export async function syncDriveScreenshots(silent = false) {
                     loadedViaService = true;
                     driveFilesViaService = true;
                     console.info('[Drive test] service account list OK:', { count: files.length });
+                    setDriveServiceStatus(`Service account бачить папку: ${files.length} файлів`, 'success');
                 } catch (error) {
                     _serviceDriveAvailable = false;
                     console.warn('[Drive] service account list failed, falling back to browser OAuth', error);
@@ -325,6 +335,7 @@ export async function syncDriveScreenshots(silent = false) {
                         status: error?.status || '',
                         message: error?.message || String(error),
                     });
+                    setDriveServiceStatus(`Service account не має доступу: ${error?.message || error}`, 'error');
                     if (error.status === 403 || error.status === 404) {
                         const message = 'Google Drive: поширте папку на service account email';
                         if (statusEl) statusEl.textContent = message;
@@ -366,6 +377,7 @@ export async function syncDriveScreenshots(silent = false) {
                 }
                 files = data.files;
                 console.info('[Drive test] browser OAuth list OK:', { count: files.length });
+                setDriveServiceStatus(`Fallback через Google login: ${files.length} файлів`, 'fallback');
             }
             _driveFilesCache = { files, ts: Date.now(), viaService: driveFilesViaService };
         }
@@ -470,6 +482,14 @@ export async function syncDriveScreenshots(silent = false) {
             metaUpdatedCount,
             viaService: driveFilesViaService,
         });
+        if (driveFilesViaService) {
+            setDriveServiceStatus(
+                failedCount > 0
+                    ? `Service account працює, але ${failedCount} файлів не завантажилось у Supabase`
+                    : `Service account працює. Нових: ${newCount}, оновлено дат: ${metaUpdatedCount}`,
+                failedCount > 0 ? 'error' : 'success'
+            );
+        }
 
         if (newCount > 0 || metaUpdatedCount > 0) {
             _driveFilesCache = null;
@@ -512,6 +532,7 @@ export async function syncDriveScreenshots(silent = false) {
         hideGlobalLoader('drive-sync', 2600);
         if (statusEl) statusEl.textContent = '❌ Помилка синхронізації';
         showToast('❌ Помилка: ' + e.message);
+        setDriveServiceStatus(`Помилка синхронізації: ${e.message}`, 'error');
     } finally {
         _syncInProgress = false;
         console.groupEnd();
@@ -522,7 +543,9 @@ export function updateDriveUI() {
     const btn = document.getElementById('drive-connect-btn');
     const info = document.getElementById('drive-folder-info');
     const disconnectBtn = document.getElementById('drive-disconnect-btn');
+    const serviceEmailEl = document.getElementById('drive-service-email');
     if (!btn) return;
+    if (serviceEmailEl) serviceEmailEl.textContent = SERVICE_ACCOUNT_EMAIL || 'service account email не налаштований';
 
     const folderId = state.appData.settings.driveFolderId;
     const folderName = state.appData.settings.driveFolderName;

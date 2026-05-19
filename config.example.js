@@ -11,4 +11,5 @@ window.TRADING_JOURNAL_CONFIG = {
     googleSheetsApiKey: 'your-browser-api-key',
     googlePickerAppId: 'your-google-cloud-project-number',
     googleDriveClientId: 'your-drive-oauth-client-id.apps.googleusercontent.com',
+    googleServiceAccountEmail: 'your-service-account@your-project.iam.gserviceaccount.com',
 };
