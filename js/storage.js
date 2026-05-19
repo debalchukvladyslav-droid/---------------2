@@ -176,6 +176,9 @@ function journalRowToMonthEntry(row) {
             gross_pnl: row?.gross_pnl ?? null,
             commissions: row?.commissions ?? null,
             locates: row?.locates ?? null,
+            notes: row?.notes ?? '',
+            mentor_comment: row?.mentor_comment ?? '',
+            ai_advice: row?.ai_advice ?? '',
             errors: metrics.errors || [],
             tradeTypesData: metrics.tradeTypesData || {},
             screenshots: metrics.screenshots || { good: [], normal: [], bad: [], error: [] },
@@ -438,7 +441,7 @@ export async function loadMonth(nick, mk, userId = null) {
         const { start, end } = getMonthRange(mk);
         const { data, error } = await supabase
             .from('journal_days')
-            .select('id, user_id, trade_date, pnl, gross_pnl, commissions, locates, daily_metrics')
+            .select('id, user_id, trade_date, pnl, gross_pnl, commissions, locates, notes, mentor_comment, ai_advice, daily_metrics')
             .eq('user_id', targetUserId)
             .gte('trade_date', start)
             .lte('trade_date', end)

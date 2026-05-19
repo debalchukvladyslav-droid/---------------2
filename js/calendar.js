@@ -680,6 +680,25 @@ function buildDayDetailBody(dateKey, data, currentMonthDayloss) {
     return lines.join('\n').trim();
 }
 
+function buildCalendarDayHoverText(dateKey, currentMonthDayloss) {
+    const data = state.appData.journal[dateKey];
+    if (!data) {
+        return formatLongDateUk(dateKey) + '\n\nНемає збереженого дня.' + appendWeekSummaryForDate(dateKey);
+    }
+
+    const body = buildDayDetailBody(dateKey, data, currentMonthDayloss);
+    let reviewLine = '';
+    if (canAccessMentorReviewQueue() && state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) {
+        const revReasons = reviewReasonsForDay(data, currentMonthDayloss);
+        if (revReasons.length) reviewLine = `\n\nРев'ю: ${revReasons.map((r) => r.label).join(', ')}`;
+    }
+
+    return formatLongDateUk(dateKey) +
+        (body ? `\n\n${body}` : '\n\nЗапис є — додайте PnL чи думки в формі дня.') +
+        reviewLine +
+        appendWeekSummaryForDate(dateKey);
+}
+
 function positionCalendarTooltip(e, el) {
     if (!el || !e) return;
     const pad = 14;
@@ -894,7 +913,7 @@ export async function renderView() {
         }
         if (tooltip) {
             cell.onmouseenter = (e) => {
-                renderCalendarTooltip(tooltip, dayHoverText.trim(), 'day');
+                renderCalendarTooltip(tooltip, buildCalendarDayHoverText(dateKey, currentMonthDayloss).trim(), 'day');
                 tooltip.style.display = 'block';
                 positionCalendarTooltip(e, tooltip);
             };
