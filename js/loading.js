@@ -6,7 +6,8 @@ function ensureLoaderRoot() {
 
     const style = document.createElement('style');
     style.textContent = `
-        #app-loading-stack{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:100000;max-width:min(360px,calc(100vw - 32px));pointer-events:none}
+        #app-loading-stack{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:450;max-width:min(360px,calc(100vw - 32px));pointer-events:none}
+        body.is-calendar-tab #app-loading-stack{bottom:92px}
         .app-loading-item{display:flex;align-items:center;gap:10px;background:var(--bg-panel,#111827);color:var(--text-main,#f8fafc);border:1px solid var(--border,#334155);box-shadow:0 10px 30px rgba(0,0,0,.28);border-radius:8px;padding:10px 12px;font-size:.9rem;line-height:1.3;pointer-events:auto}
         .app-loading-spinner{width:15px;height:15px;border:2px solid rgba(148,163,184,.35);border-top-color:var(--accent,#8b5cf6);border-radius:50%;animation:app-spin .8s linear infinite;flex:0 0 auto}
         .app-loading-done .app-loading-spinner{animation:none;border-color:var(--profit,#10b981)}

@@ -488,6 +488,12 @@
     transition: transform 0.2s ease, box-shadow 0.2s ease;
     font-size: 1.3rem;
 }
+.quick-trade-fab {
+    display: none;
+}
+body.is-calendar-tab .quick-trade-fab {
+    display: flex;
+}
 .quick-trade-fab:hover {
     transform: scale(1.1);
     box-shadow: var(--shadow-accent-lg);

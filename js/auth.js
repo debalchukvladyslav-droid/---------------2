@@ -6,6 +6,7 @@ import { canAccessMentorReviewQueueState, isMentorViewingOtherJournalState } fro
 
 const PROFILE_SUFFIX = '_stats';
 export const ACCOUNT_BLOCKED_MESSAGE = 'Акаунт заблоковано. Зверніться до адміна.';
+let authRequestInProgress = false;
 
 function getNickFromDocName(docName = '') {
     return String(docName).replace(/_stats$/, '');
@@ -52,6 +53,15 @@ function mapAuthError(error, fallback = 'Помилка') {
 
     if (message.includes('email not confirmed')) {
         return 'Пошта не підтверджена. Перевірте вашу скриньку та перейдіть за посиланням у листі.';
+    }
+
+    if (
+        code === 'over_email_send_rate_limit' ||
+        code === 'over_request_rate_limit' ||
+        message.includes('rate limit') ||
+        message.includes('too many requests')
+    ) {
+        return 'Забагато спроб або листів підтвердження. Зачекайте кілька хвилин і спробуйте ще раз, або увійдіть якщо акаунт уже створився.';
     }
 
     if (
@@ -418,6 +428,7 @@ export function toggleAuthMode() {
 }
 
 export async function handleAuth() {
+    if (authRequestInProgress) return;
     const rawLogin = document.getElementById('auth-nick').value.trim();
     const loginValue = rawLogin.toLowerCase();
     const pass = document.getElementById('auth-pass').value;
@@ -435,6 +446,7 @@ export async function handleAuth() {
 
     showError('');
 
+    authRequestInProgress = true;
     try {
         if (state.isRegisterMode) {
             const nick = loginValue;
@@ -520,6 +532,8 @@ export async function handleAuth() {
         }
     } catch (e) {
         showError(mapAuthError(e, 'Помилка'));
+    } finally {
+        authRequestInProgress = false;
     }
 }
 

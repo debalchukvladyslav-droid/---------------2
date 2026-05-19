@@ -657,6 +657,7 @@ export async function switchMainTab(tab, options = {}) {
     if (!document.getElementById('view-' + tab)) {
         tab = 'dash';
     }
+    document.body?.classList.toggle('is-calendar-tab', tab === 'calendar');
     const previousView = document.querySelector('.view-content.active');
     const previousTab = previousView?.id?.replace(/^view-/, '') || '';
     if (previousTab === tab) return;
