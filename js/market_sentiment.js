@@ -129,12 +129,12 @@ function renderSentiment(payload) {
     const root = document.getElementById('market-sentiment-card');
     if (!root) return;
 
-    if (payload?.degraded || payload?.score == null) {
+    const score = Math.round(Number(payload?.score));
+    if (payload?.degraded || !Number.isFinite(score)) {
         renderError(payload?.reason || 'Data temporarily unavailable');
         return;
     }
 
-    const score = Math.round(Number(payload.score));
     const tone = getTone(score, payload.rating);
     root.className = `stat-card-pro market-sentiment-card market-sentiment-card--${tone}`;
 
@@ -177,11 +177,14 @@ export async function renderMarketSentiment(options = {}) {
         renderLoading();
         pendingRequest = fetchMarketSentiment(force);
     }
+    const request = pendingRequest;
 
     try {
-        renderSentiment(await pendingRequest);
+        renderSentiment(await request);
     } catch (error) {
         renderError(error?.message || 'Data temporarily unavailable');
+    } finally {
+        if (pendingRequest === request) pendingRequest = null;
     }
 }
 
