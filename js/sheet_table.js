@@ -13,11 +13,9 @@ import { syncFondexxFromTradesForDay, logTradesImportConsole } from './parsers.j
 import { clearStatsCache } from './stats.js';
 import { isPureGoogleSheetTrade } from './trade_filters.js';
 import {
-    enrichTradeWithSheet,
-    findSheetMatchIndex,
-    isValidIsoDateString,
     parseSheetGridToTrades as parseSheetGridToTradesCore,
 } from './sheet_sync_core.js';
+import { mergeGoogleSheetTradesIntoJournal as mergeSheetTradesIntoJournal } from './sheet_journal_merge.js';
 
 const LS_KEY = 'tj_google_sheet_import_v1';
 
@@ -784,133 +782,6 @@ function smartValueToColumnIndex(raw) {
     return columnLetterToIndex(letter);
 }
 
-function sumTradeMoney(trades = []) {
-    return trades.reduce((sum, trade) => {
-        sum.gross += Number(trade?.gross) || 0;
-        sum.net += Number(trade?.net) || 0;
-        sum.comm += Number(trade?.comm) || 0;
-        return sum;
-    }, { gross: 0, net: 0, comm: 0 });
-}
-
-function almostEqualMoney(a, b) {
-    return Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.01;
-}
-
-function fondexxLooksDerivedFromTrades(fondexx, trades) {
-    if (!fondexx || typeof fondexx !== 'object' || !Array.isArray(trades) || trades.length === 0) return false;
-    const totals = sumTradeMoney(trades);
-    return almostEqualMoney(fondexx.gross, totals.gross)
-        && almostEqualMoney(fondexx.net, totals.net)
-        && almostEqualMoney(fondexx.comm, totals.comm);
-}
-
-function hasAnyScreenshot(day) {
-    const screens = day?.screenshots && typeof day.screenshots === 'object' ? day.screenshots : {};
-    return Object.values(screens).some((items) => Array.isArray(items) && items.length > 0);
-}
-
-function hasNonEmptyObject(value) {
-    return value && typeof value === 'object' && Object.keys(value).length > 0;
-}
-
-function isDayEmptyAfterSheetCleanup(day) {
-    if (!day || typeof day !== 'object') return true;
-    if (Array.isArray(day.trades) && day.trades.length > 0) return false;
-    if (String(day.notes || '').trim() || String(day.mentor_comment || '').trim()) return false;
-    if (hasAnyScreenshot(day)) return false;
-    if (Array.isArray(day.errors) && day.errors.length > 0) return false;
-    if (Array.isArray(day.checkedParams) && day.checkedParams.length > 0) return false;
-    if (hasNonEmptyObject(day.sliders) || hasNonEmptyObject(day.tradeTypesData) || hasNonEmptyObject(day.review_requests)) return false;
-    if (String(day.sessionGoal || '').trim() || String(day.sessionPlan || '').trim() || day.sessionDone) return false;
-    const fondexx = day.fondexx && typeof day.fondexx === 'object' ? day.fondexx : {};
-    if (Number(fondexx.net) || Number(fondexx.gross) || Number(fondexx.comm) || Number(fondexx.locates)) return false;
-    const ppro = day.ppro && typeof day.ppro === 'object' ? day.ppro : {};
-    if (Number(ppro.net) || Number(ppro.gross) || Number(ppro.comm) || Number(ppro.locates)) return false;
-    return true;
-}
-
-function cleanupPreviousGoogleSheetImport(spreadsheetId) {
-    const deletedDates = [];
-    const touchedDates = [];
-    const journal = state.appData?.journal || {};
-
-    Object.keys(journal).forEach((dateStr) => {
-        const day = journal[dateStr];
-        const trades = Array.isArray(day?.trades) ? day.trades : [];
-        const removedTrades = trades.filter((trade) => isPureGoogleSheetTrade(trade, spreadsheetId));
-        const nextTrades = trades.filter((trade) => !isPureGoogleSheetTrade(trade, spreadsheetId));
-        if (nextTrades.length === trades.length) return;
-
-        const clearSheetDerivedFondexx = nextTrades.length === 0 && fondexxLooksDerivedFromTrades(day.fondexx, removedTrades);
-        day.trades = nextTrades;
-        if (clearSheetDerivedFondexx) {
-            day.fondexx = { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] };
-            day.pnl = null;
-            day.gross_pnl = null;
-            day.commissions = null;
-            day.locates = null;
-        }
-        syncFondexxFromTradesForDay(dateStr);
-
-        if (isDayEmptyAfterSheetCleanup(day)) {
-            delete journal[dateStr];
-            deletedDates.push(dateStr);
-        } else {
-            touchedDates.push(dateStr);
-            markJournalDayDirty(dateStr);
-        }
-    });
-
-    return { deletedDates, touchedDates };
-}
-
-function mergeGoogleSheetTradesIntoJournal(outByDay, spreadsheetId) {
-    const cleanup = cleanupPreviousGoogleSheetImport(spreadsheetId);
-    const touchedDates = new Set(cleanup.touchedDates);
-    let matchedSheetRows = 0;
-    let skippedSheetRows = 0;
-
-    for (const dateStr of Object.keys(outByDay)) {
-        if (!isValidIsoDateString(dateStr)) {
-            console.warn('[Google Sheets] Пропущено невалідну дату (не пишемо в журнал):', dateStr);
-            continue;
-        }
-        const incoming = outByDay[dateStr];
-        if (!incoming.length) continue;
-        const day = state.appData.journal[dateStr];
-        const prev = Array.isArray(day?.trades) ? day.trades : [];
-        const kept = prev.filter((t) => !isPureGoogleSheetTrade(t, spreadsheetId));
-        if (!kept.length) {
-            skippedSheetRows += incoming.length;
-            continue;
-        }
-        const usedIndices = new Set();
-        const merged = [...kept];
-        let matchedCount = 0;
-
-        incoming.forEach((trade) => {
-            const matchIndex = findSheetMatchIndex(merged, trade, usedIndices);
-            if (matchIndex >= 0) {
-                merged[matchIndex] = enrichTradeWithSheet(merged[matchIndex], trade);
-                usedIndices.add(matchIndex);
-                matchedCount++;
-                matchedSheetRows++;
-            } else {
-                skippedSheetRows++;
-            }
-        });
-
-        if (!matchedCount) continue;
-        state.appData.journal[dateStr].trades = merged;
-        syncFondexxFromTradesForDay(dateStr);
-        markJournalDayDirty(dateStr);
-        touchedDates.add(dateStr);
-    }
-
-    return { deletedDates: cleanup.deletedDates, touchedDates: [...touchedDates], matchedSheetRows, skippedSheetRows };
-}
-
 async function deleteJournalDatesFromSupabase(dateStrs = []) {
     const uniqueDates = [...new Set(dateStrs)].filter((dateStr) => /^\d{4}-\d{2}-\d{2}$/.test(dateStr));
     if (!uniqueDates.length) return;
@@ -1011,7 +882,11 @@ async function executeSyncWithCfg(cfg, options = {}) {
             logTradesImportConsole('Google Sheets → журнал', outByDay);
         }
 
-        const mergeResult = mergeGoogleSheetTradesIntoJournal(outByDay, spreadsheetId);
+        const mergeResult = mergeSheetTradesIntoJournal(state.appData?.journal || {}, outByDay, spreadsheetId, {
+            syncDayTotals: (dateStr) => syncFondexxFromTradesForDay(dateStr),
+            markTouched: (dateStr) => markJournalDayDirty(dateStr),
+            warnInvalidDate: (dateStr) => console.warn('[Google Sheets] Пропущено невалідну дату (не пишемо в журнал):', dateStr),
+        });
         await deleteJournalDatesFromSupabase(mergeResult.deletedDates);
         await saveJournalData();
         try {

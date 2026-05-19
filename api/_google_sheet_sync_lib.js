@@ -1,12 +1,11 @@
 import crypto from 'node:crypto';
 import {
-    enrichTradeWithSheet,
-    findSheetMatchIndex,
     isValidIsoDateString,
     parseSheetGridToTrades,
     SHEET_DATA_FIRST_ROW,
 } from '../js/sheet_sync_core.js';
 import { isPureGoogleSheetTrade } from '../js/trade_filters.js';
+import { mergeGoogleSheetTradesIntoJournal } from '../js/sheet_journal_merge.js';
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets.readonly';
@@ -249,27 +248,6 @@ function dayToRow(userId, tradeDate, day) {
     };
 }
 
-function sumTradeMoney(trades = []) {
-    return trades.reduce((sum, trade) => {
-        sum.gross += Number(trade?.gross) || 0;
-        sum.net += Number(trade?.net) || 0;
-        sum.comm += Number(trade?.comm) || 0;
-        return sum;
-    }, { gross: 0, net: 0, comm: 0 });
-}
-
-function almostEqualMoney(a, b) {
-    return Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.01;
-}
-
-function fondexxLooksDerivedFromTrades(fondexx, trades) {
-    if (!fondexx || typeof fondexx !== 'object' || !Array.isArray(trades) || trades.length === 0) return false;
-    const totals = sumTradeMoney(trades);
-    return almostEqualMoney(fondexx.gross, totals.gross)
-        && almostEqualMoney(fondexx.net, totals.net)
-        && almostEqualMoney(fondexx.comm, totals.comm);
-}
-
 function tradeTickers(trades) {
     return Array.from(new Set((trades || []).map((t) => String(t?.symbol || '').trim()).filter(Boolean)));
 }
@@ -283,7 +261,7 @@ function syncTotalsFromTrades(day) {
     const tickers = tradeTickers(trades);
     const prevFx = day.fondexx && typeof day.fondexx === 'object' ? day.fondexx : {};
     const ppro = day.ppro && typeof day.ppro === 'object' ? day.ppro : {};
-    const importTrades = trades.filter((t) => !(t?.sheet?.source === 'google' && !t.sheet?.matchedBy));
+    const importTrades = trades.filter((trade) => !isPureGoogleSheetTrade(trade));
 
     if (importTrades.length > 0) {
         const totals = importTrades.reduce((sum, trade) => {
@@ -320,16 +298,6 @@ function syncTotalsFromTrades(day) {
     }
 }
 
-function isDayEmpty(day) {
-    if (!day || typeof day !== 'object') return true;
-    if (Array.isArray(day.trades) && day.trades.length > 0) return false;
-    if (String(day.notes || '').trim() || String(day.mentor_comment || '').trim()) return false;
-    if (Array.isArray(day.errors) && day.errors.length > 0) return false;
-    if (Array.isArray(day.checkedParams) && day.checkedParams.length > 0) return false;
-    if (String(day.sessionGoal || '').trim() || String(day.sessionPlan || '').trim() || day.sessionDone) return false;
-    return true;
-}
-
 export async function runGoogleSheetSync(config) {
     const cfg = config.config && typeof config.config === 'object' ? config.config : config;
     const spreadsheetId = cfg.spreadsheetId || config.spreadsheet_id;
@@ -351,68 +319,11 @@ export async function runGoogleSheetSync(config) {
         if (isValidIsoDateString(row.trade_date)) journal[row.trade_date] = rowToDay(row);
     }
 
-    const touched = new Set();
-    const deleted = [];
-    let matchedSheetRows = 0;
-    let skippedSheetRows = 0;
-    for (const dateStr of Object.keys(journal)) {
-        const day = journal[dateStr];
-        const trades = Array.isArray(day.trades) ? day.trades : [];
-        const removedTrades = trades.filter((trade) => isPureGoogleSheetTrade(trade, spreadsheetId));
-        const nextTrades = trades.filter((trade) => !isPureGoogleSheetTrade(trade, spreadsheetId));
-        if (nextTrades.length === trades.length) continue;
-        const clearSheetDerivedFondexx = nextTrades.length === 0 && fondexxLooksDerivedFromTrades(day.fondexx, removedTrades);
-        day.trades = nextTrades;
-        if (clearSheetDerivedFondexx) {
-            day.fondexx = { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] };
-            day.pnl = null;
-            day.gross_pnl = null;
-            day.commissions = null;
-            day.locates = null;
-        }
-        syncTotalsFromTrades(day);
-        if (isDayEmpty(day)) {
-            delete journal[dateStr];
-            deleted.push(dateStr);
-        } else {
-            touched.add(dateStr);
-        }
-    }
+    const mergeResult = mergeGoogleSheetTradesIntoJournal(journal, parsed.outByDay, spreadsheetId, {
+        syncDayTotals: (_dateStr, day) => syncTotalsFromTrades(day),
+    });
 
-    for (const dateStr of Object.keys(parsed.outByDay)) {
-        if (!isValidIsoDateString(dateStr)) continue;
-        const incoming = parsed.outByDay[dateStr] || [];
-        if (!incoming.length) continue;
-        const day = journal[dateStr];
-        const kept = Array.isArray(day?.trades) ? day.trades.filter((t) => !isPureGoogleSheetTrade(t, spreadsheetId)) : [];
-        if (!kept.length) {
-            skippedSheetRows += incoming.length;
-            continue;
-        }
-        const usedIndices = new Set();
-        const merged = [...kept];
-        let matchedCount = 0;
-
-        for (const trade of incoming) {
-            const matchIndex = findSheetMatchIndex(merged, trade, usedIndices);
-            if (matchIndex >= 0) {
-                merged[matchIndex] = enrichTradeWithSheet(merged[matchIndex], trade);
-                usedIndices.add(matchIndex);
-                matchedCount++;
-                matchedSheetRows++;
-            } else {
-                skippedSheetRows++;
-            }
-        }
-
-        if (!matchedCount) continue;
-        day.trades = merged;
-        syncTotalsFromTrades(day);
-        journal[dateStr] = day;
-        touched.add(dateStr);
-    }
-
-    const rows = [...touched]
+    const rows = mergeResult.touchedDates
         .filter((dateStr) => journal[dateStr])
         .map((dateStr) => dayToRow(config.user_id, dateStr, journal[dateStr]));
 
@@ -424,8 +335,8 @@ export async function runGoogleSheetSync(config) {
         });
     }
 
-    for (let i = 0; i < deleted.length; i += 100) {
-        const chunk = deleted.slice(i, i + 100);
+    for (let i = 0; i < mergeResult.deletedDates.length; i += 100) {
+        const chunk = mergeResult.deletedDates.slice(i, i + 100);
         const encodedDates = chunk.map((dateStr) => encodeURIComponent(`"${dateStr}"`)).join(',');
         await supabaseRest(
             `journal_days?user_id=eq.${encodeURIComponent(config.user_id)}&trade_date=in.(${encodedDates})`,
@@ -448,11 +359,11 @@ export async function runGoogleSheetSync(config) {
         spreadsheetId,
         sheetTitle,
         touchedDates: rows.length,
-        deletedDates: deleted.length,
+        deletedDates: mergeResult.deletedDates.length,
         stats: {
             ...parsed.stats,
-            matchedSheetRows,
-            skippedSheetRows,
+            matchedSheetRows: mergeResult.matchedSheetRows,
+            skippedSheetRows: mergeResult.skippedSheetRows,
         },
     };
 }

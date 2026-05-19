@@ -25,6 +25,7 @@ const { canAccessMentorReviewQueueState, isMentorViewingOtherJournalState } = aw
 const { buildAutoTradeTypesData, normalizeAppData, normalizeDayEntry } = await import('../js/data_utils.js');
 const { ecnFeeColumnIndex, parseSheetDateCellToIso } = await import('../js/parser_utils.js');
 const { sanitizeHTML, safeExternalUrl, sanitizeRichHTML } = await import('../js/sanitize.js');
+const { mergeGoogleSheetTradesIntoJournal } = await import('../js/sheet_journal_merge.js');
 const { enrichTradeWithSheet, findSheetMatchIndex, parseSheetGridToTrades } = await import('../js/sheet_sync_core.js');
 const { summarizeJournalPnl } = await import('../js/stats_math.js');
 const { getEffectiveDayPnl, isPureGoogleSheetTrade, visibleTradeRows } = await import('../js/trade_filters.js');
@@ -213,4 +214,46 @@ test('google sheet rows enrich existing Trades instead of becoming sheet-only tr
     assert.equal(merged.sheet.profitRisk, '1,2R');
     assert.equal(merged.sheet.matchedBy, 'date+ticker+pnl');
     assert.equal(isPureGoogleSheetTrade(merged), false);
+});
+
+test('shared Google Sheet merge only updates existing Trades', () => {
+    const journal = {
+        '2026-04-01': {
+            trades: [
+                { symbol: 'AAPL', opened: '2026-04-01 09:31:00', net: 10, gross: 10, comm: 0 },
+            ],
+            fondexx: { gross: 10, net: 10, comm: 0, locates: 0, tickers: ['AAPL'] },
+            ppro: { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
+        },
+        '2026-04-02': {
+            trades: [],
+            fondexx: { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
+            ppro: { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
+        },
+    };
+    const outByDay = {
+        '2026-04-01': [
+            { symbol: 'AAPL', opened: '2026-04-01 09:30:00', net: 12, sheet: { source: 'google', spreadsheetId: 'sheet-1', pv: 'ok' } },
+        ],
+        '2026-04-02': [
+            { symbol: 'TSLA', opened: '2026-04-02 09:30:00', net: 5, sheet: { source: 'google', spreadsheetId: 'sheet-1' } },
+        ],
+    };
+
+    const synced = [];
+    const marked = [];
+    const result = mergeGoogleSheetTradesIntoJournal(journal, outByDay, 'sheet-1', {
+        syncDayTotals: (dateStr) => synced.push(dateStr),
+        markTouched: (dateStr) => marked.push(dateStr),
+    });
+
+    assert.equal(result.matchedSheetRows, 1);
+    assert.equal(result.skippedSheetRows, 1);
+    assert.deepEqual(result.touchedDates, ['2026-04-01']);
+    assert.deepEqual(synced, ['2026-04-01']);
+    assert.deepEqual(marked, ['2026-04-01']);
+    assert.equal(journal['2026-04-01'].trades.length, 1);
+    assert.equal(journal['2026-04-01'].trades[0].net, 10);
+    assert.equal(journal['2026-04-01'].trades[0].sheet.pv, 'ok');
+    assert.equal(journal['2026-04-02'].trades.length, 0);
 });
