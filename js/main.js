@@ -240,6 +240,8 @@ window.saveSessionData = function() {
 };
 
 // === SESSION MODAL ===
+let sessionModalSnoozeUntil = 0;
+
 function getTodayEST() {
     const now = new Date();
     const estStr = now.toLocaleString('en-CA', { timeZone: 'America/New_York' });
@@ -317,10 +319,12 @@ window.saveSessionModal = async function() {
         if (planEl) planEl.value = state.appData.journal[today].sessionPlan;
         if (readEl) readEl.value = state.appData.journal[today].sessionReadiness;
     }
+    sessionModalSnoozeUntil = 0;
     document.getElementById('session-modal').style.display = 'none';
 };
 
 window.snoozeSessionModal = function() {
+    sessionModalSnoozeUntil = Date.now() + 5 * 60 * 1000;
     document.getElementById('session-modal').style.display = 'none';
     setTimeout(() => checkAndShowSessionModal(), 5 * 60 * 1000);
 };
@@ -361,6 +365,7 @@ window.checkSessionModalReadiness = async function() {
 function checkAndShowSessionModal() {
     if (!state.USER_DOC_NAME) return;
     if (!isSessionTime()) return;
+    if (Date.now() < sessionModalSnoozeUntil) return;
     const today = getTodayEST();
     if (state.appData.journal?.[today]?.sessionDone) return;
     fillSessionModalFromSaved();

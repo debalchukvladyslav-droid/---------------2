@@ -48,6 +48,10 @@ function formatStoredDecimal(value) {
     return parsed === null ? '' : parsed.toFixed(2);
 }
 
+function parseStoredDecimalOrZero(value) {
+    return parseDecimalInput(value) ?? 0;
+}
+
 export function getDaylossForMonth(year, monthIndex) {
     let key = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
     const monthly = state.appData?.settings?.monthlyDayloss ?? {};
@@ -608,8 +612,8 @@ function sumWeekTradingStats(mondayIso) {
         const pnl = getEffectiveDayPnl(j);
         if (pnl !== null) {
             sumPnl += pnl;
-            sumComm += parseFloat(j.commissions) || 0;
-            sumLoc += parseFloat(j.locates) || 0;
+            sumComm += parseStoredDecimalOrZero(j.commissions);
+            sumLoc += parseStoredDecimalOrZero(j.locates);
             nPnl++;
         }
     }
@@ -843,8 +847,8 @@ export async function renderView() {
                 
                 cell.classList.add(roundedPnl >= 0 ? 'green' : 'red'); 
                 totalPnl += roundedPnl; 
-                totalComm += parseFloat(data.commissions) || 0;
-                totalLocates += parseFloat(data.locates) || 0; 
+                totalComm += parseStoredDecimalOrZero(data.commissions);
+                totalLocates += parseStoredDecimalOrZero(data.locates); 
                 
                 if (state.autoFlagsCache.absoluteRecord === dateKey) { cell.classList.add('record-day'); } 
                 else if (state.autoFlagsCache.records.has(dateKey)) { cell.classList.add('record-day-old'); }

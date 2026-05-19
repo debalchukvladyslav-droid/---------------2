@@ -816,9 +816,9 @@ function mergeJournals(journals) {
             if (entryPnl == null) continue;
             if (!merged[d]) merged[d] = { pnl: 0, commissions: 0, locates: 0, tradeTypesData: {}, __statsBreakevenBand: 0 };
             const costs = getEntryCosts(entry);
-            merged[d].pnl = (parseFloat(merged[d].pnl) || 0) + entryPnl;
-            merged[d].commissions = (parseFloat(merged[d].commissions) || 0) + costs.commissions;
-            merged[d].locates = (parseFloat(merged[d].locates) || 0) + costs.locates;
+            merged[d].pnl = (parseStatsNumber(merged[d].pnl) || 0) + entryPnl;
+            merged[d].commissions = (parseStatsNumber(merged[d].commissions) || 0) + costs.commissions;
+            merged[d].locates = (parseStatsNumber(merged[d].locates) || 0) + costs.locates;
             const entryBand = Number.isFinite(Number(entry.__statsBreakevenBand))
                 ? Number(entry.__statsBreakevenBand)
                 : getStatsBreakevenBand(j.settings || {}, d);
