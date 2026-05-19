@@ -7,6 +7,7 @@ import { ensureSupabaseStorageUser, uploadToSupabaseStorage } from './supabase_s
 import { buildScreenshotPath, buildScreenshotPathVariants } from './storage_paths.js';
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 import { ensureGoogleApi, ensureGoogleIdentity } from './vendor_loader.js';
+import { supabase } from './supabase.js';
 
 const appConfig = window.TRADING_JOURNAL_CONFIG || {};
 const CLIENT_ID = String(appConfig.googleDriveClientId || appConfig.googleSheetsClientId || '').trim();
@@ -21,6 +22,7 @@ let _gapiInited = false;
 let _gsiIniting = null;
 let _syncInProgress = false;
 let _driveFilesCache = null;
+let _serviceDriveAvailable = true;
 
 function driveScreenMetaFromFile(file, prev = {}) {
     const createdAt = file.createdTime || file.modifiedTime || prev.createdAt || new Date().toISOString();
@@ -207,6 +209,52 @@ async function getTokenSilently() {
     return await tryRestoreDriveToken() ? _accessToken : null;
 }
 
+async function getSupabaseAccessToken() {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    return data?.session?.access_token || '';
+}
+
+async function fetchServiceDriveJson(params) {
+    const accessToken = await getSupabaseAccessToken();
+    if (!accessToken) throw new Error('Supabase session expired');
+    const url = new URL('/api/drive-service', window.location.origin);
+    Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
+    const response = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.ok === false) {
+        const error = new Error(data.error || `Drive service ${response.status}`);
+        error.status = response.status;
+        throw error;
+    }
+    return data;
+}
+
+async function fetchServiceDriveBlob(fileId) {
+    const accessToken = await getSupabaseAccessToken();
+    if (!accessToken) throw new Error('Supabase session expired');
+    const url = new URL('/api/drive-service', window.location.origin);
+    url.searchParams.set('action', 'media');
+    url.searchParams.set('fileId', fileId);
+    const response = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        const error = new Error(data.error || `Drive service ${response.status}`);
+        error.status = response.status;
+        throw error;
+    }
+    return await response.blob();
+}
+
+async function listDriveFilesViaService(folderId) {
+    const data = await fetchServiceDriveJson({ action: 'list', folderId });
+    return data.files || [];
+}
+
 export async function syncDriveScreenshots(silent = false) {
     if (_syncInProgress) return;
     if (state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) return;
@@ -219,43 +267,64 @@ export async function syncDriveScreenshots(silent = false) {
     if (statusEl) statusEl.textContent = '⏳ Синхронізація...';
 
     try {
-        const token = await getTokenSilently();
-        if (!token) {
-            if (statusEl) statusEl.textContent = '⚠️ Потрібна авторизація';
-            hideGlobalLoader('drive-sync');
-            return;
-        }
-        _accessToken = token;
+        let token = null;
         const storageUser = await ensureSupabaseStorageUser();
         state.myUserId = storageUser.id;
 
         let files;
+        let driveFilesViaService = false;
         if (_driveFilesCache && Date.now() - _driveFilesCache.ts < DRIVE_FILES_CACHE_TTL) {
             files = _driveFilesCache.files;
+            driveFilesViaService = !!_driveFilesCache.viaService;
         } else {
-            const listUrl = new URL('https://www.googleapis.com/drive/v3/files');
-            listUrl.searchParams.set('q', `'${folderId}' in parents and mimeType contains 'image/'`);
-            listUrl.searchParams.set('fields', 'files(id,name,mimeType,createdTime,modifiedTime,size)');
-            listUrl.searchParams.set('orderBy', 'modifiedTime desc');
-            listUrl.searchParams.set('pageSize', '100');
-            const resp = await fetch(listUrl.toString(), { headers: { Authorization: `Bearer ${token}` } });
-            const data = await resp.json();
-            if (resp.status === 401 || resp.status === 403) {
-                _accessToken = null;
-                clearDriveAccessTokenStorage();
-                if (statusEl) statusEl.textContent = 'Google Drive: потрібна авторизація';
-                if (!silent) showToast('Google Drive сесія закінчилась. Підключіть Drive знову кнопкою.');
-                hideGlobalLoader('drive-sync');
-                return;
+            let loadedViaService = false;
+            if (_serviceDriveAvailable) {
+                try {
+                    files = await listDriveFilesViaService(folderId);
+                    loadedViaService = true;
+                    driveFilesViaService = true;
+                } catch (error) {
+                    _serviceDriveAvailable = false;
+                    console.warn('[Drive] service account list failed, falling back to browser OAuth', error);
+                    if (error.status === 403 || error.status === 404) {
+                        const message = 'Google Drive: поширте папку на service account email';
+                        if (statusEl) statusEl.textContent = message;
+                        if (!silent) showToast(message);
+                    }
+                }
             }
-            if (!data.files) {
-                if (statusEl) statusEl.textContent = '⚠️ Помилка отримання файлів';
-                showGlobalLoader('drive-sync', 'Помилка отримання файлів', { type: 'error' });
-                hideGlobalLoader('drive-sync', 2600);
-                return;
+            if (!loadedViaService) {
+                token = await getTokenSilently();
+                if (!token) {
+                    if (statusEl) statusEl.textContent = 'Google Drive: потрібна авторизація або доступ service account до папки';
+                    hideGlobalLoader('drive-sync');
+                    return;
+                }
+                _accessToken = token;
+                const listUrl = new URL('https://www.googleapis.com/drive/v3/files');
+                listUrl.searchParams.set('q', `'${folderId}' in parents and mimeType contains 'image/'`);
+                listUrl.searchParams.set('fields', 'files(id,name,mimeType,createdTime,modifiedTime,size)');
+                listUrl.searchParams.set('orderBy', 'modifiedTime desc');
+                listUrl.searchParams.set('pageSize', '100');
+                const resp = await fetch(listUrl.toString(), { headers: { Authorization: `Bearer ${token}` } });
+                const data = await resp.json();
+                if (resp.status === 401 || resp.status === 403) {
+                    _accessToken = null;
+                    clearDriveAccessTokenStorage();
+                    if (statusEl) statusEl.textContent = 'Google Drive: потрібна авторизація';
+                    if (!silent) showToast('Google Drive сесія закінчилась. Підключіть Drive знову кнопкою.');
+                    hideGlobalLoader('drive-sync');
+                    return;
+                }
+                if (!data.files) {
+                    if (statusEl) statusEl.textContent = '⚠️ Помилка отримання файлів';
+                    showGlobalLoader('drive-sync', 'Помилка отримання файлів', { type: 'error' });
+                    hideGlobalLoader('drive-sync', 2600);
+                    return;
+                }
+                files = data.files;
             }
-            files = data.files;
-            _driveFilesCache = { files, ts: Date.now() };
+            _driveFilesCache = { files, ts: Date.now(), viaService: driveFilesViaService };
         }
 
         const existingPaths = new Set(state.appData.unassignedImages || []);
@@ -296,13 +365,18 @@ export async function syncDriveScreenshots(silent = false) {
                 return;
             }
             try {
-                const fileUrl = new URL(`https://www.googleapis.com/drive/v3/files/${file.id}`);
-                fileUrl.searchParams.set('alt', 'media');
-                const fileResp = await fetch(fileUrl.toString(), { headers: { Authorization: `Bearer ${token}` } });
-                if (!fileResp.ok) {
-                    throw new Error(`Drive download failed (${fileResp.status})`);
+                let blob;
+                if (driveFilesViaService) {
+                    blob = await fetchServiceDriveBlob(file.id);
+                } else {
+                    const fileUrl = new URL(`https://www.googleapis.com/drive/v3/files/${file.id}`);
+                    fileUrl.searchParams.set('alt', 'media');
+                    const fileResp = await fetch(fileUrl.toString(), { headers: { Authorization: `Bearer ${token}` } });
+                    if (!fileResp.ok) {
+                        throw new Error(`Drive download failed (${fileResp.status})`);
+                    }
+                    blob = await fileResp.blob();
                 }
-                const blob = await fileResp.blob();
                 if (blob.size > MAX_FILE_SIZE_BYTES) {
                     console.warn(`Drive: пропускаємо ${file.name} — blob перевищує ліміт`);
                     return;

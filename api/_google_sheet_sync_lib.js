@@ -9,6 +9,7 @@ import { mergeGoogleSheetTradesIntoJournal } from '../js/sheet_journal_merge.js'
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets.readonly';
+export const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
 
 function env(...names) {
     for (const name of names) {
@@ -92,7 +93,7 @@ function readServiceAccount() {
     };
 }
 
-async function getGoogleAccessToken() {
+export async function getGoogleAccessToken(scope = GOOGLE_SHEETS_SCOPE) {
     const { clientEmail, privateKey } = readServiceAccount();
     if (!clientEmail || !privateKey) {
         throw new Error('Google service account env is not configured');
@@ -102,7 +103,7 @@ async function getGoogleAccessToken() {
     const header = base64Url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
     const payload = base64Url(JSON.stringify({
         iss: clientEmail,
-        scope: GOOGLE_SHEETS_SCOPE,
+        scope,
         aud: GOOGLE_TOKEN_URL,
         exp: now + 3600,
         iat: now,
