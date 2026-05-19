@@ -184,6 +184,7 @@ function activateAction(action, trigger, event = null) {
             ? window.loadSpreadsheetFromServiceInput(trigger)
             : import('./google_sheet_connector.js').then((m) => m.loadSpreadsheetFromServiceInput?.(trigger)),
         'sheet-toggle-mapping': () => window.toggleMappingMode?.(trigger),
+        'sheet-add-mapping-column': () => window.armSheetMultiColumnAdd?.(trigger?.dataset?.sheetMapField || 'exceptions'),
         'sheet-grid-zoom': () => window.changeSheetGridZoom?.(Number(trigger?.dataset?.zoomDelta || 0)),
         'tag-search-toggle': () => window.toggleTagSearch?.(),
         'screens-distribution-toggle': () => window.toggleScreensDistribution?.(),

@@ -139,6 +139,7 @@ let _sheetGridZoom = 1;
 let _sheetSessionRestoreStarted = false;
 let _sheetSelectionRefreshQueued = false;
 let _sheetGooglePanelBindingReady = false;
+let _sheetAddNextColumnForField = '';
 
 function el(id) {
     return document.getElementById(id);
@@ -338,6 +339,9 @@ function updateGridPickerMeta() {
     if (activeEl) activeEl.textContent = smartFieldLabel(_sheetPreviewActiveField);
     if (startRowEl) startRowEl.textContent = String(deriveSheetStartRow());
     if (zoomEl) zoomEl.textContent = `${Math.round(_sheetGridZoom * 100)}%`;
+    document.querySelectorAll('[data-action="sheet-add-mapping-column"][data-sheet-map-field]').forEach((button) => {
+        button.classList.toggle('is-armed', button.dataset.sheetMapField === _sheetAddNextColumnForField);
+    });
     updateSmartRangeHints();
     renderMappingStatus();
 }
@@ -448,15 +452,26 @@ function toggleMultiMappingColumn(field, colLetter) {
     return value;
 }
 
+export function armSheetMultiColumnAdd(field = 'exceptions') {
+    if (!MULTI_MAPPING_KEYS.has(field)) return;
+    _sheetAddNextColumnForField = field;
+    setActiveGridField(field);
+    updateGridPickerMeta();
+    showToast(`Клікніть по колонці, щоб додати її до «${smartFieldLabel(field)}».`);
+}
+
 function setMappingFromGridCell(field, colLetter, rowNumber, event = null) {
     if (!field || !colLetter || !rowNumber) return;
-    const additive = !!(event?.ctrlKey || event?.metaKey || event?.shiftKey);
+    const additive = !!(event?.ctrlKey || event?.metaKey || event?.shiftKey || _sheetAddNextColumnForField === field);
     if (MULTI_MAPPING_KEYS.has(field) && additive) {
         toggleMultiMappingColumn(field, colLetter);
+        if (_sheetAddNextColumnForField === field) _sheetAddNextColumnForField = '';
     } else {
         setSmartRowValue(field, colLetter, false);
         setSmartAnchor(field, `${colLetter}${rowNumber}`);
+        if (_sheetAddNextColumnForField === field) _sheetAddNextColumnForField = '';
     }
+    updateGridPickerMeta();
     persistSheetMappingDraft();
     if (!MULTI_MAPPING_KEYS.has(field)) focusNextUnmappedField(field);
 }
@@ -1377,6 +1392,7 @@ window.toggleMappingMode = toggleMappingMode;
 window.saveSheetMapping = saveSheetMapping;
 window.handleSheetTabChange = handleSheetTabChange;
 window.changeSheetGridZoom = changeSheetGridZoom;
+window.armSheetMultiColumnAdd = armSheetMultiColumnAdd;
 window.renderMappingDropdowns = renderMappingDropdowns;
 window.populateSheetMappingFromHeaders = populateSheetMappingFromHeaders;
 window.stopSheetAutoSync = stopSheetAutoSync;

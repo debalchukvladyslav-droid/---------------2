@@ -664,6 +664,36 @@ body[data-theme="light"] .btn-google-signin {
     color: var(--text-main);
 }
 
+.sheet-smart-row__label-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sheet-mapping-add-btn {
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    color: var(--accent);
+    font-size: 1rem;
+    font-weight: 800;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.sheet-mapping-add-btn:hover,
+.sheet-mapping-add-btn.is-armed {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
 .sheet-smart-row__hint {
     font-size: 0.76rem;
     line-height: 1.45;
