@@ -4,7 +4,7 @@ import { saveJournalData, saveToLocal, markJournalDayDirty } from './storage.js'
 import { applyAutoTradeTypesData, getDefaultDayEntry } from './data_utils.js';
 import { ensureXlsx } from './vendor_loader.js';
 import { ecnFeeColumnIndex } from './parser_utils.js';
-import { isPureGoogleSheetTrade } from './trade_filters.js';
+import { isGoogleSheetTrade, isPureGoogleSheetTrade } from './trade_filters.js';
 
 function showToast(text) {
     const t = document.createElement('div');
