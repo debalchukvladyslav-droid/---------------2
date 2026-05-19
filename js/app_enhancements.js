@@ -173,10 +173,16 @@ function activateAction(action, trigger, event = null) {
         'review-request': () => window.submitReviewRequest?.(trigger?.dataset?.reviewType || ''),
         'ai-tab': () => window.switchAITab?.(trigger?.dataset?.aiTab || 'chat'),
         'data-chat-send': () => window.sendDataChatMessage?.(),
-        'google-auth': () => window.loadSpreadsheetFromServiceInput?.(),
+        'google-auth': () => window.loadSpreadsheetFromServiceInput
+            ? window.loadSpreadsheetFromServiceInput()
+            : import('./google_sheet_connector.js').then((m) => m.loadSpreadsheetFromServiceInput?.()),
         'google-logout': () => window.googleSheetsLogout?.(),
-        'google-picker': () => window.loadSpreadsheetFromServiceInput?.(),
-        'sheet-service-load': () => window.loadSpreadsheetFromServiceInput?.(trigger),
+        'google-picker': () => window.loadSpreadsheetFromServiceInput
+            ? window.loadSpreadsheetFromServiceInput()
+            : import('./google_sheet_connector.js').then((m) => m.loadSpreadsheetFromServiceInput?.()),
+        'sheet-service-load': () => window.loadSpreadsheetFromServiceInput
+            ? window.loadSpreadsheetFromServiceInput(trigger)
+            : import('./google_sheet_connector.js').then((m) => m.loadSpreadsheetFromServiceInput?.(trigger)),
         'sheet-toggle-mapping': () => window.toggleMappingMode?.(trigger),
         'sheet-grid-zoom': () => window.changeSheetGridZoom?.(Number(trigger?.dataset?.zoomDelta || 0)),
         'tag-search-toggle': () => window.toggleTagSearch?.(),

@@ -408,6 +408,30 @@ function setChipManualMapping(field) {
     persistSheetMappingDraft();
 }
 
+function focusManualMappingInput(field, seedValue = '') {
+    if (!field) return;
+    const row = document.querySelector(`[data-smart-field="${field}"]`);
+    const group = row?.querySelector('.sheet-input-group');
+    const input = group?.querySelector('.sheet-input-group__manual');
+    const toggle = group?.querySelector('.sheet-input-group__toggle');
+    if (!group || !input) return;
+
+    const current = readSmartRowValue(field);
+    group.setAttribute('data-mode', 'manual');
+    input.value = current || seedValue || '';
+    if (toggle) {
+        toggle.setAttribute('aria-pressed', 'true');
+        toggle.title = 'Заголовки з таблиці';
+    }
+    delete _sheetSmartAnchors[field];
+    updateGridPickerMeta();
+    refreshSheetGridSelectionClasses();
+    requestAnimationFrame(() => {
+        input.focus();
+        input.select();
+    });
+}
+
 function toggleMultiMappingColumn(field, colLetter) {
     const parts = String(readSmartRowValue(field) || '')
         .split(',')
@@ -422,6 +446,19 @@ function toggleMultiMappingColumn(field, colLetter) {
     setSmartRowValue(field, value, true);
     delete _sheetSmartAnchors[field];
     return value;
+}
+
+function setMappingFromGridCell(field, colLetter, rowNumber, event = null) {
+    if (!field || !colLetter || !rowNumber) return;
+    const additive = !!(event?.ctrlKey || event?.metaKey || event?.shiftKey);
+    if (MULTI_MAPPING_KEYS.has(field) && additive) {
+        toggleMultiMappingColumn(field, colLetter);
+    } else {
+        setSmartRowValue(field, colLetter, false);
+        setSmartAnchor(field, `${colLetter}${rowNumber}`);
+    }
+    persistSheetMappingDraft();
+    if (!MULTI_MAPPING_KEYS.has(field)) focusNextUnmappedField(field);
 }
 
 function persistSheetMappingDraft() {
@@ -1035,21 +1072,29 @@ function bindSheetGridPicker() {
         const rowNumber = Number(cell.dataset.rowNumber || 0);
         if (!colLetter || !rowNumber) return;
 
-        if (MULTI_MAPPING_KEYS.has(field)) {
-            toggleMultiMappingColumn(field, colLetter);
-        } else {
-            setSmartRowValue(field, colLetter, false);
-            setSmartAnchor(field, `${colLetter}${rowNumber}`);
-        }
-        persistSheetMappingDraft();
-        focusNextUnmappedField(field);
+        setMappingFromGridCell(field, colLetter, rowNumber, event);
     });
 
     document.addEventListener('dblclick', (event) => {
         const chip = event.target?.closest?.('[data-sheet-map-field]');
-        if (!chip) return;
+        if (chip) {
+            event.preventDefault();
+            focusManualMappingInput(chip.dataset.sheetMapField || '');
+            return;
+        }
+
+        const row = event.target?.closest?.('.sheet-smart-row[data-smart-field]');
+        if (row) {
+            event.preventDefault();
+            focusManualMappingInput(row.dataset.smartField || '');
+            return;
+        }
+
+        const cell = event.target?.closest?.('.sheet-grid__cell');
+        if (!cell) return;
         event.preventDefault();
-        setChipManualMapping(chip.dataset.sheetMapField || '');
+        const field = _sheetPreviewActiveField || 'date';
+        focusManualMappingInput(field, cell.dataset.colLetter || '');
     });
 
     document.addEventListener('focusin', (event) => {
