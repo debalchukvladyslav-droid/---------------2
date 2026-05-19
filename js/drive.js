@@ -204,13 +204,7 @@ function openFolderPicker(token) {
 
 async function getTokenSilently() {
     if (_accessToken) return _accessToken;
-    if (!hasPreviousDriveGrant()) return null;
-    try {
-        return await requestDriveToken({ prompt: '' });
-    } catch (error) {
-        console.warn('[Drive] silent token refresh failed:', error?.message || error);
-        return null;
-    }
+    return await tryRestoreDriveToken() ? _accessToken : null;
 }
 
 export async function syncDriveScreenshots(silent = false) {
@@ -225,9 +219,6 @@ export async function syncDriveScreenshots(silent = false) {
     if (statusEl) statusEl.textContent = '⏳ Синхронізація...';
 
     try {
-        await Promise.all([initGapi(), initGsi()]);
-        await tryRestoreDriveToken();
-
         const token = await getTokenSilently();
         if (!token) {
             if (statusEl) statusEl.textContent = '⚠️ Потрібна авторизація';
@@ -247,6 +238,14 @@ export async function syncDriveScreenshots(silent = false) {
             listUrl.searchParams.set('pageSize', '100');
             const resp = await fetch(listUrl.toString(), { headers: { Authorization: `Bearer ${token}` } });
             const data = await resp.json();
+            if (resp.status === 401 || resp.status === 403) {
+                _accessToken = null;
+                clearDriveAccessTokenStorage();
+                if (statusEl) statusEl.textContent = 'Google Drive: потрібна авторизація';
+                if (!silent) showToast('Google Drive сесія закінчилась. Підключіть Drive знову кнопкою.');
+                hideGlobalLoader('drive-sync');
+                return;
+            }
             if (!data.files) {
                 if (statusEl) statusEl.textContent = '⚠️ Помилка отримання файлів';
                 showGlobalLoader('drive-sync', 'Помилка отримання файлів', { type: 'error' });
