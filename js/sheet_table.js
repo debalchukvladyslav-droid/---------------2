@@ -1053,6 +1053,32 @@ function bindSheetGridPicker() {
     _sheetGridBindingsReady = true;
 
     document.addEventListener('click', (event) => {
+        if (event.detail >= 2) {
+            const chip = event.target?.closest?.('[data-sheet-map-field]');
+            if (chip) {
+                event.preventDefault();
+                event.stopPropagation();
+                focusManualMappingInput(chip.dataset.sheetMapField || '');
+                return;
+            }
+
+            const row = event.target?.closest?.('.sheet-smart-row[data-smart-field]');
+            if (row && !event.target?.closest?.('.sheet-input-group__manual')) {
+                event.preventDefault();
+                event.stopPropagation();
+                focusManualMappingInput(row.dataset.smartField || '');
+                return;
+            }
+
+            const cell = event.target?.closest?.('.sheet-grid__cell');
+            if (cell) {
+                event.preventDefault();
+                event.stopPropagation();
+                focusManualMappingInput(_sheetPreviewActiveField || 'date', cell.dataset.colLetter || '');
+                return;
+            }
+        }
+
         const chip = event.target?.closest?.('[data-sheet-map-field]');
         if (chip) {
             setActiveGridField(chip.dataset.sheetMapField || 'date');
@@ -1076,9 +1102,11 @@ function bindSheetGridPicker() {
     });
 
     document.addEventListener('dblclick', (event) => {
+        if (event.target?.closest?.('.sheet-input-group__manual')) return;
         const chip = event.target?.closest?.('[data-sheet-map-field]');
         if (chip) {
             event.preventDefault();
+            event.stopPropagation();
             focusManualMappingInput(chip.dataset.sheetMapField || '');
             return;
         }
@@ -1086,6 +1114,7 @@ function bindSheetGridPicker() {
         const row = event.target?.closest?.('.sheet-smart-row[data-smart-field]');
         if (row) {
             event.preventDefault();
+            event.stopPropagation();
             focusManualMappingInput(row.dataset.smartField || '');
             return;
         }
@@ -1093,9 +1122,10 @@ function bindSheetGridPicker() {
         const cell = event.target?.closest?.('.sheet-grid__cell');
         if (!cell) return;
         event.preventDefault();
+        event.stopPropagation();
         const field = _sheetPreviewActiveField || 'date';
         focusManualMappingInput(field, cell.dataset.colLetter || '');
-    });
+    }, true);
 
     document.addEventListener('focusin', (event) => {
         const row = event.target?.closest?.('.sheet-smart-row[data-smart-field]');
