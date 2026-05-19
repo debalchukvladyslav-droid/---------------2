@@ -3,7 +3,7 @@ import { state } from './state.js';
 import { saveSettings } from './storage.js';
 import { loadImages } from './gallery.js';
 import { showToast } from './utils.js';
-import { uploadToSupabaseStorage } from './supabase_storage.js';
+import { ensureSupabaseStorageUser, uploadToSupabaseStorage } from './supabase_storage.js';
 import { buildScreenshotPath, buildScreenshotPathVariants } from './storage_paths.js';
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 import { ensureGoogleApi, ensureGoogleIdentity } from './vendor_loader.js';
@@ -226,6 +226,8 @@ export async function syncDriveScreenshots(silent = false) {
             return;
         }
         _accessToken = token;
+        const storageUser = await ensureSupabaseStorageUser();
+        state.myUserId = storageUser.id;
 
         let files;
         if (_driveFilesCache && Date.now() - _driveFilesCache.ts < DRIVE_FILES_CACHE_TTL) {

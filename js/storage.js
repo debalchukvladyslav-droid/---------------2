@@ -4,7 +4,7 @@ import { state } from './state.js';
 import { normalizeAppData, normalizeDayEntry, getDefaultAppData, normalizeTradeTypesList } from './data_utils.js';
 import { loadPlaybook } from './playbook.js';
 import { clearStatsCache } from './stats.js';
-import { uploadToSupabaseStorage, deleteFromSupabaseStorage, getSupabaseStorageUrl } from './supabase_storage.js';
+import { ensureSupabaseStorageUser, uploadToSupabaseStorage, deleteFromSupabaseStorage, getSupabaseStorageUrl } from './supabase_storage.js';
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 
 function monthKey(dateStr) {
@@ -732,8 +732,10 @@ export async function initializeApp() {
 }
 
 export async function uploadBackground(file, userId) {
+    const storageUser = await ensureSupabaseStorageUser();
+    state.myUserId = storageUser.id;
     const safeName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
-    const storagePath = `backgrounds/${userId}/${safeName}`;
+    const storagePath = `backgrounds/${storageUser.id}/${safeName}`;
     await uploadToSupabaseStorage(storagePath, file, { bucket: 'backgrounds' });
 
     if (!Array.isArray(state.appData.backgrounds)) state.appData.backgrounds = [];

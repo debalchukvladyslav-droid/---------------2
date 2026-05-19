@@ -3,7 +3,7 @@ import { state, SCREEN_CATS } from './state.js';
 import { saveJournalData, markJournalDayDirty, saveSettings } from './storage.js';
 import { showToast } from './utils.js';
 import { getDefaultDayEntry } from './data_utils.js';
-import { deleteFromSupabaseStorage, getSupabaseStorageUrl, uploadToSupabaseStorage } from './supabase_storage.js';
+import { deleteFromSupabaseStorage, ensureSupabaseStorageUser, getSupabaseStorageUrl, uploadToSupabaseStorage } from './supabase_storage.js';
 import { buildScreenshotPath } from './storage_paths.js';
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 
@@ -1009,6 +1009,8 @@ window.addEventListener('paste', async function(e) {
 
     try {
         showGlobalLoader('upload-screen', 'Завантаження картинки в хмару...');
+        const storageUser = await ensureSupabaseStorageUser();
+        state.myUserId = storageUser.id;
         const ext = file.type.includes('png') ? 'png' : 'jpg';
         const filename = buildScreenshotPath(`${Date.now()}.${ext}`);
         await uploadToSupabaseStorage(filename, file, { bucket: 'screenshots' });

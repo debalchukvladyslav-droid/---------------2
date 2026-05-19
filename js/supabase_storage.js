@@ -90,6 +90,15 @@ async function createFirstSignedUrl(candidates, ttl = DEFAULT_SIGNED_URL_TTL) {
     return null;
 }
 
+export async function ensureSupabaseStorageUser() {
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error) throw error;
+    if (!user?.id) {
+        throw new Error('Supabase session expired. Sign in again before uploading files.');
+    }
+    return user;
+}
+
 export async function getSupabaseStorageUrl(pathOrUrl, ttl = DEFAULT_SIGNED_URL_TTL) {
     const value = normalizePath(pathOrUrl);
     if (!value) return '';
@@ -106,9 +115,18 @@ export async function uploadToSupabaseStorage(storagePath, file, options = {}) {
     const candidates = applyCandidateOptions(getPathCandidates(storagePath), options);
     if (!candidates.length) throw new Error('Invalid Supabase storage path');
 
+    const storageUser = options.skipAuthCheck ? null : await ensureSupabaseStorageUser();
     let lastError = null;
     let lastCandidate = null;
     for (const candidate of candidates) {
+        if (storageUser && (candidate.bucket === 'screenshots' || candidate.bucket === 'backgrounds')) {
+            const ownerKey = candidate.objectPath.split('/')[0] || '';
+            if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ownerKey)
+                && ownerKey !== storageUser.id) {
+                throw new Error(`Storage owner mismatch: path owner ${ownerKey}, auth user ${storageUser.id}`);
+            }
+        }
+
         const { error } = await supabase.storage
             .from(candidate.bucket)
             .upload(candidate.objectPath, file, {
