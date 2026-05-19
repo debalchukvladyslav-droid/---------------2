@@ -117,6 +117,53 @@ body[data-theme="light"] .btn-google-signin {
     background: #1a73e8;
 }
 
+.sheet-service-email {
+    width: 100%;
+    max-width: 520px;
+    padding: 9px 11px;
+    border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+    border-radius: 8px;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    overflow-wrap: anywhere;
+}
+
+.sheet-service-input {
+    width: 100%;
+    max-width: 520px;
+    padding: 11px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-main);
+    color: var(--text-main);
+    font-size: 0.9rem;
+}
+
+.sheet-service-input-inline {
+    max-width: none;
+    flex: 1 1 280px;
+}
+
+.sheet-service-status {
+    min-height: 18px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.sheet-service-status[data-state="success"] {
+    color: var(--profit);
+}
+
+.sheet-service-status[data-state="error"] {
+    color: var(--loss);
+}
+
+.sheet-service-status[data-state="loading"] {
+    color: var(--gold);
+}
+
 /* --- Робоча зона (стан 2) --- */
 .sheet-card[hidden],
 .sheet-workspace[hidden],

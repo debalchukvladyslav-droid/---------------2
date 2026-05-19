@@ -2,7 +2,7 @@
             <div class="sheet-zapier-page">
                 <p class="sheet-zapier-kicker">Конектор</p>
                 <h2 class="sheet-zapier-title">Google Sheets</h2>
-                <p class="sheet-zapier-lead">Підключення в стилі Zapier / Make: спочатку акаунт, потім файл на Диску, далі мапінг колонок.</p>
+                <p class="sheet-zapier-lead">Підключення в стилі Zapier / Make: додайте service account у доступ до таблиці, вставте посилання, далі мапінг колонок.</p>
 
                 <section class="sheet-card broker-import-card" aria-labelledby="broker-import-title">
                     <h3 id="broker-import-title" class="sheet-card-title">Імпорт брокерських звітів</h3>
@@ -22,7 +22,7 @@
                     <span id="sheet-google-panel-state" class="sheet-google-toggle__state">Показати</span>
                 </button>
 
-                <!-- Стан 1: неавторизований -->
+                <!-- Стан 1: підключення через service account -->
                 <section id="sheet-state-connect" class="sheet-card sheet-card--hero" aria-labelledby="sheet-connect-title">
                     <div class="sheet-drive-icon" aria-hidden="true">
                         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -30,20 +30,24 @@
                             <path d="M8 21l4-7.5M16 21l-4-7.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
                         </svg>
                     </div>
-                    <h3 id="sheet-connect-title" class="sheet-card-title">Підключіть свій Google Диск</h3>
-                    <p class="sheet-card-desc">OAuth через Google Identity Services і вибір файлу через Google Picker. Потрібні дозволи на читання таблиць і перегляд Диску (лише для вибору файлу).</p>
-                    <button type="button" class="btn-google-signin" data-action="google-auth">Увійти через Google</button>
+                    <h3 id="sheet-connect-title" class="sheet-card-title">Підключіть Google таблицю без входу</h3>
+                    <p class="sheet-card-desc">Додайте service account email у доступ до таблиці як Viewer, вставте посилання або ID таблиці та завантажте прев’ю.</p>
+                    <div class="sheet-service-email" id="sheet-service-email">service account email не налаштований</div>
+                    <input class="sheet-service-input" id="sheet-service-url-input" type="text" placeholder="Google Sheets link або spreadsheet ID">
+                    <button type="button" class="btn-google-signin" data-action="sheet-service-load">Підключити таблицю</button>
+                    <div class="sheet-service-status" id="sheet-service-status"></div>
                 </section>
 
                 <!-- Стан 2 (+3): робоча зона після «логіну» -->
                 <section id="sheet-state-workspace" class="sheet-workspace" hidden>
                     <div class="sheet-account-row">
-                        <p class="sheet-account-text">Акаунт підключено: <strong id="sheet-mock-email">—</strong></p>
-                        <button type="button" class="btn-secondary sheet-btn-compact" data-action="google-logout">Вийти</button>
+                        <p class="sheet-account-text">Service account: <strong id="sheet-mock-email">—</strong></p>
+                        <button type="button" class="btn-secondary sheet-btn-compact" data-action="google-logout">Відключити</button>
                     </div>
 
                     <div class="sheet-file-actions">
-                        <button type="button" class="btn-secondary sheet-btn-file" data-action="google-picker">📁 Вибрати таблицю з Google Диску</button>
+                        <input class="sheet-service-input sheet-service-input-inline" id="sheet-service-url-input-workspace" type="text" placeholder="Google Sheets link або spreadsheet ID">
+                        <button type="button" class="btn-secondary sheet-btn-file" data-action="sheet-service-load">Змінити таблицю</button>
                     </div>
 
                     <div id="sheet-mock-file-card" class="sheet-file-card" hidden>

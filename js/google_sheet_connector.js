@@ -20,6 +20,7 @@ import { ensureGoogleApi, ensureGoogleIdentity } from './vendor_loader.js';
 import { state } from './state.js';
 
 const appConfig = window.TRADING_JOURNAL_CONFIG || {};
+const SERVICE_ACCOUNT_EMAIL = String(appConfig.googleServiceAccountEmail || '').trim();
 
 function requiredGoogleConfig(name) {
     const value = appConfig[name];
@@ -28,12 +29,12 @@ function requiredGoogleConfig(name) {
 }
 
 /** OAuth 2.0 Web client. */
-export const GOOGLE_SHEETS_CLIENT_ID = requiredGoogleConfig('googleSheetsClientId');
+export const GOOGLE_SHEETS_CLIENT_ID = String(appConfig.googleSheetsClientId || '').trim();
 
 /** Browser API key (обмежте по referrer). */
-export const GOOGLE_SHEETS_API_KEY = requiredGoogleConfig('googleSheetsApiKey');
+export const GOOGLE_SHEETS_API_KEY = String(appConfig.googleSheetsApiKey || '').trim();
 
-const GOOGLE_PICKER_APP_ID = requiredGoogleConfig('googlePickerAppId');
+const GOOGLE_PICKER_APP_ID = String(appConfig.googlePickerAppId || '').trim();
 
 const SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets.readonly',
@@ -64,6 +65,60 @@ function quoteSheetTitle(title) {
 function rangeForSelectedSheet(range, sheetTitle = getSelectedSheetTitle()) {
     if (!sheetTitle || String(range).includes('!')) return range;
     return `${quoteSheetTitle(sheetTitle)}!${range}`;
+}
+
+function setSheetServiceStatus(message, type = '') {
+    const status = document.getElementById('sheet-service-status');
+    if (!status) return;
+    status.textContent = message || '';
+    status.dataset.state = type;
+}
+
+function setSheetServiceEmail() {
+    const emailEls = document.querySelectorAll('#sheet-service-email, #sheet-mock-email');
+    emailEls.forEach((el) => {
+        el.textContent = SERVICE_ACCOUNT_EMAIL || 'service account email не налаштований';
+    });
+}
+
+function extractSpreadsheetId(value = '') {
+    const raw = String(value || '').trim();
+    const match = raw.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+    if (match?.[1]) return match[1];
+    const idParam = raw.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (idParam?.[1]) return idParam[1];
+    return /^[a-zA-Z0-9_-]+$/.test(raw) ? raw : '';
+}
+
+async function getSupabaseAccessToken() {
+    const { supabase } = await import('./supabase.js');
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    return data?.session?.access_token || '';
+}
+
+async function fetchSheetsService(params) {
+    const token = await getSupabaseAccessToken();
+    if (!token) throw new Error('Supabase session expired');
+    const url = new URL('/api/sheets-service', window.location.origin);
+    Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
+    console.info('[Sheets service] request', params);
+    const response = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await response.json().catch(() => ({}));
+    console.info('[Sheets service] response', {
+        action: params.action || 'metadata',
+        status: response.status,
+        ok: response.ok && data.ok !== false,
+        error: data.error || '',
+    });
+    if (!response.ok || data.ok === false) {
+        const error = new Error(data.error || `Sheets service ${response.status}`);
+        error.status = response.status;
+        throw error;
+    }
+    return data;
 }
 
 function indexToColumnLetter(index) {
@@ -360,14 +415,36 @@ async function pickerCallback(data) {
     }
 }
 
+export async function loadSpreadsheetFromServiceInput(trigger = null) {
+    const input = trigger?.closest?.('.sheet-workspace')
+        ? document.getElementById('sheet-service-url-input-workspace')
+        : (document.getElementById('sheet-service-url-input') || document.getElementById('sheet-service-url-input-workspace'));
+    const fallbackId = localStorage.getItem('sheet_spreadsheet_id') || sessionStorage.getItem('sheet_spreadsheet_id') || '';
+    const spreadsheetId = extractSpreadsheetId(input?.value || fallbackId);
+    if (!spreadsheetId) {
+        setSheetServiceStatus('Вставте посилання або ID Google таблиці.', 'error');
+        showToast('Вставте посилання або ID Google таблиці.');
+        return;
+    }
+
+    setSheetServiceEmail();
+    setSheetServiceStatus('Читаємо таблицю через service account...', 'loading');
+    try {
+        const selectedSheet = await loadSpreadsheetSheets(spreadsheetId);
+        await fetchSpreadsheetData(spreadsheetId, selectedSheet);
+        syncSheetWorkspaceVisibility();
+        setSheetServiceStatus('Таблиця підключена через service account.', 'success');
+        showToast('Google таблицю підключено через service account.');
+    } catch (error) {
+        console.error('[Google Sheets] service account load failed', error);
+        setSheetServiceStatus(`Не вдалося прочитати таблицю: ${error?.message || error}`, 'error');
+        showToast('Не вдалося прочитати таблицю: ' + (error?.message || String(error)));
+    }
+}
+
 async function loadSpreadsheetSheets(fileId) {
-    await ensureGapiClientAndPicker();
-    const response = await gapi.client.sheets.spreadsheets.get({
-        spreadsheetId: fileId,
-        fields: 'sheets.properties(title,sheetId,index)',
-    });
-    const sheets = (response.result?.sheets || [])
-        .map(sheet => sheet.properties)
+    const data = await fetchSheetsService({ action: 'metadata', spreadsheetId: fileId });
+    const sheets = (data.sheets || [])
         .filter(Boolean)
         .sort((a, b) => Number(a.index || 0) - Number(b.index || 0));
     const stored = localStorage.getItem(SELECTED_SHEET_TITLE_KEY) || sessionStorage.getItem(SELECTED_SHEET_TITLE_KEY);
@@ -375,6 +452,7 @@ async function loadSpreadsheetSheets(fileId) {
         ? stored
         : (sheets[0]?.title || '');
     setSpreadsheetSheets(sheets, selected);
+    if (data.title) rememberSpreadsheet(fileId, data.title);
     return selected;
 }
 
@@ -383,25 +461,22 @@ async function loadSpreadsheetSheets(fileId) {
  * (У ТЗ також як fetchSpreadsheetData.)
  */
 export async function fetchSpreadsheetData(fileId, sheetTitle = getSelectedSheetTitle()) {
-    await ensureGapiClientAndPicker();
-    const token = accessToken || readStoredGoogleToken();
-    if (!token) throw new Error('Немає access token');
-    applyAccessTokenToGapiClient(token);
-
     try {
-        const headersResponse = await gapi.client.sheets.spreadsheets.values.get({
+        const headersResponse = await fetchSheetsService({
+            action: 'values',
             spreadsheetId: fileId,
             range: rangeForSelectedSheet('A1:ZZ1', sheetTitle),
         });
-        const range = headersResponse.result;
-        const row = range.values && range.values.length > 0 ? range.values[0] : [];
-        const previewResponse = await gapi.client.sheets.spreadsheets.values.get({
+        const row = headersResponse.values && headersResponse.values.length > 0 ? headersResponse.values[0] : [];
+        const previewResponse = await fetchSheetsService({
+            action: 'values',
             spreadsheetId: fileId,
             range: rangeForSelectedSheet(previewRangeForHeaders(row), sheetTitle),
         });
-        const previewRows = previewResponse.result?.values || [];
+        const previewRows = previewResponse.values || [];
         populateSheetMappingFromHeaders(row);
         setSheetPreviewData(previewRows);
+        setSheetServiceStatus(`Таблиця підключена. Лист: ${sheetTitle || 'перший'}`, 'success');
         return row;
     } catch (err) {
         console.error('Помилка отримання заголовків:', err);
@@ -421,16 +496,12 @@ export async function loadSheetHeaders(fileId) {
  * @returns {Promise<string[][]>}
  */
 export async function fetchSpreadsheetValuesRange(spreadsheetId, range, sheetTitle = getSelectedSheetTitle()) {
-    await ensureGapiClientAndPicker();
-    const token = accessToken || readStoredGoogleToken();
-    if (!token) throw new Error('Немає access token');
-    applyAccessTokenToGapiClient(token);
-
-    const response = await gapi.client.sheets.spreadsheets.values.get({
+    const response = await fetchSheetsService({
+        action: 'values',
         spreadsheetId,
         range: rangeForSelectedSheet(range, sheetTitle),
     });
-    return response.result.values || [];
+    return response.values || [];
 }
 
 export async function googleSheetsLogout() {
@@ -458,6 +529,32 @@ export async function googleSheetsLogout() {
 }
 
 export async function restoreGoogleSession() {
+    setSheetServiceEmail();
+    setGoogleAccountEmail(SERVICE_ACCOUNT_EMAIL || 'Service account');
+    const sid = localStorage.getItem('sheet_spreadsheet_id') || sessionStorage.getItem('sheet_spreadsheet_id');
+    const st = localStorage.getItem('sheet_spreadsheet_title') || sessionStorage.getItem('sheet_spreadsheet_title');
+    const input = document.getElementById('sheet-service-url-input');
+    const workspaceInput = document.getElementById('sheet-service-url-input-workspace');
+    if (input && sid && !input.value) input.value = sid;
+    if (workspaceInput && sid && !workspaceInput.value) workspaceInput.value = sid;
+    if (sid) {
+        sessionStorage.setItem('sheet_google_connected', '1');
+        localStorage.setItem('sheet_google_connected', '1');
+        if (st) {
+            const nameEl = document.getElementById('sheet-selected-file-name');
+            if (nameEl) nameEl.textContent = st;
+        }
+        try {
+            const selectedSheet = await loadSpreadsheetSheets(sid);
+            await fetchSpreadsheetData(sid, selectedSheet);
+        } catch (e) {
+            console.warn('[Google Sheets] service restore failed', e);
+            setSheetServiceStatus('Не вдалося оновити прев’ю. Перевірте доступ service account до таблиці.', 'error');
+        }
+    }
+    syncSheetWorkspaceVisibility();
+    return;
+
     const scopeVer = localStorage.getItem(userStorageKey(SCOPES_VERSION_KEY)) || sessionStorage.getItem(SCOPES_VERSION_KEY);
     if (scopeVer !== OAUTH_SCOPES_VERSION) {
         console.warn(
@@ -517,3 +614,4 @@ window.googleSheetsLogout = googleSheetsLogout;
 window.fetchSpreadsheetData = fetchSpreadsheetData;
 window.loadSheetHeaders = loadSheetHeaders;
 window.fetchSpreadsheetValuesRange = fetchSpreadsheetValuesRange;
+window.loadSpreadsheetFromServiceInput = loadSpreadsheetFromServiceInput;

@@ -645,6 +645,10 @@ export function rememberSpreadsheet(id, title) {
     localStorage.setItem(SESSION_GOOGLE, '1');
     const nameEl = el('sheet-selected-file-name');
     if (nameEl) nameEl.textContent = title || id;
+    const serviceInput = el('sheet-service-url-input');
+    const serviceWorkspaceInput = el('sheet-service-url-input-workspace');
+    if (serviceInput && !serviceInput.value) serviceInput.value = id;
+    if (serviceWorkspaceInput && !serviceWorkspaceInput.value) serviceWorkspaceInput.value = id;
 }
 
 export function getSelectedSheetTitle() {
@@ -855,12 +859,6 @@ async function executeSyncWithCfg(cfg, options = {}) {
     const symIdx = smartValueToColumnIndex(smart.symbol || '');
     if (dateIdx < 0 || symIdx < 0) {
         if (!quiet) showToast('Для синхронізації оберіть колонки «Дата» та «Тікер» (зазвичай A і B).');
-        return { ok: false };
-    }
-
-    const token = sessionStorage.getItem('sheet_google_access_token') || localStorage.getItem('sheet_google_access_token');
-    if (!token) {
-        if (!quiet) showToast('Немає доступу Google — увійдіть знову.');
         return { ok: false };
     }
 
