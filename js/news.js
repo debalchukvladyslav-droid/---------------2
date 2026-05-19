@@ -482,8 +482,10 @@ export async function renderDashboardNews(options = {}) {
         _newsPromise = fetchDashboardNews(force);
     }
 
+    const request = _newsPromise;
+
     try {
-        const payload = await _newsPromise;
+        const payload = await request;
         renderTickerNews(payload);
     } catch (error) {
         const msg = String(error?.message || error);
@@ -491,6 +493,8 @@ export async function renderDashboardNews(options = {}) {
             ? 'Додайте FINNHUB_API_KEY у Vercel Environment Variables і зробіть Redeploy'
             : msg;
         setTickerHTML(`Live news не підключені: ${sanitizeHTML(hint)}`);
+    } finally {
+        if (_newsPromise === request) _newsPromise = null;
     }
 }
 
