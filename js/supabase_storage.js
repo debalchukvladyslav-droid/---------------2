@@ -76,6 +76,39 @@ function storageErrorMessage(error, candidate) {
     return `Supabase storage upload failed (${where}${status ? `, ${status}` : ''}): ${detail}`;
 }
 
+function shouldFallbackToServerUpload(error) {
+    const status = String(error?.statusCode || error?.status || '');
+    const message = String(error?.message || error?.error_description || '');
+    return status === '403'
+        || message.includes('row-level security')
+        || message.includes('violates row-level security');
+}
+
+async function uploadViaServer(candidate, file, options = {}) {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    const token = data?.session?.access_token || '';
+    if (!token) throw new Error('Supabase session expired. Sign in again before uploading files.');
+
+    const query = new URLSearchParams({
+        bucket: candidate.bucket,
+        objectPath: candidate.objectPath,
+    });
+    const response = await fetch(`/api/storage-upload?${query.toString()}`, {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': options.contentType || file?.type || 'application/octet-stream',
+        },
+        body: file,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || `Server storage upload failed (${response.status})`);
+    }
+    return payload.signedUrl || '';
+}
+
 async function createFirstSignedUrl(candidates, ttl = DEFAULT_SIGNED_URL_TTL) {
     for (const candidate of candidates) {
         const { data, error } = await supabase.storage
@@ -137,6 +170,22 @@ export async function uploadToSupabaseStorage(storagePath, file, options = {}) {
         if (!error) {
             const signed = await createFirstSignedUrl([candidate], options.ttl || DEFAULT_SIGNED_URL_TTL);
             return signed?.url || storagePath;
+        }
+
+        if (!options.disableServerFallback && shouldFallbackToServerUpload(error)) {
+            try {
+                const signedUrl = await uploadViaServer(candidate, file, options);
+                return signedUrl || storagePath;
+            } catch (fallbackError) {
+                console.warn('[Storage] server fallback upload failed', {
+                    bucket: candidate.bucket,
+                    objectPath: candidate.objectPath,
+                    message: fallbackError?.message || String(fallbackError),
+                });
+                lastError = fallbackError;
+                lastCandidate = candidate;
+                continue;
+            }
         }
 
         lastError = error;
