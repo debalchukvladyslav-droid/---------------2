@@ -1,7 +1,9 @@
 {
   "type": "module",
   "scripts": {
-    "check": "node --check js/partials.js && node --check js/ui.js && node --check js/main.js && node --check js/app_enhancements.js && node --check js/sanitize.js && node --check js/access_control.js && node --check js/parser_utils.js && node --check js/trade_filters.js && node --check js/sheet_journal_merge.js && node --check js/data_utils.js && node --check js/stats_math.js && node --check js/ai.js && node --check js/news.js && node --check api/_google_sheet_sync_lib.js && node --check api/drive-service.js && node --check api/sheets-service.js && node --check api/storage-upload.js && node --check scripts/check-partials.mjs && npm run check:partials && npm run test",
+    "check": "node --check js/partials.js && node --check js/ui.js && node --check js/main.js && node --check js/app_enhancements.js && node --check js/sanitize.js && node --check js/access_control.js && node --check js/parser_utils.js && node --check js/trade_filters.js && node --check js/sheet_journal_merge.js && node --check js/data_utils.js && node --check js/stats_math.js && node --check js/ai.js && node --check js/news.js && node --check api/_google_sheet_sync_lib.js && node --check api/drive-service.js && node --check api/sheets-service.js && node --check api/storage-upload.js && node --check scripts/check-partials.mjs && node --check scripts/audit-site.mjs && npm run check:partials && npm run test",
+    "audit": "node scripts/audit-site.mjs",
+    "validate": "npm run check && npm run audit",
     "check:partials": "node scripts/check-partials.mjs",
     "test": "node --test tests/*.test.mjs",
     "dev": "node dev-server.mjs",
