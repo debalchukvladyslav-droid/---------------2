@@ -35,6 +35,29 @@ function hasNonEmptyObject(value) {
     return value && typeof value === 'object' && Object.keys(value).length > 0;
 }
 
+function annotateStoredSheetMatch(sheetRowsStore, spreadsheetId, dateStr, incomingTrade, matchIndex) {
+    if (!sheetRowsStore || !spreadsheetId || matchIndex < 0) return;
+    const rows = sheetRowsStore[spreadsheetId]?.[dateStr];
+    if (!Array.isArray(rows)) return;
+    const incomingSheet = incomingTrade?.sheet && typeof incomingTrade.sheet === 'object' ? incomingTrade.sheet : {};
+    const sheetRow = incomingSheet.sheetRow;
+    const storedIndex = rows.findIndex((row) => {
+        const storedSheet = row?.sheet && typeof row.sheet === 'object' ? row.sheet : {};
+        if (sheetRow != null && storedSheet.sheetRow === sheetRow) return true;
+        return row?.symbol === incomingTrade?.symbol && row?.opened === incomingTrade?.opened;
+    });
+    if (storedIndex < 0) return;
+    const stored = rows[storedIndex] || {};
+    rows[storedIndex] = {
+        ...stored,
+        sheet: {
+            ...(stored.sheet && typeof stored.sheet === 'object' ? stored.sheet : {}),
+            matchedTradeIndex: matchIndex,
+            matchedBy: 'date+ticker+pnl',
+        },
+    };
+}
+
 export function isDayEmptyAfterSheetCleanup(day) {
     if (!day || typeof day !== 'object') return true;
     if (Array.isArray(day.trades) && day.trades.length > 0) return false;
@@ -133,6 +156,7 @@ export function mergeGoogleSheetTradesIntoJournal(journal = {}, outByDay = {}, s
             const matchIndex = findSheetMatchIndex(merged, trade, usedIndices);
             if (matchIndex >= 0) {
                 merged[matchIndex] = enrichTradeWithSheet(merged[matchIndex], trade);
+                annotateStoredSheetMatch(sheetRowsStore, spreadsheetId, dateStr, trade, matchIndex);
                 usedIndices.add(matchIndex);
                 matchedCount++;
                 matchedSheetRows++;

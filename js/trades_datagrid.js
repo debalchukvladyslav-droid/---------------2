@@ -1,10 +1,11 @@
 // === js/trades_datagrid.js — horizontal trades table grouped by date ===
 
 import { state } from './state.js';
-import { isPureGoogleSheetTrade } from './trade_filters.js';
+import { collectDatagridRows } from './datagrid_rows.js';
 
 const DATAGRID_PAGE_SIZE = 250;
 const DATAGRID_COLSPAN = 20;
+const SESSION_SPREADSHEET_ID = 'sheet_spreadsheet_id';
 
 const TRADE_TYPES_RAW = [
     'шорт', 'не брав', 'виключення', 'виключення візуально', 'візуально',
@@ -36,6 +37,7 @@ const UK_MONTHS_SHORT = [
 ];
 
 let _datagridRowsCache = [];
+let _datagridSource = { source: 'trades', spreadsheetId: '' };
 let _datagridVisibleCount = DATAGRID_PAGE_SIZE;
 let _datagridDirty = true;
 let _datagridBindingsReady = false;
@@ -226,23 +228,22 @@ function isDatagridViewActive() {
     return !!document.getElementById('view-datagrid')?.classList.contains('active');
 }
 
+function getCurrentSpreadsheetId() {
+    try {
+        return localStorage.getItem(SESSION_SPREADSHEET_ID) || sessionStorage.getItem(SESSION_SPREADSHEET_ID) || '';
+    } catch {
+        return '';
+    }
+}
+
+function getDatagridSourceLabel() {
+    return _datagridSource.source === 'sheet' ? 'Excel/Sheet' : 'Trades';
+}
+
 function collectRows() {
-    const journal = state.appData?.journal && typeof state.appData.journal === 'object' ? state.appData.journal : {};
-    const flat = [];
-    Object.keys(journal).forEach((dateStr) => {
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
-        const trades = Array.isArray(journal[dateStr]?.trades) ? journal[dateStr].trades : [];
-        trades.forEach((t, tradeIndex) => {
-            if (isPureGoogleSheetTrade(t)) return;
-            flat.push({ dateStr, trade: t, tradeIndex });
-        });
-    });
-    flat.sort((a, b) => {
-        const dc = a.dateStr.localeCompare(b.dateStr);
-        if (dc !== 0) return dc;
-        return String(timeFromOpened(a.trade?.opened)).localeCompare(String(timeFromOpened(b.trade?.opened)));
-    });
-    return flat;
+    const result = collectDatagridRows(state.appData || {}, getCurrentSpreadsheetId());
+    _datagridSource = { source: result.source, spreadsheetId: result.spreadsheetId || '' };
+    return result.rows;
 }
 
 function ensureRowsCache() {
@@ -268,7 +269,7 @@ function badge(htmlClass, text) {
     return `<span class="badge ${htmlClass}">${esc(t)}</span>`;
 }
 
-function buildTradeRowHtml(dateStr, trade, tradeIndex) {
+function buildTradeRowHtml(dateStr, trade, tradeIndex, source) {
     const sh = sheetOf(trade);
     const net = Number(trade.net);
     const profitClass = Number.isFinite(net) && net < 0 ? 'datagrid-profit datagrid-profit--loss' : 'datagrid-profit';
@@ -294,7 +295,11 @@ function buildTradeRowHtml(dateStr, trade, tradeIndex) {
     const shares = nonEmpty(trade.qty, nonEmpty(sh.qtyShares));
     const calc = nonEmpty(sh.qtySharesCalc, shares);
 
-    return `<tr class="trade-data-row" data-date="${esc(dateStr)}" data-trade-index="${tradeIndex}" title="Відкрити цю угоду в журналі">
+    const canOpenTrade = Number(tradeIndex) >= 0;
+    const sourceAttr = source || _datagridSource.source || 'trades';
+    const rowTitle = canOpenTrade ? 'Відкрити цю угоду в журналі' : 'Рядок Excel/Sheet без відповідної угоди Trades';
+
+    return `<tr class="trade-data-row" data-date="${esc(dateStr)}" data-trade-index="${tradeIndex}" data-source="${esc(sourceAttr)}" title="${esc(rowTitle)}">
         <td>${esc(timeFromOpened(trade.opened))}</td>
         <td class="datagrid-ticker">${esc((trade.symbol || '?').toString().toUpperCase())}</td>
         <td>${typeLabel ? badge('datagrid-badge datagrid-badge--type', typeLabel) : '—'}</td>
@@ -321,10 +326,11 @@ function buildTradeRowHtml(dateStr, trade, tradeIndex) {
 function updateDatagridToolbar(total, visible, allTotal = total) {
     const summary = document.getElementById('datagrid-summary');
     const moreBtn = document.getElementById('datagrid-load-more');
+    const sourceLabel = getDatagridSourceLabel();
     if (summary) {
         summary.textContent = total > 0
-            ? `Показано ${Math.min(visible, total)} з ${total} угод ${getDatagridPeriodLabel()}${allTotal > total ? ` · всього ${allTotal}` : ''}`
-            : `Немає угод ${getDatagridPeriodLabel()}`;
+            ? `${sourceLabel}: показано ${Math.min(visible, total)} з ${total} рядків ${getDatagridPeriodLabel()}${allTotal > total ? ` · всього ${allTotal}` : ''}`
+            : `${sourceLabel}: немає рядків ${getDatagridPeriodLabel()}`;
     }
     if (moreBtn) {
         const canLoadMore = visible < total;
@@ -370,6 +376,7 @@ function bindDatagridControls() {
         if (row) {
             const dateStr = row.getAttribute('data-date') || '';
             const tradeIndex = Number(row.getAttribute('data-trade-index') || 0);
+            if (!Number.isInteger(tradeIndex) || tradeIndex < 0) return;
             window.openTradesAtDayIndex?.(dateStr, tradeIndex);
             return;
         }
@@ -439,7 +446,7 @@ export function renderTradesDatagrid() {
     const rows = filterRowsByPeriod(allRows);
     if (rows.length === 0) {
         tbody.innerHTML =
-            `<tr><td class="datagrid-empty" colspan="${DATAGRID_COLSPAN}">Немає угод ${esc(getDatagridPeriodLabel())}. Змініть місяць або виберіть ширший діапазон.</td></tr>`;
+            `<tr><td class="datagrid-empty" colspan="${DATAGRID_COLSPAN}">${esc(getDatagridSourceLabel())}: немає рядків ${esc(getDatagridPeriodLabel())}. Змініть місяць або виберіть ширший діапазон.</td></tr>`;
         updateDatagridToolbar(0, 0, allRows.length);
         return;
     }
@@ -451,12 +458,12 @@ export function renderTradesDatagrid() {
     let prevDate = null;
 
     for (let i = 0; i < visibleRows.length; i++) {
-        const { dateStr, trade } = visibleRows[i];
+        const { dateStr, trade, source } = visibleRows[i];
         if (dateStr !== prevDate) {
             html += `<tr class="date-group-row"><td colspan="${DATAGRID_COLSPAN}">${esc(formatDateHeader(dateStr))}</td></tr>`;
             prevDate = dateStr;
         }
-        html += buildTradeRowHtml(dateStr, trade, visibleRows[i].tradeIndex);
+        html += buildTradeRowHtml(dateStr, trade, visibleRows[i].tradeIndex, source);
     }
 
     tbody.innerHTML = html;

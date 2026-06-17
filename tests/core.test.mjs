@@ -27,9 +27,11 @@ const { ecnFeeColumnIndex, parseSheetDateCellToIso } = await import('../js/parse
 const { sanitizeHTML, safeExternalUrl, sanitizeRichHTML } = await import('../js/sanitize.js');
 const { mergeGoogleSheetTradesIntoJournal } = await import('../js/sheet_journal_merge.js');
 const { parseFondexxSummaryByDateRows } = await import('../js/fondexx_summary_parser.js');
+const { collectDatagridRows } = await import('../js/datagrid_rows.js');
 const { enrichTradeWithSheet, findSheetMatchIndex, parseSheetGridToTrades } = await import('../js/sheet_sync_core.js');
 const { summarizeJournalPnl } = await import('../js/stats_math.js');
 const { getEffectiveDayPnl, isPureGoogleSheetTrade, visibleTradeRows } = await import('../js/trade_filters.js');
+const { normalizeBrokerTradeType } = await import('../js/trade_import_utils.js');
 const { parseDecimalInput } = await import('../js/utils.js');
 
 test('parser utils find ECN fee columns across supported header names', () => {
@@ -213,6 +215,15 @@ test('trade filters hide pure Google Sheet rows but keep matched trades', () => 
     assert.deepEqual(visibleTradeRows([realTrade, sheetOnly, matched]).map((row) => row.index), [0, 2]);
 });
 
+test('Trades import direction normalizes obvious broker Short and Long values', () => {
+    assert.equal(normalizeBrokerTradeType('Short'), 'Short');
+    assert.equal(normalizeBrokerTradeType('Sell Short'), 'Short');
+    assert.equal(normalizeBrokerTradeType('Long'), 'Long');
+    assert.equal(normalizeBrokerTradeType('Buy Long'), 'Long');
+    assert.equal(normalizeBrokerTradeType('Custom Broker Type'), 'Custom Broker Type');
+    assert.equal(normalizeBrokerTradeType(''), '');
+});
+
 test('sheet-only pnl is ignored for day-level stats', () => {
     const sheetOnlyDay = {
         pnl: 25,
@@ -272,8 +283,9 @@ test('shared Google Sheet merge stores all rows but only updates existing Trades
     const journal = {
         '2026-04-01': {
             trades: [
-                { symbol: 'AAPL', opened: '2026-04-01 09:31:00', net: 10, gross: 10, comm: 0 },
+                { symbol: 'AAPL', opened: '2026-04-01 09:31:00', net: 10, gross: 10, comm: 0, type: 'Short' },
             ],
+            pnl: 10,
             fondexx: { gross: 10, net: 10, comm: 0, locates: 0, tickers: ['AAPL'] },
             ppro: { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
         },
@@ -285,10 +297,10 @@ test('shared Google Sheet merge stores all rows but only updates existing Trades
     };
     const outByDay = {
         '2026-04-01': [
-            { symbol: 'AAPL', opened: '2026-04-01 09:30:00', net: 12, sheet: { source: 'google', spreadsheetId: 'sheet-1', pv: 'ok' } },
+            { symbol: 'AAPL', opened: '2026-04-01 09:30:00', net: 12, type: 'Setup A', sheet: { source: 'google', spreadsheetId: 'sheet-1', pv: 'ok', tradeType: 'Setup A' } },
         ],
         '2026-04-02': [
-            { symbol: 'TSLA', opened: '2026-04-02 09:30:00', net: 5, sheet: { source: 'google', spreadsheetId: 'sheet-1' } },
+            { symbol: 'TSLA', opened: '2026-04-02 09:30:00', net: 5, type: 'do not take', sheet: { source: 'google', spreadsheetId: 'sheet-1', tradeType: 'do not take' } },
         ],
     };
 
@@ -309,9 +321,66 @@ test('shared Google Sheet merge stores all rows but only updates existing Trades
     assert.deepEqual(marked, ['2026-04-01']);
     assert.equal(journal['2026-04-01'].trades.length, 1);
     assert.equal(journal['2026-04-01'].trades[0].net, 10);
+    assert.equal(journal['2026-04-01'].pnl, 10);
+    assert.equal(journal['2026-04-01'].trades[0].type, 'Setup A');
     assert.equal(journal['2026-04-01'].trades[0].sheet.pv, 'ok');
     assert.equal(journal['2026-04-02'].trades.length, 0);
     assert.equal(sheetRowsStore['sheet-1']['2026-04-01'].length, 1);
+    assert.equal(sheetRowsStore['sheet-1']['2026-04-01'][0].sheet.matchedTradeIndex, 0);
     assert.equal(sheetRowsStore['sheet-1']['2026-04-02'].length, 1);
     assert.equal(sheetRowsStore['sheet-1']['2026-04-02'][0].symbol, 'TSLA');
+    assert.equal(sheetRowsStore['sheet-1']['2026-04-02'][0].type, 'do not take');
+});
+
+test('datagrid rows prefer current sheetRows and keep sheet-only rows out of real trade counts', () => {
+    const appData = {
+        sheetRows: {
+            'sheet-1': {
+                '2026-04-01': [
+                    { symbol: 'AAPL', opened: '2026-04-01 09:30:00', net: 12, type: 'Setup A', sheet: { source: 'google', spreadsheetId: 'sheet-1', matchedTradeIndex: 0 } },
+                    { symbol: 'TSLA', opened: '2026-04-01 09:31:00', net: 0, type: 'do not take', sheet: { source: 'google', spreadsheetId: 'sheet-1', tradeType: 'do not take' } },
+                ],
+            },
+            'sheet-2': {
+                '2026-05-01': [
+                    { symbol: 'MSFT', opened: '2026-05-01 09:30:00', net: 1, type: 'Setup B', sheet: { source: 'google', spreadsheetId: 'sheet-2' } },
+                ],
+            },
+        },
+        journal: {
+            '2026-04-01': {
+                trades: [
+                    { symbol: 'AAPL', opened: '2026-04-01 09:30:00', net: 10 },
+                    { symbol: 'TSLA', opened: '2026-04-01 09:31:00', net: 0, sheet: { source: 'google', spreadsheetId: 'sheet-1' } },
+                ],
+            },
+        },
+    };
+
+    const current = collectDatagridRows(appData, 'sheet-1');
+    assert.equal(current.source, 'sheet');
+    assert.equal(current.spreadsheetId, 'sheet-1');
+    assert.deepEqual(current.rows.map((row) => row.trade.symbol), ['AAPL', 'TSLA']);
+    assert.equal(current.rows[0].tradeIndex, 0);
+    assert.equal(current.rows[1].tradeIndex, -1);
+    assert.equal(visibleTradeRows(appData.journal['2026-04-01'].trades).length, 1);
+
+    const latest = collectDatagridRows(appData);
+    assert.equal(latest.spreadsheetId, 'sheet-2');
+});
+
+test('datagrid rows fall back to real Trades when no sheetRows exist', () => {
+    const result = collectDatagridRows({
+        journal: {
+            '2026-04-01': {
+                trades: [
+                    { symbol: 'AAPL', opened: '2026-04-01 09:30:00', net: 10 },
+                    { symbol: 'TSLA', opened: '2026-04-01 09:31:00', net: 0, sheet: { source: 'google', spreadsheetId: 'sheet-1' } },
+                ],
+            },
+        },
+    });
+
+    assert.equal(result.source, 'trades');
+    assert.deepEqual(result.rows.map((row) => row.trade.symbol), ['AAPL']);
 });

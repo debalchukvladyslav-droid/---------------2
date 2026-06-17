@@ -6,6 +6,7 @@ import { ensureXlsx } from './vendor_loader.js';
 import { ecnFeeColumnIndex } from './parser_utils.js';
 import { isGoogleSheetTrade, isPureGoogleSheetTrade } from './trade_filters.js';
 import { parseFondexxSummaryByDateRows as parseFondexxSummaryByDateRowsPure } from './fondexx_summary_parser.js';
+import { normalizeBrokerTradeType } from './trade_import_utils.js';
 
 export { parseFondexxSummaryByDateRowsPure as parseFondexxSummaryByDateRows };
 
@@ -469,7 +470,7 @@ export function importFondexxReport(event) {
                     if (opened && closed) {
                         dailyData[currentDate].trades.push({
                             symbol: sym,
-                            type: row[headers['Type']] || '',
+                            type: normalizeBrokerTradeType(row[headers['Type']]),
                             opened: opened,
                             closed: closed,
                             held: row[headers['Held']] || '',
@@ -656,7 +657,7 @@ export function importFondexxTrades(event) {
                 const ecn = ecnIdx !== undefined ? parseFloat(row[ecnIdx]) || 0 : 0;
                 dailyTrades[currentDate].push({
                     symbol: sym,
-                    type: row[headers['Type']] || '',
+                    type: normalizeBrokerTradeType(row[headers['Type']]),
                     opened, closed,
                     held: row[headers['Held']] || '',
                     entry: parseFloat(row[headers['Entry']]) || 0,
