@@ -370,6 +370,34 @@ test('datagrid rows prefer current sheetRows and keep sheet-only rows out of rea
     assert.equal(latest.spreadsheetId, 'sheet-2');
 });
 
+test('datagrid sheet rows hide dates older than current and previous month when rendered by app', () => {
+    const result = collectDatagridRows({
+        sheetRows: {
+            'sheet-1': {
+                '2026-04-30': [
+                    { symbol: 'OLD', opened: '2026-04-30 09:30:00', sheet: { source: 'google', spreadsheetId: 'sheet-1' } },
+                ],
+                '2026-05-01': [
+                    { symbol: 'MAY', opened: '2026-05-01 09:30:00', sheet: { source: 'google', spreadsheetId: 'sheet-1' } },
+                ],
+                '2026-06-17': [
+                    { symbol: 'JUN', opened: '2026-06-17 09:30:00', sheet: { source: 'google', spreadsheetId: 'sheet-1' } },
+                ],
+            },
+        },
+        cumulativeSheetRows: {
+            'archive-1': {
+                '2025-01-01': [
+                    { symbol: 'ARCHIVE', opened: '2025-01-01 09:30:00', sheet: { source: 'google', spreadsheetId: 'archive-1' } },
+                ],
+            },
+        },
+    }, 'sheet-1', new Date(2026, 5, 17));
+
+    assert.equal(result.source, 'sheet');
+    assert.deepEqual(result.rows.map((row) => row.trade.symbol), ['MAY', 'JUN']);
+});
+
 test('datagrid rows fall back to real Trades when no sheetRows exist', () => {
     const result = collectDatagridRows({
         journal: {

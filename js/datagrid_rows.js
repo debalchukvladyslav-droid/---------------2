@@ -16,6 +16,17 @@ function sheetSourceHasRows(byDay) {
         && Object.values(byDay).some((rows) => Array.isArray(rows) && rows.length > 0);
 }
 
+function pad2(value) {
+    return String(value).padStart(2, '0');
+}
+
+function sheetVisibleSinceDate(referenceDate, visibleMonths = 2) {
+    if (!(referenceDate instanceof Date) || Number.isNaN(referenceDate.getTime())) return '';
+    const months = Math.max(1, Number(visibleMonths) || 2);
+    const firstVisibleMonth = new Date(referenceDate.getFullYear(), referenceDate.getMonth() - months + 1, 1);
+    return `${firstVisibleMonth.getFullYear()}-${pad2(firstVisibleMonth.getMonth() + 1)}-01`;
+}
+
 export function pickSheetRowsSource(sheetRows = {}, preferredSpreadsheetId = '') {
     const store = sheetRows && typeof sheetRows === 'object' ? sheetRows : {};
     if (preferredSpreadsheetId && sheetSourceHasRows(store[preferredSpreadsheetId])) {
@@ -26,10 +37,12 @@ export function pickSheetRowsSource(sheetRows = {}, preferredSpreadsheetId = '')
     return spreadsheetId ? { spreadsheetId, byDay: store[spreadsheetId] } : null;
 }
 
-function flattenSheetRows(byDay = {}) {
+function flattenSheetRows(byDay = {}, referenceDate = null) {
+    const visibleSince = sheetVisibleSinceDate(referenceDate, 2);
     const flat = [];
     Object.keys(byDay)
         .filter(isDayKey)
+        .filter((dateStr) => !visibleSince || dateStr >= visibleSince)
         .sort()
         .forEach((dateStr) => {
             const rows = Array.isArray(byDay[dateStr]) ? byDay[dateStr] : [];
@@ -82,13 +95,13 @@ function flattenRealTrades(journal = {}) {
     return flat;
 }
 
-export function collectDatagridRows(appData = {}, preferredSpreadsheetId = '') {
+export function collectDatagridRows(appData = {}, preferredSpreadsheetId = '', referenceDate = null) {
     const sheetSource = pickSheetRowsSource(appData.sheetRows, preferredSpreadsheetId);
     if (sheetSource) {
         return {
             source: 'sheet',
             spreadsheetId: sheetSource.spreadsheetId,
-            rows: flattenSheetRows(sheetSource.byDay),
+            rows: flattenSheetRows(sheetSource.byDay, referenceDate),
         };
     }
     return {

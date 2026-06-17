@@ -241,7 +241,7 @@ function getDatagridSourceLabel() {
 }
 
 function collectRows() {
-    const result = collectDatagridRows(state.appData || {}, getCurrentSpreadsheetId());
+    const result = collectDatagridRows(state.appData || {}, getCurrentSpreadsheetId(), state.todayObj instanceof Date ? state.todayObj : new Date());
     _datagridSource = { source: result.source, spreadsheetId: result.spreadsheetId || '' };
     return result.rows;
 }
