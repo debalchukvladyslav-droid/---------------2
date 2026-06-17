@@ -268,6 +268,10 @@ export async function saveSettings() {
                     ? state.appData.screenDiscipline
                     : {},
             sheetRows: state.appData.sheetRows && typeof state.appData.sheetRows === 'object' ? state.appData.sheetRows : {},
+            cumulativeSheetRows:
+                state.appData.cumulativeSheetRows && typeof state.appData.cumulativeSheetRows === 'object'
+                    ? state.appData.cumulativeSheetRows
+                    : {},
             weeklyComments:
                 state.appData.weeklyComments && typeof state.appData.weeklyComments === 'object' ? state.appData.weeklyComments : {},
         };
@@ -337,6 +341,10 @@ export async function loadSettings() {
             if (incoming.sheetRows && typeof incoming.sheetRows === 'object') {
                 state.appData.sheetRows = incoming.sheetRows;
                 delete incoming.sheetRows;
+            }
+            if (incoming.cumulativeSheetRows && typeof incoming.cumulativeSheetRows === 'object') {
+                state.appData.cumulativeSheetRows = incoming.cumulativeSheetRows;
+                delete incoming.cumulativeSheetRows;
             }
             if (incoming.weeklyComments && typeof incoming.weeklyComments === 'object') {
                 state.appData.weeklyComments = incoming.weeklyComments;

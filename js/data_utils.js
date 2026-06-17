@@ -48,6 +48,7 @@ export function getDefaultAppData() {
         screenMeta: {},
         unassignedImages: [],
         sheetRows: {},
+        cumulativeSheetRows: {},
         tradeTypes: [...DEFAULT_TRADE_TYPES]
     };
 }
@@ -232,6 +233,8 @@ export function normalizeAppData(rawData) {
         tickers: safeData.tickers && typeof safeData.tickers === 'object' ? safeData.tickers : {},
         screenMeta: safeData.screenMeta && typeof safeData.screenMeta === 'object' ? safeData.screenMeta : {},
         unassignedImages: sanitizeStringArray(safeData.unassignedImages),
+        sheetRows: safeData.sheetRows && typeof safeData.sheetRows === 'object' ? safeData.sheetRows : {},
+        cumulativeSheetRows: safeData.cumulativeSheetRows && typeof safeData.cumulativeSheetRows === 'object' ? safeData.cumulativeSheetRows : {},
         tradeTypes: normalizeTradeTypesList(safeData.tradeTypes)
     };
 }

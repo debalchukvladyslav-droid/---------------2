@@ -71,6 +71,13 @@
                         <div class="sheet-smart-head">
                             <h3 class="sheet-smart-title">Мапінг колонок</h3>
                             <p class="sheet-smart-sub">Перший рядок (A1…) — підписи для мапінгу. Старт імпорту береться з вибраної клітинки: якщо для «Дата» обрати A8, таблиця читається з 8-го рядка; усі нижчі рядки з тікером у колонці «Тікер» йдуть у цей день.</p>
+                            <div class="sheet-import-mode-bar" aria-label="Режим імпорту таблиці">
+                                <div class="sheet-import-mode-toggle" role="group" aria-label="Режим Sheet імпорту">
+                                    <button type="button" class="sheet-import-mode-btn is-active" data-action="sheet-import-mode" data-sheet-mode="main">Основна</button>
+                                    <button type="button" class="sheet-import-mode-btn" data-action="sheet-import-mode" data-sheet-mode="cumulative">Накопичувальна</button>
+                                </div>
+                                <button type="button" id="sheet-duplicate-mapping-btn" class="btn-secondary sheet-btn-compact" data-action="sheet-duplicate-mapping">Продублювати мапінг</button>
+                            </div>
                         </div>
 
                         <section class="sheet-grid-picker" aria-labelledby="sheet-grid-picker-title">

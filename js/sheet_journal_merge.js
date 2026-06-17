@@ -58,6 +58,37 @@ function annotateStoredSheetMatch(sheetRowsStore, spreadsheetId, dateStr, incomi
     };
 }
 
+function storeSheetRows(sheetRowsStore, spreadsheetId, outByDay) {
+    let importedSheetRows = 0;
+    if (!sheetRowsStore || !spreadsheetId) return importedSheetRows;
+    const nextRowsByDay = {};
+    for (const dateStr of Object.keys(outByDay || {})) {
+        if (!isValidIsoDateString(dateStr)) continue;
+        const rows = Array.isArray(outByDay[dateStr]) ? outByDay[dateStr] : [];
+        if (!rows.length) continue;
+        nextRowsByDay[dateStr] = rows.map((trade) => ({
+            symbol: trade.symbol || '',
+            opened: trade.opened || '',
+            net: Number(trade.net) || 0,
+            gross: Number(trade.gross) || 0,
+            comm: Number(trade.comm) || 0,
+            type: trade.type || '',
+            sheet: trade.sheet && typeof trade.sheet === 'object' ? { ...trade.sheet } : {},
+        }));
+        importedSheetRows += nextRowsByDay[dateStr].length;
+    }
+    sheetRowsStore[spreadsheetId] = nextRowsByDay;
+    return importedSheetRows;
+}
+
+function tradeHasMainSheetContext(trade, spreadsheetId = '') {
+    const sheet = trade?.sheet;
+    if (!sheet || sheet.source !== 'google') return false;
+    if (!sheet.matchedBy) return false;
+    if (!spreadsheetId) return true;
+    return sheet.spreadsheetId !== spreadsheetId;
+}
+
 export function isDayEmptyAfterSheetCleanup(day) {
     if (!day || typeof day !== 'object') return true;
     if (Array.isArray(day.trades) && day.trades.length > 0) return false;
@@ -78,6 +109,8 @@ export function mergeGoogleSheetTradesIntoJournal(journal = {}, outByDay = {}, s
     const syncDayTotals = typeof options.syncDayTotals === 'function' ? options.syncDayTotals : () => {};
     const markTouched = typeof options.markTouched === 'function' ? options.markTouched : () => {};
     const warnInvalidDate = typeof options.warnInvalidDate === 'function' ? options.warnInvalidDate : () => {};
+    const mode = options.mode === 'cumulative' ? 'cumulative' : 'main';
+    const isCumulative = mode === 'cumulative';
     const deletedDates = [];
     const touchedDates = new Set();
     const sheetRowsStore = options.sheetRowsStore && typeof options.sheetRowsStore === 'object'
@@ -87,52 +120,36 @@ export function mergeGoogleSheetTradesIntoJournal(journal = {}, outByDay = {}, s
     let skippedSheetRows = 0;
     let importedSheetRows = 0;
 
-    if (sheetRowsStore && spreadsheetId) {
-        const nextRowsByDay = {};
-        for (const dateStr of Object.keys(outByDay || {})) {
-            if (!isValidIsoDateString(dateStr)) continue;
-            const rows = Array.isArray(outByDay[dateStr]) ? outByDay[dateStr] : [];
-            if (!rows.length) continue;
-            nextRowsByDay[dateStr] = rows.map((trade) => ({
-                symbol: trade.symbol || '',
-                opened: trade.opened || '',
-                net: Number(trade.net) || 0,
-                gross: Number(trade.gross) || 0,
-                comm: Number(trade.comm) || 0,
-                type: trade.type || '',
-                sheet: trade.sheet && typeof trade.sheet === 'object' ? { ...trade.sheet } : {},
-            }));
-            importedSheetRows += nextRowsByDay[dateStr].length;
-        }
-        sheetRowsStore[spreadsheetId] = nextRowsByDay;
+    importedSheetRows = storeSheetRows(sheetRowsStore, spreadsheetId, outByDay);
+
+    if (!isCumulative) {
+        Object.keys(journal).forEach((dateStr) => {
+            const day = journal[dateStr];
+            const trades = Array.isArray(day?.trades) ? day.trades : [];
+            const removedTrades = trades.filter((trade) => isPureGoogleSheetTrade(trade, spreadsheetId));
+            const nextTrades = trades.filter((trade) => !isPureGoogleSheetTrade(trade, spreadsheetId));
+            if (nextTrades.length === trades.length) return;
+
+            const clearSheetDerivedFondexx = nextTrades.length === 0 && fondexxLooksDerivedFromTrades(day.fondexx, removedTrades);
+            day.trades = nextTrades;
+            if (clearSheetDerivedFondexx) {
+                day.fondexx = { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] };
+                day.pnl = null;
+                day.gross_pnl = null;
+                day.commissions = null;
+                day.locates = null;
+            }
+            syncDayTotals(dateStr, day);
+
+            if (isDayEmptyAfterSheetCleanup(day)) {
+                delete journal[dateStr];
+                deletedDates.push(dateStr);
+            } else {
+                touchedDates.add(dateStr);
+                markTouched(dateStr, day);
+            }
+        });
     }
-
-    Object.keys(journal).forEach((dateStr) => {
-        const day = journal[dateStr];
-        const trades = Array.isArray(day?.trades) ? day.trades : [];
-        const removedTrades = trades.filter((trade) => isPureGoogleSheetTrade(trade, spreadsheetId));
-        const nextTrades = trades.filter((trade) => !isPureGoogleSheetTrade(trade, spreadsheetId));
-        if (nextTrades.length === trades.length) return;
-
-        const clearSheetDerivedFondexx = nextTrades.length === 0 && fondexxLooksDerivedFromTrades(day.fondexx, removedTrades);
-        day.trades = nextTrades;
-        if (clearSheetDerivedFondexx) {
-            day.fondexx = { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] };
-            day.pnl = null;
-            day.gross_pnl = null;
-            day.commissions = null;
-            day.locates = null;
-        }
-        syncDayTotals(dateStr, day);
-
-        if (isDayEmptyAfterSheetCleanup(day)) {
-            delete journal[dateStr];
-            deletedDates.push(dateStr);
-        } else {
-            touchedDates.add(dateStr);
-            markTouched(dateStr, day);
-        }
-    });
 
     for (const dateStr of Object.keys(outByDay || {})) {
         if (!isValidIsoDateString(dateStr)) {
@@ -143,7 +160,7 @@ export function mergeGoogleSheetTradesIntoJournal(journal = {}, outByDay = {}, s
         if (!incoming.length) continue;
         const day = journal[dateStr];
         const prev = Array.isArray(day?.trades) ? day.trades : [];
-        const kept = prev.filter((trade) => !isPureGoogleSheetTrade(trade, spreadsheetId));
+        const kept = isCumulative ? prev.filter((trade) => !isPureGoogleSheetTrade(trade)) : prev.filter((trade) => !isPureGoogleSheetTrade(trade, spreadsheetId));
         if (!kept.length) {
             skippedSheetRows += incoming.length;
             continue;
@@ -155,6 +172,11 @@ export function mergeGoogleSheetTradesIntoJournal(journal = {}, outByDay = {}, s
         incoming.forEach((trade) => {
             const matchIndex = findSheetMatchIndex(merged, trade, usedIndices);
             if (matchIndex >= 0) {
+                if (isCumulative && tradeHasMainSheetContext(merged[matchIndex], spreadsheetId)) {
+                    usedIndices.add(matchIndex);
+                    skippedSheetRows++;
+                    return;
+                }
                 merged[matchIndex] = enrichTradeWithSheet(merged[matchIndex], trade);
                 annotateStoredSheetMatch(sheetRowsStore, spreadsheetId, dateStr, trade, matchIndex);
                 usedIndices.add(matchIndex);

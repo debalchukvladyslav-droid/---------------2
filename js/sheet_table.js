@@ -16,8 +16,16 @@ import {
     parseSheetGridToTrades as parseSheetGridToTradesCore,
 } from './sheet_sync_core.js';
 import { mergeGoogleSheetTradesIntoJournal as mergeSheetTradesIntoJournal } from './sheet_journal_merge.js';
+import {
+    duplicateSheetMappingConfig,
+    normalizeSheetImportMode,
+    SHEET_MODE_CUMULATIVE,
+    SHEET_MODE_MAIN,
+} from './sheet_import_modes.js';
 
 const LS_KEY = 'tj_google_sheet_import_v1';
+const LS_KEY_CUMULATIVE = 'tj_google_sheet_cumulative_import_v1';
+const LS_MODE_KEY = 'tj_google_sheet_import_mode';
 
 /** Підключено до Google (після OAuth). */
 const SESSION_GOOGLE = 'sheet_google_connected';
@@ -25,6 +33,9 @@ const SESSION_GOOGLE = 'sheet_google_connected';
 const SESSION_SPREADSHEET_ID = 'sheet_spreadsheet_id';
 const SESSION_SPREADSHEET_TITLE = 'sheet_spreadsheet_title';
 const SESSION_SHEET_TITLE = 'sheet_selected_sheet_title';
+const SESSION_CUMULATIVE_SPREADSHEET_ID = 'sheet_cumulative_spreadsheet_id';
+const SESSION_CUMULATIVE_SPREADSHEET_TITLE = 'sheet_cumulative_spreadsheet_title';
+const SESSION_CUMULATIVE_SHEET_TITLE = 'sheet_cumulative_selected_sheet_title';
 const GOOGLE_PANEL_OPEN_KEY = 'tj_google_sheet_panel_open';
 
 /** Колонки таблиці / trade.sheet для статистики та datagrid (порядок = у формі). */
@@ -102,10 +113,10 @@ function clampSheetIntervalMin(n) {
  */
 export function ensureSheetAutoSyncFromConfig() {
     stopSheetAutoSync();
-    const cfg = readStoredConfig();
+    const cfg = readStoredConfig(SHEET_MODE_MAIN);
     if (!cfg?.autoSync?.enabled) return;
     if ((localStorage.getItem(SESSION_GOOGLE) || sessionStorage.getItem(SESSION_GOOGLE)) !== '1') return;
-    if (!(localStorage.getItem(SESSION_SPREADSHEET_ID) || sessionStorage.getItem(SESSION_SPREADSHEET_ID))) return;
+    if (!getModeStoredItem('spreadsheetId', SHEET_MODE_MAIN)) return;
     const min = clampSheetIntervalMin(cfg.autoSync.intervalMinutes);
     _sheetAutoTimer = setInterval(() => {
         if (!document.getElementById('view-table')?.classList.contains('active')) return;
@@ -114,9 +125,9 @@ export function ensureSheetAutoSyncFromConfig() {
         if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
         void (async () => {
             try {
-                const c = readStoredConfig();
+                const c = readStoredConfig(SHEET_MODE_MAIN);
                 if (!c?.spreadsheetId || !c?.smartColumns) return;
-                await executeSyncWithCfg(c, { quiet: true });
+                await executeSyncWithCfg(c, { quiet: true, mode: SHEET_MODE_MAIN });
             } catch (e) {
                 console.warn('[Google Sheets] авто-синхронізація:', e?.message || e);
             }
@@ -145,6 +156,57 @@ function el(id) {
     return document.getElementById(id);
 }
 
+function getActiveSheetMode() {
+    return normalizeSheetImportMode(localStorage.getItem(LS_MODE_KEY) || sessionStorage.getItem(LS_MODE_KEY));
+}
+
+function setActiveSheetMode(mode) {
+    const normalized = normalizeSheetImportMode(mode);
+    localStorage.setItem(LS_MODE_KEY, normalized);
+    sessionStorage.setItem(LS_MODE_KEY, normalized);
+    return normalized;
+}
+
+function isCumulativeMode(mode = getActiveSheetMode()) {
+    return normalizeSheetImportMode(mode) === SHEET_MODE_CUMULATIVE;
+}
+
+function modeStorageKeys(mode = getActiveSheetMode()) {
+    return isCumulativeMode(mode)
+        ? {
+            config: LS_KEY_CUMULATIVE,
+            spreadsheetId: SESSION_CUMULATIVE_SPREADSHEET_ID,
+            spreadsheetTitle: SESSION_CUMULATIVE_SPREADSHEET_TITLE,
+            sheetTitle: SESSION_CUMULATIVE_SHEET_TITLE,
+        }
+        : {
+            config: LS_KEY,
+            spreadsheetId: SESSION_SPREADSHEET_ID,
+            spreadsheetTitle: SESSION_SPREADSHEET_TITLE,
+            sheetTitle: SESSION_SHEET_TITLE,
+        };
+}
+
+function getModeStoredItem(kind, mode = getActiveSheetMode()) {
+    const key = modeStorageKeys(mode)[kind];
+    return localStorage.getItem(key) || sessionStorage.getItem(key) || '';
+}
+
+function setModeStoredItem(kind, value, mode = getActiveSheetMode()) {
+    const key = modeStorageKeys(mode)[kind];
+    if (value == null || value === '') {
+        sessionStorage.removeItem(key);
+        localStorage.removeItem(key);
+        return;
+    }
+    sessionStorage.setItem(key, value);
+    localStorage.setItem(key, value);
+}
+
+function removeModeStoredItem(kind, mode = getActiveSheetMode()) {
+    setModeStoredItem(kind, '', mode);
+}
+
 function isGoogleSheetPanelOpen() {
     return localStorage.getItem(GOOGLE_PANEL_OPEN_KEY) === '1';
 }
@@ -164,6 +226,33 @@ function syncGoogleSheetPanelToggle() {
         toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
     }
     if (stateLabel) stateLabel.textContent = open ? 'Сховати' : 'Показати';
+}
+
+function syncSheetModeUi() {
+    const mode = getActiveSheetMode();
+    document.querySelectorAll('[data-action="sheet-import-mode"][data-sheet-mode]').forEach((button) => {
+        const active = normalizeSheetImportMode(button.dataset.sheetMode) === mode;
+        button.classList.toggle('is-active', active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+
+    const duplicateBtn = el('sheet-duplicate-mapping-btn');
+    if (duplicateBtn) duplicateBtn.hidden = !isCumulativeMode(mode);
+
+    const autoSync = el('sheet-auto-sync-block');
+    if (autoSync) autoSync.hidden = isCumulativeMode(mode);
+
+    const syncBtn = el('sheet-save-sync-btn');
+    if (syncBtn) syncBtn.textContent = isCumulativeMode(mode) ? 'Імпортувати накопичувальну' : BTN_DEFAULT;
+
+    const nameEl = el('sheet-selected-file-name');
+    if (nameEl) nameEl.textContent = getModeStoredItem('spreadsheetTitle', mode) || getModeStoredItem('spreadsheetId', mode) || '—';
+
+    const serviceInput = el('sheet-service-url-input');
+    const serviceWorkspaceInput = el('sheet-service-url-input-workspace');
+    const currentId = getModeStoredItem('spreadsheetId', mode);
+    if (serviceInput) serviceInput.value = currentId;
+    if (serviceWorkspaceInput) serviceWorkspaceInput.value = currentId;
 }
 
 function bindGoogleSheetPanelToggle() {
@@ -326,14 +415,13 @@ function renderMappingStatus() {
 }
 
 function getCurrentSpreadsheetId() {
-    return localStorage.getItem(SESSION_SPREADSHEET_ID) || sessionStorage.getItem(SESSION_SPREADSHEET_ID) || '';
+    return getModeStoredItem('spreadsheetId');
 }
 
 function collectSheetRowsForCurrentSpreadsheet() {
     const spreadsheetId = getCurrentSpreadsheetId();
-    const store = state.appData?.sheetRows && typeof state.appData.sheetRows === 'object'
-        ? state.appData.sheetRows
-        : {};
+    const sourceStore = isCumulativeMode() ? state.appData?.cumulativeSheetRows : state.appData?.sheetRows;
+    const store = sourceStore && typeof sourceStore === 'object' ? sourceStore : {};
     const byDay = spreadsheetId ? store[spreadsheetId] : null;
     if (!byDay || typeof byDay !== 'object') return [];
 
@@ -603,7 +691,7 @@ function setMappingFromGridCell(field, colLetter, rowNumber, event = null) {
 function persistSheetMappingDraft() {
     try {
         const cfg = collectFormConfig();
-        localStorage.setItem(LS_KEY, JSON.stringify(cfg));
+        localStorage.setItem(modeStorageKeys(getActiveSheetMode()).config, JSON.stringify(cfg));
         _sheetFormHydratedFromStorage = true;
     } catch (e) {
         console.warn('[Google Sheets] mapping draft save failed', e);
@@ -787,7 +875,7 @@ export function populateSheetMappingFromHeaders(headers) {
         }
     });
 
-    const cfg = readStoredConfig();
+    const cfg = readStoredConfig(getActiveSheetMode());
     if (cfg?.smartColumns && typeof cfg.smartColumns === 'object') {
         SMART_KEYS.forEach((k) => {
             setSmartRowValue(k, cfg.smartColumns[k] || '', false);
@@ -813,10 +901,9 @@ export function setGoogleAccountEmail(email) {
 }
 
 export function rememberSpreadsheet(id, title) {
-    sessionStorage.setItem(SESSION_SPREADSHEET_ID, id);
-    localStorage.setItem(SESSION_SPREADSHEET_ID, id);
-    if (title) sessionStorage.setItem(SESSION_SPREADSHEET_TITLE, title);
-    if (title) localStorage.setItem(SESSION_SPREADSHEET_TITLE, title);
+    const mode = getActiveSheetMode();
+    setModeStoredItem('spreadsheetId', id, mode);
+    if (title) setModeStoredItem('spreadsheetTitle', title, mode);
     sessionStorage.setItem(SESSION_GOOGLE, '1');
     localStorage.setItem(SESSION_GOOGLE, '1');
     const nameEl = el('sheet-selected-file-name');
@@ -828,8 +915,8 @@ export function rememberSpreadsheet(id, title) {
     renderSheetRowsPanel();
 }
 
-export function getSelectedSheetTitle() {
-    return localStorage.getItem(SESSION_SHEET_TITLE) || sessionStorage.getItem(SESSION_SHEET_TITLE) || '';
+export function getSelectedSheetTitle(mode = getActiveSheetMode()) {
+    return getModeStoredItem('sheetTitle', mode);
 }
 
 export function setSpreadsheetSheets(sheets, selectedTitle = '') {
@@ -846,18 +933,16 @@ export function setSpreadsheetSheets(sheets, selectedTitle = '') {
         select.appendChild(option);
     });
 
-    const stored = selectedTitle || sessionStorage.getItem(SESSION_SHEET_TITLE) || list[0]?.title || '';
+    const mode = getActiveSheetMode();
+    const stored = selectedTitle || getModeStoredItem('sheetTitle', mode) || list[0]?.title || '';
     if (stored && list.some(sheet => sheet.title === stored)) {
         select.value = stored;
-        sessionStorage.setItem(SESSION_SHEET_TITLE, stored);
-        localStorage.setItem(SESSION_SHEET_TITLE, stored);
+        setModeStoredItem('sheetTitle', stored, mode);
     } else if (list[0]) {
         select.value = list[0].title;
-        sessionStorage.setItem(SESSION_SHEET_TITLE, list[0].title);
-        localStorage.setItem(SESSION_SHEET_TITLE, list[0].title);
+        setModeStoredItem('sheetTitle', list[0].title, mode);
     } else {
-        sessionStorage.removeItem(SESSION_SHEET_TITLE);
-        localStorage.removeItem(SESSION_SHEET_TITLE);
+        removeModeStoredItem('sheetTitle', mode);
     }
 
     picker.hidden = list.length <= 1;
@@ -866,14 +951,13 @@ export function setSpreadsheetSheets(sheets, selectedTitle = '') {
 export function clearGoogleSheetSession() {
     stopSheetAutoSync();
     sessionStorage.removeItem(SESSION_GOOGLE);
-    sessionStorage.removeItem(SESSION_SPREADSHEET_ID);
-    sessionStorage.removeItem(SESSION_SPREADSHEET_TITLE);
-    sessionStorage.removeItem(SESSION_SHEET_TITLE);
     sessionStorage.removeItem('sheet_google_access_token');
     localStorage.removeItem(SESSION_GOOGLE);
-    localStorage.removeItem(SESSION_SPREADSHEET_ID);
-    localStorage.removeItem(SESSION_SPREADSHEET_TITLE);
-    localStorage.removeItem(SESSION_SHEET_TITLE);
+    [SHEET_MODE_MAIN, SHEET_MODE_CUMULATIVE].forEach((mode) => {
+        removeModeStoredItem('spreadsheetId', mode);
+        removeModeStoredItem('spreadsheetTitle', mode);
+        removeModeStoredItem('sheetTitle', mode);
+    });
     const nameEl = el('sheet-selected-file-name');
     if (nameEl) nameEl.textContent = '—';
     setSpreadsheetSheets([]);
@@ -882,7 +966,7 @@ export function clearGoogleSheetSession() {
 
 export function syncSheetWorkspaceVisibility() {
     const connected = (localStorage.getItem(SESSION_GOOGLE) || sessionStorage.getItem(SESSION_GOOGLE)) === '1';
-    const fileOk = !!(localStorage.getItem(SESSION_SPREADSHEET_ID) || sessionStorage.getItem(SESSION_SPREADSHEET_ID));
+    const fileOk = !!getModeStoredItem('spreadsheetId');
     const panelOpen = isGoogleSheetPanelOpen();
 
     const s1 = el('sheet-state-connect');
@@ -892,6 +976,7 @@ export function syncSheetWorkspaceVisibility() {
     const tabPicker = el('sheet-tab-picker');
 
     syncGoogleSheetPanelToggle();
+    syncSheetModeUi();
     if (s1) s1.hidden = !panelOpen || connected;
     if (s2) s2.hidden = !panelOpen || !connected;
     if (fileCard) fileCard.hidden = !panelOpen || !connected || !fileOk;
@@ -1024,9 +1109,11 @@ function cellStr(row, colIdx) {
  */
 async function executeSyncWithCfg(cfg, options = {}) {
     const quiet = !!options.quiet;
+    const mode = normalizeSheetImportMode(options.mode || cfg.mode || getActiveSheetMode());
+    const cumulative = isCumulativeMode(mode);
     if (!canMutateSheetSync({ silent: quiet })) return { ok: false };
 
-    const spreadsheetId = cfg.spreadsheetId || localStorage.getItem(SESSION_SPREADSHEET_ID) || sessionStorage.getItem(SESSION_SPREADSHEET_ID) || '';
+    const spreadsheetId = cfg.spreadsheetId || getModeStoredItem('spreadsheetId', mode);
     if (!spreadsheetId) {
         if (!quiet) showToast('Оберіть таблицю на Google Диску.');
         return { ok: false };
@@ -1046,21 +1133,25 @@ async function executeSyncWithCfg(cfg, options = {}) {
 
     try {
         const mod = await import('./google_sheet_connector.js');
-        const values = await mod.fetchSpreadsheetValuesRange(spreadsheetId, `A${startRow}:ZZ2000`, cfg.sheetTitle || getSelectedSheetTitle());
+        const endRow = cumulative ? '' : '2000';
+        const values = await mod.fetchSpreadsheetValuesRange(spreadsheetId, `A${startRow}:ZZ${endRow}`, cfg.sheetTitle || getSelectedSheetTitle(mode));
         const parsedSmart = normalizeSmartColumnsForCore(smart);
         const { outByDay, dateAnchors, stats } = parseSheetGridToTradesCore(values, parsedSmart, spreadsheetId, startRow);
 
         if (!quiet) {
             console.group('[Google Sheets] Синхронізація');
             console.log('Таблиця:', cfg.selectedFileName || spreadsheetId);
-            if (cfg.sheetTitle || getSelectedSheetTitle()) console.log('Лист:', cfg.sheetTitle || getSelectedSheetTitle());
+            if (cfg.sheetTitle || getSelectedSheetTitle(mode)) console.log('Лист:', cfg.sheetTitle || getSelectedSheetTitle(mode));
             console.log('Якорі дат (перший рядок Excel з цією датою в колонці дати):', dateAnchors);
             console.groupEnd();
             logTradesImportConsole('Google Sheets → журнал', outByDay);
         }
 
         const mergeResult = mergeSheetTradesIntoJournal(state.appData?.journal || {}, outByDay, spreadsheetId, {
-            sheetRowsStore: state.appData.sheetRows || (state.appData.sheetRows = {}),
+            mode: cumulative ? SHEET_MODE_CUMULATIVE : SHEET_MODE_MAIN,
+            sheetRowsStore: cumulative
+                ? (state.appData.cumulativeSheetRows || (state.appData.cumulativeSheetRows = {}))
+                : (state.appData.sheetRows || (state.appData.sheetRows = {})),
             syncDayTotals: (dateStr) => syncFondexxFromTradesForDay(dateStr),
             markTouched: (dateStr) => markJournalDayDirty(dateStr),
             warnInvalidDate: (dateStr) => console.warn('[Google Sheets] Пропущено невалідну дату (не пишемо в журнал):', dateStr),
@@ -1080,7 +1171,9 @@ async function executeSyncWithCfg(cfg, options = {}) {
                 console.log(
                     `[Google Sheets] Imported ${mergeResult.importedSheetRows} sheet rows as auxiliary criteria; ${mergeResult.matchedSheetRows} matched Trades; ${mergeResult.skippedSheetRows} stored without Trades.`,
                 );
-                showToast(`Таблиця імпортована: ${mergeResult.importedSheetRows}. Оновлено Trades: ${mergeResult.matchedSheetRows}. Без Trades збережено допоміжно: ${mergeResult.skippedSheetRows}.`);
+                showToast(cumulative
+                    ? `Накопичувальна імпортована: ${mergeResult.importedSheetRows}. Оновлено Trades: ${mergeResult.matchedSheetRows}. Без Trades: ${mergeResult.skippedSheetRows}.`
+                    : `Таблиця імпортована: ${mergeResult.importedSheetRows}. Оновлено Trades: ${mergeResult.matchedSheetRows}. Без Trades збережено допоміжно: ${mergeResult.skippedSheetRows}.`);
             } else {
                 console.warn(
                         '[Google Sheets] Угод не знайдено: перевірте дати в колонці дати та тікери з рядка ' +
@@ -1093,9 +1186,9 @@ async function executeSyncWithCfg(cfg, options = {}) {
 
         if (window.updateAutoFlags) window.updateAutoFlags();
         if (window.renderView) window.renderView();
-        if (window.requestTradesDatagridRefresh) {
+        if (!cumulative && window.requestTradesDatagridRefresh) {
             window.requestTradesDatagridRefresh();
-        } else if (document.getElementById('view-datagrid')?.classList.contains('active') && window.renderTradesDatagrid) {
+        } else if (!cumulative && document.getElementById('view-datagrid')?.classList.contains('active') && window.renderTradesDatagrid) {
             window.renderTradesDatagrid();
         }
         const viewStats = document.getElementById('view-stats');
@@ -1311,9 +1404,9 @@ function bindSheetGridPicker() {
     });
 }
 
-function readStoredConfig() {
+function readStoredConfig(mode = getActiveSheetMode()) {
     try {
-        const raw = localStorage.getItem(LS_KEY);
+        const raw = localStorage.getItem(modeStorageKeys(mode).config);
         if (!raw) return null;
         const o = JSON.parse(raw);
         return o && typeof o === 'object' ? o : null;
@@ -1324,8 +1417,9 @@ function readStoredConfig() {
 
 function applyConfigToForm(cfg) {
     _sheetSmartAnchors = cfg?.smartAnchors && typeof cfg.smartAnchors === 'object' ? { ...cfg.smartAnchors } : {};
-    if (cfg?.sheetTitle) sessionStorage.setItem(SESSION_SHEET_TITLE, cfg.sheetTitle);
+    if (cfg?.sheetTitle) setModeStoredItem('sheetTitle', cfg.sheetTitle);
     if (!cfg) {
+        SMART_KEYS.forEach((k) => setSmartRowValue(k, '', false));
         updateGridPickerMeta();
         syncActiveGridFieldUi();
         return;
@@ -1358,6 +1452,48 @@ function applyConfigToForm(cfg) {
     syncActiveGridFieldUi();
 }
 
+export function switchSheetImportMode(mode = SHEET_MODE_MAIN) {
+    const nextMode = normalizeSheetImportMode(mode);
+    const currentMode = getActiveSheetMode();
+    if (nextMode === currentMode) {
+        syncSheetWorkspaceVisibility();
+        return;
+    }
+
+    try {
+        localStorage.setItem(modeStorageKeys(currentMode).config, JSON.stringify(collectFormConfig()));
+    } catch (_) {
+        /* ignore draft save */
+    }
+
+    setActiveSheetMode(nextMode);
+    _sheetFormHydratedFromStorage = true;
+    applyConfigToForm(readStoredConfig(nextMode));
+    syncSheetWorkspaceVisibility();
+
+    const spreadsheetId = getModeStoredItem('spreadsheetId', nextMode);
+    const sheetTitle = getSelectedSheetTitle(nextMode);
+    if (spreadsheetId) {
+        void import('./google_sheet_connector.js')
+            .then((m) => m.fetchSpreadsheetData?.(spreadsheetId, sheetTitle))
+            .catch((e) => console.warn('[Google Sheets] mode preview refresh failed', e));
+    } else {
+        clearSheetPreviewData();
+    }
+}
+
+export function duplicateMainSheetMappingToCumulative() {
+    const mainCfg = readStoredConfig(SHEET_MODE_MAIN) || {};
+    const cumulativeCfg = readStoredConfig(SHEET_MODE_CUMULATIVE) || {};
+    const next = duplicateSheetMappingConfig(mainCfg, cumulativeCfg);
+    localStorage.setItem(LS_KEY_CUMULATIVE, JSON.stringify(next));
+    if (isCumulativeMode()) {
+        applyConfigToForm(next);
+        syncSheetWorkspaceVisibility();
+    }
+    showToast('Мапінг продубльовано в накопичувальну.');
+}
+
 let _sheetFormHydratedFromStorage = false;
 
 export function initSheetTableView(options = {}) {
@@ -1367,7 +1503,7 @@ export function initSheetTableView(options = {}) {
     applySheetGridZoom();
     const needHydrate = !_sheetFormHydratedFromStorage;
     if (needHydrate) {
-        applyConfigToForm(readStoredConfig());
+        applyConfigToForm(readStoredConfig(getActiveSheetMode()));
         _sheetFormHydratedFromStorage = true;
     }
 
@@ -1398,11 +1534,10 @@ export function initSheetTableView(options = {}) {
 
 export async function handleSheetTabChange(selectEl) {
     const title = String(selectEl?.value || '').trim();
-    const spreadsheetId = localStorage.getItem(SESSION_SPREADSHEET_ID) || sessionStorage.getItem(SESSION_SPREADSHEET_ID) || '';
+    const spreadsheetId = getModeStoredItem('spreadsheetId');
     if (!title || !spreadsheetId) return;
 
-    sessionStorage.setItem(SESSION_SHEET_TITLE, title);
-    localStorage.setItem(SESSION_SHEET_TITLE, title);
+    setModeStoredItem('sheetTitle', title);
     try {
         const mod = await import('./google_sheet_connector.js');
         await mod.fetchSpreadsheetData(spreadsheetId, title);
@@ -1419,12 +1554,12 @@ function collectFormConfig() {
         smartColumns[k] = readSmartColumnForConfig(k);
     });
 
-    const spreadsheetId = localStorage.getItem(SESSION_SPREADSHEET_ID) || sessionStorage.getItem(SESSION_SPREADSHEET_ID) || '';
+    const mode = getActiveSheetMode();
+    const spreadsheetId = getModeStoredItem('spreadsheetId', mode);
     const sheetTitle = getSelectedSheetTitle();
     const title =
         el('sheet-selected-file-name')?.textContent?.trim() ||
-        localStorage.getItem(SESSION_SPREADSHEET_TITLE) ||
-        sessionStorage.getItem(SESSION_SPREADSHEET_TITLE) ||
+        getModeStoredItem('spreadsheetTitle', mode) ||
         '';
 
     const autoSync = {
@@ -1434,6 +1569,7 @@ function collectFormConfig() {
 
     return {
         version: 5,
+        mode,
         savedAt: new Date().toISOString(),
         spreadsheetId,
         selectedFileName: title,
@@ -1499,11 +1635,12 @@ export async function saveSheetMapping() {
             return;
         }
 
-        localStorage.setItem(LS_KEY, JSON.stringify(cfg));
+        const mode = getActiveSheetMode();
+        localStorage.setItem(modeStorageKeys(mode).config, JSON.stringify(cfg));
         _sheetFormHydratedFromStorage = true;
-        void persistServerSheetSyncConfig(cfg);
+        if (!isCumulativeMode(mode)) void persistServerSheetSyncConfig(cfg);
 
-        await executeSyncWithCfg(cfg, { quiet: false });
+        await executeSyncWithCfg(cfg, { quiet: false, mode });
         ensureSheetAutoSyncFromConfig();
     } catch (e) {
         console.error('[Google Sheets] sync', e);
@@ -1518,6 +1655,8 @@ export async function saveSheetMapping() {
 
 window.toggleMappingMode = toggleMappingMode;
 window.saveSheetMapping = saveSheetMapping;
+window.switchSheetImportMode = switchSheetImportMode;
+window.duplicateMainSheetMappingToCumulative = duplicateMainSheetMappingToCumulative;
 window.handleSheetTabChange = handleSheetTabChange;
 window.changeSheetGridZoom = changeSheetGridZoom;
 window.armSheetMultiColumnAdd = armSheetMultiColumnAdd;

@@ -32,6 +32,7 @@ const { enrichTradeWithSheet, findSheetMatchIndex, parseSheetGridToTrades } = aw
 const { summarizeJournalPnl } = await import('../js/stats_math.js');
 const { getEffectiveDayPnl, isPureGoogleSheetTrade, visibleTradeRows } = await import('../js/trade_filters.js');
 const { normalizeBrokerTradeType } = await import('../js/trade_import_utils.js');
+const { duplicateSheetMappingConfig } = await import('../js/sheet_import_modes.js');
 const { parseDecimalInput } = await import('../js/utils.js');
 
 test('parser utils find ECN fee columns across supported header names', () => {
@@ -383,4 +384,108 @@ test('datagrid rows fall back to real Trades when no sheetRows exist', () => {
 
     assert.equal(result.source, 'trades');
     assert.deepEqual(result.rows.map((row) => row.trade.symbol), ['AAPL']);
+});
+
+test('cumulative sheet import stores invisible rows and enriches only existing Trades', () => {
+    const journal = {
+        '2026-01-10': {
+            pnl: 25,
+            trades: [
+                { symbol: 'AAPL', opened: '2026-01-10 09:31:00', net: 25, gross: 30, comm: 5, type: 'Short' },
+            ],
+            fondexx: { gross: 30, net: 25, comm: 5, locates: 0, tickers: ['AAPL'] },
+            ppro: { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
+        },
+        '2026-01-11': {
+            pnl: null,
+            trades: [],
+            fondexx: { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
+            ppro: { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
+        },
+    };
+    const cumulativeSheetRows = {};
+    const result = mergeGoogleSheetTradesIntoJournal(journal, {
+        '2026-01-10': [
+            { symbol: 'AAPL', opened: '2026-01-10 09:30:00', net: 26, type: 'Archive Setup', sheet: { source: 'google', spreadsheetId: 'archive-1', sheetRow: 12, tradeType: 'Archive Setup', pv: 'old-ok' } },
+        ],
+        '2026-01-11': [
+            { symbol: 'TSLA', opened: '2026-01-11 09:30:00', net: 5, type: 'Archive Only', sheet: { source: 'google', spreadsheetId: 'archive-1', sheetRow: 13, tradeType: 'Archive Only' } },
+        ],
+    }, 'archive-1', {
+        mode: 'cumulative',
+        sheetRowsStore: cumulativeSheetRows,
+    });
+
+    assert.equal(result.importedSheetRows, 2);
+    assert.equal(result.matchedSheetRows, 1);
+    assert.equal(result.skippedSheetRows, 1);
+    assert.equal(journal['2026-01-10'].trades.length, 1);
+    assert.equal(journal['2026-01-10'].trades[0].net, 25);
+    assert.equal(journal['2026-01-10'].pnl, 25);
+    assert.equal(journal['2026-01-10'].trades[0].type, 'Archive Setup');
+    assert.equal(journal['2026-01-10'].trades[0].sheet.pv, 'old-ok');
+    assert.equal(journal['2026-01-11'].trades.length, 0);
+    assert.equal(cumulativeSheetRows['archive-1']['2026-01-11'][0].symbol, 'TSLA');
+
+    const grid = collectDatagridRows({ journal, cumulativeSheetRows });
+    assert.equal(grid.source, 'trades');
+    assert.deepEqual(grid.rows.map((row) => row.trade.symbol), ['AAPL']);
+});
+
+test('main sheet context wins over cumulative overlap', () => {
+    const journal = {
+        '2026-04-01': {
+            pnl: 10,
+            trades: [
+                {
+                    symbol: 'AAPL',
+                    opened: '2026-04-01 09:31:00',
+                    net: 10,
+                    type: 'Main Setup',
+                    sheet: { source: 'google', spreadsheetId: 'main-1', matchedBy: 'date+ticker+pnl', tradeType: 'Main Setup', pv: 'main' },
+                },
+            ],
+        },
+    };
+    const cumulativeSheetRows = {};
+    const result = mergeGoogleSheetTradesIntoJournal(journal, {
+        '2026-04-01': [
+            { symbol: 'AAPL', opened: '2026-04-01 09:30:00', net: 11, type: 'Archive Setup', sheet: { source: 'google', spreadsheetId: 'archive-1', sheetRow: 99, tradeType: 'Archive Setup', pv: 'archive' } },
+        ],
+    }, 'archive-1', {
+        mode: 'cumulative',
+        sheetRowsStore: cumulativeSheetRows,
+    });
+
+    assert.equal(result.matchedSheetRows, 0);
+    assert.equal(result.skippedSheetRows, 1);
+    assert.equal(journal['2026-04-01'].trades[0].type, 'Main Setup');
+    assert.equal(journal['2026-04-01'].trades[0].sheet.pv, 'main');
+    assert.equal(cumulativeSheetRows['archive-1']['2026-04-01'][0].sheet.matchedTradeIndex, undefined);
+});
+
+test('duplicating sheet mapping copies columns and anchors but not source file', () => {
+    const duplicated = duplicateSheetMappingConfig(
+        {
+            version: 5,
+            spreadsheetId: 'main-file',
+            sheetTitle: 'Current',
+            selectedFileName: 'Main',
+            smartColumns: { date: 'A', symbol: 'B', tradeType: 'C' },
+            smartAnchors: { date: 'A8', symbol: 'B8' },
+            dataStartRow: 8,
+        },
+        {
+            spreadsheetId: 'archive-file',
+            sheetTitle: 'Archive',
+            selectedFileName: 'Archive',
+            smartColumns: { date: 'D' },
+        },
+    );
+
+    assert.equal(duplicated.spreadsheetId, 'archive-file');
+    assert.equal(duplicated.sheetTitle, 'Archive');
+    assert.deepEqual(duplicated.smartColumns, { date: 'A', symbol: 'B', tradeType: 'C' });
+    assert.deepEqual(duplicated.smartAnchors, { date: 'A8', symbol: 'B8' });
+    assert.equal(duplicated.dataStartRow, 8);
 });
