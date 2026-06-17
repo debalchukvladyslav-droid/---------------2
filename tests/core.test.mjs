@@ -26,6 +26,7 @@ const { buildAutoTradeTypesData, normalizeAppData, normalizeDayEntry } = await i
 const { ecnFeeColumnIndex, parseSheetDateCellToIso } = await import('../js/parser_utils.js');
 const { sanitizeHTML, safeExternalUrl, sanitizeRichHTML } = await import('../js/sanitize.js');
 const { mergeGoogleSheetTradesIntoJournal } = await import('../js/sheet_journal_merge.js');
+const { parseFondexxSummaryByDateRows } = await import('../js/fondexx_summary_parser.js');
 const { enrichTradeWithSheet, findSheetMatchIndex, parseSheetGridToTrades } = await import('../js/sheet_sync_core.js');
 const { summarizeJournalPnl } = await import('../js/stats_math.js');
 const { getEffectiveDayPnl, isPureGoogleSheetTrade, visibleTradeRows } = await import('../js/trade_filters.js');
@@ -61,6 +62,57 @@ test('stats math summarizes journal pnl safely', () => {
         winRate: 66.67,
         profitFactor: 3.76,
     });
+});
+
+const fondexxSummaryHeaders = [
+    'Date', 'Type', 'Orders', 'Fills', 'Qty', 'Gross', 'Comm', 'Ecn Fee', 'SEC', 'TAF',
+    'NSCC', 'CLR', 'Misc', 'ORF', 'PTFPF', 'Net', 'Daily Interest', 'HTB',
+    'Misc (Cost of execution)', 'Credits Comm', 'Dividend', 'Software', 'Adj Net',
+    'Unrealized Delta', 'Total Delta',
+];
+
+function summaryRow({ date, type = 'Eq', orders = 1, fills = 1, qty = 100, gross = 0, comm = 0, ecn = 0, net = 0, software = 0, total = 0 }) {
+    return [
+        date, type, orders, fills, qty, gross, comm, ecn, 0, 0,
+        0, 0, 0, 0, 0, net, 0, 0,
+        0, 0, 0, software, total, 0, total,
+    ];
+}
+
+test('Fondexx Summary by date parser does not assign multi-month Equities total to first month', () => {
+    const parsed = parseFondexxSummaryByDateRows([
+        fondexxSummaryHeaders,
+        summaryRow({ date: '2026-01-05', gross: 14000, comm: 184.61, net: 13815.39, total: 13815.39 }),
+        summaryRow({ date: '2026-01-31', type: '', orders: 0, fills: 0, qty: 0, software: -65, total: 631.8 }),
+        summaryRow({ date: '2026-02-02', gross: 6000, comm: 34.06, net: 5965.94, total: 5965.94 }),
+        summaryRow({ date: '2026-02-28', type: '', orders: 0, fills: 0, qty: 0, total: -168.2 }),
+        summaryRow({ date: '2026-03-02', gross: 9300, comm: 60.79, net: 9239.21, total: 9239.21 }),
+        ['Equities', '', 426, 5009, 1604174, 39621.99, 0, 0, 0, 0, 0, 0, 0, 0, 0, 34079.56, 0, 0, 0, 0, 0, 0, 29484.14, 0, 29484.14],
+    ]);
+
+    assert.deepEqual(parsed.touchedMonths, ['2026-01', '2026-02', '2026-03']);
+    assert.deepEqual(parsed.dailyRows.map((row) => row.dateStr), ['2026-01-05', '2026-02-02', '2026-03-02']);
+    assert.equal(parsed.monthlyAdjustments['2026-01'].pnl, 631.8);
+    assert.equal(parsed.monthlyAdjustments['2026-02'].pnl, -168.2);
+    assert.equal(parsed.monthlyAdjustments['2026-03'], undefined);
+    assert.equal(parsed.auditTotals[0], 29484.14);
+    assert.equal(parsed.monthlyAdjustments['2026-01'].pnl !== 15036.95, true);
+});
+
+test('Fondexx Summary by date parser keeps blank no-activity rows as monthly adjustments', () => {
+    const parsed = parseFondexxSummaryByDateRows([
+        fondexxSummaryHeaders,
+        summaryRow({ date: '2026-04-01', type: '', orders: 0, fills: 0, qty: 0, total: -134.64 }),
+        summaryRow({ date: '2026-04-07', gross: -2262.83, comm: 52.37, net: -2315.2, total: -2622.3 }),
+        summaryRow({ date: '2026-05-30', type: 'Fees', orders: 0, fills: 0, qty: 0, software: -70, total: -173.2 }),
+        summaryRow({ date: '2026-06-01', gross: 19000, comm: 80.34, net: 18919.66, total: 18919.66 }),
+        ['Equities', '', 588, 5825, 1958564, 67764.15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 61867.71, 0, 0, 0, 0, 0, 0, 47379.78, 0, 47379.78],
+    ]);
+
+    assert.deepEqual(parsed.dailyRows.map((row) => row.dateStr), ['2026-04-07', '2026-06-01']);
+    assert.equal(parsed.monthlyAdjustments['2026-04'].pnl, -134.64);
+    assert.equal(parsed.monthlyAdjustments['2026-05'].pnl, -173.2);
+    assert.equal(parsed.monthlyAdjustments['2026-04'].pnl !== 39478.69, true);
 });
 
 test('access control allows mentor/admin review access and detects view-only mentor context', () => {
