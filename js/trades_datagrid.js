@@ -224,6 +224,10 @@ function nonEmpty(value, fallback = '—') {
     return value != null && value !== '' ? value : fallback;
 }
 
+function sheetOf(trade) {
+    return trade?.sheet && typeof trade.sheet === 'object' ? trade.sheet : {};
+}
+
 function isDatagridViewActive() {
     return !!document.getElementById('view-datagrid')?.classList.contains('active');
 }
