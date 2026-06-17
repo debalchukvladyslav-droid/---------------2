@@ -33,6 +33,7 @@ const { summarizeJournalPnl } = await import('../js/stats_math.js');
 const { getEffectiveDayPnl, isPureGoogleSheetTrade, visibleTradeRows } = await import('../js/trade_filters.js');
 const { normalizeBrokerTradeType } = await import('../js/trade_import_utils.js');
 const { duplicateSheetMappingConfig } = await import('../js/sheet_import_modes.js');
+const { buildExceptionKfRows, buildHourlyKfBuckets, parseSheetProfitRisk } = await import('../js/stats_sheet_metrics.js');
 const { parseDecimalInput } = await import('../js/utils.js');
 
 test('parser utils find ECN fee columns across supported header names', () => {
@@ -244,6 +245,67 @@ test('sheet-only pnl is ignored for day-level stats', () => {
     assert.equal(getEffectiveDayPnl(sheetOnlyDay), null);
     assert.equal(getEffectiveDayPnl(matchedDay), 25);
     assert.equal(getEffectiveDayPnl({ pnl: '12,50', trades: [] }), 12.5);
+});
+
+test('sheet profit risk parser accepts dot, comma, and R suffix values', () => {
+    assert.equal(parseSheetProfitRisk('1.5'), 1.5);
+    assert.equal(parseSheetProfitRisk('1,5'), 1.5);
+    assert.equal(parseSheetProfitRisk('+1.5R'), 1.5);
+    assert.equal(parseSheetProfitRisk('-0,3R'), -0.3);
+    assert.equal(parseSheetProfitRisk(''), null);
+    assert.equal(parseSheetProfitRisk('no pnl'), null);
+});
+
+test('hourly KФ buckets use matched Sheet profitRisk instead of trade net', () => {
+    const entries = [{
+        dateStr: '2026-04-01',
+        data: {
+            trades: [
+                { symbol: 'AAPL', opened: '2026-04-01 09:31:00', net: 100, sheet: { source: 'google', matchedBy: 'date+ticker+pnl', profitRisk: '1.5R' } },
+                { symbol: 'TSLA', opened: '2026-04-01 09:45:00', net: -999, sheet: { source: 'google', matchedBy: 'date+ticker+pnl', profitRisk: '-0,5R' } },
+                { symbol: 'NVDA', opened: '2026-04-01 09:50:00', net: 50, sheet: { source: 'google', profitRisk: '5R' } },
+                { symbol: 'AMD', opened: '2026-04-01 08:10:00', net: 60, sheet: { source: 'google', matchedBy: 'date+ticker+pnl' } },
+            ],
+        },
+    }];
+
+    const buckets = buildHourlyKfBuckets(entries);
+    const hourNine = buckets.find((row) => row.hour === 9);
+
+    assert.equal(hourNine.pnl, 1);
+    assert.equal(hourNine.kf, 1);
+    assert.equal(hourNine.trades, 2);
+});
+
+test('exception criteria KФ rows group matched Sheet exceptions and skip incomplete rows', () => {
+    const entries = [{
+        dateStr: '2026-04-01',
+        data: {
+            trades: [
+                { symbol: 'AAPL', opened: '2026-04-01 09:31:00', sheet: { source: 'google', matchedBy: 'date+ticker+pnl', profitRisk: '-1R', exception: 'Late entry' } },
+                { symbol: 'TSLA', opened: '2026-04-01 09:45:00', sheet: { source: 'google', matchedBy: 'date+ticker+pnl', profitRisk: '0,5R', exceptions: ['Late entry', 'Chase'] } },
+                { symbol: 'NVDA', opened: '2026-04-01 09:50:00', sheet: { source: 'google', matchedBy: 'date+ticker+pnl', profitRisk: '2R' } },
+                { symbol: 'AMD', opened: '2026-04-01 08:10:00', sheet: { source: 'google', matchedBy: 'date+ticker+pnl', exception: 'No KФ' } },
+                { symbol: 'META', opened: '2026-04-01 08:12:00', sheet: { source: 'google', profitRisk: '-5R', exception: 'Sheet only' } },
+            ],
+        },
+    }];
+
+    const rows = buildExceptionKfRows(entries);
+
+    assert.deepEqual(rows.map((row) => row.criterion), ['Late entry', 'Chase']);
+    assert.deepEqual(rows.find((row) => row.criterion === 'Late entry'), {
+        criterion: 'Late entry',
+        kf: -0.5,
+        trades: 2,
+        avgKf: -0.25,
+    });
+    assert.deepEqual(rows.find((row) => row.criterion === 'Chase'), {
+        criterion: 'Chase',
+        kf: 0.5,
+        trades: 1,
+        avgKf: 0.5,
+    });
 });
 
 test('google sheet rows enrich existing Trades instead of becoming sheet-only trades', () => {

@@ -1,12 +1,13 @@
 // === js/stats.js ===
 import { supabase } from './supabase.js';
 import { state } from './state.js';
-import { applyAutoTradeTypesData, DEFAULT_TRADE_TYPES, normalizeAppData, getDefaultAppData, normalizeTradeTypesList, classifyTradeTypeGroup } from './data_utils.js';
+import { applyAutoTradeTypesData, DEFAULT_TRADE_TYPES, normalizeAppData, getDefaultAppData, normalizeTradeTypesList } from './data_utils.js';
 import { loadMonth, loadAllMonths, getCurrentViewedUserId, resolveViewedUserId } from './storage.js';
 import { escapeHtml, parseDecimalInput } from './utils.js';
 import { ensureChartJs } from './vendor_loader.js';
 import { buildTradeTypeInsightRows } from './trade_type_analysis.js';
-import { getEffectiveDayPnl, isPureGoogleSheetTrade } from './trade_filters.js';
+import { getEffectiveDayPnl } from './trade_filters.js';
+import { buildExceptionKfRows, buildHourlyKfBuckets } from './stats_sheet_metrics.js';
 
 // ─── STATS CACHE ───────────────────────────────────────────────────────────────────────────────
 // Module-level Map survives filter switches and profile switches within the
@@ -1604,6 +1605,17 @@ function fmtMoneyAbs(val) {
         : parseFloat(abs.toFixed(2)).toString()) + '$';
 }
 
+function fmtKf(val) {
+    const num = Number(val);
+    if (!Number.isFinite(num)) return '0.00 КФ';
+    return `${num > 0 ? '+' : ''}${num.toFixed(2)} КФ`;
+}
+
+function fmtKfAbs(val) {
+    const num = Math.abs(Number(val) || 0);
+    return `${num.toFixed(2)} КФ`;
+}
+
 function setText(id, value) {
     const el = document.getElementById(id);
     if (el) el.textContent = value;
@@ -1811,44 +1823,17 @@ function buildStatsEntriesFromJournal(journal, tradeTypeFilter = null) {
     return entries;
 }
 
-function parseTradeOpenHour(opened) {
-    const match = /\b(\d{1,2}):\d{2}(?::\d{2})?\b/.exec(String(opened || ''));
-    if (!match) return null;
-    const hour = Number(match[1]);
-    return Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : null;
-}
-
-function buildHourlyPnlBuckets(entries = [], tradeTypeFilter = null) {
-    const buckets = new Map([4, 5, 6, 7, 8, 9].map(hour => [hour, { hour, pnl: 0, trades: 0 }]));
-
-    entries.forEach((entry) => {
-        const trades = Array.isArray(entry?.data?.trades) ? entry.data.trades : [];
-        trades.forEach((trade) => {
-            if (isPureGoogleSheetTrade(trade)) return;
-            if (tradeTypeFilter && classifyTradeTypeGroup(trade) !== tradeTypeFilter) return;
-            const hour = parseTradeOpenHour(trade?.opened);
-            if (!buckets.has(hour)) return;
-            const net = Number(trade?.net);
-            if (!Number.isFinite(net)) return;
-            const bucket = buckets.get(hour);
-            bucket.pnl += net;
-            bucket.trades += 1;
-        });
-    });
-
-    return [4, 5, 6, 7, 8, 9]
-        .filter(hour => hour >= 6 || buckets.get(hour).trades > 0)
-        .map(hour => ({
-            ...buckets.get(hour),
-            label: String(hour).padStart(2, '0'),
-            pnl: parseFloat(buckets.get(hour).pnl.toFixed(2)),
-        }));
-}
-
 function renderStatsBarChart(canvasId, stateKey, labels, values, theme, options = {}) {
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
     canvas.$statsGlowColor = theme.profit;
+    const isHourlyKfChart = canvasId === 'hourlyChart' || canvasId === 'compare-hourlyChart';
+    const valueFormatter = typeof options.valueFormatter === 'function'
+        ? options.valueFormatter
+        : (isHourlyKfChart ? fmtKf : fmtMoney);
+    const tickFormatter = typeof options.tickFormatter === 'function'
+        ? options.tickFormatter
+        : (isHourlyKfChart ? fmtKfAbs : fmtMoneyAbs);
     if (state[stateKey]) state[stateKey].destroy();
     state[stateKey] = new Chart(canvas.getContext('2d'), {
         type: 'bar',
@@ -1880,17 +1865,46 @@ function renderStatsBarChart(canvasId, stateKey, labels, values, theme, options 
                             const suffix = typeof options.tooltipSuffix === 'function'
                                 ? options.tooltipSuffix(ctx.dataIndex)
                                 : '';
-                            return ` ${fmtMoney(ctx.parsed.y)}${suffix}`;
+                            return ` ${valueFormatter(ctx.parsed.y)}${suffix}`;
                         },
                     },
                 },
             },
             scales: {
-                y: { grid: { color: theme.grid }, ticks: { color: theme.muted, callback: v => fmtMoneyAbs(v) } },
+                y: { grid: { color: theme.grid }, ticks: { color: theme.muted, callback: v => tickFormatter(v) } },
                 x: { grid: { display: false }, ticks: { color: theme.muted } },
             },
         },
     });
+}
+
+function renderExceptionCriteriaKfRows(rows = []) {
+    const container = document.getElementById('stats-exception-criteria-list');
+    if (!container) return;
+    if (!rows.length) {
+        container.innerHTML = '<div class="stats-empty-note">Немає угод з КФ та полем "У чому виключення" за вибраний період.</div>';
+        return;
+    }
+
+    const maxAbs = Math.max(...rows.map(row => Math.abs(Number(row.kf) || 0)), 0) || 1;
+    container.innerHTML = rows.slice(0, 18).map((row) => {
+        const kf = Number(row.kf) || 0;
+        const avg = Number(row.avgKf) || 0;
+        const tone = kf > 0 ? 'positive' : kf < 0 ? 'negative' : 'neutral';
+        const width = Math.max(6, Math.min(100, (Math.abs(kf) / maxAbs) * 100));
+        return `
+            <div class="stats-exception-row">
+                <div class="stats-exception-row-main">
+                    <span class="stats-exception-name">${escapeHtml(row.criterion)}</span>
+                    <strong class="${tone}">${escapeHtml(fmtKf(kf))}</strong>
+                </div>
+                <div class="stats-exception-meta">${row.trades} угод · середній ${escapeHtml(fmtKf(avg))}</div>
+                <div class="stats-exception-bar" aria-hidden="true">
+                    <i class="${tone}" style="width:${width}%"></i>
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
 function getStatsPeriodLabel(filters, emptyLabel = 'За весь час') {
@@ -2007,7 +2021,7 @@ function buildComparePaneSummary(entries, settings = {}, tradeTypeFilter = null,
 
     const totalDays = winDays + lossDays + beDays;
     const totalPnl = parseFloat(periodSum.toFixed(2));
-    const hourlyBuckets = buildHourlyPnlBuckets(entries, tradeTypeFilter);
+    const hourlyBuckets = buildHourlyKfBuckets(entries, tradeTypeFilter);
     return {
         totalPnl,
         winrate: totalDays ? (winDays / totalDays) * 100 : 0,
@@ -2968,7 +2982,7 @@ export function renderStatsTab() {
         }
     });
 
-    const hourlyBuckets = buildHourlyPnlBuckets(filteredEntries, ttFilter);
+    const hourlyBuckets = buildHourlyKfBuckets(filteredEntries, ttFilter);
     renderStatsBarChart(
         'hourlyChart',
         'hourlyChartInstance',
@@ -2978,6 +2992,8 @@ export function renderStatsTab() {
         { tooltipSuffix: index => `, ${hourlyBuckets[index]?.trades || 0} угод` },
     );
     
+    renderExceptionCriteriaKfRows(buildExceptionKfRows(filteredEntries, ttFilter));
+
     const ctxPie = document.getElementById('winLossChart').getContext('2d');
     ctxPie.canvas.$statsGlowColor = cssGreen;
     if (state.winLossChartInstance) state.winLossChartInstance.destroy();
