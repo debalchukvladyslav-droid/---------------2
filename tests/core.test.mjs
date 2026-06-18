@@ -346,7 +346,7 @@ test('exception criteria KФ rows group matched Sheet exceptions and skip incomp
 
     const rows = buildExceptionKfRows(entries);
 
-    assert.deepEqual(rows.map((row) => row.criterion), ['Late entry', 'Chase']);
+    assert.deepEqual(rows.map((row) => row.criterion), ['Chase', 'Late entry']);
     assert.deepEqual(rows.find((row) => row.criterion === 'Late entry'), {
         criterion: 'Late entry',
         kf: -0.5,

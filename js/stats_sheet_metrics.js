@@ -85,5 +85,5 @@ export function buildExceptionKfRows(entries = [], tradeTypeFilter = null) {
             kf: parseFloat(row.kf.toFixed(2)),
             avgKf: row.trades ? parseFloat((row.kf / row.trades).toFixed(2)) : 0,
         }))
-        .sort((a, b) => a.kf - b.kf || b.trades - a.trades || a.criterion.localeCompare(b.criterion, 'uk'));
+        .sort((a, b) => b.kf - a.kf || b.trades - a.trades || a.criterion.localeCompare(b.criterion, 'uk'));
 }
