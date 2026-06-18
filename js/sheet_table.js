@@ -1617,6 +1617,67 @@ async function persistServerSheetSyncConfig(cfg) {
     }
 }
 
+function refreshAfterSheetMatchUpdate() {
+    renderSheetRowsPanel();
+    try {
+        clearStatsCache(state.USER_DOC_NAME);
+    } catch (_) {
+        /* ignore */
+    }
+    if (window.updateAutoFlags) window.updateAutoFlags();
+    if (window.renderView) window.renderView();
+    if (window.requestTradesDatagridRefresh) window.requestTradesDatagridRefresh();
+    else if (document.getElementById('view-datagrid')?.classList.contains('active') && window.renderTradesDatagrid) window.renderTradesDatagrid();
+    const viewStats = document.getElementById('view-stats');
+    if (viewStats && viewStats.classList.contains('active') && window.refreshStatsView) window.refreshStatsView();
+    if (window.selectDate) window.selectDate(state.selectedDateStr);
+}
+
+async function rematchStoredMainSheetRows(spreadsheetId) {
+    const store = state.appData?.sheetRows && typeof state.appData.sheetRows === 'object'
+        ? state.appData.sheetRows
+        : null;
+    const outByDay = spreadsheetId && store?.[spreadsheetId] && typeof store[spreadsheetId] === 'object'
+        ? store[spreadsheetId]
+        : null;
+    if (!outByDay) return { ok: false, reason: 'no-stored-sheet-rows' };
+
+    const mergeResult = mergeSheetTradesIntoJournal(state.appData?.journal || {}, outByDay, spreadsheetId, {
+        mode: SHEET_MODE_MAIN,
+        sheetRowsStore: store,
+        syncDayTotals: (dateStr) => syncFondexxFromTradesForDay(dateStr),
+        markTouched: (dateStr) => markJournalDayDirty(dateStr),
+        warnInvalidDate: (dateStr) => console.warn('[Google Sheets] skipped invalid stored sheet date during local rematch:', dateStr),
+    });
+    await deleteJournalDatesFromSupabase(mergeResult.deletedDates);
+    await saveJournalData();
+    await saveSettings();
+    refreshAfterSheetMatchUpdate();
+    return { ok: true, local: true, mergeResult };
+}
+
+export async function refreshSheetMatchesAfterTradesImport(options = {}) {
+    const quiet = options.quiet !== false;
+    const cfg = readStoredConfig(SHEET_MODE_MAIN);
+    const spreadsheetId = cfg?.spreadsheetId || getModeStoredItem('spreadsheetId', SHEET_MODE_MAIN);
+    if (!spreadsheetId) return { ok: false, reason: 'no-main-sheet-mapping' };
+
+    if (cfg?.smartColumns && !validateSheetMappingConfig(cfg).length) {
+        try {
+            const result = await executeSyncWithCfg(cfg, { quiet: true, mode: SHEET_MODE_MAIN });
+            if (!result?.ok) throw new Error(result?.skipped ? 'sheet sync already in progress' : 'sheet sync did not complete');
+            if (!quiet) showToast('Статуси Google Sheets оновлено після імпорту Trades.');
+            return { ok: true, resynced: true, result };
+        } catch (error) {
+            console.warn('[Google Sheets] quiet resync after Trades import failed; trying local rematch', error?.message || error);
+        }
+    }
+
+    const localResult = await rematchStoredMainSheetRows(spreadsheetId);
+    if (localResult.ok && !quiet) showToast('Статуси Google Sheets оновлено локально після імпорту Trades.');
+    return localResult;
+}
+
 export async function saveSheetMapping() {
     if (!canMutateSheetSync()) return;
 
@@ -1664,3 +1725,4 @@ window.renderMappingDropdowns = renderMappingDropdowns;
 window.populateSheetMappingFromHeaders = populateSheetMappingFromHeaders;
 window.stopSheetAutoSync = stopSheetAutoSync;
 window.ensureSheetAutoSyncFromConfig = ensureSheetAutoSyncFromConfig;
+window.refreshSheetMatchesAfterTradesImport = refreshSheetMatchesAfterTradesImport;

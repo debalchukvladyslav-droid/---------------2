@@ -15,7 +15,7 @@ import { renderErrorsList, addNewErrorType, deleteErrorType, renderChecklistDisp
 import { openZoom, closeZoom, openOriginal, zoomStep, loadMoreUnassigned, assignImage, removeAssignedImage, deleteFileFromPC, loadImages, renderAssignedScreens, disposeScreensView, openScreenshotForTrade } from './gallery.js';
 import { getAIAdvice, analyzeChart, analyzeTagPatterns, openSOSModal, closeSOSModal, sendSOSMessage, sendDataChatMessage, renderAIAdviceUI, loadAIChatHistory, switchAITab, bookmarkAIChat, renderSavedAIChats, deleteSavedAI } from './ai.js';
 import { cleanupUnusedAIRequests } from './ai/client.js';
-import { setupOCRDrawing, loadLatestImageForOCR, saveVisualOCRSettings, editTicker, forceScan, updateBadgeUI, runOCR } from './ocr.js';
+import { setupOCRDrawing, loadLatestImageForOCR, saveVisualOCRSettings, editTicker, forceScan, updateBadgeUI, runOCR, enqueueOCR, enqueueBackgroundOCRForAllScreens, getOCRQueueStatus } from './ocr.js';
 import { importFondexxReport, importPPROReport, importFondexxTrades, importFondexxSummaryByDate } from './parsers.js';
 import { renderPlaybook, addPlaybookSetup, editPlaybookSetup, savePlaybookSetup, deletePlaybookSetup, getPlaybookContext, getPlaybookForSituation, loadPlaybook } from './playbook.js';
 import { loadLearnContent, renderLearnCache } from './learn.js';
@@ -430,6 +430,9 @@ window.editTicker = editTicker;
 window.forceScan = forceScan;
 window.updateBadgeUI = updateBadgeUI;
 window.runOCR = runOCR;
+window.enqueueOCR = enqueueOCR;
+window.enqueueBackgroundOCRForAllScreens = enqueueBackgroundOCRForAllScreens;
+window.getOCRQueueStatus = getOCRQueueStatus;
 window.importFondexxReport = importFondexxReport;
 window.importFondexxSummaryByDate = importFondexxSummaryByDate;
 window.importPPROReport = importPPROReport;

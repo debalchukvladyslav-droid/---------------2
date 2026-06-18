@@ -687,7 +687,14 @@ export function importFondexxTrades(event) {
                 markJournalDayDirty(d);
                 daysUpdated++;
             }
-            saveJournalData().then(() => {
+            saveJournalData().then(async () => {
+                if (window.refreshSheetMatchesAfterTradesImport) {
+                    try {
+                        await window.refreshSheetMatchesAfterTradesImport({ quiet: true });
+                    } catch (syncError) {
+                        console.warn('[Trades import] sheet match refresh failed:', syncError?.message || syncError);
+                    }
+                }
                 if (fondexxListCount > 0) {
                     console.log(
                         `[Імпорт Fondexx Trades] Імпортовано у журнал: ${fondexxListCount} угод, оновлено днів: ${daysUpdated}.`,

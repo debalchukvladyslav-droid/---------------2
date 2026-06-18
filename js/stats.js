@@ -580,12 +580,21 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
 
     try {
         if (sel.type === 'current') {
-            const nick = cleanStatsNick(state.CURRENT_VIEWED_USER || state.USER_DOC_NAME);
+            const docName = String(sel.key || state.CURRENT_VIEWED_USER || state.USER_DOC_NAME || '');
+            const nick = cleanStatsNick(docName);
             if (isStatsNickAllowed(nick.replace(/_stats$/, ''))) {
-                await loadAllMonths(state.CURRENT_VIEWED_USER, currentUserId);
-                journal = prepareStatsJournal(state.appData.journal || {});
-                tradeTypes = normalizeTradeTypesList([...(state.appData.tradeTypes || []), ...extractTradeTypesFromJournal(journal)]);
-                settings = state.appData.settings || {};
+                if (docName === state.CURRENT_VIEWED_USER) {
+                    await loadAllMonths(docName, currentUserId);
+                    journal = prepareStatsJournal(state.appData.journal || {});
+                    tradeTypes = normalizeTradeTypesList([...(state.appData.tradeTypes || []), ...extractTradeTypesFromJournal(journal)]);
+                    settings = state.appData.settings || {};
+                } else {
+                    const cleanNick = nick.replace(/_stats$/, '');
+                    const data = await getStatsDocData(`${cleanNick}_stats`, [{ type: 'all-time', val: 'all' }]);
+                    journal = prepareStatsJournal(data.journal || {});
+                    tradeTypes = normalizeTradeTypesList([...(data.tradeTypes || []), ...extractTradeTypesFromJournal(journal)]);
+                    settings = data.settings || getStatsProfileSettingsByNick(cleanNick);
+                }
             }
         } else if (sel.type === 'all') {
             const allNicks = getAllStatsNicks();
@@ -2391,7 +2400,11 @@ function renderStatsComparePanel(validEntries) {
     }
 
     normalizeCompareSourceSelection();
-    if (!state.statsCompareContext?.journal || Object.keys(state.statsCompareContext.journal).length === 0) {
+    const compareContextEmpty = !state.statsCompareContext?.journal
+        || Object.keys(state.statsCompareContext.journal).length === 0;
+    const compareMatchesMainSource = state.statsCompareSourceSelection?.type === state.statsSourceSelection?.type
+        && String(state.statsCompareSourceSelection?.key || '') === String(state.statsSourceSelection?.key || '');
+    if (compareContextEmpty && compareMatchesMainSource) {
         state.statsCompareContext = {
             journal: state.currentStatsContext.periodJournal || state.currentStatsContext.journal || {},
             label: getStatsSelectionLabel(state.statsCompareSourceSelection.type, state.statsCompareSourceSelection.key),

@@ -2,7 +2,7 @@
 import { state } from './state.js';
 import { saveSettings } from './storage.js';
 import { loadImages } from './gallery.js';
-import { showToast } from './utils.js';
+import { setCopyableText, showToast } from './utils.js';
 import { ensureSupabaseStorageUser, uploadToSupabaseStorage } from './supabase_storage.js';
 import { buildScreenshotPath, buildScreenshotPathVariants } from './storage_paths.js';
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
@@ -608,7 +608,7 @@ export function updateDriveUI() {
     const serviceEmailEl = document.getElementById('drive-service-email');
     const serviceFolderInput = document.getElementById('drive-service-folder-input');
     if (!btn) return;
-    if (serviceEmailEl) serviceEmailEl.textContent = SERVICE_ACCOUNT_EMAIL || 'service account email не налаштований';
+    if (serviceEmailEl) setCopyableText(serviceEmailEl, SERVICE_ACCOUNT_EMAIL, 'service account email не налаштований');
 
     const folderId = state.appData.settings.driveFolderId;
     const folderName = state.appData.settings.driveFolderName;

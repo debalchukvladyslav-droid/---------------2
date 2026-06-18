@@ -307,6 +307,12 @@ export function ensureDayStructure(d) {
     }
 }
 
+function cleanupDuplicateScreensDetailTitles() {
+    const rows = [...document.querySelectorAll('#view-screens .detail-title-row')];
+    if (rows.length <= 1) return;
+    rows.slice(0, -1).forEach(row => row.remove());
+}
+
 export async function renderUnassignedUI() {
     let container = document.getElementById('unassigned-container');
     let titleEl = document.getElementById('unassigned-title');
@@ -413,6 +419,7 @@ export async function loadMoreUnassigned() {
 }
 
 export async function renderAssignedScreens() {
+    cleanupDuplicateScreensDetailTitles();
     let screens = state.appData.journal[state.selectedDateStr]?.screenshots || { good:[], normal:[], bad:[], error:[] }; 
     const assignedContainer = document.getElementById('assigned-container');
     if (!assignedContainer) return;
@@ -593,6 +600,7 @@ export async function loadImages() {
     try {
         renderUnassignedUI();
         await renderAssignedScreens();
+        window.enqueueBackgroundOCRForAllScreens?.();
     } finally {
         hideGlobalLoader('screens-load');
     }

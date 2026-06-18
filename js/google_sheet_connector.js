@@ -4,7 +4,7 @@
 // COOP / вікно входу: для локальної розробки відкривайте саме http://localhost:5500 (не 127.0.0.1).
 // Якщо в консолі «липне» COOP — нове вікно Інкогніто з тим самим localhost часто скидає політики.
 
-import { showToast } from './utils.js';
+import { setCopyableText, showToast } from './utils.js';
 import {
     populateSheetMappingFromHeaders,
     setSheetPreviewData,
@@ -77,7 +77,7 @@ function setSheetServiceStatus(message, type = '') {
 function setSheetServiceEmail() {
     const emailEls = document.querySelectorAll('#sheet-service-email, #sheet-mock-email');
     emailEls.forEach((el) => {
-        el.textContent = SERVICE_ACCOUNT_EMAIL || 'service account email не налаштований';
+        setCopyableText(el, SERVICE_ACCOUNT_EMAIL, 'service account email не налаштований');
     });
 }
 

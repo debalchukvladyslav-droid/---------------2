@@ -53,6 +53,62 @@ export function showToast(msg, duration = 3000) {
     setTimeout(() => t.remove(), duration);
 }
 
+export async function copyTextToClipboard(text) {
+    const value = String(text || '').trim();
+    if (!value) return false;
+    try {
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(value);
+            return true;
+        }
+    } catch (_) {
+        /* fallback below */
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.setAttribute('readonly', '');
+    textarea.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0;';
+    document.body.appendChild(textarea);
+    textarea.select();
+    let ok = false;
+    try {
+        ok = document.execCommand('copy');
+    } catch (_) {
+        ok = false;
+    }
+    textarea.remove();
+    return ok;
+}
+
+export function setCopyableText(el, value, fallback = '—') {
+    if (!el) return;
+    const text = String(value || '').trim();
+    el.textContent = text || fallback;
+    el.dataset.copyValue = text;
+
+    let btn = el.nextElementSibling?.classList?.contains('technical-email-copy-btn')
+        ? el.nextElementSibling
+        : null;
+    if (!btn) {
+        btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'technical-email-copy-btn';
+        btn.title = 'Скопіювати';
+        btn.setAttribute('aria-label', 'Скопіювати пошту');
+        btn.textContent = '⧉';
+        el.insertAdjacentElement('afterend', btn);
+        btn.addEventListener('click', async (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const targetText = el.dataset.copyValue || el.textContent || '';
+            const ok = await copyTextToClipboard(targetText);
+            showToast(ok ? 'Пошту скопійовано' : 'Не вдалося скопіювати');
+        });
+    }
+    btn.hidden = !text;
+}
+
 /**
  * Кастомний confirm-діалог замість window.confirm.
  * @param {string} msg

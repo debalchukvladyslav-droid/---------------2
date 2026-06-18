@@ -299,9 +299,23 @@ const MIN_OCR_CANVAS_HEIGHT = 24;
 const MIN_FREE_OCR_SCORE = 80;
 const OCR_MAX_RAW_TEXT_LOG = 90;
 const OCR_TOP_CANDIDATES_LIMIT = 3;
+const OCR_BACKGROUND_DELAY_MS = 450;
+
+const ocrQueue = [];
+const ocrQueuedByPath = new Map();
+let ocrQueueRunning = false;
 
 function normalizeTicker(value) {
     return String(value || '').toUpperCase().replace(/[^A-Z]/g, '');
+}
+
+function hasValidSavedTicker(path) {
+    const ticker = normalizeTicker(state.appData?.tickers?.[path]);
+    return !!ticker && ticker !== '???' && !TICKER_GARBAGE.has(ticker);
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function normalizeOCRTicker(value) {
@@ -740,7 +754,7 @@ function makeOCRVariants(imgObj, zone, scale = 4, names = null) {
     ];
 }
 
-export async function runOCR(encodedPath, force = false) {
+async function performOCR(encodedPath, force = false) {
     const safePath = decodeURIComponent(encodedPath);
     const screenshotDate = findScreenshotDate(safePath);
     console.groupCollapsed(`[OCR ticker] ${safePath}`);
@@ -918,4 +932,118 @@ export async function runOCR(encodedPath, force = false) {
         updateBadgeUI(encodedPath, false);
         return finishOCRLog('???');
     }
+}
+
+async function processOCRQueue() {
+    if (ocrQueueRunning) return;
+    ocrQueueRunning = true;
+    try {
+        while (ocrQueue.length) {
+            const job = ocrQueue.shift();
+            if (!job) continue;
+            if (!job.force && hasValidSavedTicker(job.safePath)) {
+                updateBadgeUI(job.encodedPath, false);
+                ocrQueuedByPath.delete(job.safePath);
+                job.resolve(state.appData.tickers[job.safePath]);
+                continue;
+            }
+
+            try {
+                const result = await performOCR(job.encodedPath, job.force);
+                job.resolve(result);
+            } catch (error) {
+                job.reject(error);
+            } finally {
+                ocrQueuedByPath.delete(job.safePath);
+                if (job.background && ocrQueue.length) await sleep(OCR_BACKGROUND_DELAY_MS);
+            }
+        }
+    } finally {
+        ocrQueueRunning = false;
+    }
+}
+
+export function enqueueOCR(encodedPath, options = {}) {
+    const safePath = decodeURIComponent(encodedPath || '');
+    if (!safePath) return Promise.resolve();
+    const force = !!options.force;
+    const background = !!options.background;
+    const priority = options.priority || (force ? 'manual' : 'normal');
+
+    if (!force && hasValidSavedTicker(safePath)) {
+        updateBadgeUI(encodeURIComponent(safePath), false);
+        return Promise.resolve(state.appData.tickers[safePath]);
+    }
+
+    const existing = ocrQueuedByPath.get(safePath);
+    if (existing) {
+        if (force && !existing.force) existing.force = true;
+        if (priority === 'manual' && existing.priority !== 'manual') {
+            const idx = ocrQueue.indexOf(existing);
+            if (idx > -1) {
+                ocrQueue.splice(idx, 1);
+                ocrQueue.unshift(existing);
+            }
+            existing.priority = 'manual';
+            existing.background = false;
+        }
+        return existing.promise;
+    }
+
+    let resolveJob;
+    let rejectJob;
+    const job = {
+        encodedPath: encodeURIComponent(safePath),
+        safePath,
+        force,
+        background,
+        priority,
+        promise: new Promise((resolve, reject) => {
+            resolveJob = resolve;
+            rejectJob = reject;
+        }),
+        resolve: resolveJob,
+        reject: rejectJob,
+    };
+
+    ocrQueuedByPath.set(safePath, job);
+    if (priority === 'manual') ocrQueue.unshift(job);
+    else ocrQueue.push(job);
+    processOCRQueue();
+    return job.promise;
+}
+
+function collectAllScreenshotPaths() {
+    const paths = new Set(state.appData?.unassignedImages || []);
+    for (const day of Object.values(state.appData?.journal || {})) {
+        const screens = day?.screenshots || {};
+        for (const arr of Object.values(screens)) {
+            if (!Array.isArray(arr)) continue;
+            arr.forEach(path => { if (path) paths.add(path); });
+        }
+    }
+    return [...paths];
+}
+
+export function enqueueBackgroundOCRForAllScreens() {
+    let count = 0;
+    for (const path of collectAllScreenshotPaths()) {
+        if (!path || hasValidSavedTicker(path)) continue;
+        enqueueOCR(encodeURIComponent(path), { background: true, priority: 'background' });
+        count++;
+    }
+    if (count) console.info('[OCR] background ticker scan queued:', count);
+    return count;
+}
+
+export function getOCRQueueStatus() {
+    return {
+        running: ocrQueueRunning,
+        queued: ocrQueue.length,
+        paths: ocrQueue.map(job => job.safePath),
+    };
+}
+
+export function runOCR(encodedPath, force = false) {
+    return enqueueOCR(encodedPath, { force, priority: force ? 'manual' : 'normal' });
 }

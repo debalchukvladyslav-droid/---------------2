@@ -2462,6 +2462,24 @@ body {
     overflow-wrap: anywhere;
 }
 
+.technical-email-copy-btn {
+    width: auto;
+    min-width: 30px;
+    margin: 6px 0 0 6px;
+    padding: 6px 8px;
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    color: var(--accent);
+    font-size: 0.78rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.technical-email-copy-btn:hover {
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
 .drive-service-input {
     width: 100%;
     margin-top: 10px;
