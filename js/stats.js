@@ -424,9 +424,17 @@ function getStatsSourceOptionsHtml(selection = state.statsSourceSelection, dataP
     const typeAttr = dataPrefix ? `data-${dataPrefix}-stats-source-type` : 'data-stats-source-type';
     const keyAttr = dataPrefix ? `data-${dataPrefix}-stats-source-key` : 'data-stats-source-key';
     let currentKey = state.CURRENT_VIEWED_USER || state.USER_DOC_NAME || '';
+    const renderedTraderNicks = new Set();
+    const myNick = cleanStatsNick(state.USER_DOC_NAME || '').replace(/_stats$/, '');
+    const isViewingOtherProfile = !!(state.USER_DOC_NAME && state.CURRENT_VIEWED_USER && state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME);
     let html = isStatsNickAllowed(currentKey.replace(/_stats$/, ''))
-        ? `<button class="${getStatsSourceButtonClass('current', currentKey, selection)}" ${typeAttr}="current" ${keyAttr}="${escapeHtml(currentKey)}">🏠 Мій профіль</button>`
+        ? `<button class="${getStatsSourceButtonClass('current', currentKey, selection)}" ${typeAttr}="current" ${keyAttr}="${escapeHtml(currentKey)}">${isViewingOtherProfile ? '👤 Поточний профіль' : '🏠 Мій профіль'}</button>`
         : '';
+
+    if (isViewingOtherProfile && myNick && isStatsNickAllowed(myNick)) {
+        renderedTraderNicks.add(myNick);
+        html += `<button class="${getStatsSourceButtonClass('trader', myNick, selection)}" ${typeAttr}="trader" ${keyAttr}="${escapeHtml(myNick)}">🏠 Мій профіль (${escapeHtml(myNick)})</button>`;
+    }
 
     html += `<button class="${getStatsSourceButtonClass('all', '', selection)}" ${typeAttr}="all" ${keyAttr}="">🌍 Всі трейдери разом</button>`;
 
@@ -438,8 +446,10 @@ function getStatsSourceOptionsHtml(selection = state.statsSourceSelection, dataP
         (state.TEAM_GROUPS[groupName] || []).slice().sort((a, b) => String(a).localeCompare(String(b), 'uk')).forEach(nick => {
             let cleanNick = cleanStatsNick(nick);
             if (!isStatsNickAllowed(cleanNick)) return;
-            // Не показуємо себе в списку
-            if (`${cleanNick}_stats` === state.USER_DOC_NAME) return;
+            // Не показуємо себе в списку тільки коли власний профіль уже є поточним.
+            if (`${cleanNick}_stats` === state.USER_DOC_NAME && !isViewingOtherProfile) return;
+            if (renderedTraderNicks.has(cleanNick)) return;
+            renderedTraderNicks.add(cleanNick);
             html += `<button class="${getStatsSourceButtonClass('trader', cleanNick, selection)}" ${typeAttr}="trader" ${keyAttr}="${escapeHtml(cleanNick || nick)}">👤 ${escapeHtml(nick)}</button>`;
         });
     });
