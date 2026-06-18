@@ -2,10 +2,10 @@
 
 import { state } from './state.js';
 import { collectDatagridRows } from './datagrid_rows.js';
+import { getCurrentStoredSpreadsheetId } from './sheet_table.js';
 
 const DATAGRID_PAGE_SIZE = 250;
 const DATAGRID_COLSPAN = 20;
-const SESSION_SPREADSHEET_ID = 'sheet_spreadsheet_id';
 
 const TRADE_TYPES_RAW = [
     'шорт', 'не брав', 'виключення', 'виключення візуально', 'візуально',
@@ -234,7 +234,7 @@ function isDatagridViewActive() {
 
 function getCurrentSpreadsheetId() {
     try {
-        return localStorage.getItem(SESSION_SPREADSHEET_ID) || sessionStorage.getItem(SESSION_SPREADSHEET_ID) || '';
+        return getCurrentStoredSpreadsheetId();
     } catch {
         return '';
     }

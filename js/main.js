@@ -6,7 +6,7 @@ import { state } from './state.js';
 import { getDefaultDayEntry } from './data_utils.js';
 import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm, canAccessMentorReviewQueue, mentorAcceptReviewRequest, ensureAuthUserProfile, signInWithTelegram, maybeFinishTelegramClaim, rejectBlockedProfile, isPasswordRecoveryUrl, showPasswordRecoveryForm } from './auth.js';
 import { loadTeams, openTeamManager, createNewTeam, moveTrader, deleteTeam, renameTeam, deleteTraderProfile, renderTeamSidebar, switchUser } from './teams.js';
-import { saveToLocal, saveJournalData, markJournalDayDirty, initializeApp, exportData, importData, loadMonth, resolveViewedUserId, setCurrentViewedUserId,
+import { saveToLocal, saveJournalData, markJournalDayDirty, initializeApp, resetRuntimeDataForAccountSwitch, exportData, importData, loadMonth, resolveViewedUserId, setCurrentViewedUserId,
          loadBackgroundGallery } from './storage.js';
 import { applyTheme, saveThemeSettings, switchTab, toggleMobileSidebar, switchMainTab, scrollMainTabs, toggleMoreTabs, toggleMobileMoreMenu, closeMobileMoreMenu, bindMainTabRoutes, syncMainTabFromRoute, refreshCurrentMainTitle } from './ui.js';
 import { shiftDate, selectDateFromInput, saveEntry, renderView, selectDate, updateAutoFlags, initSelectors, renderSidebarTradesList } from './calendar.js';
@@ -586,6 +586,7 @@ function hideAuthSpinner() {
 async function bootApp(user) {
     if (_appInitialized) return;
     _appInitialized = true;
+    resetRuntimeDataForAccountSwitch();
 
     let { data: bootProfile, error: bootProfileError } = await supabase
         .from('profiles')
@@ -696,6 +697,7 @@ function resetRouteForLoginScreen() {
 function showLoginScreen() {
     _appInitialized = false;
     resetRouteForLoginScreen();
+    resetRuntimeDataForAccountSwitch();
     state.USER_DOC_NAME = '';
     state.CURRENT_VIEWED_USER = '';
     state.myUserId = null;

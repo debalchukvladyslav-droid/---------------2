@@ -15,6 +15,9 @@ import {
     clearGoogleSheetSession,
     setSpreadsheetSheets,
     getSelectedSheetTitle,
+    getCurrentStoredSpreadsheetId,
+    getCurrentStoredSpreadsheetTitle,
+    setGoogleSheetConnectedFlag,
 } from './sheet_table.js';
 import { ensureGoogleApi, ensureGoogleIdentity } from './vendor_loader.js';
 import { state } from './state.js';
@@ -190,7 +193,10 @@ function userStorageKey(baseKey) {
 }
 
 function readStoredGoogleToken() {
-    const token = sessionStorage.getItem(TOKEN_STORAGE_KEY) || localStorage.getItem(userStorageKey(TOKEN_STORAGE_KEY));
+    const scopedTokenKey = userStorageKey(TOKEN_STORAGE_KEY);
+    const token = sessionStorage.getItem(scopedTokenKey)
+        || localStorage.getItem(scopedTokenKey)
+        || (!state.myUserId ? sessionStorage.getItem(TOKEN_STORAGE_KEY) : null);
     if (!token) return null;
     const expiresAtRaw = localStorage.getItem(userStorageKey(TOKEN_EXPIRES_KEY));
     const expiresAt = Number(expiresAtRaw || 0);
@@ -205,17 +211,23 @@ function persistStoredGoogleToken(token, expiresInSec) {
     if (!token) return;
     const sec = Math.max(120, Number(expiresInSec) || 3600);
     const expiresAt = Date.now() + sec * 1000 - 90_000;
-    sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
-    localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    sessionStorage.setItem(userStorageKey(TOKEN_STORAGE_KEY), token);
     localStorage.setItem(userStorageKey(TOKEN_STORAGE_KEY), token);
-    localStorage.setItem(TOKEN_EXPIRES_KEY, String(expiresAt));
     localStorage.setItem(userStorageKey(TOKEN_EXPIRES_KEY), String(expiresAt));
     localStorage.setItem(userStorageKey(SCOPES_VERSION_KEY), OAUTH_SCOPES_VERSION);
+    if (state.myUserId) {
+        sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+        localStorage.removeItem(TOKEN_EXPIRES_KEY);
+        localStorage.removeItem(SCOPES_VERSION_KEY);
+    }
 }
 
 function clearStoredGoogleToken() {
     sessionStorage.removeItem(TOKEN_STORAGE_KEY);
     sessionStorage.removeItem(SCOPES_VERSION_KEY);
+    sessionStorage.removeItem(userStorageKey(TOKEN_STORAGE_KEY));
+    sessionStorage.removeItem(userStorageKey(SCOPES_VERSION_KEY));
     localStorage.removeItem(TOKEN_STORAGE_KEY);
     localStorage.removeItem(TOKEN_EXPIRES_KEY);
     localStorage.removeItem(SCOPES_VERSION_KEY);
@@ -296,9 +308,8 @@ function onTokenSuccess(resp, options = {}) {
     }
     accessToken = resp.access_token;
     persistStoredGoogleToken(accessToken, resp.expires_in);
-    sessionStorage.setItem(SCOPES_VERSION_KEY, OAUTH_SCOPES_VERSION);
-    sessionStorage.setItem('sheet_google_connected', '1');
-    localStorage.setItem('sheet_google_connected', '1');
+    sessionStorage.setItem(userStorageKey(SCOPES_VERSION_KEY), OAUTH_SCOPES_VERSION);
+    setGoogleSheetConnectedFlag(true);
     applyAccessTokenToGapiClient(accessToken);
     void (async () => {
         const email = await fetchGoogleUserEmail(accessToken, { silent401: !!options.silent });
@@ -419,7 +430,7 @@ export async function loadSpreadsheetFromServiceInput(trigger = null) {
     const input = trigger?.closest?.('.sheet-workspace')
         ? document.getElementById('sheet-service-url-input-workspace')
         : (document.getElementById('sheet-service-url-input') || document.getElementById('sheet-service-url-input-workspace'));
-    const fallbackId = localStorage.getItem('sheet_spreadsheet_id') || sessionStorage.getItem('sheet_spreadsheet_id') || '';
+    const fallbackId = getCurrentStoredSpreadsheetId();
     const spreadsheetId = extractSpreadsheetId(input?.value || fallbackId);
     if (!spreadsheetId) {
         setSheetServiceStatus('Вставте посилання або ID Google таблиці.', 'error');
@@ -531,15 +542,14 @@ export async function googleSheetsLogout() {
 export async function restoreGoogleSession() {
     setSheetServiceEmail();
     setGoogleAccountEmail(SERVICE_ACCOUNT_EMAIL || 'Service account');
-    const sid = localStorage.getItem('sheet_spreadsheet_id') || sessionStorage.getItem('sheet_spreadsheet_id');
-    const st = localStorage.getItem('sheet_spreadsheet_title') || sessionStorage.getItem('sheet_spreadsheet_title');
+    const sid = getCurrentStoredSpreadsheetId();
+    const st = getCurrentStoredSpreadsheetTitle();
     const input = document.getElementById('sheet-service-url-input');
     const workspaceInput = document.getElementById('sheet-service-url-input-workspace');
     if (input && sid && !input.value) input.value = sid;
     if (workspaceInput && sid && !workspaceInput.value) workspaceInput.value = sid;
     if (sid) {
-        sessionStorage.setItem('sheet_google_connected', '1');
-        localStorage.setItem('sheet_google_connected', '1');
+        setGoogleSheetConnectedFlag(true);
         if (st) {
             const nameEl = document.getElementById('sheet-selected-file-name');
             if (nameEl) nameEl.textContent = st;
@@ -567,7 +577,7 @@ export async function restoreGoogleSession() {
     try {
         await ensureGapiClientAndPicker();
         let tok = readStoredGoogleToken();
-        const wasConnected = (localStorage.getItem('sheet_google_connected') || sessionStorage.getItem('sheet_google_connected')) === '1';
+        const wasConnected = readStoredGoogleToken() || getCurrentStoredSpreadsheetId();
         if (!tok && wasConnected && hasCurrentGoogleGrant()) {
             try {
                 tok = await requestAccessToken('', { silent: true });
@@ -579,19 +589,16 @@ export async function restoreGoogleSession() {
         }
         if (!tok) return;
         accessToken = tok;
-        sessionStorage.setItem(TOKEN_STORAGE_KEY, tok);
-        sessionStorage.setItem(SCOPES_VERSION_KEY, OAUTH_SCOPES_VERSION);
+        sessionStorage.setItem(userStorageKey(TOKEN_STORAGE_KEY), tok);
+        sessionStorage.setItem(userStorageKey(SCOPES_VERSION_KEY), OAUTH_SCOPES_VERSION);
         applyAccessTokenToGapiClient(tok);
-        sessionStorage.setItem('sheet_google_connected', '1');
-        localStorage.setItem('sheet_google_connected', '1');
+        setGoogleSheetConnectedFlag(true);
         const email = await fetchGoogleUserEmail(tok, { silent401: true });
         setGoogleAccountEmail(email || 'Google акаунт');
 
-        const sid = localStorage.getItem('sheet_spreadsheet_id') || sessionStorage.getItem('sheet_spreadsheet_id');
-        const st = localStorage.getItem('sheet_spreadsheet_title') || sessionStorage.getItem('sheet_spreadsheet_title');
+        const sid = getCurrentStoredSpreadsheetId();
+        const st = getCurrentStoredSpreadsheetTitle();
         if (sid && readStoredGoogleToken()) {
-            sessionStorage.setItem('sheet_spreadsheet_id', sid);
-            if (st) sessionStorage.setItem('sheet_spreadsheet_title', st);
             const nameEl = document.getElementById('sheet-selected-file-name');
             if (nameEl) nameEl.textContent = st || sid;
             try {

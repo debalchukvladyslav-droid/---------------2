@@ -92,6 +92,27 @@ async function getCurrentUserContext() {
     };
 }
 
+export function resetRuntimeDataForAccountSwitch() {
+    state.appData = normalizeAppData(getDefaultAppData());
+    state.currentUnassignedImages = [];
+    state.unassignedVisibleCount = 5;
+    state.currentZoomedSrc = '';
+    state.loadedMonths = {};
+    state.statsDocCache = {};
+    state.currentStatsContext = { journal: {}, label: 'Мій профіль' };
+    state.statsCompareContext = { journal: {}, label: 'Мій профіль', tradeTypes: [] };
+    state.statsSourceSelection = { type: 'current', key: '' };
+    state.statsCompareSourceSelection = { type: 'current', key: '' };
+    state.activeTradeTypeFilter = null;
+    state.statsCompareTradeTypeFilter = null;
+    state.statsComparePeriodKey = '';
+    state._allMonthsLoaded = false;
+    state._monthListLoaded = false;
+    state._availableMonthKeys = new Set();
+    state.autoFlagsCache = { records: new Set(), absoluteRecord: null };
+    clearStatsCache();
+}
+
 function dayEntryToJournalRow(userId, tradeDate, entry) {
     const day = normalizeDayEntry(entry);
 
@@ -669,12 +690,14 @@ export async function initializeApp() {
         const viewedUserId = getCurrentViewedUserId() || await resolveViewedUserId(nick, { force: true });
         if (!viewedUserId) throw new Error(`Не вдалося визначити userId для ${nick}`);
         const previousAppData = state.appData && typeof state.appData === 'object' ? state.appData : {};
-
-        state.appData = normalizeAppData({
-            ...getDefaultAppData(),
-            ...previousAppData,
-            journal: {}
-        });
+        const baseAppData = getDefaultAppData();
+        if (!isViewingOwnProfile) {
+            baseAppData.settings = {
+                ...baseAppData.settings,
+                ...(previousAppData.settings && typeof previousAppData.settings === 'object' ? previousAppData.settings : {})
+            };
+        }
+        state.appData = normalizeAppData({ ...baseAppData, journal: {} });
 
         state.loadedMonths[nick] = new Set();
         state._allMonthsLoaded = false;

@@ -95,6 +95,35 @@ const SHEET_MAPPING_SELECT_MAX_COLS = 80;
 let _sheetAutoTimer = null;
 let _sheetSyncInProgress = false;
 
+function userScopedStorageKey(key) {
+    return state.myUserId ? `${key}:${state.myUserId}` : key;
+}
+
+function getStoredValue(key) {
+    const scopedKey = userScopedStorageKey(key);
+    return localStorage.getItem(scopedKey) || sessionStorage.getItem(scopedKey) || '';
+}
+
+function setStoredValue(key, value) {
+    const scopedKey = userScopedStorageKey(key);
+    if (value == null || value === '') {
+        sessionStorage.removeItem(scopedKey);
+        localStorage.removeItem(scopedKey);
+        return;
+    }
+    sessionStorage.setItem(scopedKey, value);
+    localStorage.setItem(scopedKey, value);
+}
+
+function removeStoredValue(key) {
+    const scopedKey = userScopedStorageKey(key);
+    sessionStorage.removeItem(scopedKey);
+    localStorage.removeItem(scopedKey);
+    if (!state.myUserId) return;
+    sessionStorage.removeItem(key);
+    localStorage.removeItem(key);
+}
+
 /** Зупинити авто-синхронізацію (вихід з Google, зміна профілю). */
 export function stopSheetAutoSync() {
     if (_sheetAutoTimer) {
@@ -115,7 +144,7 @@ export function ensureSheetAutoSyncFromConfig() {
     stopSheetAutoSync();
     const cfg = readStoredConfig(SHEET_MODE_MAIN);
     if (!cfg?.autoSync?.enabled) return;
-    if ((localStorage.getItem(SESSION_GOOGLE) || sessionStorage.getItem(SESSION_GOOGLE)) !== '1') return;
+    if (getStoredValue(SESSION_GOOGLE) !== '1') return;
     if (!getModeStoredItem('spreadsheetId', SHEET_MODE_MAIN)) return;
     const min = clampSheetIntervalMin(cfg.autoSync.intervalMinutes);
     _sheetAutoTimer = setInterval(() => {
@@ -157,13 +186,12 @@ function el(id) {
 }
 
 function getActiveSheetMode() {
-    return normalizeSheetImportMode(localStorage.getItem(LS_MODE_KEY) || sessionStorage.getItem(LS_MODE_KEY));
+    return normalizeSheetImportMode(getStoredValue(LS_MODE_KEY));
 }
 
 function setActiveSheetMode(mode) {
     const normalized = normalizeSheetImportMode(mode);
-    localStorage.setItem(LS_MODE_KEY, normalized);
-    sessionStorage.setItem(LS_MODE_KEY, normalized);
+    setStoredValue(LS_MODE_KEY, normalized);
     return normalized;
 }
 
@@ -189,22 +217,16 @@ function modeStorageKeys(mode = getActiveSheetMode()) {
 
 function getModeStoredItem(kind, mode = getActiveSheetMode()) {
     const key = modeStorageKeys(mode)[kind];
-    return localStorage.getItem(key) || sessionStorage.getItem(key) || '';
+    return getStoredValue(key);
 }
 
 function setModeStoredItem(kind, value, mode = getActiveSheetMode()) {
     const key = modeStorageKeys(mode)[kind];
-    if (value == null || value === '') {
-        sessionStorage.removeItem(key);
-        localStorage.removeItem(key);
-        return;
-    }
-    sessionStorage.setItem(key, value);
-    localStorage.setItem(key, value);
+    setStoredValue(key, value);
 }
 
 function removeModeStoredItem(kind, mode = getActiveSheetMode()) {
-    setModeStoredItem(kind, '', mode);
+    removeStoredValue(modeStorageKeys(mode)[kind]);
 }
 
 function isGoogleSheetPanelOpen() {
@@ -691,7 +713,7 @@ function setMappingFromGridCell(field, colLetter, rowNumber, event = null) {
 function persistSheetMappingDraft() {
     try {
         const cfg = collectFormConfig();
-        localStorage.setItem(modeStorageKeys(getActiveSheetMode()).config, JSON.stringify(cfg));
+        setStoredValue(modeStorageKeys(getActiveSheetMode()).config, JSON.stringify(cfg));
         _sheetFormHydratedFromStorage = true;
     } catch (e) {
         console.warn('[Google Sheets] mapping draft save failed', e);
@@ -904,8 +926,7 @@ export function rememberSpreadsheet(id, title) {
     const mode = getActiveSheetMode();
     setModeStoredItem('spreadsheetId', id, mode);
     if (title) setModeStoredItem('spreadsheetTitle', title, mode);
-    sessionStorage.setItem(SESSION_GOOGLE, '1');
-    localStorage.setItem(SESSION_GOOGLE, '1');
+    setGoogleSheetConnectedFlag(true);
     const nameEl = el('sheet-selected-file-name');
     if (nameEl) nameEl.textContent = title || id;
     const serviceInput = el('sheet-service-url-input');
@@ -917,6 +938,19 @@ export function rememberSpreadsheet(id, title) {
 
 export function getSelectedSheetTitle(mode = getActiveSheetMode()) {
     return getModeStoredItem('sheetTitle', mode);
+}
+
+export function getCurrentStoredSpreadsheetId(mode = getActiveSheetMode()) {
+    return getModeStoredItem('spreadsheetId', mode);
+}
+
+export function getCurrentStoredSpreadsheetTitle(mode = getActiveSheetMode()) {
+    return getModeStoredItem('spreadsheetTitle', mode);
+}
+
+export function setGoogleSheetConnectedFlag(connected) {
+    if (connected) setStoredValue(SESSION_GOOGLE, '1');
+    else removeStoredValue(SESSION_GOOGLE);
 }
 
 export function setSpreadsheetSheets(sheets, selectedTitle = '') {
@@ -950,9 +984,8 @@ export function setSpreadsheetSheets(sheets, selectedTitle = '') {
 
 export function clearGoogleSheetSession() {
     stopSheetAutoSync();
-    sessionStorage.removeItem(SESSION_GOOGLE);
+    setGoogleSheetConnectedFlag(false);
     sessionStorage.removeItem('sheet_google_access_token');
-    localStorage.removeItem(SESSION_GOOGLE);
     [SHEET_MODE_MAIN, SHEET_MODE_CUMULATIVE].forEach((mode) => {
         removeModeStoredItem('spreadsheetId', mode);
         removeModeStoredItem('spreadsheetTitle', mode);
@@ -965,7 +998,7 @@ export function clearGoogleSheetSession() {
 }
 
 export function syncSheetWorkspaceVisibility() {
-    const connected = (localStorage.getItem(SESSION_GOOGLE) || sessionStorage.getItem(SESSION_GOOGLE)) === '1';
+    const connected = getStoredValue(SESSION_GOOGLE) === '1';
     const fileOk = !!getModeStoredItem('spreadsheetId');
     const panelOpen = isGoogleSheetPanelOpen();
 
@@ -1406,7 +1439,7 @@ function bindSheetGridPicker() {
 
 function readStoredConfig(mode = getActiveSheetMode()) {
     try {
-        const raw = localStorage.getItem(modeStorageKeys(mode).config);
+        const raw = getStoredValue(modeStorageKeys(mode).config);
         if (!raw) return null;
         const o = JSON.parse(raw);
         return o && typeof o === 'object' ? o : null;
@@ -1461,7 +1494,7 @@ export function switchSheetImportMode(mode = SHEET_MODE_MAIN) {
     }
 
     try {
-        localStorage.setItem(modeStorageKeys(currentMode).config, JSON.stringify(collectFormConfig()));
+        setStoredValue(modeStorageKeys(currentMode).config, JSON.stringify(collectFormConfig()));
     } catch (_) {
         /* ignore draft save */
     }
@@ -1486,7 +1519,7 @@ export function duplicateMainSheetMappingToCumulative() {
     const mainCfg = readStoredConfig(SHEET_MODE_MAIN) || {};
     const cumulativeCfg = readStoredConfig(SHEET_MODE_CUMULATIVE) || {};
     const next = duplicateSheetMappingConfig(mainCfg, cumulativeCfg);
-    localStorage.setItem(LS_KEY_CUMULATIVE, JSON.stringify(next));
+    setStoredValue(LS_KEY_CUMULATIVE, JSON.stringify(next));
     if (isCumulativeMode()) {
         applyConfigToForm(next);
         syncSheetWorkspaceVisibility();
@@ -1697,7 +1730,7 @@ export async function saveSheetMapping() {
         }
 
         const mode = getActiveSheetMode();
-        localStorage.setItem(modeStorageKeys(mode).config, JSON.stringify(cfg));
+        setStoredValue(modeStorageKeys(mode).config, JSON.stringify(cfg));
         _sheetFormHydratedFromStorage = true;
         if (!isCumulativeMode(mode)) void persistServerSheetSyncConfig(cfg);
 
