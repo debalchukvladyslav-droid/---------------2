@@ -102,6 +102,8 @@ window.getDefaultDayEntry = getDefaultDayEntry;
 window.state = state;
 
 let manualSyncInProgress = false;
+let manualSyncIntervalId = null;
+const MANUAL_SYNC_INTERVAL_MS = 15 * 60 * 1000;
 
 async function runManualSyncStep(name, fn, options = {}) {
     const optional = options.optional !== false;
@@ -158,6 +160,20 @@ async function manualSyncAll(trigger = null) {
             btn.setAttribute('title', prevTitle || 'Синхронізувати все');
         }
     }
+}
+
+function startManualSyncScheduler() {
+    if (manualSyncIntervalId) return;
+    manualSyncIntervalId = setInterval(() => {
+        if (!state.USER_DOC_NAME) return;
+        void manualSyncAll();
+    }, MANUAL_SYNC_INTERVAL_MS);
+}
+
+function stopManualSyncScheduler() {
+    if (!manualSyncIntervalId) return;
+    clearInterval(manualSyncIntervalId);
+    manualSyncIntervalId = null;
 }
 
 window.manualSyncAll = manualSyncAll;
@@ -732,6 +748,7 @@ async function bootApp(user) {
 
         applyPersistedBackground();
         loadBackgroundGallery();
+        startManualSyncScheduler();
     } catch (e) {
         console.error('[INIT] Помилка ініціалізації:', e);
     } finally {
@@ -757,6 +774,7 @@ function resetRouteForLoginScreen() {
 
 function showLoginScreen() {
     _appInitialized = false;
+    stopManualSyncScheduler();
     resetRouteForLoginScreen();
     resetRuntimeDataForAccountSwitch();
     state.USER_DOC_NAME = '';
