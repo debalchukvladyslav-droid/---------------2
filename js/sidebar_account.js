@@ -3,7 +3,7 @@ import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { showToast } from './utils.js';
 import { loadTeams } from './teams.js';
-import { ensureSupabaseStorageUser, getSupabaseStorageUrl, uploadToSupabaseStorage } from './supabase_storage.js';
+import { deleteFromSupabaseStorage, ensureSupabaseStorageUser, getSupabaseStorageUrl, uploadToSupabaseStorage } from './supabase_storage.js';
 
 const DEFAULT_TEAM_LABEL = 'Без куща';
 
@@ -12,6 +12,10 @@ let _avatarCrop = null;
 
 function myNick() {
     return state.USER_DOC_NAME ? state.USER_DOC_NAME.replace('_stats', '') : '';
+}
+
+function isManagedAvatarPath(value = '') {
+    return String(value || '').trim().startsWith('avatars/');
 }
 
 function initialsFromProfile(p) {
@@ -257,7 +261,7 @@ async function dataUrlToBlob(dataUrl) {
 async function uploadAvatarBlob(blob) {
     if (!blob) return '';
     const user = await ensureSupabaseStorageUser();
-    const storagePath = `avatars/${user.id}/avatar.webp`;
+    const storagePath = `avatars/${user.id}/avatar-${Date.now()}.webp`;
     await uploadToSupabaseStorage(storagePath, blob, {
         bucket: 'avatars',
         contentType: blob.type || 'image/webp',
@@ -430,6 +434,14 @@ async function saveSidebarProfile() {
     if (error) {
         showToast('Не вдалося зберегти: ' + error.message);
         return;
+    }
+
+    if (settings.avatar_url
+        && prevSettings.avatar_url
+        && settings.avatar_url !== prevSettings.avatar_url
+        && isManagedAvatarPath(prevSettings.avatar_url)) {
+        deleteFromSupabaseStorage(prevSettings.avatar_url)
+            .catch((deleteErr) => console.warn('[Avatar] old avatar delete failed', deleteErr?.message || deleteErr));
     }
 
     const displayName = `${lname} ${fname} (${nick})`;
