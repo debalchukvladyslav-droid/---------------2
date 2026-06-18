@@ -665,6 +665,7 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
     state.statsCompareContext = {
         label: getStatsSelectionLabel(sel.type, sel.key),
         journal,
+        periodJournal: journal,
         tradeTypes,
         settings
     };
@@ -2407,6 +2408,7 @@ function renderStatsComparePanel(validEntries) {
     if (compareContextEmpty && compareMatchesMainSource) {
         state.statsCompareContext = {
             journal: state.currentStatsContext.periodJournal || state.currentStatsContext.journal || {},
+            periodJournal: state.currentStatsContext.periodJournal || state.currentStatsContext.journal || {},
             label: getStatsSelectionLabel(state.statsCompareSourceSelection.type, state.statsCompareSourceSelection.key),
             tradeTypes: state.currentStatsContext.tradeTypes || state.appData.tradeTypes || [],
             settings: state.currentStatsContext.settings || state.appData.settings || {}
@@ -2473,6 +2475,10 @@ function renderStatsComparePanel(validEntries) {
         state.statsCompareContext.journal || {},
         state.statsCompareTradeTypeFilter
     );
+    const comparePeriodEntries = buildStatsEntriesFromJournal(
+        state.statsCompareContext.periodJournal || state.statsCompareContext.journal || {},
+        null
+    );
     state.statsCompareScale = getStatsScaleFromFilters(state.statsCompareFilters);
     const periodTrigger = document.getElementById('stats-compare-period-trigger');
     const periodPanel = document.getElementById('stats-compare-period-panel');
@@ -2485,8 +2491,8 @@ function renderStatsComparePanel(validEntries) {
     if (periodLabel) periodLabel.textContent = comparePeriodLabel;
     setText('compare-stats-period-title', comparePeriodLabel);
     if (periodTree) {
-        periodTree.innerHTML = compareValidEntries.length
-            ? buildStatsPeriodTreeHtml(compareValidEntries, state.statsCompareFilters || [], 'compare-stats')
+        periodTree.innerHTML = comparePeriodEntries.length
+            ? buildStatsPeriodTreeHtml(comparePeriodEntries, state.statsCompareFilters || [], 'compare-stats')
             : '<div class="stats-empty-note">Немає періодів для цього джерела.</div>';
         if (!periodTree.dataset.compareTreeBound) {
             periodTree.dataset.compareTreeBound = 'true';
