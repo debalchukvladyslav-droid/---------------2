@@ -135,6 +135,7 @@ function activateAction(action, trigger, event = null) {
         'right-sidebar-toggle': () => window.toggleRightSidebar?.(),
         'team-sidebar-open': () => window.openTeamSidebar?.(),
         'notifications-toggle': () => window.toggleNotificationPanel?.(),
+        'manual-sync-all': () => window.manualSyncAll?.(trigger),
         'zoom-close': () => window.closeZoom?.(event),
         'zoom-prev': () => window.zoomStep?.(-1),
         'zoom-next': () => window.zoomStep?.(1),

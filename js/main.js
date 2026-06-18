@@ -6,7 +6,7 @@ import { state } from './state.js';
 import { getDefaultDayEntry } from './data_utils.js';
 import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm, canAccessMentorReviewQueue, mentorAcceptReviewRequest, ensureAuthUserProfile, signInWithTelegram, maybeFinishTelegramClaim, rejectBlockedProfile, isPasswordRecoveryUrl, showPasswordRecoveryForm } from './auth.js';
 import { loadTeams, openTeamManager, createNewTeam, moveTrader, deleteTeam, renameTeam, deleteTraderProfile, renderTeamSidebar, switchUser } from './teams.js';
-import { saveToLocal, saveJournalData, markJournalDayDirty, initializeApp, resetRuntimeDataForAccountSwitch, exportData, importData, loadMonth, resolveViewedUserId, setCurrentViewedUserId,
+import { saveToLocal, saveJournalData, markJournalDayDirty, initializeApp, resetRuntimeDataForAccountSwitch, exportData, importData, loadMonth, loadTradeDays, resolveViewedUserId, setCurrentViewedUserId,
          loadBackgroundGallery } from './storage.js';
 import { applyTheme, saveThemeSettings, switchTab, toggleMobileSidebar, switchMainTab, scrollMainTabs, toggleMoreTabs, toggleMobileMoreMenu, closeMobileMoreMenu, bindMainTabRoutes, syncMainTabFromRoute, refreshCurrentMainTitle } from './ui.js';
 import { shiftDate, selectDateFromInput, saveEntry, renderView, selectDate, updateAutoFlags, initSelectors, renderSidebarTradesList } from './calendar.js';
@@ -100,6 +100,67 @@ window.toggleRightSidebar = function() {
 };
 window.getDefaultDayEntry = getDefaultDayEntry;
 window.state = state;
+
+let manualSyncInProgress = false;
+
+async function runManualSyncStep(name, fn, options = {}) {
+    const optional = options.optional !== false;
+    if (typeof fn !== 'function') return { name, ok: true, skipped: true };
+    try {
+        await fn();
+        return { name, ok: true };
+    } catch (error) {
+        if (!optional) throw error;
+        console.warn(`[Manual sync] ${name}:`, error?.message || error);
+        return { name, ok: false, error };
+    }
+}
+
+async function manualSyncAll(trigger = null) {
+    if (manualSyncInProgress) return;
+    manualSyncInProgress = true;
+    const btn = trigger || document.getElementById('manual-sync-btn');
+    const prevTitle = btn?.getAttribute('title') || '';
+    if (btn) {
+        btn.classList.add('is-syncing');
+        btn.disabled = true;
+        btn.setAttribute('aria-busy', 'true');
+        btn.setAttribute('title', 'Синхронізація...');
+    }
+
+    showToast('Синхронізація запущена...');
+    try {
+        const isOwnProfile = state.CURRENT_VIEWED_USER === state.USER_DOC_NAME;
+        const steps = [
+            await runManualSyncStep('save-local', () => saveToLocal(), { optional: false }),
+            await runManualSyncStep('load-trades', () => loadTradeDays()),
+            await runManualSyncStep('drive-screenshots', () => isOwnProfile ? syncDriveScreenshots(true) : null),
+            await runManualSyncStep('google-sheet', () => isOwnProfile ? window.refreshSheetMatchesAfterTradesImport?.({ quiet: true }) : null),
+            await runManualSyncStep('background-ocr', () => isOwnProfile ? window.enqueueBackgroundOCRForAllScreens?.() : null),
+            await runManualSyncStep('calendar-view', () => window.renderView?.()),
+            await runManualSyncStep('screens-view', () => document.getElementById('view-screens')?.classList.contains('active') ? loadImages() : null),
+            await runManualSyncStep('stats-view', () => document.getElementById('view-stats')?.classList.contains('active') ? refreshStatsView() : null),
+            await runManualSyncStep('datagrid-view', () => document.getElementById('view-datagrid')?.classList.contains('active') ? renderTradesDatagrid() : null),
+            await runManualSyncStep('mentor-review', () => canAccessMentorReviewQueue() ? refreshMentorReviewQueue() : null),
+            await runManualSyncStep('dashboard-news', () => document.getElementById('view-dash')?.classList.contains('active') ? renderDashboardNews() : null),
+            await runManualSyncStep('market-sentiment', () => document.getElementById('view-dash')?.classList.contains('active') ? renderMarketSentiment() : null),
+            await runManualSyncStep('sidebar-account', () => refreshSidebarAccount()),
+            await runManualSyncStep('drive-ui', () => updateDriveUI()),
+        ];
+        const failed = steps.filter((step) => step && !step.ok);
+        showToast(failed.length ? `Синхронізацію завершено, але ${failed.length} процес(и) пропущено/не вдалося.` : 'Синхронізацію завершено.');
+    } finally {
+        manualSyncInProgress = false;
+        if (btn) {
+            btn.classList.remove('is-syncing');
+            btn.disabled = false;
+            btn.removeAttribute('aria-busy');
+            btn.setAttribute('title', prevTitle || 'Синхронізувати все');
+        }
+    }
+}
+
+window.manualSyncAll = manualSyncAll;
 window.refreshSidebarAccount = refreshSidebarAccount;
 window.refreshMentorReviewQueue = refreshMentorReviewQueue;
 window.setMentorReviewNavBadges = setMentorReviewNavBadges;

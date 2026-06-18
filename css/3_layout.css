@@ -332,6 +332,18 @@
 .header-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-glow-05); }
 .header-btn.primary { background: var(--accent); color: var(--primary-foreground); border-color: var(--accent); font-weight: 700; letter-spacing: 0.03em; }
 .header-btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); box-shadow: 0 2px 16px color-mix(in srgb, var(--accent) 35%, transparent); }
+.header-icon-btn {
+    width: 34px;
+    height: 34px;
+    justify-content: center;
+    padding: 0;
+}
+.manual-sync-btn.is-syncing svg {
+    animation: manual-sync-spin 0.9s linear infinite;
+}
+@keyframes manual-sync-spin {
+    to { transform: rotate(360deg); }
+}
 
 /* === BRAND LOGO === */
 .sidebar-brand {
