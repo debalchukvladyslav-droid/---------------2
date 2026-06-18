@@ -20,9 +20,23 @@ function cleanBucket(value) {
 }
 
 function cleanObjectPath(value) {
-    const path = decodeURIComponent(String(value || '').trim()).replace(/^\/+/, '');
+    let decoded = '';
+    try {
+        decoded = decodeURIComponent(String(value || '').trim());
+    } catch (_) {
+        decoded = String(value || '').trim();
+    }
+    const path = decoded.replace(/^\/+/, '');
     if (!path || path.includes('..') || /[\r\n]/.test(path)) return '';
     return path;
+}
+
+function encodeStoragePath(path) {
+    return String(path || '')
+        .split('/')
+        .filter(Boolean)
+        .map(segment => encodeURIComponent(segment))
+        .join('/');
 }
 
 function isUuid(value) {
@@ -51,7 +65,8 @@ async function readBody(req) {
 }
 
 async function createSignedUrl({ url, serviceKey, bucket, objectPath, expiresIn = 3600 }) {
-    const response = await fetch(`${url}/storage/v1/object/sign/${bucket}/${objectPath}`, {
+    const encodedPath = encodeStoragePath(objectPath);
+    const response = await fetch(`${url}/storage/v1/object/sign/${bucket}/${encodedPath}`, {
         method: 'POST',
         headers: {
             apikey: serviceKey,
@@ -104,7 +119,8 @@ export default async function handler(req, res) {
         if (!body.length) return sendJson(res, 400, { ok: false, error: 'Empty upload body' });
 
         const contentType = req.headers['content-type'] || 'application/octet-stream';
-        const uploadResponse = await fetch(`${url}/storage/v1/object/${bucket}/${objectPath}`, {
+        const encodedPath = encodeStoragePath(objectPath);
+        const uploadResponse = await fetch(`${url}/storage/v1/object/${bucket}/${encodedPath}`, {
             method: 'POST',
             headers: {
                 apikey: serviceKey,

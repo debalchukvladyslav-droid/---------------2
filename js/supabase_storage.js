@@ -1,4 +1,5 @@
 import { supabase } from './supabase.js';
+import { buildScreenshotPathVariants } from './storage_paths.js';
 
 const DEFAULT_SIGNED_URL_TTL = 60 * 60;
 
@@ -29,6 +30,8 @@ function getPathCandidates(storagePath) {
 
     const path = value.replace(/^\/+/, '');
     if (!path) return [];
+    const isBareImageName = !path.includes('/')
+        && /\.(?:png|jpe?g|webp|gif|bmp)$/i.test(path);
 
     if (path.startsWith('screenshots/')) {
         return [
@@ -49,6 +52,19 @@ function getPathCandidates(storagePath) {
     if (path.startsWith('avatars/')) {
         return [
             { bucket: 'avatars', objectPath: path.replace(/^avatars\//, '') },
+        ];
+    }
+
+    if (isBareImageName) {
+        const screenshotCandidates = buildScreenshotPathVariants(path)
+            .map(candidatePath => ({
+                bucket: 'screenshots',
+                objectPath: candidatePath.replace(/^screenshots\//, ''),
+            }));
+        return [
+            ...screenshotCandidates,
+            { bucket: 'assets', objectPath: path },
+            { bucket: 'files', objectPath: path },
         ];
     }
 
