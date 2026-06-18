@@ -2,6 +2,7 @@ import { getSupabaseEnv, verifySupabaseUser } from './_google_sheet_sync_lib.js'
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const OWNER_BUCKETS = new Set(['screenshots', 'backgrounds', 'avatars']);
+const AUTO_CREATE_BUCKETS = new Set(['screenshots', 'backgrounds', 'avatars']);
 
 export const config = {
     api: {
@@ -90,6 +91,41 @@ async function createSignedUrl({ url, serviceKey, bucket, objectPath, expiresIn 
     return normalizeSignedUrl(url, signed);
 }
 
+async function ensureBucketExists({ url, serviceKey, bucket }) {
+    if (!AUTO_CREATE_BUCKETS.has(bucket)) return;
+    const getResponse = await fetch(`${url}/storage/v1/bucket/${encodeURIComponent(bucket)}`, {
+        headers: {
+            apikey: serviceKey,
+            Authorization: `Bearer ${serviceKey}`,
+        },
+    });
+    if (getResponse.ok) return;
+
+    const createResponse = await fetch(`${url}/storage/v1/bucket`, {
+        method: 'POST',
+        headers: {
+            apikey: serviceKey,
+            Authorization: `Bearer ${serviceKey}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            id: bucket,
+            name: bucket,
+            public: false,
+            file_size_limit: MAX_UPLOAD_BYTES,
+        }),
+    });
+    if (!createResponse.ok && createResponse.status !== 409) {
+        const text = await createResponse.text().catch(() => '');
+        throw new Error(`Could not create storage bucket ${bucket}: ${text || createResponse.statusText}`);
+    }
+}
+
+function shouldRetryAfterEnsuringBucket(status, message = '') {
+    const text = String(message || '').toLowerCase();
+    return status === 400 || status === 404 || text.includes('bucket') || text.includes('not found');
+}
+
 export default async function handler(req, res) {
     try {
         if (req.method !== 'POST' && req.method !== 'GET') {
@@ -111,6 +147,7 @@ export default async function handler(req, res) {
 
         const { url, serviceKey } = getSupabaseEnv();
         if (!serviceKey) return sendJson(res, 501, { ok: false, error: 'SUPABASE_SERVICE_ROLE_KEY is not configured' });
+        await ensureBucketExists({ url, serviceKey, bucket });
 
         if (req.method === 'GET') {
             const signedUrl = await createSignedUrl({
@@ -129,7 +166,7 @@ export default async function handler(req, res) {
 
         const contentType = req.headers['content-type'] || 'application/octet-stream';
         const encodedPath = encodeStoragePath(objectPath);
-        const uploadResponse = await fetch(`${url}/storage/v1/object/${bucket}/${encodedPath}`, {
+        let uploadResponse = await fetch(`${url}/storage/v1/object/${bucket}/${encodedPath}`, {
             method: 'POST',
             headers: {
                 apikey: serviceKey,
@@ -140,7 +177,21 @@ export default async function handler(req, res) {
             body,
         });
 
-        const uploadText = await uploadResponse.text().catch(() => '');
+        let uploadText = await uploadResponse.text().catch(() => '');
+        if (!uploadResponse.ok && shouldRetryAfterEnsuringBucket(uploadResponse.status, uploadText)) {
+            await ensureBucketExists({ url, serviceKey, bucket });
+            uploadResponse = await fetch(`${url}/storage/v1/object/${bucket}/${encodedPath}`, {
+                method: 'POST',
+                headers: {
+                    apikey: serviceKey,
+                    Authorization: `Bearer ${serviceKey}`,
+                    'Content-Type': contentType,
+                    'x-upsert': 'true',
+                },
+                body,
+            });
+            uploadText = await uploadResponse.text().catch(() => '');
+        }
         if (!uploadResponse.ok) {
             console.warn('[Storage upload service] upload failed', {
                 bucket,
