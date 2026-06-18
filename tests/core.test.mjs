@@ -23,7 +23,7 @@ globalThis.document = {
 
 const { canAccessMentorReviewQueueState, isMentorViewingOtherJournalState } = await import('../js/access_control.js');
 const { buildAutoTradeTypesData, normalizeAppData, normalizeDayEntry } = await import('../js/data_utils.js');
-const { ecnFeeColumnIndex, parseSheetDateCellToIso } = await import('../js/parser_utils.js');
+const { ecnFeeColumnIndex, parsePPROReportDate, parseSheetDateCellToIso } = await import('../js/parser_utils.js');
 const { sanitizeHTML, safeExternalUrl, sanitizeRichHTML } = await import('../js/sanitize.js');
 const { mergeGoogleSheetTradesIntoJournal } = await import('../js/sheet_journal_merge.js');
 const { parseFondexxSummaryByDateRows } = await import('../js/fondexx_summary_parser.js');
@@ -47,6 +47,11 @@ test('sheet date parser treats slash Excel dates as month/day/year', () => {
     assert.equal(parseSheetDateCellToIso('4/2/2026'), '2026-04-02');
     assert.equal(parseSheetDateCellToIso('4/6/2026'), '2026-04-06');
     assert.equal(parseSheetDateCellToIso('1.4.2026'), '2026-04-01');
+});
+
+test('PPRO report dates are parsed as month/day/year', () => {
+    assert.equal(parsePPROReportDate('03/02/2026'), '2026-03-02');
+    assert.equal(parsePPROReportDate('03/13/2026'), '2026-03-13');
 });
 
 test('stats math summarizes journal pnl safely', () => {

@@ -3,7 +3,7 @@ import { state } from './state.js';
 import { saveJournalData, saveToLocal, markJournalDayDirty } from './storage.js';
 import { applyAutoTradeTypesData, getDefaultDayEntry } from './data_utils.js';
 import { ensureXlsx } from './vendor_loader.js';
-import { ecnFeeColumnIndex } from './parser_utils.js';
+import { ecnFeeColumnIndex, parsePPROReportDate } from './parser_utils.js';
 import { isGoogleSheetTrade, isPureGoogleSheetTrade } from './trade_filters.js';
 import { parseFondexxSummaryByDateRows as parseFondexxSummaryByDateRowsPure } from './fondexx_summary_parser.js';
 import { normalizeBrokerTradeType } from './trade_import_utils.js';
@@ -738,11 +738,10 @@ export function importPPROReport(event) {
                     let totalVal = String(row[totalKey]).trim();
                     let d = null;
                     
-                    if (dateVal && dateVal.includes('/')) d = parseSlashDatePreferDayMonth(dateVal);
+                    d = parsePPROReportDate(dateVal);
                     
                     if (d && !isFutureIsoDate(d)) {
-                        let cleanTotal = totalVal.replace(/,/g, '').replace(/"/g, '');
-                        let profit = parseFloat(cleanTotal) || 0;
+                        let profit = parseMoney(totalVal);
                         if (!dailyData[d]) dailyData[d] = { profit: 0 };
                         dailyData[d].profit += profit; 
                     }

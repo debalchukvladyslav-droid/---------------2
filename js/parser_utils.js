@@ -79,3 +79,17 @@ export function parseSheetDateCellToIso(value) {
     if (fallback && !isFutureIsoDateString(fallback)) return fallback;
     return null;
 }
+
+export function parsePPROReportDate(value) {
+    const s = String(value || '').trim().split(/\s+/)[0];
+    if (isValidIsoDateString(s)) return s;
+
+    const m = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/.exec(s);
+    if (!m) return null;
+
+    const month = Number(m[1]);
+    const day = Number(m[2]);
+    const year = Number(m[3].length === 2 ? `20${m[3]}` : m[3]);
+    const iso = toIsoFromParts(year, month, day);
+    return isValidIsoDateString(iso) ? iso : null;
+}
