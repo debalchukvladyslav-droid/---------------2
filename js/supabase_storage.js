@@ -12,7 +12,7 @@ function getSupabaseUrlCandidate(value) {
     try {
         const url = new URL(value);
         if (!url.hostname.includes('.supabase.co')) return null;
-        const match = url.pathname.match(/\/storage\/v1\/object\/(?:(?:sign|public|authenticated)\/)?([^/]+)\/(.+)$/);
+        const match = url.pathname.match(/(?:\/storage\/v1)?\/object\/(?:(?:sign|public|authenticated)\/)?([^/]+)\/(.+)$/);
         if (!match) return null;
         return {
             bucket: decodeURIComponent(match[1]),

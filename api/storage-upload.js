@@ -39,6 +39,15 @@ function encodeStoragePath(path) {
         .join('/');
 }
 
+function normalizeSignedUrl(baseUrl, signed) {
+    const value = String(signed || '').trim();
+    if (!value) return '';
+    if (/^https?:\/\//i.test(value)) return value;
+    if (value.startsWith('/storage/v1/')) return `${baseUrl}${value}`;
+    if (value.startsWith('/object/')) return `${baseUrl}/storage/v1${value}`;
+    return `${baseUrl}/storage/v1/${value.replace(/^\/+/, '')}`;
+}
+
 function isUuid(value) {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
 }
@@ -78,7 +87,7 @@ async function createSignedUrl({ url, serviceKey, bucket, objectPath, expiresIn 
     const data = await response.json().catch(() => ({}));
     const signed = data.signedURL || data.signedUrl || data.signed_url || '';
     if (!response.ok || !signed) return '';
-    return /^https?:\/\//i.test(signed) ? signed : `${url}${signed}`;
+    return normalizeSignedUrl(url, signed);
 }
 
 export default async function handler(req, res) {

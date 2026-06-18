@@ -17,6 +17,25 @@ function isManagedStoragePath(value = '') {
     return path.startsWith('screenshots/') || path.startsWith('backgrounds/') || path.startsWith('avatars/');
 }
 
+function isSupabaseObjectUrl(value = '') {
+    try {
+        const url = new URL(String(value || ''));
+        return url.hostname.includes('.supabase.co')
+            && /^(?:\/storage\/v1)?\/object\//.test(url.pathname);
+    } catch (_) {
+        return false;
+    }
+}
+
+function isBrokenSupabaseObjectUrl(value = '') {
+    try {
+        const url = new URL(String(value || ''));
+        return url.hostname.includes('.supabase.co') && url.pathname.startsWith('/object/');
+    } catch (_) {
+        return false;
+    }
+}
+
 async function tryRepairMissingStoragePath(path) {
     if (!isManagedStoragePath(path) || typeof window.syncDriveScreenshots !== 'function') return;
     if (Date.now() - storageRepairLastRun < 30_000) {
@@ -114,7 +133,7 @@ const URL_CACHE_TTL = 50 * 60 * 1000; // 50 хвилин
 function _getCachedUrl(path) {
     if (_memUrlCache[path] && Date.now() - _memUrlCache[path].ts < URL_CACHE_TTL) {
         const cachedUrl = _memUrlCache[path].url || '';
-        if (isManagedStoragePath(path) && !/^https?:\/\//i.test(cachedUrl)) {
+        if (isManagedStoragePath(path) && (!/^https?:\/\//i.test(cachedUrl) || isBrokenSupabaseObjectUrl(cachedUrl))) {
             delete _memUrlCache[path];
         } else {
             return cachedUrl;
@@ -124,7 +143,7 @@ function _getCachedUrl(path) {
         const raw = localStorage.getItem('sc:' + path);
         if (raw) {
             const e = JSON.parse(raw);
-            if (isManagedStoragePath(path) && !/^https?:\/\//i.test(e.url || '')) {
+            if (isManagedStoragePath(path) && (!/^https?:\/\//i.test(e.url || '') || isBrokenSupabaseObjectUrl(e.url || ''))) {
                 localStorage.removeItem('sc:' + path);
                 return null;
             }
@@ -148,7 +167,8 @@ export async function getStorageUrl(pathOrUrl) {
         try {
             const url = new URL(pathOrUrl);
             const path = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
-            if (isManagedStoragePath(path)) storagePath = path;
+            if (isSupabaseObjectUrl(pathOrUrl)) storagePath = pathOrUrl;
+            else if (isManagedStoragePath(path)) storagePath = path;
             else return pathOrUrl;
         } catch (_) {
             return pathOrUrl;
