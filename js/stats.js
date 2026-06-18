@@ -487,6 +487,7 @@ export function resetStatsSourceSelection() {
     state.activeFilters = [];
     state.currentStatsContext = {
         journal: state.appData.journal || {},
+        periodJournal: state.appData.journal || {},
         label: getStatsSelectionLabel(state.statsSourceSelection.type, state.statsSourceSelection.key)
     };
 }
@@ -661,6 +662,74 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
     if (state.statsCompareTradeTypeFilter && !tradeTypes.includes(state.statsCompareTradeTypeFilter)) {
         state.statsCompareTradeTypeFilter = null;
     }
+}
+
+async function loadStatsPeriodTreeJournal(selection = state.statsSourceSelection, currentUserId = null) {
+    const sel = selection || { type: 'current', key: state.CURRENT_VIEWED_USER || state.USER_DOC_NAME || '' };
+    try {
+        if (sel.type === 'current') {
+            const nick = cleanStatsNick(state.CURRENT_VIEWED_USER || state.USER_DOC_NAME).replace(/_stats$/, '');
+            if (!isStatsNickAllowed(nick)) return {};
+            await loadAllMonths(state.CURRENT_VIEWED_USER, currentUserId || getCurrentViewedUserId());
+            return prepareStatsJournal(state.appData.journal || {});
+        }
+
+        if (sel.type === 'all') {
+            const cacheKey = '__period_tree_all__|all-time';
+            const cached = _cacheGet(cacheKey);
+            if (cached) return prepareStatsJournal(cached);
+            const journals = await Promise.all(getAllStatsNicks().map(async (nick) => {
+                const k = `${nick}_stats|all-time`;
+                const c = _cacheGet(k);
+                const settings = getStatsProfileSettingsByNick(nick);
+                if (c) return { journal: c, settings };
+                const j = {};
+                const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
+                (snap.docs || []).forEach(d => { Object.assign(j, d.data()); });
+                _cacheSet(k, j);
+                return { journal: j, settings };
+            }));
+            const merged = prepareStatsJournal(mergeJournals(journals));
+            _cacheSet(cacheKey, merged);
+            return merged;
+        }
+
+        if (sel.type === 'team' && state.TEAM_GROUPS?.[sel.key]) {
+            const cacheKey = `__period_tree_team__${sel.key}|all-time`;
+            const cached = _cacheGet(cacheKey);
+            if (cached) return prepareStatsJournal(cached);
+            const journals = await Promise.all(getStatsNicksForGroup(sel.key).map(async (nick) => {
+                const k = `${nick}_stats|all-time`;
+                const c = _cacheGet(k);
+                const settings = getStatsProfileSettingsByNick(nick);
+                if (c) return { journal: c, settings };
+                const j = {};
+                const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
+                (snap.docs || []).forEach(d => { Object.assign(j, d.data()); });
+                _cacheSet(k, j);
+                return { journal: j, settings };
+            }));
+            const merged = prepareStatsJournal(mergeJournals(journals));
+            _cacheSet(cacheKey, merged);
+            return merged;
+        }
+
+        if (sel.type === 'trader') {
+            const nick = cleanStatsNick(sel.key);
+            if (!isStatsNickAllowed(nick)) return {};
+            const cacheKey = `${nick}_stats|all-time`;
+            const cached = _cacheGet(cacheKey);
+            if (cached) return prepareStatsJournal(cached);
+            const journal = {};
+            const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
+            (snap.docs || []).forEach(d => { Object.assign(journal, d.data()); });
+            _cacheSet(cacheKey, journal);
+            return prepareStatsJournal(journal);
+        }
+    } catch (error) {
+        console.warn('[Stats] period tree full journal load failed:', error?.message || String(error));
+    }
+    return {};
 }
 
 async function selectStatsCompareSource(type, key) {
@@ -1019,6 +1088,9 @@ export async function refreshStatsView() {
     if (requestId !== state.statsLoadRequestId) { if (overlay) overlay.style.display = 'none'; return; }
 
     journal = prepareStatsJournal(journal);
+    const periodTreeJournal = (!isAllTime && filters.length)
+        ? await loadStatsPeriodTreeJournal(sel, currentUserId)
+        : journal;
 
     // Збираємо tradeTypes для поточного контексту
     let contextTradeTypes = [];
@@ -1042,7 +1114,7 @@ export async function refreshStatsView() {
 
     if (requestId !== state.statsLoadRequestId) { if (overlay) overlay.style.display = 'none'; return; }
 
-    state.currentStatsContext = { label: getStatsSelectionLabel(sel.type, sel.key), journal, tradeTypes: contextTradeTypes, settings: contextSettings };
+    state.currentStatsContext = { label: getStatsSelectionLabel(sel.type, sel.key), journal, periodJournal: periodTreeJournal, tradeTypes: contextTradeTypes, settings: contextSettings };
 
     if (window.renderStatsSourceSelector) window.renderStatsSourceSelector();
     if (window.renderTradeTypeSelector) window.renderTradeTypeSelector();
@@ -1534,7 +1606,7 @@ export function buildStatsTree() {
     } else {
         const sourceJournal = sel.type === 'current'
             ? (state.appData.journal || {})
-            : (state.currentStatsContext.journal || {});
+            : (state.currentStatsContext.periodJournal || state.currentStatsContext.journal || {});
         for (let d in sourceJournal) {
             const data = sourceJournal[d];
             if (getEffectiveStatsPnl(data) != null) {
@@ -2321,7 +2393,7 @@ function renderStatsComparePanel(validEntries) {
     normalizeCompareSourceSelection();
     if (!state.statsCompareContext?.journal || Object.keys(state.statsCompareContext.journal).length === 0) {
         state.statsCompareContext = {
-            journal: state.currentStatsContext.journal || {},
+            journal: state.currentStatsContext.periodJournal || state.currentStatsContext.journal || {},
             label: getStatsSelectionLabel(state.statsCompareSourceSelection.type, state.statsCompareSourceSelection.key),
             tradeTypes: state.currentStatsContext.tradeTypes || state.appData.tradeTypes || [],
             settings: state.currentStatsContext.settings || state.appData.settings || {}
