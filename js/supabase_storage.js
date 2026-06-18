@@ -199,7 +199,7 @@ export async function uploadToSupabaseStorage(storagePath, file, options = {}) {
     let lastError = null;
     let lastCandidate = null;
     for (const candidate of candidates) {
-        if (storageUser && (candidate.bucket === 'screenshots' || candidate.bucket === 'backgrounds')) {
+        if (storageUser && (candidate.bucket === 'screenshots' || candidate.bucket === 'backgrounds' || candidate.bucket === 'avatars')) {
             const ownerKey = candidate.objectPath.split('/')[0] || '';
             if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ownerKey)
                 && ownerKey !== storageUser.id) {
@@ -207,7 +207,7 @@ export async function uploadToSupabaseStorage(storagePath, file, options = {}) {
             }
         }
 
-        if (!options.disableServerFallback && (candidate.bucket === 'screenshots' || candidate.bucket === 'backgrounds')) {
+        if (!options.disableServerFallback && (candidate.bucket === 'screenshots' || candidate.bucket === 'backgrounds' || candidate.bucket === 'avatars')) {
             try {
                 const signedUrl = await uploadViaServer(candidate, file, options);
                 return signedUrl || storagePath;

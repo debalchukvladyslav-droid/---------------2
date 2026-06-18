@@ -3,7 +3,7 @@ import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { showToast } from './utils.js';
 import { loadTeams } from './teams.js';
-import { getSupabaseStorageUrl } from './supabase_storage.js';
+import { ensureSupabaseStorageUser, getSupabaseStorageUrl, uploadToSupabaseStorage } from './supabase_storage.js';
 
 const DEFAULT_TEAM_LABEL = 'Без куща';
 
@@ -248,8 +248,32 @@ async function getAvatarCropDataUrl() {
     return blobToDataUrl(blob);
 }
 
+async function dataUrlToBlob(dataUrl) {
+    const response = await fetch(dataUrl);
+    if (!response.ok) throw new Error('Could not read saved avatar image');
+    return response.blob();
+}
+
+async function uploadAvatarBlob(blob) {
+    if (!blob) return '';
+    const user = await ensureSupabaseStorageUser();
+    const storagePath = `avatars/${user.id}/avatar.webp`;
+    await uploadToSupabaseStorage(storagePath, blob, {
+        bucket: 'avatars',
+        contentType: blob.type || 'image/webp',
+        ttl: 24 * 60 * 60,
+    });
+    return storagePath;
+}
+
 async function uploadCroppedAvatar() {
-    return getAvatarCropDataUrl();
+    return uploadAvatarBlob(await getAvatarCropBlob());
+}
+
+async function migrateInlineAvatarIfNeeded(value) {
+    const raw = String(value || '').trim();
+    if (!/^data:image\/(?:png|jpe?g|webp|gif);base64,/i.test(raw)) return raw;
+    return uploadAvatarBlob(await dataUrlToBlob(raw));
 }
 
 function bindOnce() {
@@ -380,6 +404,7 @@ async function saveSidebarProfile() {
     try {
         const uploadedAvatar = await uploadCroppedAvatar();
         if (uploadedAvatar) avatarPath = uploadedAvatar;
+        else avatarPath = await migrateInlineAvatarIfNeeded(avatarPath);
     } catch (uploadErr) {
         showToast('Could not upload avatar: ' + (uploadErr?.message || uploadErr));
         return;

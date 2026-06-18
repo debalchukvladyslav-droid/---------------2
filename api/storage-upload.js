@@ -1,7 +1,7 @@
 import { getSupabaseEnv, verifySupabaseUser } from './_google_sheet_sync_lib.js';
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
-const OWNER_BUCKETS = new Set(['screenshots', 'backgrounds']);
+const OWNER_BUCKETS = new Set(['screenshots', 'backgrounds', 'avatars']);
 
 export const config = {
     api: {
