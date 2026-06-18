@@ -394,7 +394,9 @@ function cleanStatsNick(value = '') {
 }
 
 function isStatsProfile(profile) {
-    return !!profile && profile.role !== 'mentor' && !profile.mentor_enabled;
+    if (!profile) return false;
+    if (profile.role === 'admin') return true;
+    return profile.role !== 'mentor' && !profile.mentor_enabled;
 }
 
 function isStatsNickAllowed(nick) {
