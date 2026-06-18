@@ -207,6 +207,21 @@ export async function uploadToSupabaseStorage(storagePath, file, options = {}) {
             }
         }
 
+        if (!options.disableServerFallback && (candidate.bucket === 'screenshots' || candidate.bucket === 'backgrounds')) {
+            try {
+                const signedUrl = await uploadViaServer(candidate, file, options);
+                return signedUrl || storagePath;
+            } catch (serverFirstError) {
+                console.warn('[Storage] server-first upload failed, trying client upload', {
+                    bucket: candidate.bucket,
+                    objectPath: candidate.objectPath,
+                    message: serverFirstError?.message || String(serverFirstError),
+                });
+                lastError = serverFirstError;
+                lastCandidate = candidate;
+            }
+        }
+
         const { error } = await supabase.storage
             .from(candidate.bucket)
             .upload(candidate.objectPath, file, {

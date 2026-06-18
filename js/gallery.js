@@ -354,12 +354,13 @@ export async function renderUnassignedUI() {
         container.appendChild(item);
 
         if (window.updateBadgeUI) window.updateBadgeUI(encodedPath);
-        getStorageUrl(img).then(src => {
-            if (src) imgEl.src = src;
-            else imgEl.removeAttribute('src');
-            imgEl.onclick = () => openZoom(src);
-        });
-        if ((!state.appData.tickers[img] || state.appData.tickers[img] === '???') && window.runOCR) window.runOCR(encodedPath);
+        const src = await getStorageUrl(img);
+        if (src) imgEl.src = src;
+        else imgEl.removeAttribute('src');
+        imgEl.onclick = () => openZoom(src);
+        if (src && (!state.appData.tickers[img] || state.appData.tickers[img] === '???') && window.runOCR) {
+            window.runOCR(encodedPath);
+        }
     }));
     if (leftCount > 0) {
         const moreBtn = document.createElement('div');
@@ -378,13 +379,16 @@ export async function renderUnassignedUI() {
     }
 }
 
-export function loadMoreUnassigned() { 
+export async function loadMoreUnassigned() { 
     state.unassignedVisibleCount += 5; 
     renderUnassignedUI(); 
     let imagesToShow = state.currentUnassignedImages.slice(0, state.unassignedVisibleCount); 
     for (let img of imagesToShow) { 
         let encodedPath = encodeURIComponent(img); 
-        if (!state.appData.tickers[img] && window.runOCR) window.runOCR(encodedPath); 
+        if (!state.appData.tickers[img] && window.runOCR) {
+            const src = await getStorageUrl(img);
+            if (src) window.runOCR(encodedPath);
+        }
     } 
 }
 
