@@ -147,6 +147,14 @@ async function createSignedUrlViaServer(candidate, ttl = DEFAULT_SIGNED_URL_TTL)
 
 async function createFirstSignedUrl(candidates, ttl = DEFAULT_SIGNED_URL_TTL) {
     for (const candidate of candidates) {
+        if (candidate.bucket === 'avatars') {
+            const serverSignedUrl = await createSignedUrlViaServer(candidate, ttl);
+            if (serverSignedUrl) {
+                return { ...candidate, url: serverSignedUrl };
+            }
+            continue;
+        }
+
         const { data, error } = await supabase.storage
             .from(candidate.bucket)
             .createSignedUrl(candidate.objectPath, ttl);
