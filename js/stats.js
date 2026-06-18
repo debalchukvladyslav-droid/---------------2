@@ -410,12 +410,23 @@ function getStatsNicksForGroup(groupName) {
         .filter((nick) => nick && isStatsNickAllowed(nick));
 }
 
+function getStatsAdminNicks() {
+    return Object.values(state._teamProfiles || {})
+        .filter((profile) => profile?.nick && profile.role === 'admin' && isStatsProfile(profile))
+        .map((profile) => cleanStatsNick(profile.nick))
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, 'uk'));
+}
+
 function getAllStatsNicks() {
     const out = [];
     for (const group in state.TEAM_GROUPS || {}) {
         for (const nick of getStatsNicksForGroup(group)) {
             if (!out.includes(nick)) out.push(nick);
         }
+    }
+    for (const nick of getStatsAdminNicks()) {
+        if (!out.includes(nick)) out.push(nick);
     }
     return out;
 }
@@ -453,6 +464,15 @@ function getStatsSourceOptionsHtml(selection = state.statsSourceSelection, dataP
             html += `<button class="${getStatsSourceButtonClass('trader', cleanNick, selection)}" ${typeAttr}="trader" ${keyAttr}="${escapeHtml(cleanNick || nick)}">👤 ${escapeHtml(nick)}</button>`;
         });
     });
+
+    const adminNicks = getStatsAdminNicks().filter((nick) => !renderedTraderNicks.has(nick));
+    if (adminNicks.length) {
+        html += `<div class="stats-group-title">Адміни</div>`;
+        adminNicks.forEach((nick) => {
+            renderedTraderNicks.add(nick);
+            html += `<button class="${getStatsSourceButtonClass('trader', nick, selection)}" ${typeAttr}="trader" ${keyAttr}="${escapeHtml(nick)}">👤 ${escapeHtml(nick)}</button>`;
+        });
+    }
 
     return html;
 }
