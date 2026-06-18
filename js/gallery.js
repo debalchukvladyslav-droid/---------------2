@@ -9,8 +9,32 @@ import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 
 let zoomSources = [];
 let zoomIndex = -1;
+let storageRepairPromise = null;
+let storageRepairLastRun = 0;
+
+function isManagedStoragePath(value = '') {
+    const path = String(value || '').replace(/^\/+/, '');
+    return path.startsWith('screenshots/') || path.startsWith('backgrounds/') || path.startsWith('avatars/');
+}
+
+async function tryRepairMissingStoragePath(path) {
+    if (!isManagedStoragePath(path) || typeof window.syncDriveScreenshots !== 'function') return;
+    if (Date.now() - storageRepairLastRun < 30_000) {
+        if (storageRepairPromise) await storageRepairPromise;
+        return;
+    }
+    storageRepairLastRun = Date.now();
+    storageRepairPromise = Promise.resolve(window.syncDriveScreenshots(true))
+        .catch(error => console.warn('[Storage] repair sync failed', error?.message || String(error)))
+        .finally(() => { storageRepairPromise = null; });
+    await storageRepairPromise;
+}
 
 export function openZoom(src) {
+    if (!src) {
+        showToast('Скріншот ще не доступний у storage. Запустіть синхронізацію Drive або спробуйте ще раз.');
+        return;
+    }
     if (!zoomSources.includes(src)) {
         zoomSources = [src];
     }
@@ -88,11 +112,22 @@ const _memUrlCache = {};
 const URL_CACHE_TTL = 50 * 60 * 1000; // 50 хвилин
 
 function _getCachedUrl(path) {
-    if (_memUrlCache[path] && Date.now() - _memUrlCache[path].ts < URL_CACHE_TTL) return _memUrlCache[path].url;
+    if (_memUrlCache[path] && Date.now() - _memUrlCache[path].ts < URL_CACHE_TTL) {
+        const cachedUrl = _memUrlCache[path].url || '';
+        if (isManagedStoragePath(path) && !/^https?:\/\//i.test(cachedUrl)) {
+            delete _memUrlCache[path];
+        } else {
+            return cachedUrl;
+        }
+    }
     try {
         const raw = localStorage.getItem('sc:' + path);
         if (raw) {
             const e = JSON.parse(raw);
+            if (isManagedStoragePath(path) && !/^https?:\/\//i.test(e.url || '')) {
+                localStorage.removeItem('sc:' + path);
+                return null;
+            }
             if (Date.now() - e.ts < URL_CACHE_TTL) { _memUrlCache[path] = e; return e.url; }
             localStorage.removeItem('sc:' + path);
         }
@@ -108,8 +143,17 @@ function _setCachedUrl(path, url) {
 
 export async function getStorageUrl(pathOrUrl) {
     if (!pathOrUrl) return '';
-    if (pathOrUrl.startsWith('http') && !pathOrUrl.includes('firebasestorage')) return pathOrUrl;
     let storagePath = pathOrUrl;
+    if (pathOrUrl.startsWith('http') && !pathOrUrl.includes('firebasestorage')) {
+        try {
+            const url = new URL(pathOrUrl);
+            const path = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
+            if (isManagedStoragePath(path)) storagePath = path;
+            else return pathOrUrl;
+        } catch (_) {
+            return pathOrUrl;
+        }
+    }
     if (pathOrUrl.includes('firebasestorage.googleapis.com')) {
         const match = pathOrUrl.match(/\/o\/([^?]+)/);
         if (match) storagePath = decodeURIComponent(match[1]);
@@ -117,12 +161,18 @@ export async function getStorageUrl(pathOrUrl) {
     const cached = _getCachedUrl(storagePath);
     if (cached) return cached;
     try {
-        const url = await getSupabaseStorageUrl(storagePath);
+        let url = await getSupabaseStorageUrl(storagePath);
+        if (!url && isManagedStoragePath(storagePath)) {
+            console.warn('[Storage] signed URL missing, trying repair sync:', storagePath);
+            await tryRepairMissingStoragePath(storagePath);
+            url = await getSupabaseStorageUrl(storagePath);
+        }
+        if (!url) return '';
         _setCachedUrl(storagePath, url);
         return url;
     } catch(e) {
         console.warn('Storage URL error:', e.message);
-        return pathOrUrl;
+        return isManagedStoragePath(storagePath) ? '' : pathOrUrl;
     }
 }
 
@@ -305,7 +355,8 @@ export async function renderUnassignedUI() {
 
         if (window.updateBadgeUI) window.updateBadgeUI(encodedPath);
         getStorageUrl(img).then(src => {
-            imgEl.src = src;
+            if (src) imgEl.src = src;
+            else imgEl.removeAttribute('src');
             imgEl.onclick = () => openZoom(src);
         });
         if ((!state.appData.tickers[img] || state.appData.tickers[img] === '???') && window.runOCR) window.runOCR(encodedPath);
@@ -357,7 +408,8 @@ export async function renderAssignedScreens() {
     }));
     const visibleSources = visibleCats
         .flatMap(cat => screens[cat.id] || [])
-        .map(filename => srcMap[filename] || getImgUrl(filename));
+        .map(filename => srcMap[filename])
+        .filter(Boolean);
 
     const filterBar = document.createElement('div');
     filterBar.className = 'screen-category-filter';
@@ -393,7 +445,7 @@ export async function renderAssignedScreens() {
 
         list.forEach(filename => {
             const encodedPath = encodeURIComponent(filename);
-            const src = srcMap[filename] || getImgUrl(filename);
+            const src = srcMap[filename] || '';
             const cleanId = 'ticker-' + filename.replace(/[^a-zA-Z0-9]/g, '');
             currentDayImages.push(encodedPath);
             const tags = (state.appData.screenTags && state.appData.screenTags[filename]) || [];
@@ -410,6 +462,7 @@ export async function renderAssignedScreens() {
             badge.className = 'ticker-badge'; badge.id = cleanId;
             const imgEl = document.createElement('img');
             imgEl.src = src; imgEl.title = 'Клікніть, щоб збільшити';
+            if (!src) imgEl.removeAttribute('src');
             imgEl.loading = 'lazy';
             imgEl.addEventListener('click', () => openZoomGallery(src, visibleSources));
             zoomWrap.appendChild(badge); zoomWrap.appendChild(imgEl);
@@ -868,7 +921,8 @@ window.runTagSearch = function() {
         const img = document.createElement('img');
         img.style.cssText = 'width:120px; height:80px; object-fit:cover; border-radius:6px; cursor:pointer; flex-shrink:0;';
         getStorageUrl(r.filename).then(src => {
-            img.src = src;
+            if (src) img.src = src;
+            else img.removeAttribute('src');
             img.onclick = () => openZoom(src);
         });
 

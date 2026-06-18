@@ -3,7 +3,7 @@ import { state } from './state.js';
 import { saveJournalData, saveToLocal, markJournalDayDirty } from './storage.js';
 import { applyAutoTradeTypesData, getDefaultDayEntry } from './data_utils.js';
 import { ensureXlsx } from './vendor_loader.js';
-import { ecnFeeColumnIndex, parsePPROReportDate } from './parser_utils.js';
+import { ecnFeeColumnIndex, parsePPROTotalReportRows } from './parser_utils.js';
 import { isGoogleSheetTrade, isPureGoogleSheetTrade } from './trade_filters.js';
 import { parseFondexxSummaryByDateRows as parseFondexxSummaryByDateRowsPure } from './fondexx_summary_parser.js';
 import { normalizeBrokerTradeType } from './trade_import_utils.js';
@@ -725,44 +725,29 @@ export function importPPROReport(event) {
             let sheetName = workbook.SheetNames[0];
             let worksheet = workbook.Sheets[sheetName];
             
-            let json = XLSX.utils.sheet_to_json(worksheet, {raw: false, defval: ""});
-            let dailyData = {};
-            
-            json.forEach(row => {
-                let keys = Object.keys(row);
-                let dateKey = keys.find(k => k.trim().toLowerCase() === 'date');
-                let totalKey = keys.find(k => k.trim().toLowerCase() === 'trading total');
-                
-                if (dateKey && totalKey) {
-                    let dateVal = String(row[dateKey]).trim();
-                    let totalVal = String(row[totalKey]).trim();
-                    let d = null;
-                    
-                    d = parsePPROReportDate(dateVal);
-                    
-                    if (d && !isFutureIsoDate(d)) {
-                        let profit = parseMoney(totalVal);
-                        if (!dailyData[d]) dailyData[d] = { profit: 0 };
-                        dailyData[d].profit += profit; 
-                    }
-                }
-            });
+            const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, defval: '' });
+            const dailyRows = parsePPROTotalReportRows(rows);
             
             let daysUpdated = 0;
-            for(let d in dailyData) {
-                if (!state.appData.journal[d]) state.appData.journal[d] = getDefaultDayEntry();
-                state.appData.journal[d].ppro = { gross: dailyData[d].profit, net: dailyData[d].profit, comm: 0, locates: 0, tickers: [] };
-                recalculateDailyTotals(d);
-                markJournalDayDirty(d);
+            const importedDates = [];
+            for (const day of dailyRows) {
+                const dateStr = day.dateStr;
+                if (!state.appData.journal[dateStr]) state.appData.journal[dateStr] = getDefaultDayEntry();
+                const entry = state.appData.journal[dateStr];
+                entry.ppro = { gross: day.gross, net: day.net, comm: day.comm, locates: day.locates, tickers: day.tickers };
+                entry.pproSource = 'ppro-total-report';
+                recalculateDailyTotals(dateStr);
+                markJournalDayDirty(dateStr);
+                importedDates.push(dateStr);
                 daysUpdated++;
             }
+            if (!dailyRows.length) throw new Error('У PPRO звіті не знайдено денних рядків');
             saveJournalData().then(() => {
                 showToast(`Звіт PPRO успішно імпортовано! Оновлено днів: ${daysUpdated}`); 
                 if(window.updateAutoFlags) window.updateAutoFlags(); 
-                if(window.renderView) window.renderView();
+                showImportedMonth(importedDates[0]);
                 let viewStats = document.getElementById('view-stats');
                 if (viewStats && viewStats.classList.contains('active') && window.refreshStatsView) { window.refreshStatsView(); }
-                if(window.selectDate) window.selectDate(state.selectedDateStr);
             }).catch(err => {
                 showToast('Import save error: ' + (err?.message || err));
             });

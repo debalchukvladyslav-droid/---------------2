@@ -109,6 +109,26 @@ async function uploadViaServer(candidate, file, options = {}) {
     return payload.signedUrl || '';
 }
 
+async function createSignedUrlViaServer(candidate, ttl = DEFAULT_SIGNED_URL_TTL) {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    const token = data?.session?.access_token || '';
+    if (!token) return '';
+
+    const query = new URLSearchParams({
+        bucket: candidate.bucket,
+        objectPath: candidate.objectPath,
+        expiresIn: String(ttl),
+    });
+    const response = await fetch(`/api/storage-upload?${query.toString()}`, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload?.ok) return '';
+    return payload.signedUrl || '';
+}
+
 async function createFirstSignedUrl(candidates, ttl = DEFAULT_SIGNED_URL_TTL) {
     for (const candidate of candidates) {
         const { data, error } = await supabase.storage
@@ -117,6 +137,11 @@ async function createFirstSignedUrl(candidates, ttl = DEFAULT_SIGNED_URL_TTL) {
 
         if (!error && data?.signedUrl) {
             return { ...candidate, url: data.signedUrl };
+        }
+
+        const serverSignedUrl = await createSignedUrlViaServer(candidate, ttl);
+        if (serverSignedUrl) {
+            return { ...candidate, url: serverSignedUrl };
         }
     }
 
@@ -140,7 +165,13 @@ export async function getSupabaseStorageUrl(pathOrUrl, ttl = DEFAULT_SIGNED_URL_
 
     const signed = await createFirstSignedUrl(getPathCandidates(value), ttl);
     if (signed?.url) return signed.url;
-    if (supabaseUrlCandidate || value.replace(/^\/+/, '').startsWith('avatars/')) return '';
+    const normalizedPath = value.replace(/^\/+/, '');
+    if (supabaseUrlCandidate
+        || normalizedPath.startsWith('screenshots/')
+        || normalizedPath.startsWith('backgrounds/')
+        || normalizedPath.startsWith('avatars/')) {
+        return '';
+    }
     return value;
 }
 

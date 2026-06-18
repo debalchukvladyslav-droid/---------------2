@@ -372,6 +372,8 @@ function dayEntryToJournalRow(userId, tradeDate, entry) {
             ppro: day.ppro && typeof day.ppro === 'object'
                 ? day.ppro
                 : { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
+            fondexxSource: typeof day.fondexxSource === 'string' ? day.fondexxSource : '',
+            pproSource: typeof day.pproSource === 'string' ? day.pproSource : '',
             sessionGoal: day.sessionGoal ?? '',
             sessionPlan: day.sessionPlan ?? '',
             sessionReadiness: day.sessionReadiness ?? null,

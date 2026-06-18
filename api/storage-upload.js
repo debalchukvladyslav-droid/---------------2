@@ -29,6 +29,12 @@ function isUuid(value) {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
 }
 
+function cleanExpiresIn(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 3600;
+    return Math.max(60, Math.min(24 * 60 * 60, Math.floor(n)));
+}
+
 async function readBody(req) {
     const chunks = [];
     let total = 0;
@@ -44,7 +50,7 @@ async function readBody(req) {
     return Buffer.concat(chunks);
 }
 
-async function createSignedUrl({ url, serviceKey, bucket, objectPath }) {
+async function createSignedUrl({ url, serviceKey, bucket, objectPath, expiresIn = 3600 }) {
     const response = await fetch(`${url}/storage/v1/object/sign/${bucket}/${objectPath}`, {
         method: 'POST',
         headers: {
@@ -52,7 +58,7 @@ async function createSignedUrl({ url, serviceKey, bucket, objectPath }) {
             Authorization: `Bearer ${serviceKey}`,
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ expiresIn: 3600 }),
+        body: JSON.stringify({ expiresIn }),
     });
     const data = await response.json().catch(() => ({}));
     const signed = data.signedURL || data.signedUrl || data.signed_url || '';
@@ -62,8 +68,8 @@ async function createSignedUrl({ url, serviceKey, bucket, objectPath }) {
 
 export default async function handler(req, res) {
     try {
-        if (req.method !== 'POST') {
-            res.setHeader('Allow', 'POST');
+        if (req.method !== 'POST' && req.method !== 'GET') {
+            res.setHeader('Allow', 'GET, POST');
             return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
         }
 
@@ -81,6 +87,18 @@ export default async function handler(req, res) {
 
         const { url, serviceKey } = getSupabaseEnv();
         if (!serviceKey) return sendJson(res, 501, { ok: false, error: 'SUPABASE_SERVICE_ROLE_KEY is not configured' });
+
+        if (req.method === 'GET') {
+            const signedUrl = await createSignedUrl({
+                url,
+                serviceKey,
+                bucket,
+                objectPath,
+                expiresIn: cleanExpiresIn(req.query.expiresIn),
+            });
+            if (!signedUrl) return sendJson(res, 404, { ok: false, error: 'Storage object not found or cannot be signed' });
+            return sendJson(res, 200, { ok: true, bucket, objectPath, signedUrl });
+        }
 
         const body = await readBody(req);
         if (!body.length) return sendJson(res, 400, { ok: false, error: 'Empty upload body' });

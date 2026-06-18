@@ -23,7 +23,7 @@ globalThis.document = {
 
 const { canAccessMentorReviewQueueState, isMentorViewingOtherJournalState } = await import('../js/access_control.js');
 const { buildAutoTradeTypesData, normalizeAppData, normalizeDayEntry } = await import('../js/data_utils.js');
-const { ecnFeeColumnIndex, parsePPROReportDate, parseSheetDateCellToIso } = await import('../js/parser_utils.js');
+const { ecnFeeColumnIndex, parsePPROReportDate, parsePPROTotalReportRows, parseSheetDateCellToIso } = await import('../js/parser_utils.js');
 const { sanitizeHTML, safeExternalUrl, sanitizeRichHTML } = await import('../js/sanitize.js');
 const { mergeGoogleSheetTradesIntoJournal } = await import('../js/sheet_journal_merge.js');
 const { parseFondexxSummaryByDateRows } = await import('../js/fondexx_summary_parser.js');
@@ -52,6 +52,24 @@ test('sheet date parser treats slash Excel dates as month/day/year', () => {
 test('PPRO report dates are parsed as month/day/year', () => {
     assert.equal(parsePPROReportDate('03/02/2026'), '2026-03-02');
     assert.equal(parsePPROReportDate('03/13/2026'), '2026-03-13');
+});
+
+test('PPRO total report rows aggregate daily Trading Total as profit-only source', () => {
+    const rows = [
+        ['Trader ID', 'Date', 'Currency', 'Gross', 'Gateway Charge', 'Sec Fee', 'Act Fee', 'Clr Fee', 'Exe Fee', 'Trading Total'],
+        ['VLADDEBA', '03/02/2026', 'USD', '-2,087.1539', '80.3625', '0.71', '2.2169', '7.0682', '0.0000', '-2,177.5084'],
+        ['VLADDEBA', '03/02/2026', 'USD', '100.0000', '0', '0', '0', '0', '0', '1,000.2550'],
+        ['VLADDEBA', '03/13/2026', 'USD', '745.1800', '11.0675', '0.08', '0.2622', '0.8360', '0.0000', '732.9307'],
+        ['VLADDEBA', '13/03/2026', 'USD', '999', '0', '0', '0', '0', '0', '999'],
+        ['VLADDEBA', '07/01/2027', 'USD', '999', '0', '0', '0', '0', '0', '999'],
+    ];
+
+    const parsed = parsePPROTotalReportRows(rows, { todayIso: '2026-06-18' });
+
+    assert.deepEqual(parsed, [
+        { dateStr: '2026-03-02', gross: -1177.25, net: -1177.25, comm: 0, locates: 0, tickers: [] },
+        { dateStr: '2026-03-13', gross: 732.93, net: 732.93, comm: 0, locates: 0, tickers: [] },
+    ]);
 });
 
 test('stats math summarizes journal pnl safely', () => {
@@ -250,6 +268,36 @@ test('sheet-only pnl is ignored for day-level stats', () => {
     assert.equal(getEffectiveDayPnl(sheetOnlyDay), null);
     assert.equal(getEffectiveDayPnl(matchedDay), 25);
     assert.equal(getEffectiveDayPnl({ pnl: '12,50', trades: [] }), 12.5);
+});
+
+test('PPRO-only pnl remains effective day profit', () => {
+    const pproOnlyDay = {
+        pnl: 732.93,
+        fondexx: { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
+        ppro: { gross: 732.93, net: 732.93, comm: 0, locates: 0, tickers: [] },
+        pproSource: 'ppro-total-report',
+        trades: [],
+    };
+    const combinedBrokerDay = {
+        pnl: 932.93,
+        fondexx: { gross: 250, net: 200, comm: 50, locates: 0, tickers: [] },
+        ppro: { gross: 732.93, net: 732.93, comm: 0, locates: 0, tickers: [] },
+        fondexxSource: 'summary-by-date',
+        pproSource: 'ppro-total-report',
+        trades: [],
+    };
+
+    assert.equal(getEffectiveDayPnl(pproOnlyDay), 732.93);
+    assert.equal(getEffectiveDayPnl(combinedBrokerDay), 932.93);
+});
+
+test('day normalization preserves PPRO source marker', () => {
+    const entry = normalizeDayEntry({
+        ppro: { gross: 10, net: 10, comm: 0, locates: 0 },
+        pproSource: 'ppro-total-report',
+    });
+
+    assert.equal(entry.pproSource, 'ppro-total-report');
 });
 
 test('sheet profit risk parser accepts dot, comma, and R suffix values', () => {

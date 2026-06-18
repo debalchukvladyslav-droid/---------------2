@@ -93,3 +93,46 @@ export function parsePPROReportDate(value) {
     const iso = toIsoFromParts(year, month, day);
     return isValidIsoDateString(iso) ? iso : null;
 }
+
+function parseMoney(value) {
+    const cleaned = String(value ?? '').replace(/\s/g, '').replace(/[$,]/g, '');
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : 0;
+}
+
+function findHeaderIndex(headers, names) {
+    const wanted = names.map((name) => String(name).trim().toLowerCase());
+    return headers.findIndex((header) => wanted.includes(String(header || '').trim().toLowerCase()));
+}
+
+export function parsePPROTotalReportRows(rows, options = {}) {
+    const todayIso = options.todayIso || todayIsoDate();
+    const headerRow = rows.findIndex((row) => row.some((cell) => String(cell).trim().toLowerCase() === 'date'));
+    if (headerRow < 0) throw new Error('Date column not found');
+
+    const headers = rows[headerRow].map((header) => String(header || '').trim());
+    const dateIdx = findHeaderIndex(headers, ['Date']);
+    const totalIdx = findHeaderIndex(headers, ['Trading Total']);
+    if (dateIdx < 0 || totalIdx < 0) throw new Error('Date and Trading Total columns are required');
+
+    const daily = new Map();
+    for (const row of rows.slice(headerRow + 1)) {
+        const dateStr = parsePPROReportDate(row[dateIdx]);
+        if (!dateStr || dateStr > todayIso) continue;
+
+        const net = parseMoney(row[totalIdx]);
+        const current = daily.get(dateStr) || 0;
+        daily.set(dateStr, current + net);
+    }
+
+    return [...daily.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([dateStr, net]) => ({
+            dateStr,
+            gross: Number(net.toFixed(2)),
+            net: Number(net.toFixed(2)),
+            comm: 0,
+            locates: 0,
+            tickers: [],
+        }));
+}

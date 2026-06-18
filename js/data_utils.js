@@ -30,6 +30,8 @@ export function getDefaultDayEntry() {
         checkedParams: [], sliders: {}, ai_advice: "", traded_tickers: [],
         fondexx: { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
         ppro: { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
+        fondexxSource: '',
+        pproSource: '',
         trades: [],
         tradeTypesData: {},
         review_requests: {},
@@ -186,6 +188,8 @@ export function normalizeDayEntry(entry) {
         traded_tickers: sanitizeStringArray(safeEntry.traded_tickers),
         fondexx: normalizeTradeSource(safeEntry.fondexx),
         ppro: normalizeTradeSource(safeEntry.ppro),
+        fondexxSource: typeof safeEntry.fondexxSource === 'string' ? safeEntry.fondexxSource : '',
+        pproSource: typeof safeEntry.pproSource === 'string' ? safeEntry.pproSource : '',
         tradeTypesData:
             safeEntry.tradeTypesData && typeof safeEntry.tradeTypesData === 'object' ? { ...safeEntry.tradeTypesData } : {},
         review_requests:

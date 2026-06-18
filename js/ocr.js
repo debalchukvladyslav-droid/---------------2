@@ -111,7 +111,12 @@ export async function loadLatestImageForOCR() {
                 state.pendingOCRRect = Object.assign({}, rect);
                 if (statusEl) statusEl.innerText = 'Коліщатко — зум. Права кнопка — тягати. Ліва кнопка — виділяти.';
             };
-            imgEl.src = src;
+            if (src) {
+                imgEl.src = src;
+            } else {
+                imgEl.removeAttribute('src');
+                showNoImage('⚠️ Не вдалося отримати URL скріншота. Синхронізацію Drive запущено, спробуйте ще раз.');
+            }
         } else {
             showNoImage('⚠️ Скріншотів немає. Додайте хоча б один і поверніться сюди.');
         }
@@ -781,6 +786,11 @@ export async function runOCR(encodedPath, force = false) {
         updateBadgeUI(encodedPath, true);
         const src = await getStorageUrl(safePath);
         console.log('[OCR] image URL resolved:', src ? 'ok' : 'empty');
+        if (!src) {
+            console.warn('[OCR] skipped: screenshot storage URL is unavailable', safePath);
+            updateBadgeUI(encodedPath, false);
+            return finishOCRLog();
+        }
 
         const imgObj = new Image();
         imgObj.crossOrigin = 'Anonymous';
