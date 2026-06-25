@@ -209,7 +209,7 @@ function buildServiceBotCard(bot, panel) {
 async function toggleServiceBot(bot, panel, enabled, card) {
     card.classList.add('admin-user-busy');
     try {
-        await adminApiFetch(`/api/admin/service-bots/${encodeURIComponent(bot.id)}`, {
+        await adminApiFetch(`/api/admin/service-bots?id=${encodeURIComponent(bot.id)}`, {
             method: 'PATCH',
             body: JSON.stringify({ enabled }),
         });
@@ -226,7 +226,7 @@ async function deleteServiceBot(bot, panel, card) {
     if (!confirm(`Delete service bot "${bot.name || bot.id}"?`)) return;
     card.classList.add('admin-user-busy');
     try {
-        await adminApiFetch(`/api/admin/service-bots/${encodeURIComponent(bot.id)}`, { method: 'DELETE' });
+        await adminApiFetch(`/api/admin/service-bots?id=${encodeURIComponent(bot.id)}`, { method: 'DELETE' });
         await loadServiceBotsList(panel);
         showToast('Service bot deleted');
     } catch (error) {

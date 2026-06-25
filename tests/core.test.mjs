@@ -35,7 +35,7 @@ const { normalizeBrokerTradeType } = await import('../js/trade_import_utils.js')
 const { duplicateSheetMappingConfig } = await import('../js/sheet_import_modes.js');
 const { buildExceptionKfRows, buildHourlyKfBuckets, parseSheetProfitRisk } = await import('../js/stats_sheet_metrics.js');
 const { parseDecimalInput } = await import('../js/utils.js');
-const { buildServiceBotSnapshot, hasServiceBotPermission, parseServiceBotRange } = await import('../api/_service_bots_lib.js');
+const { buildServiceBotSnapshot, hasServiceBotPermission, parseServiceBotRange } = await import('../lib/service_bots.js');
 
 test('parser utils find ECN fee columns across supported header names', () => {
     assert.equal(ecnFeeColumnIndex({ Symbol: 0, 'Ecn Fee': 4 }), 4);
