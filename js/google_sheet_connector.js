@@ -17,6 +17,9 @@ import {
     getSelectedSheetTitle,
     getCurrentStoredSpreadsheetId,
     getCurrentStoredSpreadsheetTitle,
+    getDefaultSpreadsheetId,
+    getDefaultSpreadsheetTitle,
+    getEffectiveSpreadsheetId,
     setGoogleSheetConnectedFlag,
 } from './sheet_table.js';
 import { ensureGoogleApi, ensureGoogleIdentity } from './vendor_loader.js';
@@ -91,6 +94,60 @@ function extractSpreadsheetId(value = '') {
     const idParam = raw.match(/[?&]id=([a-zA-Z0-9_-]+)/);
     if (idParam?.[1]) return idParam[1];
     return /^[a-zA-Z0-9_-]+$/.test(raw) ? raw : '';
+}
+
+function cleanDocNick(docName = '') {
+    return String(docName || '').replace(/_stats$/, '').trim();
+}
+
+function normalizeSheetTitle(value = '') {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[\s._-]+/g, '');
+}
+
+async function resolveViewedProfile() {
+    const nick = cleanDocNick(state.CURRENT_VIEWED_USER || state.USER_DOC_NAME);
+    const cached = nick ? state._teamProfiles?.[nick] : null;
+    if (cached) return cached;
+    if (!nick) return null;
+    try {
+        const { supabase } = await import('./supabase.js');
+        const { data } = await supabase
+            .from('profiles')
+            .select('id,nick,first_name,last_name')
+            .eq('nick', nick)
+            .maybeSingle();
+        return data || { nick };
+    } catch (_) {
+        return { nick };
+    }
+}
+
+function sheetTitleCandidates(profile = {}) {
+    const values = [
+        profile.last_name,
+        [profile.last_name, profile.first_name].filter(Boolean).join(' '),
+        [profile.first_name, profile.last_name].filter(Boolean).join(' '),
+        profile.nick,
+        cleanDocNick(state.CURRENT_VIEWED_USER || state.USER_DOC_NAME),
+    ];
+    return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))];
+}
+
+async function pickTraderSheetTitle(sheets = []) {
+    const list = Array.isArray(sheets) ? sheets.filter(sheet => sheet?.title) : [];
+    const profile = await resolveViewedProfile();
+    const candidates = sheetTitleCandidates(profile);
+    const normalizedCandidates = candidates.map(normalizeSheetTitle).filter(Boolean);
+    const exact = list.find((sheet) => normalizedCandidates.includes(normalizeSheetTitle(sheet.title)));
+    if (exact?.title) return exact.title;
+    const partial = list.find((sheet) => {
+        const title = normalizeSheetTitle(sheet.title);
+        return normalizedCandidates.some((candidate) => candidate && (title.includes(candidate) || candidate.includes(title)));
+    });
+    return partial?.title || '';
 }
 
 async function getSupabaseAccessToken() {
@@ -430,7 +487,7 @@ export async function loadSpreadsheetFromServiceInput(trigger = null) {
     const input = trigger?.closest?.('.sheet-workspace')
         ? document.getElementById('sheet-service-url-input-workspace')
         : (document.getElementById('sheet-service-url-input') || document.getElementById('sheet-service-url-input-workspace'));
-    const fallbackId = getCurrentStoredSpreadsheetId();
+    const fallbackId = getEffectiveSpreadsheetId();
     const spreadsheetId = extractSpreadsheetId(input?.value || fallbackId);
     if (!spreadsheetId) {
         setSheetServiceStatus('Вставте посилання або ID Google таблиці.', 'error');
@@ -459,11 +516,19 @@ async function loadSpreadsheetSheets(fileId) {
         .filter(Boolean)
         .sort((a, b) => Number(a.index || 0) - Number(b.index || 0));
     const stored = localStorage.getItem(SELECTED_SHEET_TITLE_KEY) || sessionStorage.getItem(SELECTED_SHEET_TITLE_KEY);
-    const selected = stored && sheets.some(sheet => sheet.title === stored)
+    const traderSheet = await pickTraderSheetTitle(sheets);
+    const selected = traderSheet
+        || (stored && sheets.some(sheet => sheet.title === stored)
         ? stored
-        : (sheets[0]?.title || '');
+        : (sheets[0]?.title || ''));
     setSpreadsheetSheets(sheets, selected);
-    if (data.title) rememberSpreadsheet(fileId, data.title);
+    const defaultTitle = fileId === getDefaultSpreadsheetId() ? getDefaultSpreadsheetTitle() : '';
+    if (data.title || defaultTitle) rememberSpreadsheet(fileId, data.title || defaultTitle);
+    if (traderSheet) {
+        console.info('[Google Sheets] matched trader sheet:', traderSheet);
+    } else if (sheets.length) {
+        console.warn('[Google Sheets] trader sheet was not found, using:', selected);
+    }
     return selected;
 }
 
@@ -542,7 +607,7 @@ export async function googleSheetsLogout() {
 export async function restoreGoogleSession() {
     setSheetServiceEmail();
     setGoogleAccountEmail(SERVICE_ACCOUNT_EMAIL || 'Service account');
-    const sid = getCurrentStoredSpreadsheetId();
+    const sid = getEffectiveSpreadsheetId();
     const st = getCurrentStoredSpreadsheetTitle();
     const input = document.getElementById('sheet-service-url-input');
     const workspaceInput = document.getElementById('sheet-service-url-input-workspace');
@@ -596,7 +661,7 @@ export async function restoreGoogleSession() {
         const email = await fetchGoogleUserEmail(tok, { silent401: true });
         setGoogleAccountEmail(email || 'Google акаунт');
 
-        const sid = getCurrentStoredSpreadsheetId();
+    const sid = getEffectiveSpreadsheetId();
         const st = getCurrentStoredSpreadsheetTitle();
         if (sid && readStoredGoogleToken()) {
             const nameEl = document.getElementById('sheet-selected-file-name');

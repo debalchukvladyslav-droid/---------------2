@@ -2,7 +2,7 @@
             <div class="sheet-zapier-page">
                 <p class="sheet-zapier-kicker">Конектор</p>
                 <h2 class="sheet-zapier-title">Google Sheets</h2>
-                <p class="sheet-zapier-lead">Підключення в стилі Zapier / Make: додайте service account у доступ до таблиці, вставте посилання, далі мапінг колонок.</p>
+                <p class="sheet-zapier-lead">Підключення в стилі Zapier / Make: стандартні таблиці вже задані, додайте service account у доступ до таблиці й оберіть свій лист.</p>
 
                 <section class="sheet-card broker-import-card" aria-labelledby="broker-import-title">
                     <h3 id="broker-import-title" class="sheet-card-title">Імпорт брокерських звітів</h3>
@@ -31,9 +31,9 @@
                         </svg>
                     </div>
                     <h3 id="sheet-connect-title" class="sheet-card-title">Підключіть Google таблицю без входу</h3>
-                    <p class="sheet-card-desc">Додайте service account email у доступ до таблиці як Viewer, вставте посилання або ID таблиці та завантажте прев’ю.</p>
+                    <p class="sheet-card-desc">Додайте service account email у доступ до таблиці як Viewer. Посилання потрібне тільки якщо у трейдера своя таблиця.</p>
                     <div class="sheet-service-email" id="sheet-service-email">service account email не налаштований</div>
-                    <input class="sheet-service-input" id="sheet-service-url-input" type="text" placeholder="Google Sheets link або spreadsheet ID">
+                    <input class="sheet-service-input" id="sheet-service-url-input" type="text" placeholder="Своя Google Sheets link або spreadsheet ID (необов’язково)">
                     <button type="button" class="btn-google-signin" data-action="sheet-service-load">Підключити таблицю</button>
                     <div class="sheet-service-status" id="sheet-service-status"></div>
                 </section>
@@ -54,7 +54,7 @@
                     </div>
 
                     <div class="sheet-file-actions">
-                        <input class="sheet-service-input sheet-service-input-inline" id="sheet-service-url-input-workspace" type="text" placeholder="Google Sheets link або spreadsheet ID">
+                        <input class="sheet-service-input sheet-service-input-inline" id="sheet-service-url-input-workspace" type="text" placeholder="Своя Google Sheets link або spreadsheet ID">
                         <button type="button" class="btn-secondary sheet-btn-file" data-action="sheet-service-load">Змінити таблицю</button>
                     </div>
 

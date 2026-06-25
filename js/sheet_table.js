@@ -38,6 +38,13 @@ const SESSION_CUMULATIVE_SPREADSHEET_TITLE = 'sheet_cumulative_spreadsheet_title
 const SESSION_CUMULATIVE_SHEET_TITLE = 'sheet_cumulative_selected_sheet_title';
 const GOOGLE_PANEL_OPEN_KEY = 'tj_google_sheet_panel_open';
 
+const DEFAULT_MAIN_SPREADSHEET_ID = '1A4sPWQTryHs4QofoM1p0oCaYDWcDM_OPwp3fOQEX4Co';
+const DEFAULT_CUMULATIVE_SPREADSHEET_ID = '1b4eep8h6YOB8_-i4_ug2p8BuYd4Cfo7IqAIrGG2W23M';
+const DEFAULT_SPREADSHEET_TITLES = {
+    [SHEET_MODE_MAIN]: 'Основна таблиця',
+    [SHEET_MODE_CUMULATIVE]: 'Накопичувальна таблиця',
+};
+
 /** Колонки таблиці / trade.sheet для статистики та datagrid (порядок = у формі). */
 const SMART_KEYS = [
     'date',
@@ -220,6 +227,18 @@ function getModeStoredItem(kind, mode = getActiveSheetMode()) {
     return getStoredValue(key);
 }
 
+export function getDefaultSpreadsheetId(mode = getActiveSheetMode()) {
+    return isCumulativeMode(mode) ? DEFAULT_CUMULATIVE_SPREADSHEET_ID : DEFAULT_MAIN_SPREADSHEET_ID;
+}
+
+export function getDefaultSpreadsheetTitle(mode = getActiveSheetMode()) {
+    return DEFAULT_SPREADSHEET_TITLES[normalizeSheetImportMode(mode)] || DEFAULT_SPREADSHEET_TITLES[SHEET_MODE_MAIN];
+}
+
+export function getEffectiveSpreadsheetId(mode = getActiveSheetMode()) {
+    return getModeStoredItem('spreadsheetId', mode) || getDefaultSpreadsheetId(mode);
+}
+
 function setModeStoredItem(kind, value, mode = getActiveSheetMode()) {
     const key = modeStorageKeys(mode)[kind];
     setStoredValue(key, value);
@@ -272,9 +291,13 @@ function syncSheetModeUi() {
 
     const serviceInput = el('sheet-service-url-input');
     const serviceWorkspaceInput = el('sheet-service-url-input-workspace');
-    const currentId = getModeStoredItem('spreadsheetId', mode);
+    const storedId = getModeStoredItem('spreadsheetId', mode);
+    const currentId = storedId || getDefaultSpreadsheetId(mode);
     if (serviceInput) serviceInput.value = currentId;
     if (serviceWorkspaceInput) serviceWorkspaceInput.value = currentId;
+
+    const fileBtn = document.querySelector('[data-action="sheet-service-load"].sheet-btn-file');
+    if (fileBtn) fileBtn.textContent = isCumulativeMode(mode) ? 'Змінити таблицю' : 'Підключити стандартну';
 }
 
 function bindGoogleSheetPanelToggle() {
