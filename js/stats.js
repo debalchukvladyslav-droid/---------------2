@@ -127,6 +127,21 @@ function getStatsProfileSettingsByNick(nick = '') {
     return {};
 }
 
+async function resolveStatsUserIdForNick(nick = '') {
+    const cleanNick = cleanStatsNick(nick).replace(/_stats$/, '');
+    if (!cleanNick) return null;
+    const profileId = state._teamProfiles?.[cleanNick]?.id;
+    if (profileId) return profileId;
+    return resolveViewedUserId(`${cleanNick}_stats`, { syncGlobal: false });
+}
+
+async function fetchStatsJournalForNick(nick = '', filters = [{ type: 'all-time', val: 'all' }]) {
+    const cleanNick = cleanStatsNick(nick).replace(/_stats$/, '');
+    if (!cleanNick || !isStatsNickAllowed(cleanNick)) return {};
+    const userId = await resolveStatsUserIdForNick(cleanNick);
+    return fetchMonthsForPeriod(`${cleanNick}_stats`, filters, userId);
+}
+
 function getStatsDaylossForDate(settings = {}, dateStr = '') {
     const safeSettings = settings && typeof settings === 'object' ? settings : {};
     const monthKey = /^\d{4}-\d{2}/.test(String(dateStr || '')) ? String(dateStr).slice(0, 7) : '';
@@ -315,13 +330,28 @@ function _monthKeysForFilters(filters) {
 // Uses a Supabase-backed Firestore-compatible shim for older stats code.
 async function fetchMonthsForPeriod(docName, filters, userId = null) {
     const monthKeys = _monthKeysForFilters(filters);
-    if (!monthKeys) return fetchJournalRowsForDoc(docName, null, userId);
-    const cacheKey = `${docName}|${[...monthKeys].sort().join(',')}`;
+    let resolvedUserId = userId || null;
+    if (!resolvedUserId && docName !== state.CURRENT_VIEWED_USER) {
+        resolvedUserId = await resolveViewedUserId(docName, { syncGlobal: false });
+    }
+    if (!resolvedUserId && docName === state.CURRENT_VIEWED_USER) {
+        resolvedUserId = getCurrentViewedUserId() || null;
+    }
+    const userKey = resolvedUserId || 'no-user';
+    if (!monthKeys) {
+        const cacheKey = `${docName}|${userKey}|all-time`;
+        const cached = _cacheGet(cacheKey);
+        if (cached) return cached;
+        const journal = await fetchJournalRowsForDoc(docName, null, resolvedUserId);
+        _cacheSet(cacheKey, journal);
+        return journal;
+    }
+    const cacheKey = `${docName}|${userKey}|${[...monthKeys].sort().join(',')}`;
 
     const cached = _cacheGet(cacheKey);
     if (cached) return cached;
 
-    const journal = await fetchJournalRowsForDoc(docName, monthKeys, userId);
+    const journal = await fetchJournalRowsForDoc(docName, monthKeys, resolvedUserId);
     _cacheSet(cacheKey, journal);
     return journal;
 }
@@ -640,9 +670,7 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
                     const c = _cacheGet(k);
                     const settings = getStatsProfileSettingsByNick(nick);
                     if (c) return { journal: c, settings };
-                    const j = {};
-                    const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
-                    (snap.docs || []).forEach(d => { Object.assign(j, d.data()); });
+                    const j = await fetchStatsJournalForNick(nick);
                     _cacheSet(k, j);
                     return { journal: j, settings };
                 }));
@@ -661,9 +689,7 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
                     const c = _cacheGet(k);
                     const settings = getStatsProfileSettingsByNick(nick);
                     if (c) return { journal: c, settings };
-                    const j = {};
-                    const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
-                    (snap.docs || []).forEach(d => { Object.assign(j, d.data()); });
+                    const j = await fetchStatsJournalForNick(nick);
                     _cacheSet(k, j);
                     return { journal: j, settings };
                 }));
@@ -682,8 +708,7 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
                 if (cached) {
                     journal = prepareStatsJournal(cached);
                 } else {
-                    const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
-                    (snap.docs || []).forEach(d => { Object.assign(journal, d.data()); });
+                    journal = await fetchStatsJournalForNick(nick);
                     journal = prepareStatsJournal(journal);
                     _cacheSet(cacheKey, journal);
                 }
@@ -725,9 +750,7 @@ async function loadStatsPeriodTreeJournal(selection = state.statsSourceSelection
                 const c = _cacheGet(k);
                 const settings = getStatsProfileSettingsByNick(nick);
                 if (c) return { journal: c, settings };
-                const j = {};
-                const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
-                (snap.docs || []).forEach(d => { Object.assign(j, d.data()); });
+                const j = await fetchStatsJournalForNick(nick);
                 _cacheSet(k, j);
                 return { journal: j, settings };
             }));
@@ -745,9 +768,7 @@ async function loadStatsPeriodTreeJournal(selection = state.statsSourceSelection
                 const c = _cacheGet(k);
                 const settings = getStatsProfileSettingsByNick(nick);
                 if (c) return { journal: c, settings };
-                const j = {};
-                const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
-                (snap.docs || []).forEach(d => { Object.assign(j, d.data()); });
+                const j = await fetchStatsJournalForNick(nick);
                 _cacheSet(k, j);
                 return { journal: j, settings };
             }));
@@ -762,9 +783,7 @@ async function loadStatsPeriodTreeJournal(selection = state.statsSourceSelection
             const cacheKey = `${nick}_stats|all-time`;
             const cached = _cacheGet(cacheKey);
             if (cached) return prepareStatsJournal(cached);
-            const journal = {};
-            const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
-            (snap.docs || []).forEach(d => { Object.assign(journal, d.data()); });
+            const journal = await fetchStatsJournalForNick(nick);
             _cacheSet(cacheKey, journal);
             return prepareStatsJournal(journal);
         }
@@ -1052,9 +1071,7 @@ export async function refreshStatsView() {
                             const c = _cacheGet(k);
                             const settings = getStatsProfileSettingsByNick(nick);
                             if (c) return { journal: c, settings };
-                            const j = {};
-                            const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
-                            (snap.docs || []).forEach(d => { Object.assign(j, d.data()); });
+                            const j = await fetchStatsJournalForNick(nick);
                             _cacheSet(k, j);
                             return { journal: j, settings };
                         })
@@ -1064,7 +1081,7 @@ export async function refreshStatsView() {
                 }
             } else {
                 const journals = await Promise.all(
-                    allNicks.map(nick => fetchMonthsForPeriod(`${nick}_stats`, filters))
+                    allNicks.map(nick => fetchStatsJournalForNick(nick, filters))
                 );
                 journal = mergeJournals(journals.map((j, index) => ({ journal: j, settings: getStatsProfileSettingsByNick(allNicks[index]) })));
             }
@@ -1084,9 +1101,7 @@ export async function refreshStatsView() {
                             const c = _cacheGet(k);
                             const settings = getStatsProfileSettingsByNick(nick);
                             if (c) return { journal: c, settings };
-                            const j = {};
-                            const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
-                            (snap.docs || []).forEach(d => { Object.assign(j, d.data()); });
+                            const j = await fetchStatsJournalForNick(nick);
                             _cacheSet(k, j);
                             return { journal: j, settings };
                         })
@@ -1096,7 +1111,7 @@ export async function refreshStatsView() {
                 }
             } else {
                 const journals = await Promise.all(
-                    traders.map(nick => fetchMonthsForPeriod(`${nick}_stats`, filters))
+                    traders.map(nick => fetchStatsJournalForNick(nick, filters))
                 );
                 journal = mergeJournals(journals.map((j, index) => ({ journal: j, settings: getStatsProfileSettingsByNick(traders[index]) })));
             }
@@ -1112,12 +1127,11 @@ export async function refreshStatsView() {
                 if (cached) {
                     journal = cached;
                 } else {
-                    const snap = await db.collection('journal').doc(`${nick}_stats`).collection('months').get({ source: 'server' });
-                    (snap.docs || []).forEach(d => { Object.assign(journal, d.data()); });
+                    journal = await fetchStatsJournalForNick(nick);
                     _cacheSet(k, journal);
                 }
             } else {
-                journal = await fetchMonthsForPeriod(`${nick}_stats`, filters);
+                journal = await fetchStatsJournalForNick(nick, filters);
             }
 
         } else {
