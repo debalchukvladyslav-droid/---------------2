@@ -1206,46 +1206,63 @@ body.is-calendar-tab .quick-trade-fab {
 }
 
 .market-sentiment-card {
+    --market-score: 26;
+    position: relative;
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    align-items: stretch;
     justify-content: space-between;
-    gap: 16px;
-    border: 1px solid color-mix(in srgb, var(--border) 82%, var(--accent) 18%);
-    border-radius: var(--radius-lg);
-    background:
-        linear-gradient(145deg, color-mix(in srgb, var(--accent) 5%, transparent), transparent 42%),
-        color-mix(in srgb, var(--bg-panel) 96%, var(--bg-main));
-    box-shadow: var(--shadow-accent-sm);
-    padding: 10px 14px;
-    margin-bottom: 2px;
-    min-height: 132px;
+    gap: 10px;
+    border: 1px solid #1f2937;
+    border-radius: 16px;
+    background: #111827;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.035),
+        inset 0 -18px 36px rgba(0, 0, 0, 0.18),
+        0 18px 44px rgba(0, 0, 0, 0.22);
+    padding: 14px 16px 12px;
+    margin-bottom: 0;
+    min-height: 156px;
     overflow: hidden;
+}
+.market-sentiment-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(circle at 50% 20%, rgba(255, 255, 255, 0.045), transparent 42%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 45%);
+    pointer-events: none;
 }
 .market-sentiment-kicker {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    width: 132px;
-    color: var(--text-muted);
-    font-size: 0.66rem;
+    gap: 8px;
+    width: auto;
+    color: #9ca3af;
+    font-size: 0.75rem;
     font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0;
+    letter-spacing: 0.12em;
     flex-shrink: 0;
+    position: relative;
+    z-index: 1;
 }
 .market-sentiment-dot {
-    width: 7px;
-    height: 7px;
+    width: 8px;
+    height: 8px;
     border-radius: 999px;
-    background: var(--text-muted);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--text-muted) 10%, transparent);
+    background: #ef4444;
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.12), 0 0 16px rgba(239, 68, 68, 0.55);
+    animation: marketMoodPulse 1.8s ease-in-out infinite;
 }
 .market-sentiment-gauge {
     position: relative;
-    width: min(280px, 38vw);
-    min-width: 220px;
-    height: 118px;
+    width: 100%;
+    min-width: 0;
+    height: 92px;
     flex-shrink: 0;
+    z-index: 1;
 }
 .market-sentiment-gauge svg {
     position: absolute;
@@ -1254,90 +1271,65 @@ body.is-calendar-tab .quick-trade-fab {
     height: 100%;
     overflow: visible;
 }
+.market-sentiment-track {
+    fill: none;
+    stroke: rgba(31, 41, 55, 0.92);
+    stroke-width: 12;
+    stroke-linecap: round;
+}
 .market-sentiment-arc {
     fill: none;
-    stroke-width: 18;
-    stroke-linecap: butt;
+    stroke: url(#marketMoodGradient);
+    stroke-width: 12;
+    stroke-linecap: round;
+    stroke-dasharray: 100;
+    stroke-dashoffset: calc(100 - var(--market-score, 26));
+    animation: marketMoodFill 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    transition: stroke-dashoffset 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.market-sentiment-arc--danger {
-    stroke: color-mix(in srgb, var(--loss) 82%, #ff8a2a);
-}
-.market-sentiment-arc--warn {
-    stroke: var(--gold);
-}
-.market-sentiment-arc--good {
-    stroke: color-mix(in srgb, var(--profit) 86%, #22d3ee);
-}
-.market-sentiment-needle {
-    position: absolute;
-    left: 50%;
-    bottom: 12px;
-    width: 0;
-    height: 0;
-    border-left: 9px solid transparent;
-    border-right: 9px solid transparent;
-    border-bottom: 24px solid color-mix(in srgb, var(--text-muted) 88%, white);
-    transform: translateX(-50%) rotate(var(--market-needle-angle, -90deg)) translateY(var(--market-needle-distance, -76px));
-    transform-origin: 50% 88px;
-    filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.35));
-    transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
-    z-index: 2;
+.market-sentiment-indicator {
+    fill: #fff;
+    filter: url(#marketMoodDotGlow) drop-shadow(0 0 12px rgba(255, 255, 255, 0.78));
+    stroke: rgba(255, 255, 255, 0.45);
+    stroke-width: 1.4;
+    transition:
+        cx 0.7s cubic-bezier(0.2, 0.8, 0.2, 1),
+        cy 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 #view-dash .stats-grid-pro {
     grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 .stat-card-pro.market-sentiment-card {
-    --market-needle-distance: -38px;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: space-between;
-    gap: 4px;
-    min-height: 0;
-    margin-bottom: 0;
-    padding: 10px 12px;
+    min-height: 156px;
 }
 .stat-card-pro.market-sentiment-card .market-sentiment-kicker {
-    width: auto;
-    font-size: 0.62rem;
+    font-size: 0.66rem;
 }
 .stat-card-pro.market-sentiment-card .market-sentiment-gauge {
-    width: 100%;
-    min-width: 0;
-    height: 64px;
-    flex-shrink: 0;
-}
-.stat-card-pro.market-sentiment-card .market-sentiment-arc {
-    stroke-width: 18;
-}
-.stat-card-pro.market-sentiment-card .market-sentiment-needle {
-    bottom: 6px;
-    border-left-width: 6px;
-    border-right-width: 6px;
-    border-bottom-width: 16px;
-    transform-origin: 50% 45px;
+    height: 88px;
 }
 .stat-card-pro.market-sentiment-card .market-sentiment-center {
-    bottom: 0;
+    top: 34px;
+    bottom: auto;
     width: 100%;
-    gap: 2px;
+    gap: 4px;
 }
 .stat-card-pro.market-sentiment-card .market-sentiment-center strong {
-    font-size: 1.05rem;
-    line-height: 1;
+    font-size: 2.25rem;
+    line-height: 0.95;
 }
 .stat-card-pro.market-sentiment-card .market-sentiment-center span {
-    font-size: 0.7rem;
+    font-size: 0.82rem;
     max-width: 100%;
 }
 .stat-card-pro.market-sentiment-card .market-sentiment-meta {
     width: 100%;
     min-width: 0;
     align-items: flex-start;
-    gap: 2px;
+    gap: 0;
     text-align: left;
-    font-size: 0.62rem;
+    font-size: 0.82rem;
 }
 .stat-card-pro.market-sentiment-card .market-sentiment-meta span:last-child {
     display: none;
@@ -1360,28 +1352,29 @@ body.is-calendar-tab .quick-trade-fab {
 .market-sentiment-center {
     position: absolute;
     left: 50%;
-    bottom: 4px;
+    top: 42px;
     transform: translateX(-50%);
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: center;
     gap: 4px;
     width: 150px;
     text-align: center;
 }
 .market-sentiment-center strong {
-    color: var(--text-main);
+    color: #fff;
     font-family: var(--font-mono);
     font-size: 2.25rem;
     font-weight: 800;
     line-height: 0.95;
     font-variant-numeric: tabular-nums;
+    filter: drop-shadow(0 2px 8px rgba(255, 255, 255, 0.18));
 }
 .market-sentiment-center span {
-    color: var(--text-main);
+    color: #ef4444;
     font-size: 0.92rem;
-    font-weight: 700;
+    font-weight: 500;
     line-height: 1.1;
     white-space: nowrap;
     overflow: hidden;
@@ -1391,15 +1384,17 @@ body.is-calendar-tab .quick-trade-fab {
 .market-sentiment-meta {
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
+    align-items: flex-start;
     justify-content: center;
-    gap: 6px;
-    color: var(--text-muted);
-    font-size: 0.72rem;
-    width: 148px;
-    min-width: 112px;
-    text-align: right;
+    gap: 0;
+    color: #6b7280;
+    font-size: 0.875rem;
+    width: 100%;
+    min-width: 0;
+    text-align: left;
     flex-shrink: 0;
+    position: relative;
+    z-index: 1;
 }
 .market-sentiment-meta span {
     max-width: 100%;
@@ -1409,28 +1404,28 @@ body.is-calendar-tab .quick-trade-fab {
 }
 .market-sentiment-card--extreme-fear .market-sentiment-dot,
 .market-sentiment-card--fear .market-sentiment-dot {
-    background: var(--loss);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--loss) 13%, transparent);
+    background: #ef4444;
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.12), 0 0 16px rgba(239, 68, 68, 0.55);
 }
 .market-sentiment-card--neutral .market-sentiment-dot {
-    background: var(--gold);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--gold) 13%, transparent);
+    background: #facc15;
+    box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.12), 0 0 16px rgba(250, 204, 21, 0.45);
 }
 .market-sentiment-card--greed .market-sentiment-dot,
 .market-sentiment-card--extreme-greed .market-sentiment-dot {
-    background: var(--profit);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--profit) 13%, transparent);
+    background: #10b981;
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.12), 0 0 16px rgba(16, 185, 129, 0.45);
 }
 .market-sentiment-card--extreme-fear .market-sentiment-center span,
 .market-sentiment-card--fear .market-sentiment-center span {
-    color: var(--loss);
+    color: #ef4444;
 }
 .market-sentiment-card--neutral .market-sentiment-center span {
-    color: var(--gold);
+    color: #facc15;
 }
 .market-sentiment-card--greed .market-sentiment-center span,
 .market-sentiment-card--extreme-greed .market-sentiment-center span {
-    color: var(--profit);
+    color: #10b981;
 }
 .market-sentiment-card.is-loading,
 .market-sentiment-card.is-muted {
@@ -1499,6 +1494,16 @@ body.is-calendar-tab .quick-trade-fab {
     color: var(--text-muted);
     margin: 0 0 8px;
     line-height: 1.4;
+}
+
+@keyframes marketMoodPulse {
+    0%, 100% { opacity: 0.8; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.22); }
+}
+
+@keyframes marketMoodFill {
+    from { stroke-dashoffset: 100; }
+    to { stroke-dashoffset: calc(100 - var(--market-score, 26)); }
 }
 .sidebar-pf-hint--compact {
     margin-top: 10px;

@@ -58,22 +58,36 @@
                 <div class="stat-card-pro market-sentiment-card is-loading" id="market-sentiment-card" role="button" tabindex="0" data-action="market-sentiment-open" aria-label="Open CNN Fear and Greed index">
                     <div class="market-sentiment-kicker">
                         <span class="market-sentiment-dot" aria-hidden="true"></span>
-                        <span>Market Mood</span>
+                        <span>MARKET MOOD</span>
                     </div>
                     <div class="market-sentiment-gauge" aria-hidden="true">
-                        <svg viewBox="0 0 240 130" role="img" focusable="false">
-                            <path class="market-sentiment-arc market-sentiment-arc--danger" d="M 20 110 A 100 100 0 0 1 70 23.4" pathLength="100" />
-                            <path class="market-sentiment-arc market-sentiment-arc--warn" d="M 70 23.4 A 100 100 0 0 1 170 23.4" pathLength="100" />
-                            <path class="market-sentiment-arc market-sentiment-arc--good" d="M 170 23.4 A 100 100 0 0 1 220 110" pathLength="100" />
+                        <svg viewBox="0 0 240 132" role="img" focusable="false">
+                            <defs>
+                                <linearGradient id="marketMoodGradient" x1="28" y1="110" x2="212" y2="110" gradientUnits="userSpaceOnUse">
+                                    <stop offset="0%" stop-color="#ef4444" />
+                                    <stop offset="32%" stop-color="#f97316" />
+                                    <stop offset="58%" stop-color="#facc15" />
+                                    <stop offset="100%" stop-color="#10b981" />
+                                </linearGradient>
+                                <filter id="marketMoodDotGlow" x="-60%" y="-60%" width="220%" height="220%">
+                                    <feGaussianBlur stdDeviation="4" result="blur" />
+                                    <feMerge>
+                                        <feMergeNode in="blur" />
+                                        <feMergeNode in="SourceGraphic" />
+                                    </feMerge>
+                                </filter>
+                            </defs>
+                            <path class="market-sentiment-track" d="M 28 110 A 92 92 0 0 1 212 110" pathLength="100" />
+                            <path class="market-sentiment-arc" id="market-sentiment-arc" d="M 28 110 A 92 92 0 0 1 212 110" pathLength="100" />
+                            <circle class="market-sentiment-indicator" id="market-sentiment-indicator" cx="57.9" cy="43.1" r="5.5" />
                         </svg>
-                        <span class="market-sentiment-needle" id="market-sentiment-needle"></span>
                         <div class="market-sentiment-center">
-                            <strong id="market-sentiment-score">--</strong>
-                            <span id="market-sentiment-label">Loading</span>
+                            <strong id="market-sentiment-score">26</strong>
+                            <span id="market-sentiment-label">Страх</span>
                         </div>
                     </div>
                     <div class="market-sentiment-meta">
-                        <span id="market-sentiment-delta">CNN Fear &amp; Greed</span>
+                        <span id="market-sentiment-delta">-11.6 vs 1W</span>
                         <span id="market-sentiment-updated"></span>
                     </div>
                 </div>

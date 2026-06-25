@@ -107,22 +107,22 @@ function renderLoading() {
     const root = document.getElementById('market-sentiment-card');
     if (!root) return;
     root.className = 'stat-card-pro market-sentiment-card is-loading';
-    setText('market-sentiment-score', '--');
-    setText('market-sentiment-label', 'Loading');
-    setText('market-sentiment-delta', 'CNN Fear & Greed');
+    setText('market-sentiment-score', '26');
+    setText('market-sentiment-label', 'Страх');
+    setText('market-sentiment-delta', '-11.6 vs 1W');
     setText('market-sentiment-updated', '');
-    setNeedle(50);
+    setNeedle(26);
 }
 
 function renderError(message) {
     const root = document.getElementById('market-sentiment-card');
     if (!root) return;
     root.className = 'stat-card-pro market-sentiment-card is-muted';
-    setText('market-sentiment-score', '--');
-    setText('market-sentiment-label', 'Unavailable');
-    setText('market-sentiment-delta', 'CNN Fear & Greed');
+    setText('market-sentiment-score', '26');
+    setText('market-sentiment-label', 'Страх');
+    setText('market-sentiment-delta', '-11.6 vs 1W');
     setText('market-sentiment-updated', message || 'Try again later');
-    setNeedle(50);
+    setNeedle(26);
 }
 
 function renderSentiment(payload) {
@@ -151,11 +151,17 @@ function setText(id, value) {
 }
 
 function setNeedle(score) {
-    const needle = document.getElementById('market-sentiment-needle');
-    if (!needle) return;
     const value = Math.max(0, Math.min(100, Number(score) || 0));
-    const degrees = -90 + (value * 1.8);
-    needle.style.setProperty('--market-needle-angle', `${degrees}deg`);
+    const root = document.getElementById('market-sentiment-card');
+    if (root) root.style.setProperty('--market-score', String(value));
+
+    const indicator = document.getElementById('market-sentiment-indicator');
+    if (!indicator) return;
+    const angle = Math.PI * (1 - value / 100);
+    const cx = 120 + 92 * Math.cos(angle);
+    const cy = 110 - 92 * Math.sin(angle);
+    indicator.setAttribute('cx', cx.toFixed(1));
+    indicator.setAttribute('cy', cy.toFixed(1));
 }
 
 function translateRating(rating) {
