@@ -35,6 +35,7 @@ const { normalizeBrokerTradeType } = await import('../js/trade_import_utils.js')
 const { duplicateSheetMappingConfig } = await import('../js/sheet_import_modes.js');
 const { buildExceptionKfRows, buildHourlyKfBuckets, parseSheetProfitRisk } = await import('../js/stats_sheet_metrics.js');
 const { parseDecimalInput } = await import('../js/utils.js');
+const { buildServiceBotSnapshot, hasServiceBotPermission, parseServiceBotRange } = await import('../api/_service_bots_lib.js');
 
 test('parser utils find ECN fee columns across supported header names', () => {
     assert.equal(ecnFeeColumnIndex({ Symbol: 0, 'Ecn Fee': 4 }), 4);
@@ -631,4 +632,55 @@ test('duplicating sheet mapping copies columns and anchors but not source file',
     assert.deepEqual(duplicated.smartColumns, { date: 'A', symbol: 'B', tradeType: 'C' });
     assert.deepEqual(duplicated.smartAnchors, { date: 'A8', symbol: 'B8' });
     assert.equal(duplicated.dataStartRow, 8);
+});
+
+test('service bot range parser supports date, inferred days, and max range', () => {
+    assert.deepEqual(parseServiceBotRange({ date: '2026-06-24' }, '2026-06-25'), {
+        start: '2026-06-24',
+        end: '2026-06-24',
+        days: 1,
+    });
+    assert.deepEqual(parseServiceBotRange({ days: '3' }, '2026-06-25'), {
+        start: '2026-06-23',
+        end: '2026-06-25',
+        days: 3,
+    });
+    assert.deepEqual(parseServiceBotRange({ start: '2026-06-01', end: '2026-06-03' }, ''), {
+        start: '2026-06-01',
+        end: '2026-06-03',
+        days: 3,
+    });
+    assert.throws(() => parseServiceBotRange({ start: '2026-06-01', end: '2026-07-10' }, ''), /Max range/);
+});
+
+test('service bot permission accepts explicit endpoint, star, and all only', () => {
+    assert.equal(hasServiceBotPermission({ extra_data: { allowed_endpoints: ['api_service_snapshot_read'] } }), true);
+    assert.equal(hasServiceBotPermission({ extra_data: { allowed_endpoints: ['*'] } }), true);
+    assert.equal(hasServiceBotPermission({ extra_data: { allowed_endpoints: ['all'] } }), true);
+    assert.equal(hasServiceBotPermission({ extra_data: { allowed_endpoints: ['other'] } }), false);
+});
+
+test('service bot snapshot aggregates real and matched trades but skips pure sheet rows', () => {
+    const snapshot = buildServiceBotSnapshot([
+        {
+            trade_date: '2026-06-24',
+            locates: 12.5,
+            daily_metrics: {
+                trades: [
+                    { symbol: 'AAPL', qty: 100, gross: 30, comm: 2, net: 28, opened: '2026-06-24 09:31:00', exchange: 'NYSE' },
+                    { symbol: 'TSLA', qty: 50, gross: -10, comm: 1, net: -11, opened: '2026-06-24 09:45:00', demo: true, sheet: { source: 'google', matchedBy: 'date+ticker+pnl' } },
+                    { symbol: 'MSFT', qty: 10, gross: 5, comm: 0, net: 5, sheet: { source: 'google' } },
+                ],
+            },
+        },
+    ], { start: '2026-06-24', end: '2026-06-24', days: 1 });
+
+    assert.equal(snapshot.tickers.summary.total_events, 2);
+    assert.equal(snapshot.tickers.summary.unique_count, 2);
+    assert.deepEqual(snapshot.tickers.top.map((row) => row.symbol).sort(), ['AAPL', 'TSLA']);
+    assert.equal(snapshot.orders.summary.total, 2);
+    assert.equal(snapshot.orders.summary.requested_size, 150);
+    assert.equal(snapshot.orders.summary.demo_count, 1);
+    assert.equal(snapshot.locates.summary.total, 1);
+    assert.equal(snapshot.locates.summary.total_price, 12.5);
 });

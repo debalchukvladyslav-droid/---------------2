@@ -1,0 +1,77 @@
+import {
+    cleanBotPayload,
+    createServiceBotApiKey,
+    requireAdmin,
+    sendJson,
+    SERVICE_BOT_PERMISSION,
+} from '../_service_bots_lib.js';
+import { supabaseRest } from '../_google_sheet_sync_lib.js';
+
+function botSelect() {
+    return 'id,name,bot_type,user_id,extra_data,enabled,last_used_at,created_at,updated_at';
+}
+
+export default async function handler(req, res) {
+    try {
+        await requireAdmin(req);
+
+        if (req.method === 'GET') {
+            const bots = await supabaseRest(`bots?select=${botSelect()}&order=created_at.desc`);
+            const userIds = [...new Set((bots || []).map((bot) => bot.user_id).filter(Boolean))];
+            let profiles = [];
+            if (userIds.length) {
+                const ids = userIds.map((id) => encodeURIComponent(`"${id}"`)).join(',');
+                profiles = await supabaseRest(`profiles?id=in.(${ids})&select=id,nick,team`);
+            }
+            const profileMap = new Map((profiles || []).map((profile) => [profile.id, profile]));
+            return sendJson(res, 200, {
+                ok: true,
+                bots: (bots || []).map((bot) => ({
+                    ...bot,
+                    profile: profileMap.get(bot.user_id) || null,
+                })),
+            });
+        }
+
+        if (req.method !== 'POST') {
+            res.setHeader('Allow', 'GET, POST');
+            return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
+        }
+
+        const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+        const payload = cleanBotPayload(body);
+        if (!payload.userId) return sendJson(res, 400, { ok: false, error: 'Missing user_id' });
+
+        const profiles = await supabaseRest(
+            `profiles?id=eq.${encodeURIComponent(payload.userId)}&select=id,nick,team&limit=1`,
+        );
+        if (!profiles?.[0]) return sendJson(res, 404, { ok: false, error: 'Profile not found' });
+
+        const apiKey = createServiceBotApiKey();
+        const row = {
+            name: payload.name,
+            bot_type: 'service',
+            api_key: apiKey,
+            user_id: payload.userId,
+            extra_data: { allowed_endpoints: [SERVICE_BOT_PERMISSION] },
+            enabled: payload.enabled,
+        };
+        const inserted = await supabaseRest('bots?select=id,name,bot_type,user_id,extra_data,enabled,last_used_at,created_at,updated_at', {
+            method: 'POST',
+            headers: { Prefer: 'return=representation' },
+            body: JSON.stringify(row),
+        });
+
+        return sendJson(res, 201, {
+            ok: true,
+            api_key: apiKey,
+            bot: {
+                ...(inserted?.[0] || row),
+                profile: profiles[0],
+            },
+        });
+    } catch (error) {
+        const status = error?.status || 500;
+        return sendJson(res, status, { ok: false, error: error?.message || String(error) });
+    }
+}

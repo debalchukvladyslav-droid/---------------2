@@ -1,0 +1,438 @@
+import crypto from 'node:crypto';
+import { supabaseRest, verifySupabaseUser } from './_google_sheet_sync_lib.js';
+
+export const SERVICE_BOT_PERMISSION = 'api_service_snapshot_read';
+export const MAX_RANGE_DAYS = 31;
+const DEFAULT_LIMIT = 100;
+const DEFAULT_TOP_LIMIT = 20;
+const DEFAULT_CACHE_TTL_SEC = 30;
+
+const snapshotCache = new Map();
+
+export function sendJson(res, status, body, extraHeaders = {}) {
+    res.status(status).setHeader('Content-Type', 'application/json; charset=utf-8');
+    Object.entries(extraHeaders).forEach(([key, value]) => res.setHeader(key, value));
+    res.end(JSON.stringify(body));
+}
+
+export function sendEmpty(res, status, extraHeaders = {}) {
+    Object.entries(extraHeaders).forEach(([key, value]) => res.setHeader(key, value));
+    res.status(status).end();
+}
+
+function isValidIsoDateString(value) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+    if (!m) return false;
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    const d = Number(m[3]);
+    const dt = new Date(Date.UTC(y, mo - 1, d));
+    return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
+}
+
+function addDays(dateStr, delta) {
+    const [y, m, d] = String(dateStr).split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d + delta));
+    return dt.toISOString().slice(0, 10);
+}
+
+function inclusiveDays(start, end) {
+    const a = Date.parse(`${start}T00:00:00Z`);
+    const b = Date.parse(`${end}T00:00:00Z`);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return 0;
+    return Math.floor((b - a) / 86400000) + 1;
+}
+
+function cleanPositiveInt(value, fallback, max = 1000) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(1, Math.min(max, Math.floor(n)));
+}
+
+export function parseServiceBotRange(query = {}, latestDate = '') {
+    const date = String(query.date || '').trim();
+    let start = String(query.start || '').trim();
+    let end = String(query.end || '').trim();
+    const days = cleanPositiveInt(query.days, 1, MAX_RANGE_DAYS);
+
+    if (date) {
+        if (!isValidIsoDateString(date)) throw Object.assign(new Error('Invalid date'), { status: 400 });
+        start = date;
+        end = date;
+    } else if (start || end) {
+        if (start && !isValidIsoDateString(start)) throw Object.assign(new Error('Invalid start'), { status: 400 });
+        if (end && !isValidIsoDateString(end)) throw Object.assign(new Error('Invalid end'), { status: 400 });
+        if (!start && end) start = addDays(end, -(days - 1));
+        if (start && !end) end = addDays(start, days - 1);
+    } else {
+        if (!latestDate) return { start: '', end: '', days: 0 };
+        end = latestDate;
+        start = addDays(end, -(days - 1));
+    }
+
+    if (start > end) throw Object.assign(new Error('start must be before end'), { status: 400 });
+    const count = inclusiveDays(start, end);
+    if (count > MAX_RANGE_DAYS) throw Object.assign(new Error('Max range is 31 days'), { status: 400 });
+    return { start, end, days: count };
+}
+
+function allowedEndpoints(extraData = {}) {
+    const endpoints = extraData?.allowed_endpoints;
+    if (!Array.isArray(endpoints)) return [];
+    return endpoints.map((item) => String(item || '').trim()).filter(Boolean);
+}
+
+export function hasServiceBotPermission(bot) {
+    const endpoints = allowedEndpoints(bot?.extra_data);
+    return endpoints.includes(SERVICE_BOT_PERMISSION) || endpoints.includes('*') || endpoints.includes('all');
+}
+
+function botKeyFromReq(req) {
+    const value = req.headers['x-bot-key'] || req.headers['x-api-key'];
+    return Array.isArray(value) ? value[0] : String(value || '').trim();
+}
+
+export async function authenticateServiceBot(req) {
+    const apiKey = botKeyFromReq(req);
+    if (!apiKey) throw Object.assign(new Error('No valid auth was provided'), { status: 401 });
+
+    const rows = await supabaseRest(
+        `bots?api_key=eq.${encodeURIComponent(apiKey)}&select=*&limit=1`,
+    );
+    const bot = rows?.[0];
+    if (!bot) throw Object.assign(new Error('No valid auth was provided'), { status: 401 });
+    if (bot.enabled === false) throw Object.assign(new Error('Bot is disabled'), { status: 403 });
+    if (bot.bot_type !== 'service') throw Object.assign(new Error('Bot is not a service bot'), { status: 403 });
+    if (!hasServiceBotPermission(bot)) throw Object.assign(new Error('Bot access is not allowed'), { status: 403 });
+    if (!bot.user_id) throw Object.assign(new Error('Bot has no subject user'), { status: 403 });
+
+    const profiles = await supabaseRest(
+        `profiles?id=eq.${encodeURIComponent(bot.user_id)}&select=id,nick,team&limit=1`,
+    );
+    const profile = profiles?.[0] || { id: bot.user_id, nick: '', team: '' };
+
+    await supabaseRest(`bots?id=eq.${encodeURIComponent(bot.id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ last_used_at: new Date().toISOString() }),
+    }).catch(() => null);
+
+    return { bot, profile };
+}
+
+export async function getLatestTradeDate(userId) {
+    const rows = await supabaseRest(
+        `journal_days?user_id=eq.${encodeURIComponent(userId)}&select=trade_date&order=trade_date.desc&limit=1`,
+    );
+    return rows?.[0]?.trade_date || '';
+}
+
+export async function fetchJournalRows(userId, range) {
+    if (!range?.start || !range?.end) return [];
+    return supabaseRest(
+        `journal_days?user_id=eq.${encodeURIComponent(userId)}&trade_date=gte.${encodeURIComponent(range.start)}&trade_date=lte.${encodeURIComponent(range.end)}&select=trade_date,pnl,gross_pnl,commissions,locates,daily_metrics&order=trade_date.desc`,
+    );
+}
+
+function isPureGoogleSheetTrade(trade) {
+    return !!(trade?.sheet && typeof trade.sheet === 'object' && trade.sheet.source === 'google' && !trade.sheet.matchedBy);
+}
+
+function visibleTradesFromRow(row) {
+    const metrics = row?.daily_metrics && typeof row.daily_metrics === 'object' ? row.daily_metrics : {};
+    const trades = Array.isArray(metrics.trades) ? metrics.trades : [];
+    return trades.filter((trade) => !isPureGoogleSheetTrade(trade));
+}
+
+function numberOrZero(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+}
+
+function normalizeSymbol(value) {
+    return String(value || '').trim().toUpperCase();
+}
+
+function tradeOpenedValue(trade, dateStr) {
+    return String(trade?.opened || `${dateStr} 00:00:00`).trim();
+}
+
+function tradeExchange(trade) {
+    return String(trade?.exchange || trade?.sheet?.exchange || '').trim() || 'unknown';
+}
+
+function recentTradeItem(trade, row, index) {
+    return {
+        date: row.trade_date,
+        index,
+        symbol: normalizeSymbol(trade?.symbol),
+        type: trade?.type || trade?.sheet?.tradeType || '',
+        opened: tradeOpenedValue(trade, row.trade_date),
+        closed: trade?.closed || '',
+        qty: numberOrZero(trade?.qty),
+        gross: numberOrZero(trade?.gross),
+        comm: numberOrZero(trade?.comm),
+        net: numberOrZero(trade?.net),
+        exchange: tradeExchange(trade),
+        demo: trade?.demo === true,
+        sheet: trade?.sheet && typeof trade.sheet === 'object'
+            ? {
+                source: trade.sheet.source || '',
+                matchedBy: trade.sheet.matchedBy || '',
+                spreadsheetId: trade.sheet.spreadsheetId || '',
+                sheetRow: trade.sheet.sheetRow ?? null,
+            }
+            : null,
+    };
+}
+
+function topRows(map, limit, mapper = (value) => value) {
+    return [...map.values()]
+        .sort((a, b) => (b.count || b.total || 0) - (a.count || a.total || 0) || String(a.symbol || a.key || '').localeCompare(String(b.symbol || b.key || '')))
+        .slice(0, limit)
+        .map(mapper);
+}
+
+export function buildServiceBotSnapshot(rows = [], range = {}, options = {}) {
+    const limit = cleanPositiveInt(options.limit, DEFAULT_LIMIT, 500);
+    const topLimit = cleanPositiveInt(options.top_limit, DEFAULT_TOP_LIMIT, 100);
+    const tickerMap = new Map();
+    const exchangeMap = new Map();
+    const tradeItems = [];
+    const locateItems = [];
+    let requestedSize = 0;
+    let filledSize = 0;
+    let demoCount = 0;
+    let totalLocates = 0;
+
+    for (const row of rows || []) {
+        const trades = visibleTradesFromRow(row);
+        trades.forEach((trade, index) => {
+            const symbol = normalizeSymbol(trade?.symbol);
+            if (!symbol) return;
+            const qty = numberOrZero(trade?.qty);
+            const net = numberOrZero(trade?.net);
+            const gross = numberOrZero(trade?.gross);
+            const comm = numberOrZero(trade?.comm);
+            requestedSize += qty;
+            filledSize += qty;
+            if (trade?.demo === true) demoCount++;
+
+            const current = tickerMap.get(symbol) || { symbol, count: 0, qty: 0, gross: 0, comm: 0, net: 0 };
+            current.count += 1;
+            current.qty += qty;
+            current.gross += gross;
+            current.comm += comm;
+            current.net += net;
+            tickerMap.set(symbol, current);
+
+            const exchange = tradeExchange(trade);
+            const ex = exchangeMap.get(exchange) || { exchange, count: 0 };
+            ex.count += 1;
+            exchangeMap.set(exchange, ex);
+
+            tradeItems.push(recentTradeItem(trade, row, index));
+        });
+
+        const locates = numberOrZero(row?.locates);
+        if (locates > 0) {
+            totalLocates += locates;
+            locateItems.push({
+                date: row.trade_date,
+                status: 'derived',
+                total_price: Number(locates.toFixed(2)),
+                source: 'journal_days.locates',
+            });
+        }
+    }
+
+    tradeItems.sort((a, b) => String(b.opened).localeCompare(String(a.opened)));
+    locateItems.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+
+    const topTickers = topRows(tickerMap, topLimit, row => ({
+        ...row,
+        gross: Number(row.gross.toFixed(2)),
+        comm: Number(row.comm.toFixed(2)),
+        net: Number(row.net.toFixed(2)),
+    }));
+    const byExchange = topRows(exchangeMap, topLimit);
+    const uniqueTickers = tickerMap.size;
+    const totalEvents = tradeItems.length;
+
+    const tickers = {
+        range,
+        summary: {
+            total_events: totalEvents,
+            unique_count: uniqueTickers,
+            with_locate_price_count: locateItems.length,
+            blocked_count: 0,
+        },
+        top: topTickers,
+        by_exchange: byExchange,
+        items: tradeItems.slice(0, limit),
+    };
+
+    const orders = {
+        range,
+        summary: {
+            total: totalEvents,
+            unique_tickers: uniqueTickers,
+            traders: 1,
+            requested_size: requestedSize,
+            filled_size: filledSize,
+            demo_count: demoCount,
+        },
+        by_status: totalEvents ? [{ status: 'filled', count: totalEvents }] : [],
+        top_tickers: topTickers,
+        top_traders: [],
+        items: tradeItems.slice(0, limit).map(item => ({ ...item, status: 'filled' })),
+    };
+
+    const locates = {
+        range,
+        summary: {
+            total: locateItems.length,
+            unique_tickers: 0,
+            traders: 1,
+            bots: 1,
+            total_size: 0,
+            average_price: locateItems.length ? Number((totalLocates / locateItems.length).toFixed(4)) : 0,
+            total_price: Number(totalLocates.toFixed(2)),
+        },
+        by_status: locateItems.length ? [{ status: 'derived', count: locateItems.length }] : [],
+        top_tickers: [],
+        top_traders: [],
+        items: locateItems.slice(0, limit),
+    };
+
+    return {
+        summary: {
+            range,
+            tickers: tickers.summary,
+            locates: locates.summary,
+            orders: orders.summary,
+        },
+        tickers,
+        locates,
+        orders,
+    };
+}
+
+function cacheTtlMs() {
+    const n = Number(process.env.SERVICE_BOT_SNAPSHOT_CACHE_TTL_SEC);
+    return (Number.isFinite(n) && n >= 0 ? n : DEFAULT_CACHE_TTL_SEC) * 1000;
+}
+
+function createEtag(payload) {
+    const hash = crypto.createHash('sha256').update(JSON.stringify(payload)).digest('base64url');
+    return `"${hash}"`;
+}
+
+export async function buildServiceBotResponse(req, endpoint) {
+    const { bot, profile } = await authenticateServiceBot(req);
+    const latestDate = await getLatestTradeDate(bot.user_id);
+    const range = parseServiceBotRange(req.query || {}, latestDate);
+    const limit = cleanPositiveInt(req.query?.limit, DEFAULT_LIMIT, 500);
+    const topLimit = cleanPositiveInt(req.query?.top_limit, DEFAULT_TOP_LIMIT, 100);
+    const refresh = String(req.query?.refresh || '').toLowerCase() === 'true';
+    const ttl = cacheTtlMs();
+    const cacheKey = JSON.stringify({ endpoint, botId: bot.id, userId: bot.user_id, range, limit, topLimit });
+    const cached = snapshotCache.get(cacheKey);
+    const now = Date.now();
+    if (!refresh && cached && ttl > 0 && now - cached.ts < ttl) {
+        return { ...cached.response, cacheHit: true };
+    }
+
+    const rows = await fetchJournalRows(bot.user_id, range);
+    const sections = buildServiceBotSnapshot(rows || [], range, { limit, top_limit: topLimit });
+    const baseMeta = {
+        subject: {
+            user_id: profile.id || bot.user_id,
+            nick: profile.nick || '',
+            team: profile.team || '',
+        },
+        bot: {
+            id: bot.id,
+            name: bot.name || '',
+        },
+        generated_at: new Date().toISOString(),
+        cache: {
+            ttl_sec: Math.round(ttl / 1000),
+            refresh,
+            hit: false,
+        },
+        data_source: 'journal_days',
+    };
+
+    const withMeta = (payload, warnings = []) => ({
+        meta: warnings.length ? { ...baseMeta, warnings } : baseMeta,
+        ...payload,
+    });
+
+    const payloadByEndpoint = {
+        summary: withMeta(sections.summary),
+        tickers: withMeta(sections.tickers),
+        locates: withMeta(sections.locates, ['locates_derived_from_journal_totals']),
+        orders: withMeta(sections.orders),
+        snapshot: withMeta({
+            range,
+            summary: sections.summary,
+            tickers: sections.tickers,
+            locates: sections.locates,
+            orders: sections.orders,
+        }, ['locates_derived_from_journal_totals']),
+    };
+    const payload = payloadByEndpoint[endpoint] || payloadByEndpoint.snapshot;
+    const etag = createEtag(payload);
+    const response = { status: 200, payload, etag, cacheHit: false };
+    if (ttl > 0) snapshotCache.set(cacheKey, { ts: now, response });
+    return response;
+}
+
+export async function handleServiceBotEndpoint(req, res, endpoint) {
+    if (req.method !== 'GET') {
+        res.setHeader('Allow', 'GET');
+        return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
+    }
+    try {
+        const response = await buildServiceBotResponse(req, endpoint);
+        const etag = response.etag;
+        if (etag && req.headers['if-none-match'] === etag) {
+            return sendEmpty(res, 304, { ETag: etag });
+        }
+        const payload = {
+            ...response.payload,
+            meta: {
+                ...response.payload.meta,
+                cache: {
+                    ...(response.payload.meta?.cache || {}),
+                    hit: response.cacheHit === true,
+                },
+            },
+        };
+        return sendJson(res, 200, payload, etag ? { ETag: etag } : {});
+    } catch (error) {
+        const status = error?.status || 500;
+        return sendJson(res, status, { ok: false, error: error?.message || String(error) });
+    }
+}
+
+export async function requireAdmin(req) {
+    const user = await verifySupabaseUser(req.headers.authorization || '');
+    if (!user?.id) throw Object.assign(new Error('Unauthorized'), { status: 401 });
+    const rows = await supabaseRest(
+        `profiles?id=eq.${encodeURIComponent(user.id)}&select=id,role&limit=1`,
+    );
+    if (rows?.[0]?.role !== 'admin') throw Object.assign(new Error('Admin only'), { status: 403 });
+    return user;
+}
+
+export function createServiceBotApiKey() {
+    return `shs_service_${crypto.randomBytes(24).toString('base64url')}`;
+}
+
+export function cleanBotPayload(body = {}) {
+    const name = String(body.name || '').trim().slice(0, 120);
+    const userId = String(body.user_id || body.userId || '').trim();
+    const enabled = body.enabled !== false;
+    return { name: name || 'Service bot', userId, enabled };
+}

@@ -1,7 +1,7 @@
 // === js/admin.js ===
 import { supabase } from './supabase.js';
 import { state } from './state.js';
-import { showToast } from './utils.js';
+import { copyTextToClipboard, showToast } from './utils.js';
 import { loadTeams } from './teams.js';
 import { exportProfileData, resetProfileData } from './storage.js';
 
@@ -13,10 +13,13 @@ export async function renderAdminPanel() {
     if (!container) return;
 
     const refreshUsersBtn = document.getElementById('admin-refresh-users-btn');
+    const botsPanel = document.getElementById('admin-service-bots-panel');
     const fullAdmin = state.myRole === 'admin';
     const dataManager = fullAdmin || state.IS_MENTOR_MODE;
+    if (botsPanel) botsPanel.hidden = !fullAdmin;
     if (!dataManager) {
         if (refreshUsersBtn) refreshUsersBtn.style.display = 'none';
+        if (botsPanel) botsPanel.innerHTML = '';
         container.innerHTML =
             '<p class="admin-empty">Повний список профілів і зміна ролей доступні лише адміністратору. Для кущів використайте блок вище або «Команда» в шапці.</p>';
         return;
@@ -52,7 +55,185 @@ export async function renderAdminPanel() {
     const teamChoices = teamListForSelect();
 
     container.innerHTML = '';
+    if (fullAdmin) renderServiceBotsPanel(profiles || []);
     visibleProfiles.forEach((p) => container.appendChild(buildUserCard(p, teamChoices, { fullAdmin, dataManager })));
+}
+
+async function adminApiFetch(path, options = {}) {
+    const { data, error } = await supabase.auth.getSession();
+    const token = data?.session?.access_token;
+    if (error || !token) throw new Error(error?.message || 'Auth session not found');
+    const response = await fetch(path, {
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+            ...(options.headers || {}),
+        },
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload?.ok === false) {
+        throw new Error(payload?.error || response.statusText || `HTTP ${response.status}`);
+    }
+    return payload;
+}
+
+function renderServiceBotsPanel(profiles = []) {
+    const panel = document.getElementById('admin-service-bots-panel');
+    if (!panel) return;
+    panel.hidden = false;
+    const traders = profiles.filter((profile) => profile?.id);
+    panel.innerHTML = `
+        <div class="admin-service-bots-head">
+            <div>
+                <h4 class="admin-section-title">Service bots</h4>
+                <p class="admin-section-subtitle">Read-only API keys for external services.</p>
+            </div>
+            <button type="button" class="btn-admin-action" data-service-bots-refresh>Refresh</button>
+        </div>
+        <form class="admin-service-bot-form" data-service-bot-form>
+            <label class="admin-field">
+                <span class="admin-label">Bot name</span>
+                <input class="admin-input" name="name" type="text" maxlength="120" placeholder="Trading service bot">
+            </label>
+            <label class="admin-field">
+                <span class="admin-label">Trader</span>
+                <select class="admin-select" name="user_id">
+                    ${traders.map((profile) => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.nick || profile.email || profile.id)}</option>`).join('')}
+                </select>
+            </label>
+            <button type="submit" class="btn-admin-action">Create key</button>
+        </form>
+        <div class="admin-service-bot-key" data-service-bot-key hidden></div>
+        <div class="admin-service-bots-list" data-service-bots-list>
+            <p class="admin-loading">Loading service bots...</p>
+        </div>
+    `;
+
+    panel.querySelector('[data-service-bots-refresh]')?.addEventListener('click', () => loadServiceBotsList(panel));
+    panel.querySelector('[data-service-bot-form]')?.addEventListener('submit', (event) => createServiceBot(event, panel));
+    loadServiceBotsList(panel);
+}
+
+async function createServiceBot(event, panel) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const body = {
+        name: String(formData.get('name') || '').trim(),
+        user_id: String(formData.get('user_id') || '').trim(),
+    };
+    const submit = form.querySelector('button[type="submit"]');
+    if (submit) submit.disabled = true;
+    try {
+        const payload = await adminApiFetch('/api/admin/service-bots', {
+            method: 'POST',
+            body: JSON.stringify(body),
+        });
+        form.reset();
+        renderCreatedServiceBotKey(panel, payload.api_key);
+        await loadServiceBotsList(panel);
+        showToast('Service bot key created');
+    } catch (error) {
+        showToast('Service bot error: ' + (error?.message || error));
+    } finally {
+        if (submit) submit.disabled = false;
+    }
+}
+
+function renderCreatedServiceBotKey(panel, apiKey) {
+    const box = panel.querySelector('[data-service-bot-key]');
+    if (!box) return;
+    box.hidden = false;
+    box.innerHTML = `
+        <div class="admin-service-bot-key-title">New key. Save it now.</div>
+        <code>${escapeHtml(apiKey || '')}</code>
+        <button type="button" class="btn-admin-action">Copy</button>
+    `;
+    box.querySelector('button')?.addEventListener('click', async () => {
+        const ok = await copyTextToClipboard(apiKey || '');
+        showToast(ok ? 'Service bot key copied' : 'Copy failed');
+    });
+}
+
+async function loadServiceBotsList(panel) {
+    const list = panel.querySelector('[data-service-bots-list]');
+    if (!list) return;
+    list.innerHTML = '<p class="admin-loading">Loading service bots...</p>';
+    try {
+        const payload = await adminApiFetch('/api/admin/service-bots');
+        const bots = Array.isArray(payload.bots) ? payload.bots : [];
+        if (!bots.length) {
+            list.innerHTML = '<p class="admin-empty">No service bots yet.</p>';
+            return;
+        }
+        list.innerHTML = '';
+        bots.forEach((bot) => list.appendChild(buildServiceBotCard(bot, panel)));
+    } catch (error) {
+        list.innerHTML = `<p class="admin-error">Service bots error: ${escapeHtml(error?.message || error)}</p>`;
+    }
+}
+
+function allowedEndpointsText(bot) {
+    const endpoints = bot?.extra_data?.allowed_endpoints;
+    return Array.isArray(endpoints) && endpoints.length ? endpoints.join(', ') : 'none';
+}
+
+function buildServiceBotCard(bot, panel) {
+    const card = document.createElement('div');
+    card.className = 'admin-user-card admin-service-bot-card';
+    const profile = bot.profile || {};
+    const enabled = bot.enabled !== false;
+    const lastUsed = bot.last_used_at ? new Date(bot.last_used_at).toLocaleString() : 'never';
+    card.innerHTML = `
+        <div class="admin-user-head">
+            <div class="admin-user-title">
+                <span>${escapeHtml(bot.name || 'Service bot')}</span>
+                <span class="admin-user-status ${enabled ? 'admin-user-status--active' : 'admin-user-status--blocked'}">${enabled ? 'Enabled' : 'Disabled'}</span>
+            </div>
+            <div class="admin-user-meta">
+                Trader: ${escapeHtml(profile.nick || bot.user_id || '-')} · Last used: ${escapeHtml(lastUsed)}
+            </div>
+            <div class="admin-user-meta">Allowed: ${escapeHtml(allowedEndpointsText(bot))}</div>
+        </div>
+        <div class="admin-user-actions">
+            <button type="button" class="btn-admin-action" data-service-bot-toggle>${enabled ? 'Disable' : 'Enable'}</button>
+            <button type="button" class="btn-admin-danger" data-service-bot-delete>Delete</button>
+        </div>
+    `;
+    card.querySelector('[data-service-bot-toggle]')?.addEventListener('click', () => toggleServiceBot(bot, panel, !enabled, card));
+    card.querySelector('[data-service-bot-delete]')?.addEventListener('click', () => deleteServiceBot(bot, panel, card));
+    return card;
+}
+
+async function toggleServiceBot(bot, panel, enabled, card) {
+    card.classList.add('admin-user-busy');
+    try {
+        await adminApiFetch(`/api/admin/service-bots/${encodeURIComponent(bot.id)}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ enabled }),
+        });
+        await loadServiceBotsList(panel);
+        showToast(enabled ? 'Service bot enabled' : 'Service bot disabled');
+    } catch (error) {
+        showToast('Service bot error: ' + (error?.message || error));
+    } finally {
+        card.classList.remove('admin-user-busy');
+    }
+}
+
+async function deleteServiceBot(bot, panel, card) {
+    if (!confirm(`Delete service bot "${bot.name || bot.id}"?`)) return;
+    card.classList.add('admin-user-busy');
+    try {
+        await adminApiFetch(`/api/admin/service-bots/${encodeURIComponent(bot.id)}`, { method: 'DELETE' });
+        await loadServiceBotsList(panel);
+        showToast('Service bot deleted');
+    } catch (error) {
+        showToast('Service bot error: ' + (error?.message || error));
+    } finally {
+        card.classList.remove('admin-user-busy');
+    }
 }
 
 function teamListForSelect() {
