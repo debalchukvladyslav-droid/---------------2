@@ -324,6 +324,7 @@ function renderServiceBotExplorerResult(panel, statePayload) {
     const meta = payload.meta || {};
     const subject = meta.subject || {};
     const range = payload.range || {};
+    const trades = serviceBotPayloadToTrades(payload);
     box.innerHTML = `
         <div class="admin-service-bot-result-head">
             <div>
@@ -336,12 +337,100 @@ function renderServiceBotExplorerResult(panel, statePayload) {
             </div>
             <button type="button" class="btn-admin-action" data-service-bot-result-copy>Copy JSON</button>
         </div>
+        ${renderServiceBotTrades(trades)}
         <pre class="admin-service-bot-json">${escapeHtml(JSON.stringify(payload, null, 2))}</pre>
     `;
     box.querySelector('[data-service-bot-result-copy]')?.addEventListener('click', async () => {
         const ok = await copyTextToClipboard(JSON.stringify(payload, null, 2));
         showToast(ok ? 'JSON copied' : 'Copy failed');
     });
+}
+
+function serviceBotPayloadToTrades(payload = {}) {
+    const items = Array.isArray(payload?.orders?.items)
+        ? payload.orders.items
+        : Array.isArray(payload?.items)
+            ? payload.items
+            : [];
+    return items.map((item) => ({
+        date: item.date || '',
+        opened: item.opened || '',
+        closed: item.closed || '',
+        symbol: item.symbol || '',
+        side: item.type || '',
+        qty: Number(item.qty) || 0,
+        gross: Number(item.gross) || 0,
+        comm: Number(item.comm) || 0,
+        net: Number(item.net) || 0,
+        exchange: item.exchange || '',
+        status: item.status || 'filled',
+        demo: item.demo === true,
+    }));
+}
+
+function formatAdminMoney(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return '0.00';
+    return n.toFixed(2);
+}
+
+function renderServiceBotTrades(trades = []) {
+    if (!trades.length) {
+        return `
+            <div class="admin-service-bot-trades">
+                <div class="admin-service-bot-key-title">Угоди</div>
+                <p class="admin-empty">За цей діапазон API не повернув угод. Перевір, чи в journal_days.daily_metrics.trades є реальні Trades, а не тільки Google Sheet rows.</p>
+            </div>
+        `;
+    }
+
+    const totalQty = trades.reduce((sum, trade) => sum + trade.qty, 0);
+    const totalNet = trades.reduce((sum, trade) => sum + trade.net, 0);
+    const demoCount = trades.filter((trade) => trade.demo).length;
+    const rows = trades.map((trade) => `
+        <tr>
+            <td>${escapeHtml(trade.date)}</td>
+            <td>${escapeHtml(trade.opened || trade.closed || '')}</td>
+            <td><strong>${escapeHtml(trade.symbol || '—')}</strong></td>
+            <td>${escapeHtml(trade.side || '—')}</td>
+            <td>${escapeHtml(String(trade.qty || 0))}</td>
+            <td class="${trade.net >= 0 ? 'text-profit' : 'text-loss'}">${escapeHtml(formatAdminMoney(trade.net))}</td>
+            <td>${escapeHtml(formatAdminMoney(trade.gross))}</td>
+            <td>${escapeHtml(formatAdminMoney(trade.comm))}</td>
+            <td>${escapeHtml(trade.exchange || '—')}</td>
+            <td>${escapeHtml(trade.demo ? 'demo' : trade.status || 'filled')}</td>
+        </tr>
+    `).join('');
+
+    return `
+        <div class="admin-service-bot-trades">
+            <div class="admin-service-bot-result-head">
+                <div>
+                    <div class="admin-service-bot-key-title">Угоди</div>
+                    <div class="admin-user-meta">${trades.length} rows · Qty ${escapeHtml(String(totalQty))} · Net ${escapeHtml(formatAdminMoney(totalNet))} · Demo ${escapeHtml(String(demoCount))}</div>
+                </div>
+            </div>
+            <div class="admin-service-bot-table-wrap">
+                <table class="admin-service-bot-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Opened</th>
+                            <th>Ticker</th>
+                            <th>Side</th>
+                            <th>Qty</th>
+                            <th>Net</th>
+                            <th>Gross</th>
+                            <th>Comm</th>
+                            <th>Exchange</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        </div>
+    `;
 }
 
 async function loadServiceBotsList(panel) {

@@ -1187,6 +1187,38 @@ body.is-calendar-tab .quick-trade-fab {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
 }
+.admin-service-bot-trades {
+    display: grid;
+    gap: 8px;
+}
+.admin-service-bot-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+.admin-service-bot-table {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+    color: var(--text-main);
+    font-size: 0.78rem;
+}
+.admin-service-bot-table th,
+.admin-service-bot-table td {
+    padding: 8px 9px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+    text-align: left;
+    white-space: nowrap;
+}
+.admin-service-bot-table th {
+    color: var(--text-muted);
+    background: color-mix(in srgb, var(--bg-main) 60%, transparent);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+}
+.admin-service-bot-table tbody tr:last-child td {
+    border-bottom: 0;
+}
 .admin-user-status--active {
     color: var(--profit);
     border-color: color-mix(in srgb, var(--profit) 35%, transparent);
