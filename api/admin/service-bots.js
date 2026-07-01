@@ -72,7 +72,10 @@ export default async function handler(req, res) {
         );
         if (!profiles?.[0]) return sendJson(res, 404, { ok: false, error: 'Profile not found' });
 
-        const apiKey = createServiceBotApiKey();
+        if (payload.apiKey && payload.apiKey.length < 12) {
+            return sendJson(res, 400, { ok: false, error: 'Secret key is too short' });
+        }
+        const apiKey = payload.apiKey || createServiceBotApiKey();
         const row = {
             name: payload.name,
             bot_type: 'service',

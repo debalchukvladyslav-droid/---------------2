@@ -89,7 +89,7 @@ function renderServiceBotsPanel(profiles = []) {
         <div class="admin-service-bots-head">
             <div>
                 <h4 class="admin-section-title">Service bots</h4>
-                <p class="admin-section-subtitle">Read-only API keys for external services.</p>
+                <p class="admin-section-subtitle">Read-only API keys for external bots. Ключ з інструкції спочатку зареєструй тут у полі Existing secret key.</p>
             </div>
             <button type="button" class="btn-admin-action" data-service-bots-refresh>Refresh</button>
         </div>
@@ -104,6 +104,10 @@ function renderServiceBotsPanel(profiles = []) {
                     ${traders.map((profile) => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.nick || profile.email || profile.id)}</option>`).join('')}
                 </select>
             </label>
+            <label class="admin-field">
+                <span class="admin-label">Existing secret key</span>
+                <input class="admin-input" name="secret_key" type="password" autocomplete="off" spellcheck="false" placeholder="optional">
+            </label>
             <button type="submit" class="btn-admin-action">Create key</button>
         </form>
         <div class="admin-service-bot-key" data-service-bot-key hidden></div>
@@ -111,7 +115,7 @@ function renderServiceBotsPanel(profiles = []) {
             <div class="admin-service-bots-head">
                 <div>
                     <h4 class="admin-section-title">Service bot data explorer</h4>
-                    <p class="admin-section-subtitle">Встав secret/API key і подивись всі дані, які read API може віддати.</p>
+                    <p class="admin-section-subtitle">Тестує вже зареєстрований ключ з таблиці bots. Якщо ключ ще не створений вище, тут буде 401.</p>
                 </div>
                 <button type="button" class="btn-admin-action" data-service-bot-secret-clear>Clear key</button>
             </div>
@@ -175,6 +179,7 @@ async function createServiceBot(event, panel) {
     const body = {
         name: String(formData.get('name') || '').trim(),
         user_id: String(formData.get('user_id') || '').trim(),
+        secret_key: String(formData.get('secret_key') || '').trim(),
     };
     const submit = form.querySelector('button[type="submit"]');
     if (submit) submit.disabled = true;

@@ -1112,7 +1112,7 @@ body.is-calendar-tab .quick-trade-fab {
 .admin-section-subtitle { margin: 3px 0 0; color: var(--text-muted); font-size: 0.82rem; }
 .admin-service-bot-form {
     display: grid;
-    grid-template-columns: minmax(150px, 1fr) minmax(180px, 1fr) auto;
+    grid-template-columns: minmax(150px, 1fr) minmax(180px, 1fr) minmax(180px, 1fr) auto;
     gap: 10px;
     align-items: end;
 }
