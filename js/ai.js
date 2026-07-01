@@ -13,6 +13,66 @@ const sanitizeAIHtml = sanitizeRichHTML;
 let sosChatHistory = []; 
 let dataChatHistory = [];
 
+const AI_QUICK_PROMPTS = {
+    weekly: 'Зроби короткий тижневий звіт: що тягне результат, що ламає дисципліну, які 3 правила взяти на наступний тиждень.',
+    mistakes: 'Знайди мої повторювані помилки за останні угоди. Розділи на технічні, ризикові та психологічні.',
+    risk: 'Оціни мій ризик-менеджмент: дейлос, серії мінусів, розмір збитків і моменти, де я міг перегинати.',
+    setups: 'Порівняй мої типи входів і сетапи. Які варто форсити, які краще фільтрувати або тимчасово прибрати?'
+};
+
+function formatAIResponse(text) {
+    return sanitizeAIHtml(sanitizeHTML(text)
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/^### (.*$)/gm, '<h4>$1</h4>')
+        .replace(/^## (.*$)/gm, '<h3>$1</h3>')
+        .replace(/^- (.*$)/gm, '<li>$1</li>')
+        .replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>')
+        .replace(/\n/g, '<br>'));
+}
+
+function setDataChatBusy(isBusy) {
+    const inputEl = document.getElementById('data-chat-input');
+    const sendBtn = document.querySelector('[data-action="data-chat-send"]');
+    if (inputEl) inputEl.disabled = isBusy;
+    if (sendBtn) {
+        sendBtn.disabled = isBusy;
+        sendBtn.setAttribute('aria-busy', isBusy ? 'true' : 'false');
+        sendBtn.textContent = isBusy ? 'Думаю...' : 'Відправити';
+    }
+}
+
+function makeAIChatBubble(userText, aiHtml) {
+    const wrapperDiv = document.createElement('div');
+    wrapperDiv.className = 'ai-chat-answer';
+
+    const aiMsgDiv = document.createElement('div');
+    aiMsgDiv.className = 'chat-msg ai-msg';
+    aiMsgDiv.innerHTML = `<strong>🤖 AI Аналітик:</strong><br>${aiHtml}`;
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'btn-save-icon';
+    saveBtn.type = 'button';
+    saveBtn.innerHTML = '🔖';
+    saveBtn.title = 'Зберегти / видалити закладку';
+    saveBtn.onclick = () => {
+        bookmarkAIChat(userText, aiHtml, saveBtn);
+    };
+
+    wrapperDiv.appendChild(aiMsgDiv);
+    wrapperDiv.appendChild(saveBtn);
+    return wrapperDiv;
+}
+
+export function applyAIQuickPrompt(key) {
+    const inputEl = document.getElementById('data-chat-input');
+    if (!inputEl) return;
+    const prompt = AI_QUICK_PROMPTS[key];
+    if (!prompt) return;
+    inputEl.value = prompt;
+    inputEl.focus();
+}
+
 export function extractGeminiText(respData) {
     if (respData && respData.error && respData.error.message) throw new Error(respData.error.message);
     const parts = respData && respData.candidates && respData.candidates[0] && respData.candidates[0].content
@@ -262,6 +322,7 @@ export async function sendDataChatMessage() {
     if (!userText) return;
 
     inputEl.value = '';
+    setDataChatBusy(true);
 
     const key = getGeminiKeys()[0];
 
@@ -274,7 +335,8 @@ export async function sendDataChatMessage() {
 
     const typingDiv = document.createElement('div');
     typingDiv.className = 'chat-msg ai-msg';
-    typingDiv.innerHTML = `<em>Друк...</em>`;
+    typingDiv.classList.add('chat-typing-row');
+    typingDiv.innerHTML = '<em>Друкую відповідь...</em>';
     chatBox.appendChild(typingDiv);
     chatBox.scrollTop = chatBox.scrollHeight;
 
@@ -286,58 +348,31 @@ export async function sendDataChatMessage() {
         const promptText = `Ось дані журналу: ${journalData}\n\nТеги скріншотів: ${screenTagsData}${tradeTypeContext}${playbookContext}\n\nВідповідай коротко українською. Коли питання стосується результату, обов'язково враховуй різні типи входу як різні логіки. Запит: ${userText}`;
 
         const aiResponseText = await callGemini(key, {
-            systemInstruction: { parts: [{ text: "Ти професійний трейдинг-ментор. Пиши коротко українською." }] },
+            systemInstruction: { parts: [{ text: "Ти професійний трейдинг-ментор. Пиши українською, коротко, конкретно і без фінансових обіцянок. Роби висновки з журналу, ризику, типів входу, тегів скрінів і плейбуку. Якщо даних мало, прямо скажи що саме треба додати." }] },
             contents: [{ parts: [{ text: promptText }] }]
         });
-        const formattedHTML = sanitizeAIHtml(sanitizeHTML(aiResponseText)
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\*(.*?)\*/g, '<em>$1</em>')
-            .replace(/^### (.*$)/gm, '<h4 style="margin:8px 0 4px">$1</h4>')
-            .replace(/^## (.*$)/gm, '<h3 style="margin:8px 0 4px">$1</h3>')
-            .replace(/^- (.*$)/gm, '<li>$1</li>')
-            .replace(/(<li>.*<\/li>)/gs, '<ul style="margin:4px 0 4px 16px">$1</ul>')
-            .replace(/\n/g, '<br>'));
+        const formattedHTML = formatAIResponse(aiResponseText);
 
         chatBox.removeChild(typingDiv);
-        
-        // ОБГОРТКА ДЛЯ НОВОГО ПОВІДОМЛЕННЯ (Бульбашка + Зірочка)
-        const wrapperDiv = document.createElement('div');
-        wrapperDiv.style.display = 'flex';
-        wrapperDiv.style.alignItems = 'center';
-        wrapperDiv.style.gap = '8px';
-        wrapperDiv.style.alignSelf = 'flex-start';
-        wrapperDiv.style.maxWidth = '95%';
-
-        const aiMsgDiv = document.createElement('div');
-        aiMsgDiv.className = 'chat-msg ai-msg';
-        aiMsgDiv.innerHTML = `<strong>🤖 AI Аналітик:</strong><br>${formattedHTML}`;
-        
-        const saveBtn = document.createElement('button');
-        saveBtn.className = 'btn-save-icon';
-        saveBtn.innerHTML = '🔖';
-        saveBtn.title = 'Зберегти / Видалити закладку';
-        saveBtn.onclick = () => { 
-            // Передаємо saveBtn третім параметром!
-            bookmarkAIChat(userText, formattedHTML, saveBtn); 
-        };
-        
-        wrapperDiv.appendChild(aiMsgDiv);
-        wrapperDiv.appendChild(saveBtn);
-        chatBox.appendChild(wrapperDiv);
+        chatBox.appendChild(makeAIChatBubble(userText, formattedHTML));
         
         chatBox.scrollTop = chatBox.scrollHeight;
 
         if (!state.appData.aiChatHistory) state.appData.aiChatHistory = [];
         state.appData.aiChatHistory.push({ role: 'user', text: userText });
         state.appData.aiChatHistory.push({ role: 'ai', text: formattedHTML });
-        // Не зберігаємо в базу — тільки в памяті сесії
+        state.appData.aiChatHistory = state.appData.aiChatHistory.slice(-40);
+        saveToLocal();
 
     } catch (error) {
-        chatBox.removeChild(typingDiv);
+        if (typingDiv.parentElement) chatBox.removeChild(typingDiv);
         const errDiv = document.createElement('div');
         errDiv.className = 'chat-msg ai-msg';
         errDiv.innerHTML = `<span style="color:var(--loss)">⚠️ Помилка AI: ${sanitizeHTML(error.message)}</span>`;
         chatBox.appendChild(errDiv);
+    } finally {
+        setDataChatBusy(false);
+        inputEl.focus();
     }
 }
 
@@ -359,38 +394,16 @@ export function loadAIChatHistory() {
             if (msg.role === 'ai') {
                 // Знаходимо текст юзера, щоб зберегти в закладки
                 const prevUserMsg = (i > 0 && state.appData.aiChatHistory[i-1].role === 'user') ? state.appData.aiChatHistory[i-1].text : 'Запит з історії';
+                const aiHtml = sanitizeAIHtml(msg.text);
+                const wrapperDiv = makeAIChatBubble(prevUserMsg, aiHtml);
+                const saveBtn = wrapperDiv.querySelector('.btn-save-icon');
 
-                // Створюємо ОБГОРТКУ: Повідомлення + Зірочка збоку
-                const wrapperDiv = document.createElement('div');
-                wrapperDiv.style.display = 'flex';
-                wrapperDiv.style.alignItems = 'center';
-                wrapperDiv.style.gap = '8px';
-                wrapperDiv.style.alignSelf = 'flex-start';
-                wrapperDiv.style.maxWidth = '95%';
-
-                const aiMsgDiv = document.createElement('div');
-                aiMsgDiv.className = 'chat-msg ai-msg';
-                aiMsgDiv.innerHTML = `<strong>🤖 AI Аналітик:</strong><br>${sanitizeAIHtml(sanitizeHTML(msg.text))}`;
-
-                const saveBtn = document.createElement('button');
-                saveBtn.className = 'btn-save-icon';
-                saveBtn.innerHTML = '🔖';
-                saveBtn.title = 'Зберегти / Видалити закладку';
-                
                 // Перевіряємо, чи повідомлення ВЖЕ є у збережених
                 let isAlreadySaved = state.appData.aiSavedChats && state.appData.aiSavedChats.some(item => item.user === prevUserMsg && item.ai === msg.text);
                 if (isAlreadySaved) {
-                    saveBtn.style.color = 'var(--accent)';
-                    saveBtn.style.opacity = '1';
+                    saveBtn?.classList.add('is-saved');
                 }
 
-                saveBtn.onclick = () => {
-                    // Передаємо saveBtn третім параметром!
-                    bookmarkAIChat(prevUserMsg, msg.text, saveBtn);
-                };
-
-                wrapperDiv.appendChild(aiMsgDiv);
-                wrapperDiv.appendChild(saveBtn);
                 chatBox.appendChild(wrapperDiv);
             } else {
                 // Повідомлення юзера (Телеграм стиль)
@@ -433,8 +446,7 @@ export function bookmarkAIChat(userText, aiHtml, btnEl) {
             // ❌ ЯКЩО ВЖЕ Є — ВИДАЛЯЄМО ЗІ ЗБЕРЕЖЕНОГО
             state.appData.aiSavedChats.splice(existingIdx, 1);
             if (btnEl) {
-                btnEl.style.color = 'var(--text-muted)'; // Повертаємо сірий колір
-                btnEl.style.opacity = '0.5';
+                btnEl.classList.remove('is-saved');
             }
         } else {
             // ✅ ЯКЩО НЕМАЄ — ДОДАЄМО В ЗБЕРЕЖЕНЕ
@@ -444,8 +456,7 @@ export function bookmarkAIChat(userText, aiHtml, btnEl) {
                 ai: aiHtml
             });
             if (btnEl) {
-                btnEl.style.color = 'var(--accent)'; // Підсвічуємо синім/кольором теми
-                btnEl.style.opacity = '1';
+                btnEl.classList.add('is-saved');
             }
         }
         
@@ -470,24 +481,23 @@ export function renderSavedAIChats() {
         container.innerHTML = '';
         state.appData.aiSavedChats.forEach((item, idx) => {
             const card = document.createElement('div');
-            card.style.cssText = 'background:var(--bg-panel);border:1px solid var(--accent);border-radius:8px;padding:15px;';
+            card.className = 'ai-saved-card';
 
             const dateDiv = document.createElement('div');
-            dateDiv.style.cssText = 'font-size:0.8rem;color:var(--text-muted);margin-bottom:10px;';
+            dateDiv.className = 'ai-saved-card-date';
             dateDiv.textContent = `📅 Збережено: ${item.date}`;
 
             const userDiv = document.createElement('div');
-            userDiv.style.marginBottom = '10px';
+            userDiv.className = 'ai-saved-card-user';
             const userLabel = document.createElement('strong');
             userLabel.textContent = 'Ваш запит: ';
             const userSpan = document.createElement('span');
-            userSpan.style.color = 'var(--text-main)';
             userSpan.textContent = item.user;
             userDiv.appendChild(userLabel);
             userDiv.appendChild(userSpan);
 
             const aiDiv = document.createElement('div');
-            aiDiv.style.cssText = 'background:color-mix(in srgb,var(--accent) 10%,transparent);padding:10px;border-radius:6px;margin-bottom:10px;';
+            aiDiv.className = 'ai-saved-card-answer';
             const aiLabel = document.createElement('strong');
             aiLabel.textContent = 'ШІ:';
             const aiBr = document.createElement('br');
@@ -500,7 +510,7 @@ export function renderSavedAIChats() {
 
             const delBtn = document.createElement('button');
             delBtn.className = 'btn-secondary';
-            delBtn.style.cssText = 'width:100%;border-color:var(--loss);color:var(--loss);';
+            delBtn.classList.add('ai-saved-delete');
             delBtn.textContent = '❌ Видалити закладку';
             delBtn.addEventListener('click', () => deleteSavedAI(idx));
 

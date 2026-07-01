@@ -1,5 +1,18 @@
 <div id="view-ai" class="view-content">
     <div class="ai-workspace">
+        <div class="ai-toolbar">
+            <div class="ai-toolbar-title">
+                <span class="ai-toolbar-kicker">AI Mentor</span>
+                <h2>Розбір журналу</h2>
+            </div>
+            <div class="ai-quick-actions" aria-label="Швидкі AI-запити">
+                <button type="button" class="ai-chip" data-action="ai-quick-prompt" data-ai-prompt="weekly">Тижневий звіт</button>
+                <button type="button" class="ai-chip" data-action="ai-quick-prompt" data-ai-prompt="mistakes">Помилки</button>
+                <button type="button" class="ai-chip" data-action="ai-quick-prompt" data-ai-prompt="risk">Ризик</button>
+                <button type="button" class="ai-chip" data-action="ai-quick-prompt" data-ai-prompt="setups">Сетапи</button>
+            </div>
+        </div>
+
         <div class="ai-tab-row">
             <button class="btn-primary btn-flex-1" id="btn-ai-chat" data-action="ai-tab" data-ai-tab="chat">💬 Чат з AI</button>
             <button class="btn-secondary btn-flex-1" id="btn-ai-saved" data-action="ai-tab" data-ai-tab="saved">💾 Збережене</button>

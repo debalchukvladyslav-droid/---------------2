@@ -173,6 +173,7 @@ function activateAction(action, trigger, event = null) {
         'stats-compare-close': () => window.closeStatsCompareMode?.(),
         'review-request': () => window.submitReviewRequest?.(trigger?.dataset?.reviewType || ''),
         'ai-tab': () => window.switchAITab?.(trigger?.dataset?.aiTab || 'chat'),
+        'ai-quick-prompt': () => window.applyAIQuickPrompt?.(trigger?.dataset?.aiPrompt || ''),
         'data-chat-send': () => window.sendDataChatMessage?.(),
         'google-auth': () => window.loadSpreadsheetFromServiceInput
             ? window.loadSpreadsheetFromServiceInput()
