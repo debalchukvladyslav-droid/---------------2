@@ -85,6 +85,7 @@ function renderServiceBotsPanel(profiles = []) {
     if (!panel) return;
     panel.hidden = false;
     const traders = profiles.filter((profile) => profile?.id);
+    const defaultRange = getDefaultAdminPproRange();
     panel.innerHTML = `
         <div class="admin-service-bots-head">
             <div>
@@ -109,9 +110,48 @@ function renderServiceBotsPanel(profiles = []) {
                 <span class="admin-label">Existing secret key</span>
                 <input class="admin-input" name="secret_key" type="password" autocomplete="off" spellcheck="false" placeholder="optional">
             </label>
+            <label class="admin-field">
+                <span class="admin-label">Data source</span>
+                <select class="admin-select" name="data_source">
+                    <option value="ppro">PPRO</option>
+                    <option value="all">All journal data</option>
+                    <option value="fondexx">Fondexx</option>
+                </select>
+            </label>
             <button type="submit" class="btn-admin-action">Create key</button>
         </form>
         <div class="admin-service-bot-key" data-service-bot-key hidden></div>
+        <div class="admin-ppro-viewer" data-admin-ppro-viewer>
+            <div class="admin-service-bots-head">
+                <div>
+                    <h4 class="admin-section-title">PPRO data check</h4>
+                    <p class="admin-section-subtitle">Ізольована перевірка: читаємо тільки PPRO з journal_days.daily_metrics.ppro, без bot key і без зовнішнього API.</p>
+                </div>
+            </div>
+            <form class="admin-ppro-form" data-admin-ppro-form>
+                <label class="admin-field">
+                    <span class="admin-label">Trader</span>
+                    <select class="admin-select" name="user_id">
+                        <option value="">All traders</option>
+                        ${traders.map((profile) => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.nick || profile.email || profile.id)}</option>`).join('')}
+                    </select>
+                </label>
+                <label class="admin-field">
+                    <span class="admin-label">Start</span>
+                    <input class="admin-input" name="start" type="date" value="${escapeHtml(defaultRange.start)}">
+                </label>
+                <label class="admin-field">
+                    <span class="admin-label">End</span>
+                    <input class="admin-input" name="end" type="date" value="${escapeHtml(defaultRange.end)}">
+                </label>
+                <label class="admin-field">
+                    <span class="admin-label">Limit</span>
+                    <input class="admin-input" name="limit" type="number" min="1" max="1000" value="300">
+                </label>
+                <button type="submit" class="btn-admin-action">Load PPRO</button>
+            </form>
+            <div class="admin-ppro-result" data-admin-ppro-result hidden></div>
+        </div>
         <div class="admin-service-bot-explorer" data-service-bot-explorer>
             <div class="admin-service-bots-head">
                 <div>
@@ -175,8 +215,168 @@ function renderServiceBotsPanel(profiles = []) {
 
     panel.querySelector('[data-service-bots-refresh]')?.addEventListener('click', () => loadServiceBotsList(panel));
     panel.querySelector('[data-service-bot-form]')?.addEventListener('submit', (event) => createServiceBot(event, panel));
+    bindAdminPproViewer(panel, profiles || []);
     bindServiceBotExplorer(panel);
     loadServiceBotsList(panel);
+}
+
+function getDefaultAdminPproRange() {
+    const end = new Date();
+    const start = new Date(end);
+    start.setDate(start.getDate() - 30);
+    const fmt = (date) => date.toISOString().slice(0, 10);
+    return { start: fmt(start), end: fmt(end) };
+}
+
+function pproSourceHasData(ppro = {}) {
+    return !!(
+        Number(ppro?.gross)
+        || Number(ppro?.net)
+        || Number(ppro?.comm)
+        || Number(ppro?.locates)
+        || (Array.isArray(ppro?.tickers) && ppro.tickers.length)
+    );
+}
+
+function splitAdminPproValue(value, count) {
+    const n = Number(value) || 0;
+    const c = Math.max(1, count || 1);
+    return Number((n / c).toFixed(2));
+}
+
+function profileName(profile) {
+    return profile?.nick || [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || profile?.email || profile?.id || '';
+}
+
+function buildAdminPproRows(rows = [], profiles = []) {
+    const profileMap = new Map((profiles || []).map((profile) => [profile.id, profile]));
+    const out = [];
+    (rows || []).forEach((row) => {
+        const metrics = row?.daily_metrics && typeof row.daily_metrics === 'object' ? row.daily_metrics : {};
+        const ppro = metrics.ppro && typeof metrics.ppro === 'object' ? metrics.ppro : {};
+        if (!pproSourceHasData(ppro)) return;
+        const tickers = Array.isArray(ppro.tickers)
+            ? [...new Set(ppro.tickers.map((ticker) => String(ticker || '').trim().toUpperCase()).filter(Boolean))]
+            : [];
+        const symbols = tickers.length ? tickers : ['PPRO_TOTAL'];
+        const profile = profileMap.get(row.user_id) || {};
+        symbols.forEach((symbol) => {
+            out.push({
+                date: row.trade_date || '',
+                user_id: row.user_id || '',
+                trader: profileName(profile) || row.user_id || '—',
+                team: profile.team || '',
+                symbol,
+                gross: splitAdminPproValue(ppro.gross, symbols.length),
+                pnl: splitAdminPproValue(ppro.net, symbols.length),
+                commissions: splitAdminPproValue(ppro.comm, symbols.length),
+                locates: splitAdminPproValue(ppro.locates, symbols.length),
+                source: metrics.pproSource || 'daily_metrics.ppro',
+            });
+        });
+    });
+    return out.sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(a.trader).localeCompare(String(b.trader)));
+}
+
+function bindAdminPproViewer(panel, profiles = []) {
+    const form = panel.querySelector('[data-admin-ppro-form]');
+    if (!form) return;
+    form.addEventListener('submit', (event) => loadAdminPproData(event, panel, profiles));
+}
+
+async function loadAdminPproData(event, panel, profiles = []) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const start = String(formData.get('start') || '').trim();
+    const end = String(formData.get('end') || '').trim();
+    const userId = String(formData.get('user_id') || '').trim();
+    const limit = Math.max(1, Math.min(1000, Number(formData.get('limit')) || 300));
+    const result = panel.querySelector('[data-admin-ppro-result]');
+    const submit = form.querySelector('button[type="submit"]');
+    if (!result) return;
+    result.hidden = false;
+    result.innerHTML = '<p class="admin-loading">Loading PPRO rows...</p>';
+    if (submit) submit.disabled = true;
+    try {
+        let query = supabase
+            .from('journal_days')
+            .select('user_id, trade_date, pnl, gross_pnl, commissions, locates, daily_metrics')
+            .order('trade_date', { ascending: false })
+            .limit(limit);
+        if (start) query = query.gte('trade_date', start);
+        if (end) query = query.lte('trade_date', end);
+        if (userId) query = query.eq('user_id', userId);
+
+        const { data, error } = await query;
+        if (error) throw error;
+        const pproRows = buildAdminPproRows(data || [], profiles);
+        renderAdminPproResult(result, pproRows, { start, end });
+    } catch (error) {
+        result.innerHTML = `<p class="admin-error">PPRO load error: ${escapeHtml(error?.message || error)}</p>`;
+    } finally {
+        if (submit) submit.disabled = false;
+    }
+}
+
+function renderAdminPproResult(container, rows = [], range = {}) {
+    if (!rows.length) {
+        container.innerHTML = '<p class="admin-empty">PPRO дані за цей діапазон не знайдені в journal_days.daily_metrics.ppro.</p>';
+        return;
+    }
+    const totalPnl = rows.reduce((sum, row) => sum + row.pnl, 0);
+    const totalGross = rows.reduce((sum, row) => sum + row.gross, 0);
+    const totalCommissions = rows.reduce((sum, row) => sum + row.commissions, 0);
+    const totalLocates = rows.reduce((sum, row) => sum + row.locates, 0);
+    const json = JSON.stringify(rows, null, 2);
+    container.innerHTML = `
+        <div class="admin-service-bot-result-head">
+            <div>
+                <div class="admin-service-bot-key-title">PPRO rows</div>
+                <div class="admin-user-meta">
+                    ${rows.length} entries · PnL ${escapeHtml(formatAdminMoney(totalPnl))} · Gross ${escapeHtml(formatAdminMoney(totalGross))} · Comm ${escapeHtml(formatAdminMoney(totalCommissions))} · Locates ${escapeHtml(formatAdminMoney(totalLocates))}
+                    ${range.start || range.end ? ` · Range: ${escapeHtml(range.start || '')} - ${escapeHtml(range.end || '')}` : ''}
+                </div>
+            </div>
+            <button type="button" class="btn-admin-action" data-admin-ppro-copy>Copy JSON</button>
+        </div>
+        <div class="admin-service-bot-table-wrap">
+            <table class="admin-service-bot-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Trader</th>
+                        <th>Team</th>
+                        <th>Entry/Ticker</th>
+                        <th>PnL</th>
+                        <th>Gross</th>
+                        <th>Commissions</th>
+                        <th>Locates</th>
+                        <th>Source</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rows.map((row) => `
+                        <tr>
+                            <td>${escapeHtml(row.date)}</td>
+                            <td>${escapeHtml(row.trader)}</td>
+                            <td>${escapeHtml(row.team || '—')}</td>
+                            <td><strong>${escapeHtml(row.symbol)}</strong></td>
+                            <td class="${row.pnl >= 0 ? 'text-profit' : 'text-loss'}">${escapeHtml(formatAdminMoney(row.pnl))}</td>
+                            <td>${escapeHtml(formatAdminMoney(row.gross))}</td>
+                            <td>${escapeHtml(formatAdminMoney(row.commissions))}</td>
+                            <td>${escapeHtml(formatAdminMoney(row.locates))}</td>
+                            <td>${escapeHtml(row.source)}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+    container.querySelector('[data-admin-ppro-copy]')?.addEventListener('click', async () => {
+        const ok = await copyTextToClipboard(json);
+        showToast(ok ? 'PPRO JSON copied' : 'Copy failed');
+    });
 }
 
 async function createServiceBot(event, panel) {
@@ -188,6 +388,7 @@ async function createServiceBot(event, panel) {
         user_id: String(formData.get('user_id') || '').trim(),
         all_traders: String(formData.get('user_id') || '').trim() === '__all_traders__',
         secret_key: String(formData.get('secret_key') || '').trim(),
+        data_source: String(formData.get('data_source') || 'ppro').trim(),
     };
     const submit = form.querySelector('button[type="submit"]');
     if (submit) submit.disabled = true;
@@ -482,7 +683,8 @@ function renderServiceBotExplorerOptions(panel, bots = []) {
         ...bots.map((bot) => {
             const profile = bot.profile || {};
             const scope = bot.user_id ? (profile.nick || bot.user_id || 'Trader') : 'All traders';
-            return `<option value="${escapeHtml(String(bot.id))}">${escapeHtml(bot.name || 'Service bot')} · ${escapeHtml(scope)}</option>`;
+            const source = bot.extra_data?.data_source || 'all';
+            return `<option value="${escapeHtml(String(bot.id))}">${escapeHtml(bot.name || 'Service bot')} · ${escapeHtml(scope)} · ${escapeHtml(String(source).toUpperCase())}</option>`;
         }),
     ].join('');
     if ([...select.options].some((option) => option.value === previous)) select.value = previous;
@@ -500,6 +702,7 @@ function buildServiceBotCard(bot, panel) {
     const enabled = bot.enabled !== false;
     const lastUsed = bot.last_used_at ? new Date(bot.last_used_at).toLocaleString() : 'never';
     const traderLabel = bot.user_id ? (profile.nick || bot.user_id || '-') : 'All traders';
+    const sourceLabel = bot.extra_data?.data_source || 'all';
     card.innerHTML = `
         <div class="admin-user-head">
             <div class="admin-user-title">
@@ -510,6 +713,7 @@ function buildServiceBotCard(bot, panel) {
                 Trader: ${escapeHtml(traderLabel)} · Last used: ${escapeHtml(lastUsed)}
             </div>
             <div class="admin-user-meta">Allowed: ${escapeHtml(allowedEndpointsText(bot))}</div>
+            <div class="admin-user-meta">Source: ${escapeHtml(String(sourceLabel).toUpperCase())}</div>
         </div>
         <div class="admin-user-actions">
             <button type="button" class="btn-admin-action" data-service-bot-toggle>${enabled ? 'Disable' : 'Enable'}</button>

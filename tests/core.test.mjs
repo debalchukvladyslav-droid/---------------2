@@ -716,3 +716,26 @@ test('service bot snapshot derives orders from broker and day totals when trades
     assert.equal(snapshot.orders.items[0].derived, true);
     assert(snapshot.orders.items.some((item) => item.symbol === 'JOURNAL_TOTAL'));
 });
+
+test('service bot snapshot can be restricted to ppro source only', () => {
+    const snapshot = buildServiceBotSnapshot([
+        {
+            user_id: 'u1',
+            trade_date: '2026-06-24',
+            pnl: 70,
+            gross_pnl: 100,
+            commissions: 30,
+            locates: 0,
+            daily_metrics: {
+                trades: [{ symbol: 'SHOULD_SKIP', qty: 1, net: 1 }],
+                fondexx: { gross: 50, net: 40, comm: 10, locates: 0, tickers: ['FDXX'] },
+                ppro: { gross: 30, net: 25, comm: 5, locates: 0, tickers: ['PPRO'] },
+            },
+        },
+    ], { start: '2026-06-24', end: '2026-06-24', days: 1 }, { data_source: 'ppro' });
+
+    assert.equal(snapshot.orders.summary.total, 1);
+    assert.equal(snapshot.orders.items[0].symbol, 'PPRO');
+    assert.equal(snapshot.orders.items[0].derived_source, 'daily_metrics.ppro');
+    assert.equal(snapshot.orders.items.some((item) => item.symbol === 'FDXX'), false);
+});

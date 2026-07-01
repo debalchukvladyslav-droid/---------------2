@@ -1112,7 +1112,7 @@ body.is-calendar-tab .quick-trade-fab {
 .admin-section-subtitle { margin: 3px 0 0; color: var(--text-muted); font-size: 0.82rem; }
 .admin-service-bot-form {
     display: grid;
-    grid-template-columns: minmax(150px, 1fr) minmax(180px, 1fr) minmax(180px, 1fr) auto;
+    grid-template-columns: minmax(140px, 1fr) minmax(170px, 1fr) minmax(170px, 1fr) minmax(130px, 0.75fr) auto;
     gap: 10px;
     align-items: end;
 }
@@ -1139,6 +1139,29 @@ body.is-calendar-tab .quick-trade-fab {
     border-radius: 8px;
     background: color-mix(in srgb, var(--bg-main) 42%, transparent);
 }
+.admin-ppro-viewer {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid color-mix(in srgb, var(--profit) 26%, var(--border));
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-main) 48%, transparent);
+}
+.admin-ppro-form {
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) repeat(3, minmax(110px, 0.7fr)) auto;
+    gap: 10px;
+    align-items: end;
+}
+.admin-ppro-result {
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-panel) 78%, #000 22%);
+}
+.admin-ppro-result[hidden] { display: none !important; }
 .admin-service-bot-query {
     display: grid;
     grid-template-columns: minmax(210px, 1.25fr) minmax(130px, 0.75fr) repeat(5, minmax(90px, 0.6fr));
@@ -1229,6 +1252,9 @@ body.is-calendar-tab .quick-trade-fab {
     .admin-service-bot-query {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+    .admin-ppro-form {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
     .admin-user-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -1236,6 +1262,7 @@ body.is-calendar-tab .quick-trade-fab {
 @media (max-width: 700px) {
     .admin-service-bot-form { grid-template-columns: 1fr; }
     .admin-service-bot-query { grid-template-columns: 1fr; }
+    .admin-ppro-form { grid-template-columns: 1fr; }
     .admin-service-bot-query-actions { flex-direction: column; align-items: stretch; }
     .admin-user-card {
         grid-template-columns: 1fr;

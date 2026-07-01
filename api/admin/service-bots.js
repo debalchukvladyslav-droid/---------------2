@@ -120,6 +120,7 @@ export default async function handler(req, res) {
             extra_data: {
                 allowed_endpoints: [SERVICE_BOT_PERMISSION],
                 scope: payload.allTraders ? 'all_traders' : 'trader',
+                data_source: payload.dataSource,
             },
             enabled: payload.enabled,
         };
