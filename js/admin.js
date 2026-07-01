@@ -7,6 +7,8 @@ import { exportProfileData, resetProfileData } from './storage.js';
 
 const ROLES = ['trader', 'mentor', 'admin'];
 const DEFAULT_TEAM = 'Без куща';
+const SERVICE_BOT_SECRET_STORAGE_KEY = 'tj_admin_service_bot_secret_key';
+const SERVICE_BOT_DATA_ENDPOINTS = ['snapshot', 'summary', 'tickers', 'orders', 'locates'];
 
 export async function renderAdminPanel() {
     const container = document.getElementById('admin-users-list');
@@ -105,6 +107,56 @@ function renderServiceBotsPanel(profiles = []) {
             <button type="submit" class="btn-admin-action">Create key</button>
         </form>
         <div class="admin-service-bot-key" data-service-bot-key hidden></div>
+        <div class="admin-service-bot-explorer" data-service-bot-explorer>
+            <div class="admin-service-bots-head">
+                <div>
+                    <h4 class="admin-section-title">Service bot data explorer</h4>
+                    <p class="admin-section-subtitle">Встав secret/API key і подивись всі дані, які read API може віддати.</p>
+                </div>
+                <button type="button" class="btn-admin-action" data-service-bot-secret-clear>Clear key</button>
+            </div>
+            <form class="admin-service-bot-query" data-service-bot-query-form>
+                <label class="admin-field admin-field-wide">
+                    <span class="admin-label">Secret / API key</span>
+                    <input class="admin-input" name="secret_key" type="password" autocomplete="off" spellcheck="false" placeholder="shs_service_...">
+                </label>
+                <label class="admin-field">
+                    <span class="admin-label">Endpoint</span>
+                    <select class="admin-select" name="endpoint">
+                        ${SERVICE_BOT_DATA_ENDPOINTS.map((endpoint) => `<option value="${endpoint}">${endpoint}</option>`).join('')}
+                    </select>
+                </label>
+                <label class="admin-field">
+                    <span class="admin-label">Days</span>
+                    <input class="admin-input" name="days" type="number" min="1" max="31" value="31">
+                </label>
+                <label class="admin-field">
+                    <span class="admin-label">Start</span>
+                    <input class="admin-input" name="start" type="date">
+                </label>
+                <label class="admin-field">
+                    <span class="admin-label">End</span>
+                    <input class="admin-input" name="end" type="date">
+                </label>
+                <label class="admin-field">
+                    <span class="admin-label">Items limit</span>
+                    <input class="admin-input" name="limit" type="number" min="1" max="500" value="100">
+                </label>
+                <label class="admin-field">
+                    <span class="admin-label">Top limit</span>
+                    <input class="admin-input" name="top_limit" type="number" min="1" max="100" value="25">
+                </label>
+                <label class="admin-check-field">
+                    <input name="refresh" type="checkbox" value="1">
+                    <span>Refresh cache</span>
+                </label>
+                <div class="admin-service-bot-query-actions">
+                    <button type="submit" class="btn-admin-action">Load data</button>
+                    <button type="button" class="btn-admin-action" data-service-bot-secret-save>Save key</button>
+                </div>
+            </form>
+            <div class="admin-service-bot-result" data-service-bot-result hidden></div>
+        </div>
         <div class="admin-service-bots-list" data-service-bots-list>
             <p class="admin-loading">Loading service bots...</p>
         </div>
@@ -112,6 +164,7 @@ function renderServiceBotsPanel(profiles = []) {
 
     panel.querySelector('[data-service-bots-refresh]')?.addEventListener('click', () => loadServiceBotsList(panel));
     panel.querySelector('[data-service-bot-form]')?.addEventListener('submit', (event) => createServiceBot(event, panel));
+    bindServiceBotExplorer(panel);
     loadServiceBotsList(panel);
 }
 
@@ -153,6 +206,121 @@ function renderCreatedServiceBotKey(panel, apiKey) {
     box.querySelector('button')?.addEventListener('click', async () => {
         const ok = await copyTextToClipboard(apiKey || '');
         showToast(ok ? 'Service bot key copied' : 'Copy failed');
+    });
+}
+
+function bindServiceBotExplorer(panel) {
+    const form = panel.querySelector('[data-service-bot-query-form]');
+    const keyInput = form?.elements?.secret_key;
+    if (!form || !keyInput) return;
+
+    keyInput.value = localStorage.getItem(SERVICE_BOT_SECRET_STORAGE_KEY) || '';
+    panel.querySelector('[data-service-bot-secret-save]')?.addEventListener('click', () => {
+        const key = String(keyInput.value || '').trim();
+        if (!key) {
+            showToast('Встав secret/API key');
+            return;
+        }
+        localStorage.setItem(SERVICE_BOT_SECRET_STORAGE_KEY, key);
+        showToast('Secret key saved locally');
+    });
+    panel.querySelector('[data-service-bot-secret-clear]')?.addEventListener('click', () => {
+        localStorage.removeItem(SERVICE_BOT_SECRET_STORAGE_KEY);
+        keyInput.value = '';
+        renderServiceBotExplorerResult(panel, null);
+        showToast('Secret key cleared');
+    });
+    form.addEventListener('submit', (event) => loadServiceBotExplorerData(event, panel));
+}
+
+function serviceBotQueryParams(formData) {
+    const params = new URLSearchParams();
+    ['days', 'start', 'end', 'limit', 'top_limit'].forEach((name) => {
+        const value = String(formData.get(name) || '').trim();
+        if (value) params.set(name, value);
+    });
+    if (formData.get('refresh')) params.set('refresh', '1');
+    return params;
+}
+
+async function loadServiceBotExplorerData(event, panel) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const key = String(formData.get('secret_key') || '').trim();
+    const endpoint = SERVICE_BOT_DATA_ENDPOINTS.includes(String(formData.get('endpoint')))
+        ? String(formData.get('endpoint'))
+        : 'snapshot';
+    if (!key) {
+        showToast('Встав secret/API key');
+        return;
+    }
+
+    const submit = form.querySelector('button[type="submit"]');
+    if (submit) submit.disabled = true;
+    renderServiceBotExplorerResult(panel, { loading: true });
+    try {
+        const params = serviceBotQueryParams(formData);
+        const url = `/api/service-bots/${encodeURIComponent(endpoint)}${params.toString() ? `?${params}` : ''}`;
+        const response = await fetch(url, {
+            headers: {
+                'X-Bot-Key': key,
+                'X-Api-Key': key,
+            },
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(payload?.error || response.statusText || `HTTP ${response.status}`);
+        }
+        renderServiceBotExplorerResult(panel, { endpoint, payload });
+        showToast('Service bot data loaded');
+    } catch (error) {
+        renderServiceBotExplorerResult(panel, { error: error?.message || String(error) });
+        showToast('Service bot API error: ' + (error?.message || error));
+    } finally {
+        if (submit) submit.disabled = false;
+    }
+}
+
+function renderServiceBotExplorerResult(panel, statePayload) {
+    const box = panel.querySelector('[data-service-bot-result]');
+    if (!box) return;
+    if (!statePayload) {
+        box.hidden = true;
+        box.innerHTML = '';
+        return;
+    }
+    box.hidden = false;
+    if (statePayload.loading) {
+        box.innerHTML = '<p class="admin-loading">Loading read API data...</p>';
+        return;
+    }
+    if (statePayload.error) {
+        box.innerHTML = `<p class="admin-error">Read API error: ${escapeHtml(statePayload.error)}</p>`;
+        return;
+    }
+
+    const payload = statePayload.payload || {};
+    const meta = payload.meta || {};
+    const subject = meta.subject || {};
+    const range = payload.range || {};
+    box.innerHTML = `
+        <div class="admin-service-bot-result-head">
+            <div>
+                <div class="admin-service-bot-key-title">${escapeHtml(statePayload.endpoint || 'snapshot')}</div>
+                <div class="admin-user-meta">
+                    Trader: ${escapeHtml(subject.nick || subject.user_id || '—')}
+                    ${subject.team ? ` · Team: ${escapeHtml(subject.team)}` : ''}
+                    ${range.start || range.end ? ` · Range: ${escapeHtml(range.start || '')} - ${escapeHtml(range.end || '')}` : ''}
+                </div>
+            </div>
+            <button type="button" class="btn-admin-action" data-service-bot-result-copy>Copy JSON</button>
+        </div>
+        <pre class="admin-service-bot-json">${escapeHtml(JSON.stringify(payload, null, 2))}</pre>
+    `;
+    box.querySelector('[data-service-bot-result-copy]')?.addEventListener('click', async () => {
+        const ok = await copyTextToClipboard(JSON.stringify(payload, null, 2));
+        showToast(ok ? 'JSON copied' : 'Copy failed');
     });
 }
 
