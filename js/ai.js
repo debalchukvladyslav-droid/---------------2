@@ -5,6 +5,7 @@ import { getImgUrl, getStorageUrl } from './gallery.js';
 import { getGeminiKeys, callGemini, callGeminiViaProxy, callGeminiJSON, sleep } from './ai/client.js';
 import { sanitizeHTML, sanitizeRichHTML } from './sanitize.js';
 import { buildTradeTypeAIContext, buildDayTradeTypeAIContext } from './trade_type_analysis.js';
+import { isNotTakenTrade } from './data_utils.js';
 
 export { getGeminiKeys, callGemini, callGeminiViaProxy, callGeminiJSON, sleep };
 
@@ -62,6 +63,62 @@ function makeAIChatBubble(userText, aiHtml) {
     wrapperDiv.appendChild(aiMsgDiv);
     wrapperDiv.appendChild(saveBtn);
     return wrapperDiv;
+}
+
+function buildAIJournalForPrompt(journal = {}) {
+    const output = {};
+    for (const [dateStr, day] of Object.entries(journal || {})) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
+        const nextDay = { ...(day || {}) };
+        if (Array.isArray(day?.trades)) {
+            nextDay.trades = day.trades.map((trade) => {
+                const notTaken = isNotTakenTrade(trade);
+                return {
+                    ...trade,
+                    aiExecutionStatus: notTaken ? 'not_taken' : 'executed',
+                    aiExecutionNote: notTaken
+                        ? 'Це сетап/можливість, яку трейдер НЕ БРАВ. Не рахувати як виконану угоду, PnL, winrate або помилку виконання входу.'
+                        : 'Це виконана угода, якщо інші поля не кажуть протилежне.',
+                };
+            });
+        }
+        output[dateStr] = nextDay;
+    }
+    return output;
+}
+
+function buildNotTakenAIContext(journal = {}) {
+    let notTakenCount = 0;
+    let executedCount = 0;
+    const examples = [];
+
+    for (const [dateStr, day] of Object.entries(journal || {})) {
+        const trades = Array.isArray(day?.trades) ? day.trades : [];
+        for (const trade of trades) {
+            if (isNotTakenTrade(trade)) {
+                notTakenCount++;
+                if (examples.length < 8) {
+                    const sheet = trade?.sheet && typeof trade.sheet === 'object' ? trade.sheet : {};
+                    const type = sheet.tradeType || trade?.type || sheet.fondexxType || 'тип не вказаний';
+                    const symbol = trade?.symbol || trade?.ticker || '';
+                    examples.push(`- ${dateStr}${symbol ? ` ${symbol}` : ''}: "${type}" = НЕ БРАВ / пропущена можливість`);
+                }
+            } else {
+                executedCount++;
+            }
+        }
+    }
+
+    return [
+        '',
+        '',
+        'ВАЖЛИВО ПРО УГОДИ "НЕ БРАВ":',
+        'Якщо тип/коментар угоди містить "не брав", "не взяв", "do not take", "not taken", "no trade", "skip" або схожий зміст — це НЕ виконана угода.',
+        'Такі записи рахуй як пропущені або спостережні сетапи: їх можна аналізувати як фільтр, якість відбору, missed opportunity або дисципліну очікування.',
+        'Не включай їх у PnL, winrate, середній результат, кількість реальних входів і не критикуй трейдера за виконання входу/стопа, бо позиції не було.',
+        `У поточному контексті: виконаних записів приблизно ${executedCount}, "не брав"/спостережних записів ${notTakenCount}.`,
+        examples.length ? `Приклади:\n${examples.join('\n')}` : '',
+    ].filter(Boolean).join('\n');
 }
 
 export function applyAIQuickPrompt(key) {
@@ -128,7 +185,8 @@ export async function getAIAdvice() {
     
     const currentDay = state.appData.journal[state.selectedDateStr] || {};
     const tradeTypeContext = `${buildDayTradeTypeAIContext(currentDay)}${buildTradeTypeAIContext(state.appData.journal || {}, { tradeTypes: state.appData.tradeTypes, recentDays: 90, limit: 6 })}`;
-    let promptText = `Ось мій звіт за торговий день:\nPnL: ${pnl}$\nВідмітки: ${params.length > 0 ? params.join(', ') : 'Немає'}\nПомилки: ${errs.length > 0 ? errs.join(', ') : 'Немає'}\nМій стан: ${slidersText.join(', ')}\nМої думки: "${notes}"\n${tradeTypeContext}${window.getPlaybookContext ? window.getPlaybookContext() : ''}`;
+    const notTakenContext = buildNotTakenAIContext({ [state.selectedDateStr]: currentDay });
+    let promptText = `Ось мій звіт за торговий день:\nPnL: ${pnl}$\nВідмітки: ${params.length > 0 ? params.join(', ') : 'Немає'}\nПомилки: ${errs.length > 0 ? errs.join(', ') : 'Немає'}\nМій стан: ${slidersText.join(', ')}\nМої думки: "${notes}"\n${tradeTypeContext}${notTakenContext}${window.getPlaybookContext ? window.getPlaybookContext() : ''}`;
     
     try {
         let advice = await callGemini(key, { systemInstruction: { parts: [{ text: "Ти мій напарник по пропу і строгий ризик-менеджер. Спілкуйся українською, коротко (3-4 речення), прямо і по суті, без офіціозу. Використовуй звичайний трейдерський сленг (тільт, фомо, дейлос, профіт). Якщо я порушив систему або поплив емоційно — спокійно, але жорстко ткни в це носом, спираючись на звіт, щоб я зробив висновки. Якщо день ідеально зелений і без косяків — не розводь дифірамби, просто скажи щось типу: 'Нормально відпрацював, систему дотримав. Завтра головне не зловити корону і не лудоманіти, тримай ризики'." }] }, contents: [{ parts: [{ text: promptText }] }] });
@@ -238,6 +296,7 @@ export async function analyzeChart(encodedPath, cleanId) {
         let base64data = await new Promise((resolve) => { let reader = new FileReader(); reader.onloadend = () => resolve(reader.result.split(',')[1]); reader.readAsDataURL(blob); });
         
         const tradeTypeContext = buildTradeTypeAIContext(state.appData.journal || {}, { tradeTypes: state.appData.tradeTypes, recentDays: 90, limit: 6 });
+        const notTakenContext = buildNotTakenAIContext(state.appData.journal || {});
         let prompt = `Ти — професійний проп-трейдер. Проаналізуй цей графік.
 
 КОНТЕКСТ ТРЕЙДЕРА (дуже важливо враховувати):
@@ -250,6 +309,7 @@ export async function analyzeChart(encodedPath, cleanId) {
 - Детальніше розглядай рух після входу в позицію
 - Сітка фібоначі служить тільки консолідацією
 ${tradeTypeContext}
+${notTakenContext}
 
 ЩО АНАЛІЗУВАТИ НАСАМПЕРЕД — ВІЗУАЛЬНИЙ ПАТЕРН:
 1. Опиши форму руху ціни ДО входу: як виглядає структура (консолідація, пробій, відкат, імпульс, флет, клин тощо)
@@ -341,11 +401,13 @@ export async function sendDataChatMessage() {
     chatBox.scrollTop = chatBox.scrollHeight;
 
     try {
-        const journalData = JSON.stringify(state.appData.journal);
+        const journalForAI = buildAIJournalForPrompt(state.appData.journal || {});
+        const journalData = JSON.stringify(journalForAI);
         const screenTagsData = JSON.stringify(state.appData.screenTags || {});
         const tradeTypeContext = buildTradeTypeAIContext(state.appData.journal || {}, { tradeTypes: state.appData.tradeTypes, recentDays: 120, limit: 8 });
+        const notTakenContext = buildNotTakenAIContext(state.appData.journal || {});
         const playbookContext = window.getPlaybookContext ? window.getPlaybookContext() : '';
-        const promptText = `Ось дані журналу: ${journalData}\n\nТеги скріншотів: ${screenTagsData}${tradeTypeContext}${playbookContext}\n\nВідповідай коротко українською. Коли питання стосується результату, обов'язково враховуй різні типи входу як різні логіки. Запит: ${userText}`;
+        const promptText = `Ось дані журналу: ${journalData}\n\nТеги скріншотів: ${screenTagsData}${tradeTypeContext}${notTakenContext}${playbookContext}\n\nВідповідай коротко українською. Коли питання стосується результату, обов'язково враховуй різні типи входу як різні логіки. Окремо відрізняй виконані угоди від записів "не брав". Запит: ${userText}`;
 
         const aiResponseText = await callGemini(key, {
             systemInstruction: { parts: [{ text: "Ти професійний трейдинг-ментор. Пиши українською, коротко, конкретно і без фінансових обіцянок. Роби висновки з журналу, ризику, типів входу, тегів скрінів і плейбуку. Якщо даних мало, прямо скажи що саме треба додати." }] },

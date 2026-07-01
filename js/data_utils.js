@@ -95,6 +95,30 @@ export function classifyTradeTypeGroup(trade) {
     return null;
 }
 
+export function isNotTakenTrade(trade) {
+    const sheet = trade?.sheet && typeof trade.sheet === 'object' ? trade.sheet : {};
+    const fields = [
+        trade?.type,
+        trade?.tradeType,
+        trade?.setupType,
+        trade?.note,
+        trade?.notes,
+        sheet.tradeType,
+        sheet.fondexxType,
+        sheet.exception,
+        sheet.exceptions,
+        sheet.pv,
+    ];
+    const text = fields
+        .flatMap((value) => Array.isArray(value) ? value : [value])
+        .map((value) => String(value || '').toLowerCase())
+        .join(' ');
+
+    if (!text.trim()) return false;
+    return /\bdo\s*not\s*take\b|\bnot\s*taken\b|\bno\s*trade\b|\bskip(?:ped)?\b/i.test(text)
+        || /не\s*брав|не\s*взяв|пропустив|пропущен|без\s*входу/i.test(text);
+}
+
 function parseTradeKf(value) {
     if (value === null || value === undefined || value === '') return null;
     const match = String(value).replace(',', '.').match(/-?\d+(?:\.\d+)?/);
@@ -112,6 +136,7 @@ export function buildAutoTradeTypesData(trades = []) {
     let hasAny = false;
 
     trades.forEach((trade) => {
+        if (isNotTakenTrade(trade)) return;
         const group = classifyTradeTypeGroup(trade);
         if (!group || !totals[group]) return;
 

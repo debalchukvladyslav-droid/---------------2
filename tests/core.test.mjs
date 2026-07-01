@@ -22,7 +22,7 @@ globalThis.document = {
 };
 
 const { canAccessMentorReviewQueueState, isMentorViewingOtherJournalState } = await import('../js/access_control.js');
-const { buildAutoTradeTypesData, normalizeAppData, normalizeDayEntry } = await import('../js/data_utils.js');
+const { buildAutoTradeTypesData, isNotTakenTrade, normalizeAppData, normalizeDayEntry } = await import('../js/data_utils.js');
 const { ecnFeeColumnIndex, parsePPROReportDate, parsePPROTotalReportRows, parseSheetDateCellToIso } = await import('../js/parser_utils.js');
 const { sanitizeHTML, safeExternalUrl, sanitizeRichHTML } = await import('../js/sanitize.js');
 const { mergeGoogleSheetTradesIntoJournal } = await import('../js/sheet_journal_merge.js');
@@ -220,6 +220,25 @@ test('auto trade type metrics group imported trades by default categories', () =
         'Виключення': { pnl: 2, kf: 0.2 },
         'Фіолетова': { pnl: 3, kf: 0.3 },
         'Візуально': { pnl: 2, kf: 0.2 },
+    });
+});
+
+test('not-taken sheet trade types are detected but excluded from auto trade PnL buckets', () => {
+    assert.equal(isNotTakenTrade({ sheet: { tradeType: 'не брав візуально' } }), true);
+    assert.equal(isNotTakenTrade({ type: 'do not take' }), true);
+    assert.equal(isNotTakenTrade({ sheet: { tradeType: 'Виключення' } }), false);
+
+    const auto = buildAutoTradeTypesData([
+        { net: 10, type: 'шорт', sheet: { profitRisk: '1R' } },
+        { net: -999, type: 'не брав візуально', sheet: { tradeType: 'не брав візуально', profitRisk: '-5R' } },
+        { net: 500, sheet: { tradeType: 'do not take', profitRisk: '3R' } },
+    ]);
+
+    assert.deepEqual(auto, {
+        'Шорт': { pnl: 10, kf: 1 },
+        'Виключення': { pnl: '', kf: '' },
+        'Фіолетова': { pnl: '', kf: '' },
+        'Візуально': { pnl: '', kf: '' },
     });
 });
 
