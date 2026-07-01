@@ -6,7 +6,7 @@ function geminiEdgeUrl() {
 }
 const PROXY_FALLBACK = '/api/gemini';
 const DEFAULT_MODEL = 'gemini-2.5-flash';
-const REQUEST_TIMEOUT_MS = 20000;
+const REQUEST_TIMEOUT_MS = 55000;
 const UNUSED_LOG_RETENTION_DAYS = 2;
 const MAX_LOG_STRING = 1200;
 const MAX_RESPONSE_PREVIEW = 2000;
@@ -32,7 +32,9 @@ export async function callGeminiJSON(key, payload) {
 export async function callGeminiViaProxy(payload, model = DEFAULT_MODEL) {
     const logId = await createAIRequestLog({ payload, model });
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const timeout = setTimeout(() => {
+        controller.abort(new Error('AI запит триває надто довго. Спробуйте ще раз або звузьте запит.'));
+    }, REQUEST_TIMEOUT_MS);
 
     try {
         const headers = { 'Content-Type': 'application/json' };
@@ -69,11 +71,25 @@ export async function callGeminiViaProxy(payload, model = DEFAULT_MODEL) {
         await finishAIRequestLog(logId, { status: 'completed', responseText: text });
         return text;
     } catch (error) {
-        await finishAIRequestLog(logId, { status: 'failed', error });
-        throw error;
+        const normalizedError = normalizeAIProxyError(error);
+        await finishAIRequestLog(logId, { status: 'failed', error: normalizedError });
+        throw normalizedError;
     } finally {
         clearTimeout(timeout);
     }
+}
+
+function normalizeAIProxyError(error) {
+    const message = String(error?.message || error || '');
+    const name = String(error?.name || '');
+    if (
+        name === 'AbortError' ||
+        name === 'TimeoutError' ||
+        /aborted|abort|timeout|timed out/i.test(message)
+    ) {
+        return new Error('AI не встиг відповісти. Спробуйте ще раз або зробіть запит коротшим.');
+    }
+    return error instanceof Error ? error : new Error(message || 'AI запит не вдався.');
 }
 
 export async function markAIRequestUsed(logId) {

@@ -46,10 +46,10 @@ export default async function handler(req, res) {
                 ...(referer ? { Referer: referer, Origin: new URL(referer).origin } : {}),
             },
             body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(25000),
+            signal: AbortSignal.timeout(50000),
         });
     } catch (e) {
-        return res.status(502).json({ message: e.message || 'Gemini fetch failed' });
+        return res.status(502).json({ message: normalizeGeminiFetchError(e) });
     }
 
     let data;
@@ -67,6 +67,15 @@ export default async function handler(req, res) {
     if (!text) return res.status(502).json({ message: 'Empty response from Gemini' });
 
     return res.status(200).json({ text });
+}
+
+function normalizeGeminiFetchError(error) {
+    const message = String(error?.message || error || '');
+    const name = String(error?.name || '');
+    if (name === 'TimeoutError' || name === 'AbortError' || /aborted|abort|timeout|timed out/i.test(message)) {
+        return 'Gemini довго не відповідає. Спробуйте ще раз або зробіть запит коротшим.';
+    }
+    return message || 'Gemini fetch failed';
 }
 
 function getGeminiApiKey() {

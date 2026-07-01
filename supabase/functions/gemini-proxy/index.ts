@@ -118,10 +118,10 @@ Deno.serve(async (req) => {
                 ...(referer ? { Referer: referer, Origin: new URL(referer).origin } : {}),
             },
             body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(25000),
+            signal: AbortSignal.timeout(50000),
         });
     } catch (e) {
-        return json({ message: (e as Error).message || 'Gemini fetch failed' }, 502, req);
+        return json({ message: normalizeGeminiFetchError(e) }, 502, req);
     }
 
     let data: Record<string, unknown>;
@@ -164,4 +164,14 @@ function getGeminiReferer(req: Request): string {
     } catch {
         return '';
     }
+}
+
+function normalizeGeminiFetchError(error: unknown): string {
+    const err = error as { name?: string; message?: string };
+    const message = String(err?.message || error || '');
+    const name = String(err?.name || '');
+    if (name === 'TimeoutError' || name === 'AbortError' || /aborted|abort|timeout|timed out/i.test(message)) {
+        return 'Gemini довго не відповідає. Спробуйте ще раз або зробіть запит коротшим.';
+    }
+    return message || 'Gemini fetch failed';
 }
