@@ -382,6 +382,8 @@ function serviceBotPayloadToTrades(payload = {}) {
         exchange: item.exchange || '',
         status: item.status || 'filled',
         demo: item.demo === true,
+        derived: item.derived === true,
+        derivedSource: item.derived_source || '',
     }));
 }
 
@@ -416,7 +418,7 @@ function renderServiceBotTrades(trades = []) {
             <td>${escapeHtml(formatAdminMoney(trade.gross))}</td>
             <td>${escapeHtml(formatAdminMoney(trade.comm))}</td>
             <td>${escapeHtml(trade.exchange || '—')}</td>
-            <td>${escapeHtml(trade.demo ? 'demo' : trade.status || 'filled')}</td>
+            <td>${escapeHtml(trade.derived ? `derived ${trade.derivedSource || ''}` : (trade.demo ? 'demo' : trade.status || 'filled'))}</td>
         </tr>
     `).join('');
 

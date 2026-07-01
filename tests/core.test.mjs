@@ -684,3 +684,35 @@ test('service bot snapshot aggregates real and matched trades but skips pure she
     assert.equal(snapshot.locates.summary.total, 1);
     assert.equal(snapshot.locates.summary.total_price, 12.5);
 });
+
+test('service bot snapshot derives orders from broker and day totals when trades are empty', () => {
+    const snapshot = buildServiceBotSnapshot([
+        {
+            user_id: 'u1',
+            trade_date: '2026-06-24',
+            pnl: 90,
+            gross_pnl: 100,
+            commissions: 10,
+            locates: 0,
+            daily_metrics: {
+                trades: [],
+                fondexx: { gross: 100, net: 90, comm: 10, locates: 0, tickers: ['AAPL', 'TSLA'] },
+                ppro: { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
+            },
+        },
+        {
+            user_id: 'u2',
+            trade_date: '2026-06-25',
+            pnl: -25,
+            gross_pnl: -20,
+            commissions: 5,
+            locates: 0,
+            daily_metrics: { trades: [], traded_tickers: [] },
+        },
+    ], { start: '2026-06-24', end: '2026-06-25', days: 2 });
+
+    assert.equal(snapshot.orders.summary.total, 3);
+    assert.equal(snapshot.tickers.summary.unique_count, 3);
+    assert.equal(snapshot.orders.items[0].derived, true);
+    assert(snapshot.orders.items.some((item) => item.symbol === 'JOURNAL_TOTAL'));
+});
