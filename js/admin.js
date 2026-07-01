@@ -185,6 +185,7 @@ async function createServiceBot(event, panel) {
         });
         form.reset();
         renderCreatedServiceBotKey(panel, payload.api_key);
+        setServiceBotExplorerKey(panel, payload.api_key, { persist: true });
         await loadServiceBotsList(panel);
         showToast('Service bot key created');
     } catch (error) {
@@ -207,6 +208,14 @@ function renderCreatedServiceBotKey(panel, apiKey) {
         const ok = await copyTextToClipboard(apiKey || '');
         showToast(ok ? 'Service bot key copied' : 'Copy failed');
     });
+}
+
+function setServiceBotExplorerKey(panel, apiKey, options = {}) {
+    const key = String(apiKey || '').trim();
+    if (!key) return;
+    const keyInput = panel.querySelector('[data-service-bot-query-form] [name="secret_key"]');
+    if (keyInput) keyInput.value = key;
+    if (options.persist) localStorage.setItem(SERVICE_BOT_SECRET_STORAGE_KEY, key);
 }
 
 function bindServiceBotExplorer(panel) {
@@ -270,6 +279,12 @@ async function loadServiceBotExplorerData(event, panel) {
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
+            if (response.status === 401) {
+                throw new Error('401: secret/API key is missing or invalid. Create a service bot key and paste the full shs_service_... value.');
+            }
+            if (response.status === 403) {
+                throw new Error('403: this bot is disabled, not service type, or has no api_service_snapshot_read permission.');
+            }
             throw new Error(payload?.error || response.statusText || `HTTP ${response.status}`);
         }
         renderServiceBotExplorerResult(panel, { endpoint, payload });
