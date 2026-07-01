@@ -1,5 +1,7 @@
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const DEFAULT_MODEL = 'gemini-2.5-flash';
+const DEFAULT_OPENROUTER_MODEL = 'openai/gpt-5.5';
 const MAX_PAYLOAD_BYTES = 8 * 1024 * 1024;
 const DEFAULT_ALLOWED_ORIGINS = new Set([
     'https://traderjournal-six.vercel.app',
@@ -23,12 +25,16 @@ export default async function handler(req, res) {
     const authResult = await verifySupabaseAuth(req);
     if (!authResult.ok) return res.status(authResult.status).json({ message: authResult.message });
 
-    const GEMINI_API_KEY = getGeminiApiKey();
-    if (!GEMINI_API_KEY) return res.status(500).json({ message: 'GEMINI_API_KEY not configured on server' });
-
     const { payload, model: rawModel } = req.body || {};
     if (!payload || typeof payload !== 'object') return res.status(400).json({ message: 'Missing payload' });
     if (!isPayloadSizeAllowed(payload)) return res.status(413).json({ message: 'AI payload is too large' });
+
+    if (shouldUseOpenRouter()) {
+        return handleOpenRouter(req, res, payload);
+    }
+
+    const GEMINI_API_KEY = getGeminiApiKey();
+    if (!GEMINI_API_KEY) return res.status(500).json({ message: 'GEMINI_API_KEY not configured on server' });
 
     const model = typeof rawModel === 'string' && ALLOWED_MODELS.has(rawModel)
         ? rawModel
@@ -67,6 +73,112 @@ export default async function handler(req, res) {
     if (!text) return res.status(502).json({ message: 'Empty response from Gemini' });
 
     return res.status(200).json({ text });
+}
+
+async function handleOpenRouter(req, res, payload) {
+    const apiKey = getOpenRouterApiKey();
+    if (!apiKey) return res.status(500).json({ message: 'OPENROUTER_API_KEY not configured on server' });
+
+    const referer = getGeminiReferer(req);
+    const model = getOpenRouterModel();
+    const body = {
+        model,
+        messages: geminiPayloadToOpenAIMessages(payload),
+        temperature: 0.35,
+    };
+
+    let openRouterRes;
+    try {
+        openRouterRes = await fetch(OPENROUTER_CHAT_URL, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+                ...(referer ? { 'HTTP-Referer': referer } : {}),
+                'X-Title': 'Trading Journal Pro',
+            },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(50000),
+        });
+    } catch (e) {
+        return res.status(502).json({ message: normalizeGeminiFetchError(e) });
+    }
+
+    let data;
+    try { data = await openRouterRes.json(); } catch { return res.status(502).json({ message: 'Invalid JSON from OpenRouter' }); }
+
+    if (!openRouterRes.ok) {
+        return res.status(openRouterRes.status).json({ message: data?.error?.message || `OpenRouter error ${openRouterRes.status}` });
+    }
+
+    const text = extractOpenRouterText(data);
+    if (!text) return res.status(502).json({ message: 'Empty response from OpenRouter' });
+    return res.status(200).json({ text });
+}
+
+function shouldUseOpenRouter() {
+    const provider = String(process.env.AI_PROVIDER || process.env.LLM_PROVIDER || '').trim().toLowerCase();
+    return provider === 'openrouter' || (!!getOpenRouterApiKey() && !getGeminiApiKey());
+}
+
+function getOpenRouterApiKey() {
+    return String(process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_KEY || '').trim();
+}
+
+function getOpenRouterModel() {
+    return String(process.env.OPENROUTER_MODEL || process.env.AI_MODEL || DEFAULT_OPENROUTER_MODEL).trim();
+}
+
+function geminiPayloadToOpenAIMessages(payload) {
+    const messages = [];
+    const systemText = partsToText(payload?.systemInstruction?.parts);
+    if (systemText) messages.push({ role: 'system', content: systemText });
+
+    const contents = Array.isArray(payload?.contents) ? payload.contents : [];
+    for (const item of contents) {
+        const role = item?.role === 'model' ? 'assistant' : 'user';
+        const content = geminiPartsToOpenAIContent(item?.parts);
+        if (typeof content === 'string' ? content.trim() : content.length) {
+            messages.push({ role, content });
+        }
+    }
+
+    return messages.length ? messages : [{ role: 'user', content: 'Проаналізуй дані трейдинг-журналу.' }];
+}
+
+function geminiPartsToOpenAIContent(parts) {
+    const normalized = Array.isArray(parts) ? parts : [];
+    const content = [];
+    for (const part of normalized) {
+        if (typeof part?.text === 'string' && part.text.trim()) {
+            content.push({ type: 'text', text: part.text });
+        }
+        const inline = part?.inline_data || part?.inlineData;
+        if (inline?.data) {
+            const mimeType = inline.mime_type || inline.mimeType || 'image/jpeg';
+            content.push({
+                type: 'image_url',
+                image_url: { url: `data:${mimeType};base64,${inline.data}` },
+            });
+        }
+    }
+    if (content.length === 1 && content[0].type === 'text') return content[0].text;
+    return content;
+}
+
+function partsToText(parts) {
+    return Array.isArray(parts)
+        ? parts.map((part) => (typeof part?.text === 'string' ? part.text : '')).join('\n').trim()
+        : '';
+}
+
+function extractOpenRouterText(data) {
+    const content = data?.choices?.[0]?.message?.content;
+    if (typeof content === 'string') return content.trim();
+    if (Array.isArray(content)) {
+        return content.map((part) => typeof part?.text === 'string' ? part.text : '').join('').trim();
+    }
+    return '';
 }
 
 function normalizeGeminiFetchError(error) {

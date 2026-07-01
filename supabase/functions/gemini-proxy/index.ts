@@ -6,7 +6,9 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const DEFAULT_MODEL = 'gemini-2.5-flash';
+const DEFAULT_OPENROUTER_MODEL = 'openai/gpt-5.5';
 const ALLOWED_MODELS = new Set([DEFAULT_MODEL, 'gemini-2.5-flash-lite', 'gemini-2.5-pro']);
 const MAX_PAYLOAD_BYTES = 8 * 1024 * 1024;
 const DEFAULT_ALLOWED_ORIGINS = new Set([
@@ -78,18 +80,6 @@ Deno.serve(async (req) => {
     const v = await verifyUserJwt(req.headers.get('Authorization'));
     if (!v.ok) return json({ message: v.message }, v.status, req);
 
-    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-    if (!GEMINI_API_KEY) {
-        return json(
-            {
-                message:
-                    'GEMINI_API_KEY не задано. Supabase Dashboard → Project Settings → Edge Functions → Secrets, або: supabase secrets set GEMINI_API_KEY=...',
-            },
-            500,
-            req,
-        );
-    }
-
     let body: { payload?: unknown; model?: string };
     try {
         body = await req.json();
@@ -103,6 +93,22 @@ Deno.serve(async (req) => {
     }
     if (!payloadSizeOk(payload)) {
         return json({ message: 'AI payload is too large' }, 413, req);
+    }
+
+    if (shouldUseOpenRouter()) {
+        return handleOpenRouter(req, payload);
+    }
+
+    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+    if (!GEMINI_API_KEY) {
+        return json(
+            {
+                message:
+                    'GEMINI_API_KEY не задано. Supabase Dashboard → Project Settings → Edge Functions → Secrets, або: supabase secrets set GEMINI_API_KEY=...',
+            },
+            500,
+            req,
+        );
     }
 
     const model = typeof rawModel === 'string' && ALLOWED_MODELS.has(rawModel) ? rawModel : DEFAULT_MODEL;
@@ -146,6 +152,51 @@ Deno.serve(async (req) => {
     return json({ text }, 200, req);
 });
 
+async function handleOpenRouter(req: Request, payload: unknown): Promise<Response> {
+    const apiKey = getOpenRouterApiKey();
+    if (!apiKey) return json({ message: 'OPENROUTER_API_KEY not configured on Edge' }, 500, req);
+
+    const referer = getGeminiReferer(req);
+    const body = {
+        model: getOpenRouterModel(),
+        messages: geminiPayloadToOpenAIMessages(payload),
+        temperature: 0.35,
+    };
+
+    let openRouterRes: Response;
+    try {
+        openRouterRes = await fetch(OPENROUTER_CHAT_URL, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+                ...(referer ? { 'HTTP-Referer': referer } : {}),
+                'X-Title': 'Trading Journal Pro',
+            },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(50000),
+        });
+    } catch (e) {
+        return json({ message: normalizeGeminiFetchError(e) }, 502, req);
+    }
+
+    let data: Record<string, unknown>;
+    try {
+        data = (await openRouterRes.json()) as Record<string, unknown>;
+    } catch {
+        return json({ message: 'Invalid JSON from OpenRouter' }, 502, req);
+    }
+
+    if (!openRouterRes.ok) {
+        const err = data?.error as { message?: string } | undefined;
+        return json({ message: err?.message || `OpenRouter error ${openRouterRes.status}` }, openRouterRes.status, req);
+    }
+
+    const text = extractOpenRouterText(data);
+    if (!text) return json({ message: 'Empty response from OpenRouter' }, 502, req);
+    return json({ text }, 200, req);
+}
+
 function getGeminiReferer(req: Request): string {
     const raw = [
         Deno.env.get('GEMINI_REFERER'),
@@ -174,4 +225,77 @@ function normalizeGeminiFetchError(error: unknown): string {
         return 'Gemini довго не відповідає. Спробуйте ще раз або зробіть запит коротшим.';
     }
     return message || 'Gemini fetch failed';
+}
+
+function shouldUseOpenRouter(): boolean {
+    const provider = String(Deno.env.get('AI_PROVIDER') || Deno.env.get('LLM_PROVIDER') || '').trim().toLowerCase();
+    return provider === 'openrouter' || (!!getOpenRouterApiKey() && !Deno.env.get('GEMINI_API_KEY'));
+}
+
+function getOpenRouterApiKey(): string {
+    return String(Deno.env.get('OPENROUTER_API_KEY') || Deno.env.get('OPENROUTER_KEY') || '').trim();
+}
+
+function getOpenRouterModel(): string {
+    return String(Deno.env.get('OPENROUTER_MODEL') || Deno.env.get('AI_MODEL') || DEFAULT_OPENROUTER_MODEL).trim();
+}
+
+function geminiPayloadToOpenAIMessages(payload: unknown): Array<{ role: string; content: string | unknown[] }> {
+    const p = payload as {
+        systemInstruction?: { parts?: Array<{ text?: string }> };
+        contents?: Array<{ role?: string; parts?: Array<Record<string, unknown>> }>;
+    };
+    const messages: Array<{ role: string; content: string | unknown[] }> = [];
+    const systemText = partsToText(p?.systemInstruction?.parts);
+    if (systemText) messages.push({ role: 'system', content: systemText });
+
+    const contents = Array.isArray(p?.contents) ? p.contents : [];
+    for (const item of contents) {
+        const role = item?.role === 'model' ? 'assistant' : 'user';
+        const content = geminiPartsToOpenAIContent(item?.parts);
+        if (typeof content === 'string' ? content.trim() : content.length) {
+            messages.push({ role, content });
+        }
+    }
+
+    return messages.length ? messages : [{ role: 'user', content: 'Проаналізуй дані трейдинг-журналу.' }];
+}
+
+function geminiPartsToOpenAIContent(parts: Array<Record<string, unknown>> | undefined): string | unknown[] {
+    const normalized = Array.isArray(parts) ? parts : [];
+    const content: unknown[] = [];
+
+    for (const part of normalized) {
+        if (typeof part?.text === 'string' && part.text.trim()) {
+            content.push({ type: 'text', text: part.text });
+        }
+        const inline = (part?.inline_data || part?.inlineData) as { data?: string; mime_type?: string; mimeType?: string } | undefined;
+        if (inline?.data) {
+            const mimeType = inline.mime_type || inline.mimeType || 'image/jpeg';
+            content.push({
+                type: 'image_url',
+                image_url: { url: `data:${mimeType};base64,${inline.data}` },
+            });
+        }
+    }
+
+    const only = content[0] as { type?: string; text?: string } | undefined;
+    if (content.length === 1 && only?.type === 'text') return only.text || '';
+    return content;
+}
+
+function partsToText(parts: Array<{ text?: string }> | undefined): string {
+    return Array.isArray(parts)
+        ? parts.map((part) => (typeof part?.text === 'string' ? part.text : '')).join('\n').trim()
+        : '';
+}
+
+function extractOpenRouterText(data: Record<string, unknown>): string {
+    const choices = data?.choices as Array<{ message?: { content?: unknown } }> | undefined;
+    const content = choices?.[0]?.message?.content;
+    if (typeof content === 'string') return content.trim();
+    if (Array.isArray(content)) {
+        return content.map((part) => typeof part?.text === 'string' ? part.text : '').join('').trim();
+    }
+    return '';
 }
