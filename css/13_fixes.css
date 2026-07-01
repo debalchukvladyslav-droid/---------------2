@@ -1198,7 +1198,7 @@ body.is-calendar-tab .quick-trade-fab {
 }
 .admin-service-bot-table {
     width: 100%;
-    min-width: 760px;
+    min-width: 840px;
     border-collapse: collapse;
     color: var(--text-main);
     font-size: 0.78rem;

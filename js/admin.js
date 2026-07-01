@@ -101,6 +101,7 @@ function renderServiceBotsPanel(profiles = []) {
             <label class="admin-field">
                 <span class="admin-label">Trader</span>
                 <select class="admin-select" name="user_id">
+                    <option value="__all_traders__">All traders</option>
                     ${traders.map((profile) => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.nick || profile.email || profile.id)}</option>`).join('')}
                 </select>
             </label>
@@ -120,6 +121,12 @@ function renderServiceBotsPanel(profiles = []) {
                 <button type="button" class="btn-admin-action" data-service-bot-secret-clear>Clear key</button>
             </div>
             <form class="admin-service-bot-query" data-service-bot-query-form>
+                <label class="admin-field">
+                    <span class="admin-label">Saved bot key</span>
+                    <select class="admin-select" name="bot_id" data-service-bot-explorer-select>
+                        <option value="">Manual key</option>
+                    </select>
+                </label>
                 <label class="admin-field admin-field-wide">
                     <span class="admin-label">Secret / API key</span>
                     <input class="admin-input" name="secret_key" type="password" autocomplete="off" spellcheck="false" placeholder="shs_service_...">
@@ -179,6 +186,7 @@ async function createServiceBot(event, panel) {
     const body = {
         name: String(formData.get('name') || '').trim(),
         user_id: String(formData.get('user_id') || '').trim(),
+        all_traders: String(formData.get('user_id') || '').trim() === '__all_traders__',
         secret_key: String(formData.get('secret_key') || '').trim(),
     };
     const submit = form.querySelector('button[type="submit"]');
@@ -262,11 +270,12 @@ async function loadServiceBotExplorerData(event, panel) {
     const form = event.currentTarget;
     const formData = new FormData(form);
     const key = String(formData.get('secret_key') || '').trim();
+    const botId = String(formData.get('bot_id') || '').trim();
     const endpoint = SERVICE_BOT_DATA_ENDPOINTS.includes(String(formData.get('endpoint')))
         ? String(formData.get('endpoint'))
         : 'snapshot';
-    if (!key) {
-        showToast('Встав secret/API key');
+    if (!key && !botId) {
+        showToast('Вибери saved bot key або встав secret/API key');
         return;
     }
 
@@ -275,22 +284,28 @@ async function loadServiceBotExplorerData(event, panel) {
     renderServiceBotExplorerResult(panel, { loading: true });
     try {
         const params = serviceBotQueryParams(formData);
-        const url = `/api/service-bots/${encodeURIComponent(endpoint)}${params.toString() ? `?${params}` : ''}`;
-        const response = await fetch(url, {
-            headers: {
-                'X-Bot-Key': key,
-                'X-Api-Key': key,
-            },
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            if (response.status === 401) {
-                throw new Error('401: secret/API key is missing or invalid. Create a service bot key and paste the full shs_service_... value.');
+        let payload = null;
+        if (botId) {
+            params.set('endpoint', endpoint);
+            payload = await adminApiFetch(`/api/admin/service-bots?id=${encodeURIComponent(botId)}&data=1&${params}`);
+        } else {
+            const url = `/api/service-bots/${encodeURIComponent(endpoint)}${params.toString() ? `?${params}` : ''}`;
+            const response = await fetch(url, {
+                headers: {
+                    'X-Bot-Key': key,
+                    'X-Api-Key': key,
+                },
+            });
+            payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                if (response.status === 401) {
+                    throw new Error('401: secret/API key is missing or invalid. Create a service bot key and paste the full shs_service_... value.');
+                }
+                if (response.status === 403) {
+                    throw new Error('403: this bot is disabled, not service type, or has no api_service_snapshot_read permission.');
+                }
+                throw new Error(payload?.error || response.statusText || `HTTP ${response.status}`);
             }
-            if (response.status === 403) {
-                throw new Error('403: this bot is disabled, not service type, or has no api_service_snapshot_read permission.');
-            }
-            throw new Error(payload?.error || response.statusText || `HTTP ${response.status}`);
         }
         renderServiceBotExplorerResult(panel, { endpoint, payload });
         showToast('Service bot data loaded');
@@ -354,6 +369,8 @@ function serviceBotPayloadToTrades(payload = {}) {
             : [];
     return items.map((item) => ({
         date: item.date || '',
+        trader: item.trader?.nick || item.trader?.id || item.user_id || '',
+        team: item.trader?.team || '',
         opened: item.opened || '',
         closed: item.closed || '',
         symbol: item.symbol || '',
@@ -390,6 +407,7 @@ function renderServiceBotTrades(trades = []) {
     const rows = trades.map((trade) => `
         <tr>
             <td>${escapeHtml(trade.date)}</td>
+            <td>${escapeHtml(trade.trader || '—')}</td>
             <td>${escapeHtml(trade.opened || trade.closed || '')}</td>
             <td><strong>${escapeHtml(trade.symbol || '—')}</strong></td>
             <td>${escapeHtml(trade.side || '—')}</td>
@@ -415,6 +433,7 @@ function renderServiceBotTrades(trades = []) {
                     <thead>
                         <tr>
                             <th>Date</th>
+                            <th>Trader</th>
                             <th>Opened</th>
                             <th>Ticker</th>
                             <th>Side</th>
@@ -446,9 +465,25 @@ async function loadServiceBotsList(panel) {
         }
         list.innerHTML = '';
         bots.forEach((bot) => list.appendChild(buildServiceBotCard(bot, panel)));
+        renderServiceBotExplorerOptions(panel, bots);
     } catch (error) {
         list.innerHTML = `<p class="admin-error">Service bots error: ${escapeHtml(error?.message || error)}</p>`;
     }
+}
+
+function renderServiceBotExplorerOptions(panel, bots = []) {
+    const select = panel.querySelector('[data-service-bot-explorer-select]');
+    if (!select) return;
+    const previous = select.value;
+    select.innerHTML = [
+        '<option value="">Manual key</option>',
+        ...bots.map((bot) => {
+            const profile = bot.profile || {};
+            const scope = bot.user_id ? (profile.nick || bot.user_id || 'Trader') : 'All traders';
+            return `<option value="${escapeHtml(String(bot.id))}">${escapeHtml(bot.name || 'Service bot')} · ${escapeHtml(scope)}</option>`;
+        }),
+    ].join('');
+    if ([...select.options].some((option) => option.value === previous)) select.value = previous;
 }
 
 function allowedEndpointsText(bot) {
@@ -462,6 +497,7 @@ function buildServiceBotCard(bot, panel) {
     const profile = bot.profile || {};
     const enabled = bot.enabled !== false;
     const lastUsed = bot.last_used_at ? new Date(bot.last_used_at).toLocaleString() : 'never';
+    const traderLabel = bot.user_id ? (profile.nick || bot.user_id || '-') : 'All traders';
     card.innerHTML = `
         <div class="admin-user-head">
             <div class="admin-user-title">
@@ -469,7 +505,7 @@ function buildServiceBotCard(bot, panel) {
                 <span class="admin-user-status ${enabled ? 'admin-user-status--active' : 'admin-user-status--blocked'}">${enabled ? 'Enabled' : 'Disabled'}</span>
             </div>
             <div class="admin-user-meta">
-                Trader: ${escapeHtml(profile.nick || bot.user_id || '-')} · Last used: ${escapeHtml(lastUsed)}
+                Trader: ${escapeHtml(traderLabel)} · Last used: ${escapeHtml(lastUsed)}
             </div>
             <div class="admin-user-meta">Allowed: ${escapeHtml(allowedEndpointsText(bot))}</div>
         </div>

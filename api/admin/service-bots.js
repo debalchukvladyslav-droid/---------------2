@@ -1,4 +1,5 @@
 import {
+    buildServiceBotResponse,
     cleanBotPayload,
     createServiceBotApiKey,
     requireAdmin,
@@ -17,6 +18,37 @@ export default async function handler(req, res) {
         const id = String(req.query?.id || '').trim();
 
         if (req.method === 'GET') {
+            if (id && String(req.query?.data || '') === '1') {
+                const endpoint = String(req.query?.endpoint || 'snapshot').trim();
+                const allowed = new Set(['summary', 'tickers', 'locates', 'orders', 'snapshot']);
+                if (!allowed.has(endpoint)) return sendJson(res, 404, { ok: false, error: 'Service bot endpoint not found' });
+                const bots = await supabaseRest(`bots?id=eq.${encodeURIComponent(id)}&select=*&limit=1`);
+                const bot = bots?.[0];
+                if (!bot?.api_key) return sendJson(res, 404, { ok: false, error: 'Service bot key not found' });
+                const query = { ...(req.query || {}) };
+                delete query.id;
+                delete query.data;
+                delete query.endpoint;
+                const response = await buildServiceBotResponse({
+                    ...req,
+                    query,
+                    headers: {
+                        ...(req.headers || {}),
+                        'x-bot-key': bot.api_key,
+                    },
+                }, endpoint);
+                return sendJson(res, 200, {
+                    ...response.payload,
+                    meta: {
+                        ...(response.payload.meta || {}),
+                        cache: {
+                            ...(response.payload.meta?.cache || {}),
+                            hit: response.cacheHit === true,
+                        },
+                    },
+                });
+            }
+
             const bots = await supabaseRest(`bots?select=${botSelect()}&order=created_at.desc`);
             const userIds = [...new Set((bots || []).map((bot) => bot.user_id).filter(Boolean))];
             let profiles = [];
@@ -65,12 +97,16 @@ export default async function handler(req, res) {
 
         const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
         const payload = cleanBotPayload(body);
-        if (!payload.userId) return sendJson(res, 400, { ok: false, error: 'Missing user_id' });
+        if (!payload.userId && !payload.allTraders) return sendJson(res, 400, { ok: false, error: 'Missing user_id' });
 
-        const profiles = await supabaseRest(
-            `profiles?id=eq.${encodeURIComponent(payload.userId)}&select=id,nick,team&limit=1`,
-        );
-        if (!profiles?.[0]) return sendJson(res, 404, { ok: false, error: 'Profile not found' });
+        let profile = null;
+        if (!payload.allTraders) {
+            const profiles = await supabaseRest(
+                `profiles?id=eq.${encodeURIComponent(payload.userId)}&select=id,nick,team&limit=1`,
+            );
+            if (!profiles?.[0]) return sendJson(res, 404, { ok: false, error: 'Profile not found' });
+            profile = profiles[0];
+        }
 
         if (payload.apiKey && payload.apiKey.length < 12) {
             return sendJson(res, 400, { ok: false, error: 'Secret key is too short' });
@@ -80,8 +116,11 @@ export default async function handler(req, res) {
             name: payload.name,
             bot_type: 'service',
             api_key: apiKey,
-            user_id: payload.userId,
-            extra_data: { allowed_endpoints: [SERVICE_BOT_PERMISSION] },
+            user_id: payload.allTraders ? null : payload.userId,
+            extra_data: {
+                allowed_endpoints: [SERVICE_BOT_PERMISSION],
+                scope: payload.allTraders ? 'all_traders' : 'trader',
+            },
             enabled: payload.enabled,
         };
         const inserted = await supabaseRest('bots?select=id,name,bot_type,user_id,extra_data,enabled,last_used_at,created_at,updated_at', {
@@ -95,7 +134,7 @@ export default async function handler(req, res) {
             api_key: apiKey,
             bot: {
                 ...(inserted?.[0] || row),
-                profile: profiles[0],
+                profile,
             },
         });
     } catch (error) {
