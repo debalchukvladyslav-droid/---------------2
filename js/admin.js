@@ -124,17 +124,22 @@ function renderServiceBotsPanel(profiles = []) {
         <div class="admin-ppro-viewer" data-admin-ppro-viewer>
             <div class="admin-service-bots-head">
                 <div>
-                    <h4 class="admin-section-title">PPRO data check</h4>
-                    <p class="admin-section-subtitle">Ізольована перевірка: читаємо тільки PPRO з journal_days.daily_metrics.ppro, без bot key і без зовнішнього API.</p>
+                    <h4 class="admin-section-title">External PPRO bot API check</h4>
+                    <p class="admin-section-subtitle">Ізольована перевірка зовнішнього API бота: не читає ручні імпорти сайту і не прив'язує трейдерів до profiles.</p>
                 </div>
             </div>
             <form class="admin-ppro-form" data-admin-ppro-form>
+                <label class="admin-field admin-field-wide">
+                    <span class="admin-label">External API URL</span>
+                    <input class="admin-input" name="url" type="url" placeholder="https://.../api/...">
+                </label>
                 <label class="admin-field">
-                    <span class="admin-label">Trader</span>
-                    <select class="admin-select" name="user_id">
-                        <option value="">All traders</option>
-                        ${traders.map((profile) => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.nick || profile.email || profile.id)}</option>`).join('')}
-                    </select>
+                    <span class="admin-label">Auth header</span>
+                    <input class="admin-input" name="auth_header" type="text" value="X-Api-Key">
+                </label>
+                <label class="admin-field">
+                    <span class="admin-label">API key</span>
+                    <input class="admin-input" name="api_key" type="password" autocomplete="off" spellcheck="false">
                 </label>
                 <label class="admin-field">
                     <span class="admin-label">Start</span>
@@ -215,7 +220,7 @@ function renderServiceBotsPanel(profiles = []) {
 
     panel.querySelector('[data-service-bots-refresh]')?.addEventListener('click', () => loadServiceBotsList(panel));
     panel.querySelector('[data-service-bot-form]')?.addEventListener('submit', (event) => createServiceBot(event, panel));
-    bindAdminPproViewer(panel, profiles || []);
+    bindAdminPproViewer(panel);
     bindServiceBotExplorer(panel);
     loadServiceBotsList(panel);
 }
@@ -278,42 +283,48 @@ function buildAdminPproRows(rows = [], profiles = []) {
     return out.sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(a.trader).localeCompare(String(b.trader)));
 }
 
-function bindAdminPproViewer(panel, profiles = []) {
+function bindAdminPproViewer(panel) {
     const form = panel.querySelector('[data-admin-ppro-form]');
     if (!form) return;
-    form.addEventListener('submit', (event) => loadAdminPproData(event, panel, profiles));
+    form.addEventListener('submit', (event) => loadAdminPproData(event, panel));
 }
 
-async function loadAdminPproData(event, panel, profiles = []) {
+async function loadAdminPproData(event, panel) {
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
+    const url = String(formData.get('url') || '').trim();
+    const apiKey = String(formData.get('api_key') || '').trim();
+    const authHeader = String(formData.get('auth_header') || 'X-Api-Key').trim();
     const start = String(formData.get('start') || '').trim();
     const end = String(formData.get('end') || '').trim();
-    const userId = String(formData.get('user_id') || '').trim();
     const limit = Math.max(1, Math.min(1000, Number(formData.get('limit')) || 300));
     const result = panel.querySelector('[data-admin-ppro-result]');
     const submit = form.querySelector('button[type="submit"]');
     if (!result) return;
+    if (!url) {
+        showToast('Встав External API URL');
+        return;
+    }
     result.hidden = false;
-    result.innerHTML = '<p class="admin-loading">Loading PPRO rows...</p>';
+    result.innerHTML = '<p class="admin-loading">Loading external PPRO API...</p>';
     if (submit) submit.disabled = true;
     try {
-        let query = supabase
-            .from('journal_days')
-            .select('user_id, trade_date, pnl, gross_pnl, commissions, locates, daily_metrics')
-            .order('trade_date', { ascending: false })
-            .limit(limit);
-        if (start) query = query.gte('trade_date', start);
-        if (end) query = query.lte('trade_date', end);
-        if (userId) query = query.eq('user_id', userId);
-
-        const { data, error } = await query;
-        if (error) throw error;
-        const pproRows = buildAdminPproRows(data || [], profiles);
-        renderAdminPproResult(result, pproRows, { start, end });
+        const payload = await adminApiFetch('/api/admin/service-bots', {
+            method: 'POST',
+            body: JSON.stringify({
+                action: 'external_ppro_probe',
+                url,
+                api_key: apiKey,
+                auth_header: authHeader,
+                start,
+                end,
+                limit,
+            }),
+        });
+        renderAdminPproResult(result, payload.items || [], { start, end, raw: payload.payload, sourceUrl: payload.source_url, status: payload.status });
     } catch (error) {
-        result.innerHTML = `<p class="admin-error">PPRO load error: ${escapeHtml(error?.message || error)}</p>`;
+        result.innerHTML = `<p class="admin-error">External PPRO API error: ${escapeHtml(error?.message || error)}</p>`;
     } finally {
         if (submit) submit.disabled = false;
     }
@@ -321,20 +332,25 @@ async function loadAdminPproData(event, panel, profiles = []) {
 
 function renderAdminPproResult(container, rows = [], range = {}) {
     if (!rows.length) {
-        container.innerHTML = '<p class="admin-empty">PPRO дані за цей діапазон не знайдені в journal_days.daily_metrics.ppro.</p>';
+        container.innerHTML = `
+            <p class="admin-empty">Зовнішній PPRO API не повернув масив угод/входів у відомих полях data/items/orders/trades/positions/fills/rows/results.</p>
+            ${range.raw ? `<pre class="admin-service-bot-json">${escapeHtml(JSON.stringify(range.raw, null, 2))}</pre>` : ''}
+        `;
         return;
     }
     const totalPnl = rows.reduce((sum, row) => sum + row.pnl, 0);
     const totalGross = rows.reduce((sum, row) => sum + row.gross, 0);
     const totalCommissions = rows.reduce((sum, row) => sum + row.commissions, 0);
     const totalLocates = rows.reduce((sum, row) => sum + row.locates, 0);
-    const json = JSON.stringify(rows, null, 2);
+    const exportPayload = { items: rows, raw: range.raw || null };
+    const json = JSON.stringify(exportPayload, null, 2);
     container.innerHTML = `
         <div class="admin-service-bot-result-head">
             <div>
-                <div class="admin-service-bot-key-title">PPRO rows</div>
+                <div class="admin-service-bot-key-title">External PPRO rows</div>
                 <div class="admin-user-meta">
                     ${rows.length} entries · PnL ${escapeHtml(formatAdminMoney(totalPnl))} · Gross ${escapeHtml(formatAdminMoney(totalGross))} · Comm ${escapeHtml(formatAdminMoney(totalCommissions))} · Locates ${escapeHtml(formatAdminMoney(totalLocates))}
+                    ${range.sourceUrl ? ` · Source: ${escapeHtml(range.sourceUrl)}` : ''}
                     ${range.start || range.end ? ` · Range: ${escapeHtml(range.start || '')} - ${escapeHtml(range.end || '')}` : ''}
                 </div>
             </div>
@@ -348,11 +364,14 @@ function renderAdminPproResult(container, rows = [], range = {}) {
                         <th>Trader</th>
                         <th>Team</th>
                         <th>Entry/Ticker</th>
+                        <th>Side</th>
+                        <th>Qty</th>
+                        <th>Entry Price</th>
                         <th>PnL</th>
                         <th>Gross</th>
                         <th>Commissions</th>
                         <th>Locates</th>
-                        <th>Source</th>
+                        <th>Status</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -362,16 +381,20 @@ function renderAdminPproResult(container, rows = [], range = {}) {
                             <td>${escapeHtml(row.trader)}</td>
                             <td>${escapeHtml(row.team || '—')}</td>
                             <td><strong>${escapeHtml(row.symbol)}</strong></td>
+                            <td>${escapeHtml(row.side || '—')}</td>
+                            <td>${escapeHtml(String(row.qty || 0))}</td>
+                            <td>${escapeHtml(formatAdminMoney(row.entry_price))}</td>
                             <td class="${row.pnl >= 0 ? 'text-profit' : 'text-loss'}">${escapeHtml(formatAdminMoney(row.pnl))}</td>
                             <td>${escapeHtml(formatAdminMoney(row.gross))}</td>
                             <td>${escapeHtml(formatAdminMoney(row.commissions))}</td>
                             <td>${escapeHtml(formatAdminMoney(row.locates))}</td>
-                            <td>${escapeHtml(row.source)}</td>
+                            <td>${escapeHtml(row.status || '—')}</td>
                         </tr>
                     `).join('')}
                 </tbody>
             </table>
         </div>
+        <pre class="admin-service-bot-json">${escapeHtml(JSON.stringify(range.raw || {}, null, 2))}</pre>
     `;
     container.querySelector('[data-admin-ppro-copy]')?.addEventListener('click', async () => {
         const ok = await copyTextToClipboard(json);

@@ -12,6 +12,102 @@ function botSelect() {
     return 'id,name,bot_type,user_id,extra_data,enabled,last_used_at,created_at,updated_at';
 }
 
+function firstValue(source = {}, names = []) {
+    for (const name of names) {
+        if (source?.[name] !== undefined && source?.[name] !== null && source?.[name] !== '') return source[name];
+    }
+    return '';
+}
+
+function collectArrayPayload(payload) {
+    if (Array.isArray(payload)) return payload;
+    if (!payload || typeof payload !== 'object') return [];
+    const candidates = ['data', 'items', 'orders', 'trades', 'positions', 'fills', 'rows', 'results'];
+    for (const key of candidates) {
+        if (Array.isArray(payload[key])) return payload[key];
+        if (payload[key] && typeof payload[key] === 'object') {
+            const nested = collectArrayPayload(payload[key]);
+            if (nested.length) return nested;
+        }
+    }
+    return [];
+}
+
+function normalizeExternalPproItems(payload, limit = 500) {
+    const items = collectArrayPayload(payload).slice(0, limit);
+    return items.map((item) => {
+        const row = item && typeof item === 'object' ? item : {};
+        return {
+            date: firstValue(row, ['date', 'trade_date', 'created_at', 'time', 'timestamp', 'opened_at', 'opened']),
+            trader: firstValue(row, ['trader', 'trader_nick', 'nick', 'nickname', 'username', 'user', 'account', 'login']),
+            symbol: firstValue(row, ['symbol', 'ticker', 'instrument', 'sec', 'asset']),
+            side: firstValue(row, ['side', 'direction', 'type', 'action']),
+            qty: Number(firstValue(row, ['qty', 'quantity', 'shares', 'size', 'filled_size'])) || 0,
+            entry_price: Number(firstValue(row, ['entry_price', 'price', 'avg_price', 'fill_price', 'opened_price'])) || 0,
+            pnl: Number(firstValue(row, ['pnl', 'net', 'net_pnl', 'profit', 'realized_pnl'])) || 0,
+            gross: Number(firstValue(row, ['gross', 'gross_pnl'])) || 0,
+            commissions: Number(firstValue(row, ['commission', 'commissions', 'comm', 'fees', 'fee'])) || 0,
+            locates: Number(firstValue(row, ['locates', 'locate_fee', 'locate_cost', 'borrow_fee'])) || 0,
+            status: firstValue(row, ['status', 'state']),
+            raw: row,
+        };
+    });
+}
+
+function assertSafeExternalUrl(rawUrl) {
+    const url = new URL(String(rawUrl || '').trim());
+    if (url.protocol !== 'https:') throw new Error('External API URL must use https');
+    const host = url.hostname.toLowerCase();
+    if (
+        host === 'localhost'
+        || host.endsWith('.local')
+        || host === '127.0.0.1'
+        || host === '0.0.0.0'
+        || host.startsWith('10.')
+        || host.startsWith('192.168.')
+        || /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+    ) {
+        throw new Error('External API host is not allowed');
+    }
+    return url;
+}
+
+async function fetchExternalPproProbe(body = {}) {
+    const url = assertSafeExternalUrl(body.url || body.base_url || body.baseUrl);
+    const apiKey = String(body.api_key || body.apiKey || body.secret_key || body.secretKey || '').trim();
+    const authHeader = String(body.auth_header || body.authHeader || 'X-Api-Key').trim() || 'X-Api-Key';
+    const limit = Math.max(1, Math.min(1000, Number(body.limit) || 500));
+    ['start', 'end', 'date', 'limit'].forEach((name) => {
+        const value = String(body[name] || '').trim();
+        if (value) url.searchParams.set(name, value);
+    });
+
+    const headers = { Accept: 'application/json' };
+    if (apiKey) headers[authHeader] = apiKey;
+
+    const response = await fetch(url, { headers });
+    const text = await response.text();
+    let payload = null;
+    try { payload = text ? JSON.parse(text) : null; } catch (_) { payload = { raw_text: text }; }
+    if (!response.ok) {
+        return {
+            ok: false,
+            status: response.status,
+            statusText: response.statusText,
+            payload,
+        };
+    }
+    const items = normalizeExternalPproItems(payload, limit);
+    return {
+        ok: true,
+        status: response.status,
+        source_url: `${url.origin}${url.pathname}`,
+        count: items.length,
+        items,
+        payload,
+    };
+}
+
 export default async function handler(req, res) {
     try {
         await requireAdmin(req);
@@ -96,6 +192,11 @@ export default async function handler(req, res) {
         }
 
         const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+        if (body.action === 'external_ppro_probe') {
+            const payload = await fetchExternalPproProbe(body);
+            return sendJson(res, payload.ok ? 200 : 502, payload);
+        }
+
         const payload = cleanBotPayload(body);
         if (!payload.userId && !payload.allTraders) return sendJson(res, 400, { ok: false, error: 'Missing user_id' });
 
