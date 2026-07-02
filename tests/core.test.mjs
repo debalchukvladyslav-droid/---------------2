@@ -460,10 +460,35 @@ test('google sheet rows enrich existing Trades instead of becoming sheet-only tr
 
     assert.equal(parsed.stats.tradeCount, 2);
     assert.equal(matchIndex, 0);
+    assert.equal(merged.opened, '2026-04-01 09:47:00');
     assert.equal(merged.type, 'Шорт');
     assert.equal(merged.sheet.profitRisk, '1,2R');
     assert.equal(merged.sheet.matchedBy, 'date+ticker+pnl');
     assert.equal(isPureGoogleSheetTrade(merged), false);
+});
+
+test('google sheet-only rows do not invent 09:30 entry time', () => {
+    const parsed = parseSheetGridToTrades(
+        [
+            ['20.06.2026', 'AAPL', '10'],
+        ],
+        { date: 'A', symbol: 'B', profit: 'C' },
+        'sheet-no-time',
+        6,
+    );
+
+    const sheetOnly = parsed.outByDay['2026-06-20'][0];
+    assert.equal(sheetOnly.opened, '');
+    assert.equal(sheetOnly.closed, '');
+
+    const grid = collectDatagridRows({
+        sheetRows: {
+            'sheet-no-time': {
+                '2026-06-20': [sheetOnly],
+            },
+        },
+    }, 'sheet-no-time', new Date(2026, 5, 21));
+    assert.equal(grid.rows[0].trade.opened, '');
 });
 
 test('google sheet import keeps alternating compact dates as separate days', () => {

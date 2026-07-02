@@ -255,7 +255,6 @@ export function parseSheetGridToTrades(values, smartColumns, spreadsheetId, star
         if (!activeDate || symRaw === '' || symRaw == null || !isLikelyTicker(symRaw)) continue;
 
         const symbol = String(symRaw).trim().toUpperCase();
-        const timeStr = '09:30:00';
         const profitRaw = profitIdx >= 0 ? getCell(row, profitIdx) : '';
         const hasProfitCell = profitRaw != null && String(profitRaw).trim() !== '';
         const net = hasProfitCell ? parseMoneyCell(profitRaw) : 0;
@@ -309,8 +308,8 @@ export function parseSheetGridToTrades(values, smartColumns, spreadsheetId, star
         const trade = {
             symbol,
             type: typeCell || 'Google Sheet',
-            opened: `${activeDate} ${timeStr}`,
-            closed: `${activeDate} 16:00:00`,
+            opened: '',
+            closed: '',
             held: '',
             entry: Number.isFinite(entryNum) ? entryNum : 0,
             exit: 0,

@@ -53,7 +53,7 @@ function flattenSheetRows(byDay = {}, referenceDate = null) {
                     source: 'sheet',
                     trade: {
                         symbol: row?.symbol || '',
-                        opened: row?.opened || `${dateStr} 09:30:00`,
+                        opened: row?.opened || '',
                         net: Number(row?.net) || 0,
                         gross: Number(row?.gross) || 0,
                         comm: Number(row?.comm) || 0,
