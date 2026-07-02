@@ -3641,3 +3641,86 @@ body.is-offline [data-needs-network="true"] {
     padding: 8px 14px;
     font-size: 0.82rem;
 }
+/* Settings backups */
+.settings-backup-panel {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+}
+
+.settings-backup-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.settings-backup-title {
+    margin: 0 0 4px;
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: var(--text-main);
+}
+
+.settings-backup-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.settings-backup-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-panel) 86%, var(--bg-main));
+}
+
+.settings-backup-meta {
+    min-width: 0;
+}
+
+.settings-backup-name {
+    font-size: 0.86rem;
+    font-weight: 750;
+    color: var(--text-main);
+}
+
+.settings-backup-sub {
+    margin-top: 2px;
+    font-size: 0.74rem;
+    color: var(--text-muted);
+}
+
+.settings-backup-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+.settings-backup-actions button {
+    min-height: 28px;
+    padding: 5px 8px;
+    font-size: 0.74rem;
+}
+
+@media (max-width: 640px) {
+    .settings-backup-head,
+    .settings-backup-item {
+        grid-template-columns: 1fr;
+    }
+
+    .settings-backup-head {
+        flex-direction: column;
+    }
+
+    .settings-backup-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+}

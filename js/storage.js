@@ -6,6 +6,7 @@ import { loadPlaybook } from './playbook.js';
 import { clearStatsCache } from './stats.js';
 import { ensureSupabaseStorageUser, uploadToSupabaseStorage, deleteFromSupabaseStorage, getSupabaseStorageUrl } from './supabase_storage.js';
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
+import { createCompressedBackup } from './backups.js';
 
 function monthKey(dateStr) {
     return dateStr.slice(0, 7);
@@ -412,6 +413,12 @@ async function _doSave(opts = {}) {
 
         const entries = sourceEntries
             .filter(([dateStr, entry]) => /^\d{4}-\d{2}-\d{2}$/.test(dateStr) && entry?.__detailsLoaded !== false);
+
+        if (entries.length) {
+            await createCompressedBackup({ reason: forceFull ? 'full-save' : 'sync' }).catch((error) => {
+                console.warn('[Backups] auto backup before journal sync failed:', error?.message || error);
+            });
+        }
 
         const rows = entries.map(([dateStr, entry]) => {
             const row = dayEntryToJournalRow(userId, dateStr, entry);

@@ -17,6 +17,22 @@
                 <button class="btn-secondary flex-fill" data-action="export-data">Експорт БД</button>
                 <button class="btn-secondary flex-fill" data-action="file-picker" data-target="file-input">Імпорт БД</button>
             </div>
+            <div class="settings-backup-panel">
+                <div class="settings-backup-head">
+                    <div>
+                        <h4 class="settings-backup-title">Автобекапи синхронізації</h4>
+                        <p class="settings-copy-sm">Перед синхронізацією журнал стискається і зберігається локально у цьому браузері.</p>
+                    </div>
+                    <div class="settings-backup-actions">
+                        <button class="btn-secondary btn-auto" data-action="backup-create">Створити зараз</button>
+                        <button class="btn-secondary btn-auto" data-action="file-picker" data-target="backup-input">Імпорт backup</button>
+                    </div>
+                </div>
+                <input type="file" id="backup-input" class="file-input-hidden" accept=".tjbackup.json,.json" data-import="backup">
+                <div id="settings-backup-list" class="settings-backup-list">
+                    <p class="settings-copy-sm">Бекапів ще немає.</p>
+                </div>
+            </div>
         </div>
     </div>
 

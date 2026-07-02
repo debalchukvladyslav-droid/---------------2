@@ -6,7 +6,7 @@ import { state } from './state.js';
 import { getDefaultDayEntry } from './data_utils.js';
 import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm, canAccessMentorReviewQueue, mentorAcceptReviewRequest, ensureAuthUserProfile, signInWithTelegram, maybeFinishTelegramClaim, rejectBlockedProfile, isPasswordRecoveryUrl, showPasswordRecoveryForm } from './auth.js';
 import { loadTeams, openTeamManager, createNewTeam, moveTrader, deleteTeam, renameTeam, deleteTraderProfile, renderTeamSidebar, switchUser } from './teams.js';
-import { saveToLocal, saveJournalData, markJournalDayDirty, initializeApp, resetRuntimeDataForAccountSwitch, exportData, importData, loadMonth, loadTradeDays, resolveViewedUserId, setCurrentViewedUserId,
+import { saveToLocal, saveJournalData, markJournalDayDirty, markAllJournalDirty, initializeApp, resetRuntimeDataForAccountSwitch, exportData, importData, loadMonth, loadTradeDays, resolveViewedUserId, setCurrentViewedUserId,
          loadBackgroundGallery } from './storage.js';
 import { applyTheme, saveThemeSettings, switchTab, toggleMobileSidebar, switchMainTab, scrollMainTabs, toggleMoreTabs, toggleMobileMoreMenu, closeMobileMoreMenu, bindMainTabRoutes, syncMainTabFromRoute, refreshCurrentMainTitle } from './ui.js';
 import { shiftDate, selectDateFromInput, saveEntry, renderView, selectDate, updateAutoFlags, initSelectors, renderSidebarTradesList } from './calendar.js';
@@ -34,6 +34,14 @@ import { initPlaybookChart } from './playbook_chart.js';
 import { renderDashboardNews, refreshDashboardNews, refreshLiveNewsModal, openLiveNewsModal, closeLiveNewsModal } from './news.js';
 import { renderMarketSentiment, refreshMarketSentiment, openMarketSentimentSource } from './market_sentiment.js';
 import { buildTradeTypeAIContext } from './trade_type_analysis.js';
+import {
+    createCompressedBackup,
+    deleteCompressedBackup,
+    downloadCompressedBackup,
+    listCompressedBackups,
+    restoreCompressedBackup,
+    restoreCompressedBackupEntry,
+} from './backups.js';
 import { loadPartials } from './partials.js';
 import { applyPersistedBackground, initBackgroundControls } from './backgrounds.js';
 import { initGlobalAppEvents } from './app_events.js';
@@ -134,6 +142,7 @@ async function manualSyncAll(trigger = null) {
     try {
         const isOwnProfile = state.CURRENT_VIEWED_USER === state.USER_DOC_NAME;
         const steps = [
+            await runManualSyncStep('backup', () => isOwnProfile ? createCompressedBackup({ reason: 'manual-sync', force: true }) : null),
             await runManualSyncStep('save-local', () => saveToLocal(), { optional: false }),
             await runManualSyncStep('load-trades', () => loadTradeDays()),
             await runManualSyncStep('drive-screenshots', () => isOwnProfile ? syncDriveScreenshots(true) : null),
@@ -557,6 +566,123 @@ window.syncDriveScreenshots = syncDriveScreenshots;
 window.updateDriveUI = updateDriveUI;
 window.disconnectGoogleDrive = disconnectGoogleDrive;
 window.loadBackgroundGallery = loadBackgroundGallery;
+
+function escapeBackupHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function formatBackupBytes(bytes) {
+    const n = Number(bytes) || 0;
+    if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+    if (n >= 1024) return `${Math.round(n / 1024)} KB`;
+    return `${n} B`;
+}
+
+function formatBackupDate(value) {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return 'unknown date';
+    return d.toLocaleString('uk-UA', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+}
+
+function renderSettingsBackups() {
+    const host = document.getElementById('settings-backup-list');
+    if (!host) return;
+    const backups = listCompressedBackups();
+    if (!backups.length) {
+        host.innerHTML = '<p class="settings-copy-sm">Бекапів ще немає. Натисніть “Створити зараз” або запустіть синхронізацію.</p>';
+        return;
+    }
+
+    host.innerHTML = backups.map((backup) => `
+        <article class="settings-backup-item">
+            <div class="settings-backup-meta">
+                <div class="settings-backup-name">${escapeBackupHtml(formatBackupDate(backup.createdAt))} · ${escapeBackupHtml(backup.reason || 'backup')}</div>
+                <div class="settings-backup-sub">
+                    ${escapeBackupHtml(backup.days || 0)} днів · ${escapeBackupHtml(formatBackupBytes(backup.storedBytes))} з ${escapeBackupHtml(formatBackupBytes(backup.rawBytes))} · ${escapeBackupHtml(backup.encoding || '')}
+                </div>
+            </div>
+            <div class="settings-backup-actions">
+                <button type="button" class="btn-secondary" data-action="backup-download" data-backup-id="${escapeBackupHtml(backup.id)}">Скачати</button>
+                <button type="button" class="btn-secondary" data-action="backup-restore" data-backup-id="${escapeBackupHtml(backup.id)}">Відновити</button>
+                <button type="button" class="btn-secondary" data-action="backup-delete" data-backup-id="${escapeBackupHtml(backup.id)}">Видалити</button>
+            </div>
+        </article>
+    `).join('');
+}
+
+window.renderSettingsBackups = renderSettingsBackups;
+window.createSettingsBackup = async function() {
+    try {
+        await createCompressedBackup({ reason: 'manual', force: true });
+        renderSettingsBackups();
+        showToast('Бекап створено');
+    } catch (error) {
+        console.error('[Backups] create failed', error);
+        showToast('Не вдалося створити бекап: ' + (error?.message || error));
+    }
+};
+window.downloadSettingsBackup = function(id) {
+    try {
+        downloadCompressedBackup(id);
+    } catch (error) {
+        showToast('Не вдалося скачати бекап: ' + (error?.message || error));
+    }
+};
+window.deleteSettingsBackup = function(id) {
+    if (!window.confirm('Видалити цей локальний бекап?')) return;
+    deleteCompressedBackup(id);
+    renderSettingsBackups();
+    showToast('Бекап видалено');
+};
+window.restoreSettingsBackup = async function(id) {
+    if (!window.confirm('Відновити журнал з цього бекапу? Поточні дані будуть замінені локально і збережені в Supabase.')) return;
+    try {
+        await createCompressedBackup({ reason: 'before-restore', force: true });
+        await restoreCompressedBackup(id);
+        markAllJournalDirty();
+        await saveToLocal();
+        renderSettingsBackups();
+        if (window.renderView) window.renderView();
+        if (window.refreshStatsView) window.refreshStatsView();
+        showToast('Бекап відновлено');
+    } catch (error) {
+        console.error('[Backups] restore failed', error);
+        showToast('Не вдалося відновити бекап: ' + (error?.message || error));
+    }
+};
+
+window.importSettingsBackup = async function(event) {
+    const file = event?.target?.files?.[0];
+    if (!file) return;
+    try {
+        const text = await file.text();
+        const entry = JSON.parse(text);
+        if (!window.confirm('Відновити журнал з backup-файлу? Поточні дані будуть замінені локально і збережені в Supabase.')) return;
+        await createCompressedBackup({ reason: 'before-file-restore', force: true });
+        await restoreCompressedBackupEntry(entry);
+        markAllJournalDirty();
+        await saveToLocal();
+        renderSettingsBackups();
+        if (window.renderView) window.renderView();
+        if (window.refreshStatsView) window.refreshStatsView();
+        showToast('Backup-файл відновлено');
+    } catch (error) {
+        console.error('[Backups] file restore failed', error);
+        showToast('Не вдалося імпортувати backup: ' + (error?.message || error));
+    } finally {
+        if (event?.target) event.target.value = '';
+    }
+};
 
 window.saveDaylossSetting = function() {
     const input = document.getElementById('setting-dayloss-limit');

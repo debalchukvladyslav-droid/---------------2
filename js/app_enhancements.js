@@ -167,6 +167,10 @@ function activateAction(action, trigger, event = null) {
         'trade-type-save': () => window.saveTradeTypes?.(),
         'theme-save': () => window.saveThemeSettings?.(),
         'dayloss-save': () => window.saveDaylossSetting?.(),
+        'backup-create': () => window.createSettingsBackup?.(),
+        'backup-download': () => window.downloadSettingsBackup?.(trigger?.dataset?.backupId || ''),
+        'backup-restore': () => window.restoreSettingsBackup?.(trigger?.dataset?.backupId || ''),
+        'backup-delete': () => window.deleteSettingsBackup?.(trigger?.dataset?.backupId || ''),
         'ocr-save': () => window.saveVisualOCRSettings?.(),
         'stats-dropdown': () => window.toggleStatsDropdown?.(trigger?.dataset?.dropdown || ''),
         'stats-compare-toggle': () => window.toggleStatsCompareMode?.(),
@@ -272,6 +276,7 @@ function handleImportInput(event) {
         'fondexx-summary': window.importFondexxSummaryByDate,
         'fondexx-trades': window.importFondexxTrades,
         ppro: window.importPPROReport,
+        backup: window.importSettingsBackup,
     };
     const fn = handlers[kind];
     if (typeof fn !== 'function') return false;
