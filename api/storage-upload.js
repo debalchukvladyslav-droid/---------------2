@@ -141,7 +141,7 @@ export default async function handler(req, res) {
         if (!bucket || !objectPath) return sendJson(res, 400, { ok: false, error: 'Missing bucket or objectPath' });
 
         const ownerKey = objectPath.split('/')[0] || '';
-        if (OWNER_BUCKETS.has(bucket) && (!isUuid(ownerKey) || ownerKey !== user.id)) {
+        if (req.method !== 'GET' && OWNER_BUCKETS.has(bucket) && (!isUuid(ownerKey) || ownerKey !== user.id)) {
             return sendJson(res, 403, { ok: false, error: 'Storage owner mismatch' });
         }
 

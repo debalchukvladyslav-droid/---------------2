@@ -2,6 +2,9 @@ import { supabase } from './supabase.js';
 import { buildScreenshotPathVariants } from './storage_paths.js';
 
 const DEFAULT_SIGNED_URL_TTL = 60 * 60;
+const AVATAR_SIGNED_URL_TTL = 24 * 60 * 60;
+const SIGNED_URL_CACHE_SAFETY_MS = 60 * 1000;
+const signedUrlCache = new Map();
 
 function normalizePath(input = '') {
     return decodeURIComponent(String(input || '').trim());
@@ -147,12 +150,21 @@ async function createSignedUrlViaServer(candidate, ttl = DEFAULT_SIGNED_URL_TTL)
 
 async function createFirstSignedUrl(candidates, ttl = DEFAULT_SIGNED_URL_TTL) {
     for (const candidate of candidates) {
+        const cacheKey = `${candidate.bucket}/${candidate.objectPath}`;
+        const cached = signedUrlCache.get(cacheKey);
+        if (cached?.url && cached.expiresAt > Date.now() + SIGNED_URL_CACHE_SAFETY_MS) {
+            return { ...candidate, url: cached.url };
+        }
+
         if (candidate.bucket === 'avatars') {
             const serverSignedUrl = await createSignedUrlViaServer(candidate, ttl);
             if (serverSignedUrl) {
+                signedUrlCache.set(cacheKey, {
+                    url: serverSignedUrl,
+                    expiresAt: Date.now() + ttl * 1000,
+                });
                 return { ...candidate, url: serverSignedUrl };
             }
-            continue;
         }
 
         const { data, error } = await supabase.storage
@@ -160,11 +172,19 @@ async function createFirstSignedUrl(candidates, ttl = DEFAULT_SIGNED_URL_TTL) {
             .createSignedUrl(candidate.objectPath, ttl);
 
         if (!error && data?.signedUrl) {
+            signedUrlCache.set(cacheKey, {
+                url: data.signedUrl,
+                expiresAt: Date.now() + ttl * 1000,
+            });
             return { ...candidate, url: data.signedUrl };
         }
 
         const serverSignedUrl = await createSignedUrlViaServer(candidate, ttl);
         if (serverSignedUrl) {
+            signedUrlCache.set(cacheKey, {
+                url: serverSignedUrl,
+                expiresAt: Date.now() + ttl * 1000,
+            });
             return { ...candidate, url: serverSignedUrl };
         }
     }
@@ -187,7 +207,11 @@ export async function getSupabaseStorageUrl(pathOrUrl, ttl = DEFAULT_SIGNED_URL_
     const supabaseUrlCandidate = getSupabaseUrlCandidate(value);
     if (/^https?:\/\//i.test(value) && !value.includes('firebasestorage') && !supabaseUrlCandidate) return value;
 
-    const signed = await createFirstSignedUrl(getPathCandidates(value), ttl);
+    const candidates = getPathCandidates(value);
+    const effectiveTtl = candidates.some((candidate) => candidate.bucket === 'avatars')
+        ? Math.max(ttl, AVATAR_SIGNED_URL_TTL)
+        : ttl;
+    const signed = await createFirstSignedUrl(candidates, effectiveTtl);
     if (signed?.url) return signed.url;
     const normalizedPath = value.replace(/^\/+/, '');
     if (supabaseUrlCandidate
