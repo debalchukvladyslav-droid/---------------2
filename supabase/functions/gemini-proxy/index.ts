@@ -8,7 +8,7 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const DEFAULT_MODEL = 'gemini-2.5-flash';
-const DEFAULT_OPENROUTER_MODEL = 'openai/gpt-5.5';
+const DEFAULT_OPENROUTER_MODEL = 'openrouter/free';
 const ALLOWED_MODELS = new Set([DEFAULT_MODEL, 'gemini-2.5-flash-lite', 'gemini-2.5-pro']);
 const MAX_PAYLOAD_BYTES = 8 * 1024 * 1024;
 const DEFAULT_ALLOWED_ORIGINS = new Set([
