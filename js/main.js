@@ -39,6 +39,7 @@ import {
     deleteCompressedBackup,
     downloadCompressedBackup,
     listCompressedBackups,
+    refreshServerBackups,
     restoreCompressedBackup,
     restoreCompressedBackupEntry,
 } from './backups.js';
@@ -142,7 +143,7 @@ async function manualSyncAll(trigger = null) {
     try {
         const isOwnProfile = state.CURRENT_VIEWED_USER === state.USER_DOC_NAME;
         const steps = [
-            await runManualSyncStep('backup', () => isOwnProfile ? createCompressedBackup({ reason: 'manual-sync', force: true }) : null),
+            await runManualSyncStep('backup', () => isOwnProfile ? createCompressedBackup({ reason: 'manual-sync', force: true, requireServer: true }) : null, { optional: false }),
             await runManualSyncStep('save-local', () => saveToLocal(), { optional: false }),
             await runManualSyncStep('load-trades', () => loadTradeDays()),
             await runManualSyncStep('drive-screenshots', () => isOwnProfile ? syncDriveScreenshots(true) : null),
@@ -612,7 +613,7 @@ function renderSettingsBackups() {
             <div class="settings-backup-meta">
                 <div class="settings-backup-name">${escapeBackupHtml(formatBackupDate(backup.createdAt))} · ${escapeBackupHtml(backup.reason || 'backup')}</div>
                 <div class="settings-backup-sub">
-                    ${escapeBackupHtml(backup.days || 0)} днів · ${escapeBackupHtml(formatBackupBytes(backup.storedBytes))} з ${escapeBackupHtml(formatBackupBytes(backup.rawBytes))} · ${escapeBackupHtml(backup.encoding || '')}
+                    ${escapeBackupHtml(backup.days || 0)} днів · ${escapeBackupHtml(formatBackupBytes(backup.storedBytes))} з ${escapeBackupHtml(formatBackupBytes(backup.rawBytes))} · ${escapeBackupHtml(backup.encoding || '')} · ${backup.serverBackedUp ? 'сервер' : 'локально'}
                 </div>
             </div>
             <div class="settings-backup-actions">
@@ -631,9 +632,17 @@ window.toggleSettingsBackupList = function() {
     localStorage.setItem('tj:settings-backups:hidden', nextHidden ? '1' : '0');
     renderSettingsBackups();
 };
+window.refreshSettingsBackups = async function() {
+    try {
+        await refreshServerBackups();
+        renderSettingsBackups();
+    } catch (error) {
+        console.warn('[Backups] server list failed:', error?.message || error);
+    }
+};
 window.createSettingsBackup = async function() {
     try {
-        await createCompressedBackup({ reason: 'manual', force: true });
+        await createCompressedBackup({ reason: 'manual', force: true, requireServer: true });
         renderSettingsBackups();
         showToast('Бекап створено');
     } catch (error) {
@@ -657,7 +666,7 @@ window.deleteSettingsBackup = function(id) {
 window.restoreSettingsBackup = async function(id) {
     if (!window.confirm('Відновити журнал з цього бекапу? Поточні дані будуть замінені локально і збережені в Supabase.')) return;
     try {
-        await createCompressedBackup({ reason: 'before-restore', force: true });
+        await createCompressedBackup({ reason: 'before-restore', force: true, requireServer: true });
         await restoreCompressedBackup(id);
         markAllJournalDirty();
         await saveToLocal();
@@ -678,7 +687,7 @@ window.importSettingsBackup = async function(event) {
         const text = await file.text();
         const entry = JSON.parse(text);
         if (!window.confirm('Відновити журнал з backup-файлу? Поточні дані будуть замінені локально і збережені в Supabase.')) return;
-        await createCompressedBackup({ reason: 'before-file-restore', force: true });
+        await createCompressedBackup({ reason: 'before-file-restore', force: true, requireServer: true });
         await restoreCompressedBackupEntry(entry);
         markAllJournalDirty();
         await saveToLocal();

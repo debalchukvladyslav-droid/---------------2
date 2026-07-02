@@ -121,6 +121,23 @@ function addLiveRegions() {
 function activateAction(action, trigger, event = null) {
     if (!action) return false;
 
+    const toggleBackupList = () => {
+        if (typeof window.toggleSettingsBackupList === 'function') {
+            window.toggleSettingsBackupList();
+            return true;
+        }
+        const host = document.getElementById('settings-backup-list');
+        const button = document.getElementById('settings-backup-toggle');
+        if (!host) return false;
+        const nextHidden = !host.hidden;
+        host.hidden = nextHidden;
+        try {
+            localStorage.setItem('tj:settings-backups:hidden', nextHidden ? '1' : '0');
+        } catch {}
+        if (button) button.textContent = nextHidden ? 'Показати список' : 'Сховати список';
+        return true;
+    };
+
     const actions = {
         'auth-submit': () => window.handleAuth?.(),
         'auth-telegram': () => window.signInWithTelegram?.(),
@@ -173,7 +190,7 @@ function activateAction(action, trigger, event = null) {
         'backup-download': () => window.downloadSettingsBackup?.(trigger?.dataset?.backupId || ''),
         'backup-restore': () => window.restoreSettingsBackup?.(trigger?.dataset?.backupId || ''),
         'backup-delete': () => window.deleteSettingsBackup?.(trigger?.dataset?.backupId || ''),
-        'backup-list-toggle': () => window.toggleSettingsBackupList?.(),
+        'backup-list-toggle': toggleBackupList,
         'ocr-save': () => window.saveVisualOCRSettings?.(),
         'stats-dropdown': () => window.toggleStatsDropdown?.(trigger?.dataset?.dropdown || ''),
         'stats-compare-toggle': () => window.toggleStatsCompareMode?.(),

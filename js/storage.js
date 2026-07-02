@@ -415,9 +415,7 @@ async function _doSave(opts = {}) {
             .filter(([dateStr, entry]) => /^\d{4}-\d{2}-\d{2}$/.test(dateStr) && entry?.__detailsLoaded !== false);
 
         if (entries.length) {
-            await createCompressedBackup({ reason: forceFull ? 'full-save' : 'sync' }).catch((error) => {
-                console.warn('[Backups] auto backup before journal sync failed:', error?.message || error);
-            });
+            await createCompressedBackup({ reason: forceFull ? 'full-save' : 'sync', requireServer: true });
         }
 
         const rows = entries.map(([dateStr, entry]) => {

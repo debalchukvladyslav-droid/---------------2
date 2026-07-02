@@ -1,10 +1,13 @@
 import { state } from './state.js';
 import { normalizeAppData } from './data_utils.js';
+import { supabase } from './supabase.js';
 
 const BACKUP_VERSION = 1;
 const BACKUP_PREFIX = 'tj:compressed-backups:v1';
 const MAX_BACKUPS = 12;
 const MIN_AUTO_BACKUP_INTERVAL_MS = 2 * 60 * 1000;
+let serverBackupsCache = [];
+let serverBackupsLoadedFor = '';
 
 function backupOwnerKey() {
     return state.myUserId || state.USER_DOC_NAME || 'anonymous';
@@ -65,6 +68,18 @@ function readBackupEntries() {
     }
 }
 
+function mergeBackupEntries(localEntries, remoteEntries) {
+    const seen = new Set();
+    return [...remoteEntries, ...localEntries]
+        .filter((entry) => {
+            if (!entry?.id || seen.has(entry.id)) return false;
+            seen.add(entry.id);
+            return true;
+        })
+        .sort((a, b) => Date.parse(b.createdAt || '') - Date.parse(a.createdAt || ''))
+        .slice(0, MAX_BACKUPS);
+}
+
 function writeBackupEntries(entries) {
     const clean = entries.slice(0, MAX_BACKUPS);
     try {
@@ -101,6 +116,75 @@ function shouldSkipAutoBackup(entries, reason) {
     return Number.isFinite(lastMs) && Date.now() - lastMs < MIN_AUTO_BACKUP_INTERVAL_MS;
 }
 
+async function getServerBackupUserId() {
+    if (state.myUserId) return state.myUserId;
+    const { data, error } = await supabase.auth.getUser();
+    if (error) throw error;
+    return data?.user?.id || '';
+}
+
+function rowToBackupEntry(row) {
+    const entry = row?.backup_data && typeof row.backup_data === 'object' ? row.backup_data : {};
+    return {
+        ...entry,
+        id: entry.id || row.backup_id,
+        reason: entry.reason || row.reason || 'backup',
+        nick: entry.nick || row.nick || backupNick(),
+        createdAt: entry.createdAt || row.backup_created_at || row.created_at,
+        rawBytes: entry.rawBytes ?? row.raw_bytes,
+        storedBytes: entry.storedBytes ?? row.stored_bytes,
+        days: entry.days ?? row.days,
+        encoding: entry.encoding || row.encoding,
+        serverBackedUp: true,
+    };
+}
+
+async function saveBackupToServer(entry) {
+    const userId = await getServerBackupUserId();
+    if (!userId) throw new Error('No authenticated Supabase user for server backup');
+
+    const row = {
+        backup_id: entry.id,
+        user_id: userId,
+        reason: entry.reason || 'backup',
+        nick: entry.nick || backupNick(),
+        backup_created_at: entry.createdAt,
+        backup_data: entry,
+        raw_bytes: entry.rawBytes || 0,
+        stored_bytes: entry.storedBytes || 0,
+        days: entry.days || 0,
+        encoding: entry.encoding || '',
+    };
+    const { error } = await supabase
+        .from('journal_backups')
+        .upsert(row, { onConflict: 'user_id,backup_id' });
+    if (error) throw error;
+
+    serverBackupsCache = mergeBackupEntries([entry], serverBackupsCache).map((item) => (
+        item.id === entry.id ? { ...entry, serverBackedUp: true } : item
+    ));
+    serverBackupsLoadedFor = userId;
+    return { ...entry, serverBackedUp: true };
+}
+
+async function deleteOldServerBackups(userId) {
+    const { data, error } = await supabase
+        .from('journal_backups')
+        .select('backup_id, backup_created_at, created_at')
+        .eq('user_id', userId)
+        .order('backup_created_at', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+        .range(MAX_BACKUPS, 200);
+    if (error || !Array.isArray(data) || !data.length) return;
+    const ids = data.map((row) => row.backup_id).filter(Boolean);
+    if (!ids.length) return;
+    await supabase
+        .from('journal_backups')
+        .delete()
+        .eq('user_id', userId)
+        .in('backup_id', ids);
+}
+
 export async function createCompressedBackup(options = {}) {
     const reason = options.reason || 'manual';
     const existing = readBackupEntries();
@@ -123,15 +207,44 @@ export async function createCompressedBackup(options = {}) {
         days: Object.keys(payload.appData?.journal || {}).filter((key) => /^\d{4}-\d{2}-\d{2}$/.test(key)).length,
     };
     writeBackupEntries([entry, ...existing.filter((item) => item.id !== entry.id)]);
-    return entry;
+    try {
+        const serverEntry = await saveBackupToServer(entry);
+        const userId = await getServerBackupUserId();
+        await deleteOldServerBackups(userId);
+        return serverEntry;
+    } catch (error) {
+        console.warn('[Backups] server backup failed:', error?.message || error);
+        if (options.requireServer) throw error;
+        return entry;
+    }
 }
 
 export function listCompressedBackups() {
-    return readBackupEntries();
+    return mergeBackupEntries(readBackupEntries(), serverBackupsCache);
+}
+
+export async function refreshServerBackups() {
+    const userId = await getServerBackupUserId();
+    if (!userId) return [];
+    const { data, error } = await supabase
+        .from('journal_backups')
+        .select('backup_id, reason, nick, backup_created_at, created_at, backup_data, raw_bytes, stored_bytes, days, encoding')
+        .eq('user_id', userId)
+        .order('backup_created_at', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+        .limit(MAX_BACKUPS);
+    if (error) throw error;
+    serverBackupsLoadedFor = userId;
+    serverBackupsCache = Array.isArray(data) ? data.map(rowToBackupEntry) : [];
+    return serverBackupsCache;
 }
 
 export async function readCompressedBackup(id) {
-    const entry = readBackupEntries().find((item) => item.id === id);
+    let entry = listCompressedBackups().find((item) => item.id === id);
+    if (!entry) {
+        await refreshServerBackups();
+        entry = listCompressedBackups().find((item) => item.id === id);
+    }
     if (!entry) throw new Error('Backup not found');
     return readCompressedBackupEntry(entry);
 }
@@ -159,10 +272,16 @@ export async function restoreCompressedBackupEntry(entry) {
 
 export function deleteCompressedBackup(id) {
     writeBackupEntries(readBackupEntries().filter((item) => item.id !== id));
+    serverBackupsCache = serverBackupsCache.filter((item) => item.id !== id);
+    getServerBackupUserId()
+        .then((userId) => userId
+            ? supabase.from('journal_backups').delete().eq('user_id', userId).eq('backup_id', id)
+            : null)
+        .catch((error) => console.warn('[Backups] server delete failed:', error?.message || error));
 }
 
 export function downloadCompressedBackup(id) {
-    const entry = readBackupEntries().find((item) => item.id === id);
+    const entry = listCompressedBackups().find((item) => item.id === id);
     if (!entry) throw new Error('Backup not found');
     const blob = new Blob([JSON.stringify(entry)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);

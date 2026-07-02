@@ -569,6 +569,7 @@ async function runMainTabWork(tab) {
     if (tab === 'calendar' && window.refreshReviewRequestButtons) tasks.push(Promise.resolve(window.refreshReviewRequestButtons()));
     if (tab === 'settings' && window.renderDaylossSettings) tasks.push(Promise.resolve(window.renderDaylossSettings()));
     if (tab === 'settings' && window.renderSettingsBackups) tasks.push(Promise.resolve(window.renderSettingsBackups()));
+    if (tab === 'settings' && window.refreshSettingsBackups) tasks.push(Promise.resolve(window.refreshSettingsBackups()));
     if (tab === 'playbook' && window.renderPlaybook) tasks.push(Promise.resolve(window.renderPlaybook()));
     if (tab === 'learn' && window.renderLearnCache) tasks.push(Promise.resolve(window.renderLearnCache()));
     if (tab === 'admin' && window.renderAdminPanel) tasks.push(Promise.resolve(window.renderAdminPanel()));
