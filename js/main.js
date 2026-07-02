@@ -28,7 +28,7 @@ import { initSheetTableView, saveSheetMapping } from './sheet_table.js';
 import { renderTradesDatagrid, disposeTradesDatagrid, TRADE_TYPES } from './trades_datagrid.js';
 import { initNotifications } from './notifications.js';
 import { submitReviewRequest, refreshReviewRequestButtons } from './review_requests.js';
-import { showToast } from './utils.js';
+import { parseDecimalInput, showToast } from './utils.js';
 import { connectGoogleDrive, syncDriveScreenshots, updateDriveUI, disconnectGoogleDrive, startDriveAutoSync, tryRestoreDriveToken } from './drive.js';
 import { initPlaybookChart } from './playbook_chart.js';
 import { renderDashboardNews, refreshDashboardNews, refreshLiveNewsModal, openLiveNewsModal, closeLiveNewsModal } from './news.js';
@@ -684,20 +684,123 @@ window.importSettingsBackup = async function(event) {
     }
 };
 
-window.saveDaylossSetting = function() {
-    const input = document.getElementById('setting-dayloss-limit');
-    if (!input) return;
-    const val = parseFloat(input.value);
-    if (isNaN(val)) return;
+function getCalendarMonthKey() {
     const yearEl = document.getElementById('cal-view-year');
     const monthEl = document.getElementById('cal-view-month');
-    if (!yearEl || !monthEl) return;
-    const mk = `${yearEl.value}-${String(parseInt(monthEl.value) + 1).padStart(2, '0')}`;
-    if (!state.appData.settings.monthlyDayloss) state.appData.settings.monthlyDayloss = {};
-    state.appData.settings.monthlyDayloss[mk] = val;
+    if (!yearEl || !monthEl) return new Date().toISOString().slice(0, 7);
+    return `${yearEl.value}-${String(parseInt(monthEl.value, 10) + 1).padStart(2, '0')}`;
+}
+
+function ensureMonthlyDayloss() {
+    if (!state.appData.settings) state.appData.settings = {};
+    if (!state.appData.settings.monthlyDayloss || typeof state.appData.settings.monthlyDayloss !== 'object') {
+        state.appData.settings.monthlyDayloss = {};
+    }
+    return state.appData.settings.monthlyDayloss;
+}
+
+function normalizeDaylossInput(value) {
+    const parsed = parseDecimalInput(value);
+    if (parsed === null || !Number.isFinite(parsed)) return null;
+    return parsed > 0 ? -parsed : parsed;
+}
+
+function formatMonthLabel(monthKey) {
+    const [year, month] = String(monthKey || '').split('-').map(Number);
+    if (!year || !month) return monthKey || '';
+    return new Date(year, month - 1, 1).toLocaleDateString('uk-UA', { month: 'long', year: 'numeric' });
+}
+
+function getJournalMonthKeys() {
+    const fromJournal = Object.keys(state.appData?.journal || {})
+        .filter((key) => /^\d{4}-\d{2}-\d{2}$/.test(key))
+        .map((key) => key.slice(0, 7));
+    const fromSettings = Object.keys(state.appData?.settings?.monthlyDayloss || {})
+        .filter((key) => /^\d{4}-\d{2}$/.test(key));
+    return [...new Set([...fromJournal, ...fromSettings, getCalendarMonthKey()])]
+        .sort((a, b) => b.localeCompare(a));
+}
+
+function syncDaylossInputs(monthKey = null) {
+    const selectedMonth = monthKey || document.getElementById('setting-dayloss-month')?.value || getCalendarMonthKey();
+    const monthInput = document.getElementById('setting-dayloss-month');
+    const daylossInput = document.getElementById('setting-dayloss-limit');
+    const monthly = state.appData?.settings?.monthlyDayloss || {};
+    const value = monthly[selectedMonth] ?? state.appData?.settings?.defaultDayloss ?? -100;
+    if (monthInput) monthInput.value = selectedMonth;
+    if (daylossInput) daylossInput.value = value;
+}
+
+function renderDaylossMonthsList() {
+    const list = document.getElementById('settings-dayloss-months-list');
+    if (!list) return;
+    const months = getJournalMonthKeys();
+    const monthly = state.appData?.settings?.monthlyDayloss || {};
+    if (!months.length) {
+        list.innerHTML = '<p class="settings-copy-sm">Місяців з даними ще немає.</p>';
+        return;
+    }
+    list.innerHTML = months.map((monthKey) => `
+        <label class="settings-dayloss-month-item">
+            <span>${escapeBackupHtml(formatMonthLabel(monthKey))}</span>
+            <input type="number" step="1" value="${escapeBackupHtml(monthly[monthKey] ?? '')}" placeholder="${escapeBackupHtml(state.appData?.settings?.defaultDayloss ?? -100)}" data-dayloss-month="${escapeBackupHtml(monthKey)}">
+        </label>
+    `).join('');
+}
+
+window.renderDaylossSettings = function() {
+    syncDaylossInputs();
+    renderDaylossMonthsList();
+};
+
+window.toggleDaylossMonthsPanel = function() {
+    const panel = document.getElementById('settings-dayloss-months-panel');
+    if (!panel) return;
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) renderDaylossMonthsList();
+};
+
+window.saveDaylossSetting = function() {
+    const input = document.getElementById('setting-dayloss-limit');
+    const monthInput = document.getElementById('setting-dayloss-month');
+    if (!input) return;
+    const val = normalizeDaylossInput(input.value);
+    if (val === null) {
+        showToast('Введіть коректний дейлос');
+        return;
+    }
+    const mk = monthInput?.value || getCalendarMonthKey();
+    ensureMonthlyDayloss()[mk] = val;
     saveToLocal().then(() => {
+        syncDaylossInputs(mk);
+        renderDaylossMonthsList();
         if (window.renderView) window.renderView();
-        import('./utils.js').then(m => m.showToast(`✅ Дейлос для ${mk} збережено: ${val}$`));
+        showToast(`Дейлос для ${mk} збережено: ${val}$`);
+    });
+};
+
+window.saveAllDaylossMonths = function() {
+    const inputs = Array.from(document.querySelectorAll('[data-dayloss-month]'));
+    const monthly = ensureMonthlyDayloss();
+    let saved = 0;
+    for (const input of inputs) {
+        const monthKey = input.dataset.daylossMonth;
+        const raw = String(input.value || '').trim();
+        if (!raw) {
+            delete monthly[monthKey];
+            continue;
+        }
+        const val = normalizeDaylossInput(raw);
+        if (val === null) continue;
+        monthly[monthKey] = val;
+        input.value = val;
+        saved++;
+    }
+    saveToLocal().then(() => {
+        syncDaylossInputs();
+        renderDaylossMonthsList();
+        if (window.renderView) window.renderView();
+        showToast(`Дейлоси збережено: ${saved}`);
     });
 };
 

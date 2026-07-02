@@ -823,6 +823,9 @@ export async function renderView() {
     
     let settingsInput = document.getElementById('setting-dayloss-limit');
     if (settingsInput) settingsInput.value = currentMonthDayloss;
+
+    let settingsMonthInput = document.getElementById('setting-dayloss-month');
+    if (settingsMonthInput) settingsMonthInput.value = `${year}-${String(month + 1).padStart(2, '0')}`;
     
     let settingsLabel = document.getElementById('settings-current-month-label');
     if (settingsLabel) {

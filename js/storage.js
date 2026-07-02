@@ -742,10 +742,12 @@ export async function initializeApp() {
         const themeRadio = document.getElementById('theme-' + (s.theme || 'dark'));
         const fontRadio = document.getElementById('font-' + (s.font || 'inter'));
         const daylossInput = document.getElementById('setting-dayloss-limit');
+        const daylossMonthInput = document.getElementById('setting-dayloss-month');
 
         if (themeRadio) themeRadio.checked = true;
         if (fontRadio) fontRadio.checked = true;
         if (daylossInput) daylossInput.value = s.defaultDayloss || -100;
+        if (daylossMonthInput) daylossMonthInput.value = state.selectedDateStr?.slice(0, 7) || new Date().toISOString().slice(0, 7);
 
         if (s.theme === 'custom' && s.customTheme) {
             ['bg-main', 'bg-panel', 'text-main', 'accent', 'profit', 'loss'].forEach((f, i) => {
@@ -761,6 +763,7 @@ export async function initializeApp() {
         if (window.renderErrorsList) window.renderErrorsList();
         if (window.renderSettingsChecklist) window.renderSettingsChecklist();
         if (window.renderSettingsSliders) window.renderSettingsSliders();
+        if (window.renderDaylossSettings) window.renderDaylossSettings();
         if (window.renderMyTradeTypes) window.renderMyTradeTypes();
         if (window.loadImages) window.loadImages();
         if (window.renderView) await window.renderView();

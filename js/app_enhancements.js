@@ -167,6 +167,8 @@ function activateAction(action, trigger, event = null) {
         'trade-type-save': () => window.saveTradeTypes?.(),
         'theme-save': () => window.saveThemeSettings?.(),
         'dayloss-save': () => window.saveDaylossSetting?.(),
+        'dayloss-months-toggle': () => window.toggleDaylossMonthsPanel?.(),
+        'dayloss-months-save': () => window.saveAllDaylossMonths?.(),
         'backup-create': () => window.createSettingsBackup?.(),
         'backup-download': () => window.downloadSettingsBackup?.(trigger?.dataset?.backupId || ''),
         'backup-restore': () => window.restoreSettingsBackup?.(trigger?.dataset?.backupId || ''),
@@ -379,6 +381,10 @@ function bindDeclarativeActions() {
         }
         if (target?.matches?.('[data-action="trade-date-symbol-select"]')) {
             window.populateSymbolSelect?.(target.value);
+            return;
+        }
+        if (target?.matches?.('#setting-dayloss-month')) {
+            window.renderDaylossSettings?.();
         }
     });
 
