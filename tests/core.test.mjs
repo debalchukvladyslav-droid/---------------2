@@ -43,11 +43,15 @@ test('parser utils find ECN fee columns across supported header names', () => {
     assert.equal(ecnFeeColumnIndex({ Symbol: 0 }), undefined);
 });
 
-test('sheet date parser treats slash Excel dates as month/day/year', () => {
-    assert.equal(parseSheetDateCellToIso('4/1/2026'), '2026-04-01');
-    assert.equal(parseSheetDateCellToIso('4/2/2026'), '2026-04-02');
-    assert.equal(parseSheetDateCellToIso('4/6/2026'), '2026-04-06');
+test('sheet date parser treats text Excel dates as day/month/year', () => {
+    assert.equal(parseSheetDateCellToIso('4/1/2026'), '2026-01-04');
+    assert.equal(parseSheetDateCellToIso('4/2/2026'), '2026-02-04');
+    assert.equal(parseSheetDateCellToIso('4/6/2026'), '2026-06-04');
     assert.equal(parseSheetDateCellToIso('1.4.2026'), '2026-04-01');
+    assert.equal(parseSheetDateCellToIso('15,05,26'), '2026-05-15');
+    assert.equal(parseSheetDateCellToIso('15.05.26'), '2026-05-15');
+    assert.equal(parseSheetDateCellToIso('15/05/26'), '2026-05-15');
+    assert.equal(parseSheetDateCellToIso('15-05-2026'), '2026-05-15');
 });
 
 test('PPRO report dates are parsed as month/day/year', () => {
@@ -384,7 +388,7 @@ test('exception criteria KФ rows group matched Sheet exceptions and skip incomp
 test('google sheet rows enrich existing Trades instead of becoming sheet-only trades', () => {
     const parsed = parseSheetGridToTrades(
         [
-            ['4/1/2026', 'AAPL', 'Шорт', '120,50', '1,2R', 'PV ok'],
+            ['1/4/2026', 'AAPL', 'Шорт', '120,50', '1,2R', 'PV ok'],
             ['', 'TSLA', 'Шорт', '-25', '-0,3R', 'late'],
         ],
         {

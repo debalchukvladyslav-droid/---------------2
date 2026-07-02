@@ -36,10 +36,17 @@ function calendarYmdValid(year, month, day) {
     return dt.getUTCFullYear() === year && dt.getUTCMonth() === month - 1 && dt.getUTCDate() === day;
 }
 
+function normalizeTwoOrFourDigitYear(raw) {
+    const text = String(raw || '').trim();
+    if (/^\d{2}$/.test(text)) return 2000 + Number(text);
+    if (/^\d{4}$/.test(text)) return Number(text);
+    return NaN;
+}
+
 /**
  * Date from Sheets/Excel cells.
- * Slash dates are treated as US Excel M/D/YYYY first: 4/1/2026 -> 2026-04-01.
- * Dot dates stay European D.M.YYYY: 1.4.2026 -> 2026-04-01.
+ * Text dates are read as D/M/Y for common trader sheets:
+ * 15,05,26 / 15.05.26 / 15/05/26 / 15-05-2026 -> 2026-05-15.
  */
 export function parseSheetDateCellToIso(value) {
     if (value == null || value === '') return null;
@@ -59,24 +66,16 @@ export function parseSheetDateCellToIso(value) {
     }
 
     const datePart = s.split(/\s+/)[0];
-    const m = /^(\d{1,2})([./])(\d{1,2})[./](\d{4})$/.exec(datePart);
+    const m = /^(\d{1,2})[.,/-](\d{1,2})[.,/-](\d{2}|\d{4})$/.exec(datePart);
     if (!m) return null;
 
-    const a = Number(m[1]);
-    const separator = m[2];
-    const b = Number(m[3]);
-    const year = Number(m[4]);
+    const day = Number(m[1]);
+    const month = Number(m[2]);
+    const year = normalizeTwoOrFourDigitYear(m[3]);
     if (!Number.isFinite(year) || year < 1990 || year > 2100) return null;
 
-    const preferred = separator === '/'
-        ? (calendarYmdValid(year, a, b) ? toIsoFromParts(year, a, b) : null)
-        : (calendarYmdValid(year, b, a) ? toIsoFromParts(year, b, a) : null);
-    const fallback = separator === '/'
-        ? (calendarYmdValid(year, b, a) ? toIsoFromParts(year, b, a) : null)
-        : (calendarYmdValid(year, a, b) ? toIsoFromParts(year, a, b) : null);
-
-    if (preferred && !isFutureIsoDateString(preferred)) return preferred;
-    if (fallback && !isFutureIsoDateString(fallback)) return fallback;
+    const iso = calendarYmdValid(year, month, day) ? toIsoFromParts(year, month, day) : null;
+    if (iso && !isFutureIsoDateString(iso)) return iso;
     return null;
 }
 

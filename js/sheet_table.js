@@ -442,6 +442,18 @@ function renderMappingStatus() {
         button.append(label, value);
         fragment.appendChild(button);
 
+        if (anchorLabel) {
+            const clearButton = document.createElement('button');
+            clearButton.type = 'button';
+            clearButton.className = 'sheet-mapping-clear-btn';
+            clearButton.dataset.action = 'sheet-clear-mapping';
+            clearButton.dataset.sheetMapField = field;
+            clearButton.title = `Очистити ${smartFieldLabel(field)}`;
+            clearButton.setAttribute('aria-label', `Очистити мапінг ${smartFieldLabel(field)}`);
+            clearButton.textContent = '×';
+            fragment.appendChild(clearButton);
+        }
+
         if (field === 'exceptions') {
             const addButton = document.createElement('button');
             addButton.type = 'button';
@@ -654,6 +666,18 @@ function setSmartAnchor(field, ref) {
     else delete _sheetSmartAnchors[field];
     updateGridPickerMeta();
     refreshSheetGridSelectionClasses();
+}
+
+export function clearSheetMappingField(field = '') {
+    const key = String(field || '').trim();
+    if (!SMART_KEYS.includes(key)) return;
+    setSmartRowValue(key, '', false);
+    delete _sheetSmartAnchors[key];
+    if (_sheetAddNextColumnForField === key) _sheetAddNextColumnForField = '';
+    setActiveGridField(key);
+    updateGridPickerMeta();
+    refreshSheetGridSelectionClasses();
+    persistSheetMappingDraft();
 }
 
 function setChipManualMapping(field) {
@@ -1777,6 +1801,7 @@ window.duplicateMainSheetMappingToCumulative = duplicateMainSheetMappingToCumula
 window.handleSheetTabChange = handleSheetTabChange;
 window.changeSheetGridZoom = changeSheetGridZoom;
 window.armSheetMultiColumnAdd = armSheetMultiColumnAdd;
+window.clearSheetMappingField = clearSheetMappingField;
 window.renderMappingDropdowns = renderMappingDropdowns;
 window.populateSheetMappingFromHeaders = populateSheetMappingFromHeaders;
 window.stopSheetAutoSync = stopSheetAutoSync;

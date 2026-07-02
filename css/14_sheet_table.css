@@ -594,6 +594,27 @@ body[data-theme="light"] .btn-google-signin {
     font-weight: 800;
 }
 
+.sheet-mapping-clear-btn {
+    align-self: center;
+    width: 24px;
+    height: 24px;
+    margin-left: -4px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-panel);
+    color: var(--text-muted);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: border-color 0.14s ease, color 0.14s ease, background 0.14s ease;
+}
+
+.sheet-mapping-clear-btn:hover {
+    border-color: color-mix(in srgb, var(--loss) 45%, var(--border));
+    background: color-mix(in srgb, var(--loss) 8%, var(--bg-panel));
+    color: var(--loss);
+}
+
 .sheet-grid-picker__preview {
     --sheet-grid-zoom: 1;
     overflow-x: auto;
