@@ -143,7 +143,6 @@ function getScopedProfiles() {
     return Object.values(state._teamProfiles || {})
         .filter((p) => {
             if (!p?.id || !p?.nick || p.mentor_enabled || p.role === 'mentor') return false;
-            if (state.myRole === 'admin') return true;
             return (p.team || DEFAULT_TEAM) === myTeam;
         })
         .sort((a, b) => {

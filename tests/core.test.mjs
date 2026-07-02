@@ -21,7 +21,12 @@ globalThis.document = {
     },
 };
 
-const { canAccessMentorReviewQueueState, isMentorViewingOtherJournalState } = await import('../js/access_control.js');
+const {
+    canAccessMentorReviewQueueState,
+    canWriteMentorCommentState,
+    isMentorViewingOtherJournalState,
+    isViewingOtherProfileState,
+} = await import('../js/access_control.js');
 const { buildAutoTradeTypesData, isNotTakenTrade, normalizeAppData, normalizeDayEntry } = await import('../js/data_utils.js');
 const { ecnFeeColumnIndex, parsePPROReportDate, parsePPROTotalReportRows, parseSheetDateCellToIso } = await import('../js/parser_utils.js');
 const { sanitizeHTML, safeExternalUrl, sanitizeRichHTML } = await import('../js/sanitize.js');
@@ -147,11 +152,34 @@ test('Fondexx Summary by date parser keeps blank no-activity rows as monthly adj
     assert.equal(parsed.monthlyAdjustments['2026-04'].pnl !== 39478.69, true);
 });
 
-test('access control allows mentor/admin review access and detects view-only mentor context', () => {
+test('access control opens viewing but keeps review and mentor comment role-scoped', () => {
     assert.equal(canAccessMentorReviewQueueState({ myRole: 'trader', isMentorMode: false }), false);
     assert.equal(canAccessMentorReviewQueueState({ myRole: 'mentor', isMentorMode: false }), true);
-    assert.equal(canAccessMentorReviewQueueState({ myRole: 'admin', isMentorMode: false }), true);
+    assert.equal(canAccessMentorReviewQueueState({ myRole: 'admin', isMentorMode: false }), false);
     assert.equal(canAccessMentorReviewQueueState({ myRole: 'trader', isMentorMode: true }), true);
+
+    assert.equal(isViewingOtherProfileState({
+        userDocName: 'trader_a_stats',
+        currentViewedUser: 'trader_b_stats',
+    }), true);
+    assert.equal(canWriteMentorCommentState({
+        myRole: 'trader',
+        isMentorMode: false,
+        userDocName: 'trader_a_stats',
+        currentViewedUser: 'trader_b_stats',
+    }), false);
+    assert.equal(canWriteMentorCommentState({
+        myRole: 'admin',
+        isMentorMode: false,
+        userDocName: 'admin_stats',
+        currentViewedUser: 'trader_b_stats',
+    }), false);
+    assert.equal(canWriteMentorCommentState({
+        myRole: 'mentor',
+        isMentorMode: true,
+        userDocName: 'mentor_stats',
+        currentViewedUser: 'trader_stats',
+    }), true);
 
     assert.equal(isMentorViewingOtherJournalState({
         myRole: 'mentor',

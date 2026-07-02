@@ -86,7 +86,7 @@ export function getReviewRequestSlot(dateStr, kind, screenKey = null) {
 }
 
 export async function submitReviewRequest(kind, screenKey = null) {
-    if (isMentorViewingOtherJournal()) {
+    if (state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) {
         showToast('Недоступно в режимі перегляду чужого журналу');
         return;
     }
@@ -232,7 +232,7 @@ export async function fetchMentorReviewNotificationHits() {
     if (!state.myUserId || !state.USER_DOC_NAME) return hits;
     const myNick = state.USER_DOC_NAME.replace('_stats', '');
     const me = state._teamProfiles?.[myNick];
-    if (!me?.mentor_enabled && state.myRole !== 'mentor' && state.myRole !== 'admin') return hits;
+    if (!me?.mentor_enabled && state.myRole !== 'mentor') return hits;
 
     const profiles = Object.values(state._teamProfiles || {});
     const team = me?.team || 'Без куща';

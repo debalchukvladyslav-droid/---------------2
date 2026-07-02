@@ -485,8 +485,8 @@ export async function selectDate(dateStr) {
 export function saveEntry() {
     if (!state.selectedDateStr) return; // Ніяких алертів, просто тихий вихід, якщо день не обрано
     if (state.dayDetailsLoading) return;
-    if (isMentorViewingOtherJournal()) {
-        showToast('Ментор не може зберігати день трейдера — лише коментар наставника або приватна нотатка.');
+    if (state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) {
+        showToast('This profile is read-only.');
         return;
     }
     

@@ -2,7 +2,12 @@
 import { supabase, TELEGRAM_AUTH_FN, SUPABASE_ANON_KEY, TELEGRAM_LOGIN_RETURN_BASE } from './supabase.js';
 import { state } from './state.js';
 import { normalizeDayEntry } from './data_utils.js';
-import { canAccessMentorReviewQueueState, isMentorViewingOtherJournalState } from './access_control.js';
+import {
+    canAccessMentorReviewQueueState,
+    canWriteMentorCommentState,
+    isMentorViewingOtherJournalState,
+    isViewingOtherProfileState,
+} from './access_control.js';
 
 const PROFILE_SUFFIX = '_stats';
 export const ACCOUNT_BLOCKED_MESSAGE = 'Акаунт заблоковано. Зверніться до адміна.';
@@ -812,12 +817,27 @@ export function isMentorViewingOtherJournal() {
     });
 }
 
+export function isViewingOtherProfile() {
+    return isViewingOtherProfileState({
+        userDocName: state.USER_DOC_NAME,
+        currentViewedUser: state.CURRENT_VIEWED_USER,
+    });
+}
+
+export function canWriteMentorComment() {
+    return canWriteMentorCommentState({
+        myRole: state.myRole,
+        isMentorMode: state.IS_MENTOR_MODE,
+        userDocName: state.USER_DOC_NAME,
+        currentViewedUser: state.CURRENT_VIEWED_USER,
+    });
+}
+
 export function applyAccessRights() {
     const isSelf = state.CURRENT_VIEWED_USER === state.USER_DOC_NAME;
-    const isLookingAtSomeoneElse = !isSelf;
-    const mentorViewOnly = isMentorViewingOtherJournal();
-    const privilegedAccess = state.IS_MENTOR_MODE || state.myRole === 'admin';
-    const hasAccess = isSelf || privilegedAccess;
+    const isLookingAtSomeoneElse = isViewingOtherProfile();
+    const mentorCommentAccess = canWriteMentorComment();
+    const hasAccess = isSelf;
 
     let statusBanner = document.getElementById('status-banner');
     if (!statusBanner) {
@@ -827,13 +847,13 @@ export function applyAccessRights() {
         document.body.appendChild(statusBanner);
     }
 
-    if (isLookingAtSomeoneElse && !privilegedAccess) {
+    if (isLookingAtSomeoneElse && !mentorCommentAccess) {
         statusBanner.innerHTML = '👁️ Тільки перегляд';
         statusBanner.style.background = 'var(--bg-panel)';
         statusBanner.style.color = 'var(--text-muted)';
         statusBanner.style.border = '1px solid var(--border)';
         statusBanner.style.display = 'block';
-    } else if (isLookingAtSomeoneElse && privilegedAccess) {
+    } else if (isLookingAtSomeoneElse && mentorCommentAccess) {
         statusBanner.innerHTML = '👑 Наставник';
         statusBanner.style.background = 'var(--gold)';
         statusBanner.style.color = 'black';
@@ -845,32 +865,31 @@ export function applyAccessRights() {
 
     document.querySelectorAll('input, textarea, select').forEach((el) => {
         const safeIds = [
-            'trade-date', 'stats-filter-year', 'stats-filter-month', 'stats-filter-user',
+            'stats-filter-year', 'stats-filter-month', 'stats-filter-user',
             'sidebar-pf-fname', 'sidebar-pf-lname', 'sidebar-pf-avatar-url',
             'mr-days', 'mr-period', 'mr-loss-threshold', 'cal-view-month', 'cal-view-year',
             'mr-f-need-mentor', 'mr-f-big-loss', 'mr-f-errors', 'mr-f-no-screens', 'mr-f-no-session', 'mr-f-notes-request', 'mr-f-ai-hint', 'mr-f-incomplete', 'mr-f-no-note', 'mr-f-loss-streak',
             'rr-btn-screens-general', 'rr-btn-calendar-profit',
         ];
         if (safeIds.includes(el.id) || el.id.includes('theme-') || el.id.includes('font-')) return;
-        if (mentorViewOnly && el.closest('#form-sidebar')) {
-            const mentorEditable = ['trade-date', 'mentor-notes', 'private-user-note'];
-            el.disabled = !mentorEditable.includes(el.id);
+        if (isLookingAtSomeoneElse && el.closest('#form-sidebar')) {
+            el.disabled = !(mentorCommentAccess && el.id === 'mentor-notes');
             return;
         }
         el.disabled = !hasAccess;
     });
 
     const saveDayBtn = document.getElementById('btn-save-day');
-    if (saveDayBtn) saveDayBtn.style.display = !hasAccess || mentorViewOnly ? 'none' : 'flex';
+    if (saveDayBtn) saveDayBtn.style.display = hasAccess ? 'flex' : 'none';
 
     const mentorSaveBtn = document.getElementById('btn-save-mentor');
-    if (mentorSaveBtn) mentorSaveBtn.style.display = mentorViewOnly ? 'inline-flex' : 'none';
+    if (mentorSaveBtn) mentorSaveBtn.style.display = mentorCommentAccess ? 'inline-flex' : 'none';
 
     document.querySelectorAll('.delete, .btn-secondary, .btn-ai').forEach((btn) => {
         if (btn.classList.contains('rr-exempt-access')) return;
         const t = btn.innerText || '';
         if (t.includes('Вийти') || t.includes('Додати тип')) return;
-        if (mentorViewOnly && btn.closest('#form-sidebar')) {
+        if (isLookingAtSomeoneElse && btn.closest('#form-sidebar')) {
             btn.style.display = 'none';
             return;
         }
@@ -878,7 +897,7 @@ export function applyAccessRights() {
     });
 
     let mentorPanel = document.getElementById('mentor-trade-types-panel');
-    if (mentorPanel) mentorPanel.style.display = (privilegedAccess && isLookingAtSomeoneElse) ? 'block' : 'none';
+    if (mentorPanel) mentorPanel.style.display = 'none';
     const btnAdminTeam = document.getElementById('btn-admin-team-manager');
     const showTeamAdmin = state.myRole === 'admin' || state.IS_MENTOR_MODE;
     if (btnAdminTeam) btnAdminTeam.style.display = showTeamAdmin ? 'inline-flex' : 'none';
@@ -1011,11 +1030,16 @@ export function deactivateMentorMode() {
 }
 
 export async function mentorAcceptReviewRequest(dateStr, kind, screenPath) {
-    if (!isMentorViewingOtherJournal()) {
+    if (!canWriteMentorComment()) {
         showToast('Прийняття запиту доступне лише ментору в журналі трейдера');
         return;
     }
     if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
+    const targetProfile = await getProfileByNick(getNickFromDocName(state.CURRENT_VIEWED_USER), 'id');
+    if (!targetProfile?.id) {
+        showToast('Target trader profile not found');
+        return;
+    }
     const raw = state.appData.journal[dateStr] || {};
     const day = normalizeDayEntry(raw);
     if (!day.review_requests || typeof day.review_requests !== 'object') day.review_requests = {};
@@ -1043,41 +1067,57 @@ export async function mentorAcceptReviewRequest(dateStr, kind, screenPath) {
     }
     state.appData.journal[dateStr] = day;
     try {
-        await saveJournalDay(state.CURRENT_VIEWED_USER, dateStr, day);
+        const { data, error } = await supabase.rpc('accept_mentor_review_request', {
+            target_user_id: targetProfile.id,
+            target_trade_date: dateStr,
+            request_kind: kind,
+            screen_path: screenPath || null,
+        });
+        if (error) throw error;
+        if (data === false) throw new Error('Review request was not accepted');
         showToast('Запит прийнято');
         if (window.refreshReviewRequestButtons) window.refreshReviewRequestButtons();
         if (window.renderAssignedScreens) void window.renderAssignedScreens();
         if (window.renderView) window.renderView();
     } catch (e) {
+        state.appData.journal[dateStr] = raw;
         console.error(e);
         showToast('Помилка збереження: ' + (e?.message || e));
     }
 }
 
 export async function saveMentorComment() {
-    if (!(state.IS_MENTOR_MODE || state.myRole === 'admin') || state.CURRENT_VIEWED_USER === state.USER_DOC_NAME) return;
+    if (!canWriteMentorComment()) return;
 
     let comment = document.getElementById('mentor-notes').value.trim();
+    const targetProfile = await getProfileByNick(getNickFromDocName(state.CURRENT_VIEWED_USER), 'id');
+    if (!targetProfile?.id) {
+        showToast('Target trader profile not found');
+        return;
+    }
     if (!state.appData.journal[state.selectedDateStr]) {
         state.appData.journal[state.selectedDateStr] = window.getDefaultDayEntry ? window.getDefaultDayEntry() : {};
     }
 
+    const previousComment = state.appData.journal[state.selectedDateStr].mentor_comment || '';
     state.appData.journal[state.selectedDateStr].mentor_comment = comment;
 
     let btn = document.getElementById('btn-save-mentor');
     btn.innerText = '⏳ Збереження...';
 
     try {
-        await saveJournalDay(
-            state.CURRENT_VIEWED_USER,
-            state.selectedDateStr,
-            state.appData.journal[state.selectedDateStr]
-        );
+        const { error } = await supabase.rpc('save_mentor_comment', {
+            target_user_id: targetProfile.id,
+            target_trade_date: state.selectedDateStr,
+            comment_text: comment,
+        });
+        if (error) throw error;
         btn.innerText = '✓ Збережено!';
         btn.style.background = 'var(--profit)';
         setTimeout(() => { btn.innerText = '✓ Зберегти коментар'; btn.style.background = '#eab308'; }, 2000);
         if (window.renderView) window.renderView();
     } catch (e) {
+        state.appData.journal[state.selectedDateStr].mentor_comment = previousComment;
         if (isMissingRelationError(e)) {
             showToast('Таблиця journal_days ще не створена в Supabase');
         } else {
@@ -1113,29 +1153,6 @@ export async function loadPrivateNote() {
     if (!container || !textarea) return;
     if (!state.USER_DOC_NAME) return;
 
-    const viewingOther = state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME;
-    const plainViewOnly = viewingOther && !state.IS_MENTOR_MODE;
-
-    async function fillFromMyPrivateNotes() {
-        const targetUser = state.CURRENT_VIEWED_USER.replace('_stats', '');
-        const date = state.selectedDateStr;
-        try {
-            const profile = await getProfileByNick(getNickFromDocName(state.USER_DOC_NAME), 'private_notes');
-            textarea.value = profile?.private_notes?.[targetUser]?.[date] || '';
-        } catch (e) {
-            console.error('loadPrivateNote error:', e);
-        }
-    }
-
-    if (plainViewOnly) {
-        container.style.display = 'block';
-        await fillFromMyPrivateNotes();
-        return;
-    }
-    if (isMentorViewingOtherJournal()) {
-        container.style.display = 'block';
-        await fillFromMyPrivateNotes();
-        return;
-    }
+    if (isViewingOtherProfile()) textarea.value = '';
     container.style.display = 'none';
 }
