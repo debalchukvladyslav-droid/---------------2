@@ -43,6 +43,94 @@ function normalizeTwoOrFourDigitYear(raw) {
     return NaN;
 }
 
+function dateOrdinal(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+    if (!m) return NaN;
+    return Math.floor(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 86400000);
+}
+
+function candidateFromParts(year, month, day, mode) {
+    const iso = calendarYmdValid(year, month, day) ? toIsoFromParts(year, month, day) : null;
+    if (!iso || isFutureIsoDateString(iso)) return null;
+    return { iso, mode };
+}
+
+function parseSheetDateCellCandidates(value, options = {}) {
+    if (value == null || value === '') return [];
+    const s = String(value).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        return isValidIsoDateString(s) && !isFutureIsoDateString(s) ? [{ iso: s, mode: 'fixed' }] : [];
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        const iso = parseSheetDateCellToIso(value);
+        return iso ? [{ iso, mode: 'fixed' }] : [];
+    }
+
+    const datePart = s.split(/\s+/)[0];
+    const m = /^(\d{1,2})[.,/-](\d{1,2})(?:[.,/-](\d{2}|\d{4}))?$/.exec(datePart);
+    if (!m) return [];
+
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    const fallbackYear = Number(options.year) || Number(todayIsoDate().slice(0, 4));
+    const year = m[3] ? normalizeTwoOrFourDigitYear(m[3]) : fallbackYear;
+    if (!Number.isFinite(year) || year < 1990 || year > 2100) return [];
+
+    const candidates = [
+        candidateFromParts(year, b, a, 'DMY'),
+        candidateFromParts(year, a, b, 'MDY'),
+    ].filter(Boolean);
+    const seen = new Set();
+    return candidates.filter((candidate) => {
+        const key = candidate.iso;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
+function scoreDateSequence(isos) {
+    const ordinals = isos.map(dateOrdinal).filter(Number.isFinite);
+    if (!ordinals.length) return -Infinity;
+    let score = ordinals.length * 10;
+    for (let i = 1; i < ordinals.length; i++) {
+        const diff = ordinals[i] - ordinals[i - 1];
+        if (diff === 0) score += 2;
+        else if (diff === 1) score += 12;
+        else if (diff > 1 && diff <= 7) score += 6;
+        else if (diff > 7 && diff <= 31) score += 1;
+        else if (diff < 0 && diff >= -7) score -= 2;
+        else score -= 6;
+    }
+    return score;
+}
+
+/**
+ * Sequence-aware Sheet/Excel date parser.
+ * Uses neighboring rows to decide whether ambiguous 2-part/3-part dates are
+ * D/M/Y or M/D/Y. This lets 20.06/21.06 and 06.20/06.21 both become separate
+ * June trading days when the column pattern makes that clear.
+ */
+export function parseSheetDateCellsToIsoSequence(values, options = {}) {
+    const candidateRows = values.map((value) => parseSheetDateCellCandidates(value, options));
+    const modes = ['DMY', 'MDY'];
+    const modeScores = new Map();
+    for (const mode of modes) {
+        const isos = candidateRows
+            .map((candidates) => candidates.find((candidate) => candidate.mode === mode || candidate.mode === 'fixed')?.iso || null)
+            .filter(Boolean);
+        modeScores.set(mode, scoreDateSequence(isos));
+    }
+    const preferredMode = (modeScores.get('MDY') > modeScores.get('DMY')) ? 'MDY' : 'DMY';
+
+    return candidateRows.map((candidates) => {
+        if (!candidates.length) return null;
+        return candidates.find((candidate) => candidate.mode === 'fixed')?.iso
+            || candidates.find((candidate) => candidate.mode === preferredMode)?.iso
+            || candidates[0].iso;
+    });
+}
+
 /**
  * Date from Sheets/Excel cells.
  * Text dates are read as D/M/Y for common trader sheets:

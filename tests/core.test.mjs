@@ -28,7 +28,7 @@ const {
     isViewingOtherProfileState,
 } = await import('../js/access_control.js');
 const { buildAutoTradeTypesData, isNotTakenTrade, normalizeAppData, normalizeDayEntry } = await import('../js/data_utils.js');
-const { ecnFeeColumnIndex, parsePPROReportDate, parsePPROTotalReportRows, parseSheetDateCellToIso } = await import('../js/parser_utils.js');
+const { ecnFeeColumnIndex, parsePPROReportDate, parsePPROTotalReportRows, parseSheetDateCellToIso, parseSheetDateCellsToIsoSequence } = await import('../js/parser_utils.js');
 const { sanitizeHTML, safeExternalUrl, sanitizeRichHTML } = await import('../js/sanitize.js');
 const { mergeGoogleSheetTradesIntoJournal } = await import('../js/sheet_journal_merge.js');
 const { parseFondexxSummaryByDateRows } = await import('../js/fondexx_summary_parser.js');
@@ -57,6 +57,25 @@ test('sheet date parser treats text Excel dates as day/month/year', () => {
     assert.equal(parseSheetDateCellToIso('15.05.26'), '2026-05-15');
     assert.equal(parseSheetDateCellToIso('15/05/26'), '2026-05-15');
     assert.equal(parseSheetDateCellToIso('15-05-2026'), '2026-05-15');
+});
+
+test('sheet date sequence parser infers day/month or month/day from row order', () => {
+    assert.deepEqual(
+        parseSheetDateCellsToIsoSequence(['20.06', '21.06', '24.06'], { year: 2026 }),
+        ['2026-06-20', '2026-06-21', '2026-06-24']
+    );
+    assert.deepEqual(
+        parseSheetDateCellsToIsoSequence(['06.20', '06.21', '06.24'], { year: 2026 }),
+        ['2026-06-20', '2026-06-21', '2026-06-24']
+    );
+    assert.deepEqual(
+        parseSheetDateCellsToIsoSequence(['20,06,26', '21,06,26', '24.06.2026']),
+        ['2026-06-20', '2026-06-21', '2026-06-24']
+    );
+    assert.deepEqual(
+        parseSheetDateCellsToIsoSequence(['4/1/2026', '4/2/2026', '4/6/2026']),
+        ['2026-04-01', '2026-04-02', '2026-04-06']
+    );
 });
 
 test('PPRO report dates are parsed as month/day/year', () => {
@@ -445,6 +464,28 @@ test('google sheet rows enrich existing Trades instead of becoming sheet-only tr
     assert.equal(merged.sheet.profitRisk, '1,2R');
     assert.equal(merged.sheet.matchedBy, 'date+ticker+pnl');
     assert.equal(isPureGoogleSheetTrade(merged), false);
+});
+
+test('google sheet import keeps alternating compact dates as separate days', () => {
+    const parsed = parseSheetGridToTrades(
+        [
+            ['06.20', 'AAPL', '10'],
+            ['06.21', 'TSLA', '20'],
+            ['06.24', 'NVDA', '-5'],
+        ],
+        {
+            date: 'A',
+            symbol: 'B',
+            profit: 'C',
+        },
+        'sheet-compact-dates',
+        10,
+    );
+
+    assert.deepEqual(Object.keys(parsed.outByDay).sort(), ['2026-06-20', '2026-06-21', '2026-06-24']);
+    assert.equal(parsed.dateAnchors['2026-06-20'], 10);
+    assert.equal(parsed.dateAnchors['2026-06-21'], 11);
+    assert.equal(parsed.dateAnchors['2026-06-24'], 12);
 });
 
 test('shared Google Sheet merge stores all rows but only updates existing Trades', () => {

@@ -1,4 +1,4 @@
-import { parseSheetDateCellToIso } from './parser_utils.js';
+import { parseSheetDateCellsToIsoSequence } from './parser_utils.js';
 
 export const SHEET_DATA_FIRST_ROW = 6;
 
@@ -238,11 +238,14 @@ export function parseSheetGridToTrades(values, smartColumns, spreadsheetId, star
         return { outByDay, dateAnchors, stats: { tradeCount: 0, dayCount: 0 } };
     }
 
+    const parsedDatesByRow = parseSheetDateCellsToIsoSequence(
+        values.map((row) => getCell(row || [], dateIdx))
+    );
+
     for (let i = 0; i < values.length; i++) {
         const row = values[i] || [];
         const excelRow = startRow + i;
-        const dateRaw = getCell(row, dateIdx);
-        const parsedDate = parseSheetDateCellToIso(dateRaw);
+        const parsedDate = parsedDatesByRow[i];
         if (parsedDate) {
             activeDate = parsedDate;
             if (dateAnchors[parsedDate] == null) dateAnchors[parsedDate] = excelRow;
