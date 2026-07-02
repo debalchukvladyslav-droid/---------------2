@@ -116,6 +116,20 @@ function shouldSkipAutoBackup(entries, reason) {
     return Number.isFinite(lastMs) && Date.now() - lastMs < MIN_AUTO_BACKUP_INTERVAL_MS;
 }
 
+function isMissingServerBackupTable(error) {
+    const message = String(error?.message || error?.details || error?.hint || '');
+    return error?.code === '42P01'
+        || error?.code === 'PGRST205'
+        || /journal_backups/i.test(message) && /not found|does not exist|schema cache/i.test(message);
+}
+
+function normalizeServerBackupError(error) {
+    if (isMissingServerBackupTable(error)) {
+        return new Error('Server backups table is not installed yet. Run database/security/10_server_journal_backups.sql in Supabase.');
+    }
+    return error;
+}
+
 async function getServerBackupUserId() {
     if (state.myUserId) return state.myUserId;
     const { data, error } = await supabase.auth.getUser();
@@ -213,8 +227,9 @@ export async function createCompressedBackup(options = {}) {
         await deleteOldServerBackups(userId);
         return serverEntry;
     } catch (error) {
-        console.warn('[Backups] server backup failed:', error?.message || error);
-        if (options.requireServer) throw error;
+        const normalizedError = normalizeServerBackupError(error);
+        console.warn('[Backups] server backup failed:', normalizedError?.message || normalizedError);
+        if (options.requireServer) throw normalizedError;
         return entry;
     }
 }
@@ -233,7 +248,7 @@ export async function refreshServerBackups() {
         .order('backup_created_at', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false })
         .limit(MAX_BACKUPS);
-    if (error) throw error;
+    if (error) throw normalizeServerBackupError(error);
     serverBackupsLoadedFor = userId;
     serverBackupsCache = Array.isArray(data) ? data.map(rowToBackupEntry) : [];
     return serverBackupsCache;
