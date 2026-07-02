@@ -173,6 +173,7 @@ function activateAction(action, trigger, event = null) {
         'backup-download': () => window.downloadSettingsBackup?.(trigger?.dataset?.backupId || ''),
         'backup-restore': () => window.restoreSettingsBackup?.(trigger?.dataset?.backupId || ''),
         'backup-delete': () => window.deleteSettingsBackup?.(trigger?.dataset?.backupId || ''),
+        'backup-list-toggle': () => window.toggleSettingsBackupList?.(),
         'ocr-save': () => window.saveVisualOCRSettings?.(),
         'stats-dropdown': () => window.toggleStatsDropdown?.(trigger?.dataset?.dropdown || ''),
         'stats-compare-toggle': () => window.toggleStatsCompareMode?.(),

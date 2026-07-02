@@ -597,6 +597,10 @@ function formatBackupDate(value) {
 function renderSettingsBackups() {
     const host = document.getElementById('settings-backup-list');
     if (!host) return;
+    const toggle = document.getElementById('settings-backup-toggle');
+    const isHidden = localStorage.getItem('tj:settings-backups:hidden') === '1';
+    host.hidden = isHidden;
+    if (toggle) toggle.textContent = isHidden ? 'Показати список' : 'Сховати список';
     const backups = listCompressedBackups();
     if (!backups.length) {
         host.innerHTML = '<p class="settings-copy-sm">Бекапів ще немає. Натисніть “Створити зараз” або запустіть синхронізацію.</p>';
@@ -621,6 +625,12 @@ function renderSettingsBackups() {
 }
 
 window.renderSettingsBackups = renderSettingsBackups;
+window.toggleSettingsBackupList = function() {
+    const host = document.getElementById('settings-backup-list');
+    const nextHidden = !host?.hidden;
+    localStorage.setItem('tj:settings-backups:hidden', nextHidden ? '1' : '0');
+    renderSettingsBackups();
+};
 window.createSettingsBackup = async function() {
     try {
         await createCompressedBackup({ reason: 'manual', force: true });

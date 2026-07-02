@@ -12,7 +12,9 @@ async function doLoadPartials(root = document) {
         const url = host.getAttribute(PARTIAL_ATTR);
         if (!url) return;
 
-        const response = await fetch(url, { cache: 'no-cache' });
+        const bust = `v=${encodeURIComponent(window.APP_VERSION || 'dev')}&t=${Date.now()}`;
+        const partialUrl = `${url}${url.includes('?') ? '&' : '?'}${bust}`;
+        const response = await fetch(partialUrl, { cache: 'reload' });
         if (!response.ok) throw new Error(`Partial ${url}: HTTP ${response.status}`);
 
         const html = await response.text();

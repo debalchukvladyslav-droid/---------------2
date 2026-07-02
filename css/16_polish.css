@@ -2533,16 +2533,55 @@ body {
 
 .settings-dayloss-row {
     display: grid;
-    grid-template-columns: minmax(160px, 220px) minmax(160px, 220px);
+    grid-template-columns: minmax(180px, 240px) minmax(180px, 240px);
     gap: 12px;
     align-items: end;
+}
+
+.settings-dayloss-row .form-group {
+    margin-bottom: 0;
+}
+
+.settings-dayloss-row input {
+    min-height: 40px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-panel) 72%, var(--bg-main));
+    border-color: color-mix(in srgb, var(--border) 82%, var(--accent));
+    font-weight: 700;
+}
+
+.settings-dayloss-row input[type="month"] {
+    position: relative;
+    color-scheme: dark;
+    cursor: pointer;
+    letter-spacing: 0;
+}
+
+body[data-theme="light"] .settings-dayloss-row input[type="month"] {
+    color-scheme: light;
+}
+
+.settings-dayloss-row input[type="month"]::-webkit-calendar-picker-indicator {
+    width: 18px;
+    height: 18px;
+    padding: 4px;
+    border-radius: 6px;
+    background-color: color-mix(in srgb, var(--accent) 18%, transparent);
+    cursor: pointer;
+    opacity: 0.9;
+}
+
+.settings-dayloss-row input[type="month"]:hover,
+.settings-dayloss-row input[type="number"]:hover {
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+    background: color-mix(in srgb, var(--bg-panel) 82%, var(--bg-main));
 }
 
 .settings-dayloss-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    margin-top: 2px;
+    margin-top: 12px;
 }
 
 .settings-dayloss-months-panel {
@@ -3771,6 +3810,11 @@ body.is-offline [data-needs-network="true"] {
     min-height: 28px;
     padding: 5px 8px;
     font-size: 0.74rem;
+}
+
+#settings-backup-toggle {
+    border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+    color: var(--text-main);
 }
 
 @media (max-width: 640px) {
