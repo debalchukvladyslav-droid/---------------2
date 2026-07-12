@@ -4,7 +4,7 @@
 import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { getDefaultDayEntry } from './data_utils.js';
-import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm, canAccessMentorReviewQueue, mentorAcceptReviewRequest, ensureAuthUserProfile, signInWithTelegram, maybeFinishTelegramClaim, rejectBlockedProfile, isPasswordRecoveryUrl, showPasswordRecoveryForm } from './auth.js';
+import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm, canAccessMentorReviewQueue, mentorAcceptReviewRequest, ensureAuthUserProfile, rejectBlockedProfile, isPasswordRecoveryUrl, showPasswordRecoveryForm } from './auth.js';
 import { loadTeams, openTeamManager, createNewTeam, moveTrader, deleteTeam, renameTeam, deleteTraderProfile, renderTeamSidebar, switchUser } from './teams.js';
 import { saveToLocal, saveJournalData, markJournalDayDirty, markAllJournalDirty, initializeApp, resetRuntimeDataForAccountSwitch, exportData, importData, loadMonth, loadTradeDays, resolveViewedUserId, setCurrentViewedUserId,
          loadBackgroundGallery } from './storage.js';
@@ -200,7 +200,6 @@ window.refreshMarketSentiment = refreshMarketSentiment;
 window.openMarketSentimentSource = openMarketSentimentSource;
 window.toggleAuthMode = toggleAuthMode;
 window.handleAuth = handleAuth;
-window.signInWithTelegram = signInWithTelegram;
 window.logout = logout;
 window.activateMentorMode = activateMentorMode;
 window.openTeamManager = openTeamManager;
@@ -1060,7 +1059,6 @@ showAuthSpinner();
 
 (async () => {
     try {
-        await maybeFinishTelegramClaim();
         const isRecovery = isPasswordRecoveryUrl();
         const { data: { session }, error } = await supabase.auth.getSession();
         if (error) throw error;

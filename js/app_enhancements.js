@@ -140,7 +140,6 @@ function activateAction(action, trigger, event = null) {
 
     const actions = {
         'auth-submit': () => window.handleAuth?.(),
-        'auth-telegram': () => window.signInWithTelegram?.(),
         'auth-toggle-mode': () => window.toggleAuthMode?.(),
         'reset-send': () => window.sendResetCode?.(),
         'reset-verify': () => window.verifyResetCode?.(),
