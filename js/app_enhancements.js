@@ -211,6 +211,7 @@ function activateAction(action, trigger, event = null) {
         'sheet-toggle-mapping': () => window.toggleMappingMode?.(trigger),
         'sheet-import-mode': () => window.switchSheetImportMode?.(trigger?.dataset?.sheetMode || 'main'),
         'sheet-duplicate-mapping': () => window.duplicateMainSheetMappingToCumulative?.(),
+        'sheet-auto-map': () => window.autoMapSheetColumns?.(),
         'sheet-add-mapping-column': () => window.armSheetMultiColumnAdd?.(trigger?.dataset?.sheetMapField || 'exceptions'),
         'sheet-clear-mapping': () => window.clearSheetMappingField?.(trigger?.dataset?.sheetMapField || ''),
         'sheet-grid-zoom': () => window.changeSheetGridZoom?.(Number(trigger?.dataset?.zoomDelta || 0)),

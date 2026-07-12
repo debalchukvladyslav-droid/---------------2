@@ -93,6 +93,30 @@ const QUICK_MAPPING_KEYS = [
 const REQUIRED_MAPPING_KEYS = ['date', 'symbol'];
 const MULTI_MAPPING_KEYS = new Set(['tradeType', 'exceptions']);
 
+const AUTO_MAP_SCAN_ROWS = 20;
+const AUTO_MAP_HEADER_WINDOW = 3;
+const AUTO_MAP_ALIASES = {
+    date: ['дата', 'date', 'trade date', 'дата угоди', 'час', 'time', 'opened', 'open time'],
+    symbol: ['ticker', 'тікер', 'тикер', 'символ', 'symbol', 'instrument', 'asset'],
+    tradeType: ['тип сдєлки', 'тип сделки', 'тип угоди', 'класифікація', 'trade type', 'type', 'side', 'direction', 'buy/sell'],
+    profit: ['профіт факт', 'профіт', 'прибуток', 'profit', 'p&l', 'pnl', 'net pnl', 'realized pnl', 'profit/loss'],
+    profitRisk: ['профіт в ризиках', 'profit risk', 'risk profit', 'r', 'r-multiple', 'profit r', 'прибуток в ризиках'],
+    pv: ['pv=pv', 'pv', 'пв'],
+    altPv: ['alt pv', 'alternative pv', 'альт pv', 'альтернативний pv'],
+    exceptions: ['у чому виключення', 'виключення', 'исключения', 'exception', 'exceptions', 'mistake', 'error'],
+    traderComment: ['коментар трейдера', 'комментарий трейдера', 'trader comment', 'comment', 'notes', 'нотатки'],
+    exit: ['вихід', 'выход', 'exit', 'close', 'close reason'],
+    teamLeadComment: ['коментар teamlead', 'teamlead', 'team lead comment', 'tl comment'],
+    paperType: ['тип паперу', 'тип бумаги', 'paper type', 'stock type'],
+    period: ['період', 'период', 'period', 'session'],
+    growthPct: ['виросла %', 'рост %', 'growth %', 'move %', 'percent move'],
+    riskUsd: ['ризик $', 'ризик ($)', 'risk $', 'risk usd', 'risk'],
+    consolidateCents: ['консол. (цц)', 'консол', 'consolidation', 'consolidate cents', 'цц'],
+    entryPrice: ['ціна входу', 'цена входа', 'entry price', 'entry', 'open price'],
+    qtyShares: ['шер брав', 'shares', 'qty', 'quantity', 'size', 'кількість', 'кол-во'],
+    qtySharesCalc: ['розрах. шер', 'розрахунок шер', 'calc shares', 'calculated shares', 'planned shares'],
+};
+
 /** Перший рядок даних угод у Google Sheets (1-based). */
 const SHEET_DATA_FIRST_ROW = 6;
 const SHEET_PREVIEW_RENDER_MAX_ROWS = 60;
@@ -892,6 +916,142 @@ export function setSheetPreviewData(rows) {
         : [];
     _sheetPreviewHoverRef = null;
     buildSheetGridPreview();
+}
+
+function normalizeAutoMapText(value) {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[єё]/g, 'е')
+        .replace(/ї/g, 'і')
+        .replace(/[\s\n\r\t_/\\-]+/g, ' ')
+        .replace(/[^\p{L}\p{N}&.%+ ]+/gu, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function autoMapHeaderMatches(header, aliases = []) {
+    const normalized = normalizeAutoMapText(header);
+    if (!normalized) return false;
+    return aliases
+        .map(normalizeAutoMapText)
+        .filter(Boolean)
+        .some((alias) => alias === normalized || normalized.includes(alias) || alias.includes(normalized));
+}
+
+function autoMapRowScore(row = []) {
+    return (row || []).reduce((score, cell) => {
+        const hit = Object.values(AUTO_MAP_ALIASES).some((aliases) => autoMapHeaderMatches(cell, aliases));
+        return score + (hit ? 1 : 0);
+    }, 0);
+}
+
+function autoMapCellValue(grid, row, col) {
+    const direct = grid[row]?.[col];
+    if (direct != null && String(direct).trim()) return String(direct).trim();
+
+    for (let r = row - 1; r >= Math.max(0, row - AUTO_MAP_HEADER_WINDOW); r -= 1) {
+        const value = grid[r]?.[col];
+        if (value != null && String(value).trim()) return String(value).trim();
+    }
+    for (let c = col - 1; c >= 0; c -= 1) {
+        const value = grid[row]?.[c];
+        if (value != null && String(value).trim()) return String(value).trim();
+    }
+    return '';
+}
+
+function flattenAutoMapHeaders(grid, topRow, bottomRow, maxCols) {
+    const headers = [];
+    for (let col = 0; col < maxCols; col += 1) {
+        const parts = [];
+        for (let row = topRow; row <= bottomRow; row += 1) {
+            const value = autoMapCellValue(grid, row, col);
+            if (!value) continue;
+            const prev = parts[parts.length - 1];
+            if (!prev || normalizeAutoMapText(prev) !== normalizeAutoMapText(value)) parts.push(value);
+        }
+        headers.push(parts.join(' ').trim());
+    }
+    return headers;
+}
+
+function mapAutoHeaders(headers = []) {
+    const mapped = {};
+    Object.entries(AUTO_MAP_ALIASES).forEach(([field, aliases]) => {
+        let best = null;
+        headers.forEach((header, index) => {
+            if (!autoMapHeaderMatches(header, aliases)) return;
+            const candidate = { index, length: normalizeAutoMapText(header).length };
+            if (!best || candidate.length < best.length) best = candidate;
+        });
+        if (best) mapped[field] = best.index;
+    });
+    return mapped;
+}
+
+function detectAutoMapHeader(grid = []) {
+    const rows = grid.slice(0, AUTO_MAP_SCAN_ROWS);
+    const maxCols = Math.max(...rows.map((row) => Array.isArray(row) ? row.length : 0), 0);
+    if (!rows.length || !maxCols) return null;
+
+    const anchorRows = rows
+        .map((row, index) => ({ index, score: autoMapRowScore(row) }))
+        .filter((row) => row.score > 0);
+    if (!anchorRows.length) return null;
+
+    let best = null;
+    anchorRows.forEach(({ index: anchor }) => {
+        for (let top = Math.max(0, anchor - 2); top <= anchor; top += 1) {
+            for (let bottom = anchor; bottom <= Math.min(rows.length - 1, anchor + 2); bottom += 1) {
+                const headers = flattenAutoMapHeaders(rows, top, bottom, maxCols);
+                const mapped = mapAutoHeaders(headers);
+                const mandatoryHits = ['date', 'symbol'].filter((field) => mapped[field] != null).length;
+                const totalHits = Object.keys(mapped).length;
+                const score = mandatoryHits * 100 + totalHits * 10 - (bottom - top);
+                if (!best || score > best.score) best = { top, bottom, headers, mapped, score };
+            }
+        }
+    });
+    return best;
+}
+
+export function autoMapSheetColumns() {
+    if (!_sheetPreviewRows.length) {
+        showToast('Спочатку підключіть таблицю, щоб з’явилось прев’ю.');
+        return;
+    }
+
+    const detected = detectAutoMapHeader(_sheetPreviewRows);
+    if (!detected || !detected.mapped || !Object.keys(detected.mapped).length) {
+        showToast('Не вдалося знайти шапку. Перевірте перші 20 рядків або додайте alias.');
+        return;
+    }
+
+    populateSheetMappingFromHeaders(detected.headers);
+    _dynamicHeaders = detected.headers.filter((header) => String(header || '').trim());
+    const startRow = detected.bottom + 2;
+    let applied = 0;
+
+    Object.entries(detected.mapped).forEach(([field, index]) => {
+        if (!SMART_KEYS.includes(field)) return;
+        const letter = indexToColumnLetter(index);
+        setSmartRowValue(field, letter, false);
+        _sheetSmartAnchors[field] = `${letter}${startRow}`;
+        applied += 1;
+    });
+
+    updateGridPickerMeta();
+    syncActiveGridFieldUi();
+    refreshSheetGridSelectionClasses();
+    persistSheetMappingDraft();
+
+    const missing = REQUIRED_MAPPING_KEYS.filter((field) => detected.mapped[field] == null);
+    showToast(missing.length
+        ? `Автомапінг частковий: ${applied} полів. Не знайдено: ${missing.map(smartFieldLabel).join(', ')}.`
+        : `Автомапінг готовий: ${applied} полів, старт з рядка ${startRow}.`);
 }
 
 /**
@@ -1800,6 +1960,7 @@ window.switchSheetImportMode = switchSheetImportMode;
 window.duplicateMainSheetMappingToCumulative = duplicateMainSheetMappingToCumulative;
 window.handleSheetTabChange = handleSheetTabChange;
 window.changeSheetGridZoom = changeSheetGridZoom;
+window.autoMapSheetColumns = autoMapSheetColumns;
 window.armSheetMultiColumnAdd = armSheetMultiColumnAdd;
 window.clearSheetMappingField = clearSheetMappingField;
 window.renderMappingDropdowns = renderMappingDropdowns;
