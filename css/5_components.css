@@ -477,4 +477,8 @@
 .theme-preview-light   { background: linear-gradient(135deg, #e8eaef 50%, #f4f5f8 50%); border: 1px solid #d8dce6; }
 .theme-preview-matrix  { background: linear-gradient(135deg, #000d00 50%, #001a00 50%); }
 .theme-preview-dracula { background: linear-gradient(135deg, #191a21 50%, #21222c 50%); }
+.theme-preview-ocean   { background: linear-gradient(135deg, #061827 50%, #0b2538 50%); box-shadow: inset 0 -3px #22d3ee; }
+.theme-preview-nord    { background: linear-gradient(135deg, #242933 50%, #2e3440 50%); box-shadow: inset 0 -3px #88c0d0; }
+.theme-preview-sunset  { background: linear-gradient(135deg, #1b1014 50%, #2a171c 50%); box-shadow: inset 0 -3px #fb923c; }
+.theme-preview-rose    { background: linear-gradient(135deg, #180d18 50%, #29152a 50%); box-shadow: inset 0 -3px #f472b6; }
 .theme-preview-custom  { background: linear-gradient(135deg, var(--bg-main) 50%, var(--bg-panel) 50%); display: flex; align-items: center; justify-content: center; font-size: 1.1rem; }

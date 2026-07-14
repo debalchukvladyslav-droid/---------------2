@@ -116,6 +116,38 @@ const THEME_PRESETS = {
         aiBg:              'rgba(189,147,249,0.06)',
         aiBorder:          'rgba(189,147,249,0.25)',
     },
+    ocean: {
+        background: '#061827', card: '#0b2538', primary: '#22d3ee', primaryForeground: '#04131f',
+        muted: '#12344a', mutedForeground: '#7da7bd', border: '#17435d', ring: '#22d3ee',
+        sidebarBg: '#04131f', sidebarAccentBg: '#0b2538', bgColor: '#061827', panelColor: '#0b2538',
+        primaryColor: '#22d3ee', textPrimary: '#e0f7ff', textSecondary: '#7da7bd', bgHover: '#12344a',
+        accentHover: '#67e8f9', profit: '#2dd4bf', loss: '#fb7185', gold: '#fbbf24',
+        aiBg: 'rgba(34,211,238,0.06)', aiBorder: 'rgba(34,211,238,0.28)',
+    },
+    nord: {
+        background: '#242933', card: '#2e3440', primary: '#88c0d0', primaryForeground: '#242933',
+        muted: '#3b4252', mutedForeground: '#9aa7b8', border: '#434c5e', ring: '#88c0d0',
+        sidebarBg: '#20242d', sidebarAccentBg: '#2e3440', bgColor: '#242933', panelColor: '#2e3440',
+        primaryColor: '#88c0d0', textPrimary: '#eceff4', textSecondary: '#9aa7b8', bgHover: '#3b4252',
+        accentHover: '#8fbcbb', profit: '#a3be8c', loss: '#bf616a', gold: '#ebcb8b',
+        aiBg: 'rgba(136,192,208,0.06)', aiBorder: 'rgba(136,192,208,0.25)',
+    },
+    sunset: {
+        background: '#1b1014', card: '#2a171c', primary: '#fb923c', primaryForeground: '#1b1014',
+        muted: '#3a2025', mutedForeground: '#b98b86', border: '#543038', ring: '#fb923c',
+        sidebarBg: '#160c10', sidebarAccentBg: '#2a171c', bgColor: '#1b1014', panelColor: '#2a171c',
+        primaryColor: '#fb923c', textPrimary: '#fff1e8', textSecondary: '#b98b86', bgHover: '#3a2025',
+        accentHover: '#fdba74', profit: '#4ade80', loss: '#f43f5e', gold: '#facc15',
+        aiBg: 'rgba(251,146,60,0.06)', aiBorder: 'rgba(251,146,60,0.27)',
+    },
+    rose: {
+        background: '#180d18', card: '#29152a', primary: '#f472b6', primaryForeground: '#180d18',
+        muted: '#3a203b', mutedForeground: '#b892b7', border: '#513052', ring: '#f472b6',
+        sidebarBg: '#130a14', sidebarAccentBg: '#29152a', bgColor: '#180d18', panelColor: '#29152a',
+        primaryColor: '#f472b6', textPrimary: '#fce7f3', textSecondary: '#b892b7', bgHover: '#3a203b',
+        accentHover: '#f9a8d4', profit: '#34d399', loss: '#fb7185', gold: '#fbbf24',
+        aiBg: 'rgba(244,114,182,0.06)', aiBorder: 'rgba(244,114,182,0.27)',
+    },
 };
 
 // --- РОЗУМНИЙ АЛГОРИТМ КОНТРАСТУ ТА РОЗДІЛЕННЯ ---
