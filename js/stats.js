@@ -17,6 +17,7 @@ const _statsCache = new Map();
 const _CACHE_TTL = 24 * 60 * 60 * 1000;
 const _profileIdCache = new Map();
 const STATS_BREAKEVEN_DAYLOSS_RATIO = 0.04;
+let _comparisonRpcAvailable = true;
 
 function _cacheGet(key) {
     const entry = _statsCache.get(key);
@@ -147,10 +148,18 @@ async function fetchComparisonJournalForNick(nick = '') {
     if (!cleanNick || !isStatsNickAllowed(cleanNick)) return {};
     const userId = await resolveStatsUserIdForNick(cleanNick);
     if (!userId) return {};
-    const { data, error } = await supabase.rpc('get_stats_comparison_journal', {
-        target_user_id: userId,
-    });
-    if (error) throw error;
+    if (!_comparisonRpcAvailable) {
+        return fetchStatsJournalForNick(cleanNick);
+    }
+    const { data, error } = await supabase.rpc('get_stats_comparison_journal', { target_user_id: userId });
+    if (error) {
+        if (error.code === 'PGRST202') {
+            _comparisonRpcAvailable = false;
+            console.warn('[Stats comparison] RPC is not installed. Apply database/security/11_stats_comparison_access.sql in Supabase.');
+            return fetchStatsJournalForNick(cleanNick);
+        }
+        throw error;
+    }
     const journal = {};
     (data || []).forEach((row) => {
         if (/^\d{4}-\d{2}-\d{2}$/.test(String(row.trade_date || ''))) {
