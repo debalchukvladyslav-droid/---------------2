@@ -18,7 +18,7 @@ let interfaceObserver = null;
 const steps = [
     { id: 'overview', tab: 'dash', target: ['.app-sidebar', '.mobile-bottom-nav'], title: 'Головна навігація', text: 'Звідси відкриваються календар, скріншоти, імпорт, аналітика, AI Ментор, навчання та налаштування.' },
     { id: 'team', tab: 'dash', target: '#team-toggle-btn', title: 'Команда', text: 'Тут можна відкрити свою команду та переходити до доступних профілів трейдерів.', action: '#team-toggle-btn', actionLabel: 'Відкрийте «Команда»', optional: true },
-    { id: 'notifications', tab: 'dash', target: '#notif-bell-btn', title: 'Сповіщення', text: 'Увімкніть сповіщення на ПК, щоб бачити нові події та запити на рев’ю.', prepare: 'notifications', action: '#notif-enable-push', actionLabel: 'Натисніть «Сповіщення на ПК»', optional: true },
+    { id: 'notifications', tab: 'dash', target: '#notif-bell-btn', title: 'Сповіщення', text: 'Увімкніть сповіщення на ПК, щоб бачити нові події та запити на рев’ю.', prepare: 'notifications', placement: 'right', action: '#notif-enable-push', actionLabel: 'Натисніть «Сповіщення на ПК»', optional: true },
     { id: 'sync', tab: 'dash', target: '#manual-sync-btn', title: 'Загальна синхронізація', text: 'Ця кнопка синхронізує журнал, Google Sheets, скріншоти та інші дані. Та сама синхронізація автоматично виконується кожні 5 хвилин.' },
     { id: 'calendar', tab: 'calendar', target: '.day-cell', title: 'Календар торгових днів', text: 'Один клік вибирає день. Подвійний клік або кнопка «+» відкриває форму додавання та редагування дня.' },
     { id: 'drive-open', tab: 'screens', target: '.screens-settings-btn', title: '1. Відкрийте налаштування скріншотів', text: 'Натисніть шестерню. Наступні пункти проведуть через підключення Drive.', group: 'drive', action: '.screens-settings-btn', actionLabel: 'Відкрийте налаштування', optional: true },
@@ -254,6 +254,18 @@ function positionTour() {
         card.style.width = `${cardWidth}px`;
         const estimatedHeight = Math.min(card.offsetHeight || 320, innerHeight - 24);
         if (innerWidth <= 720) return;
+
+        const currentStep = steps[stepIndex];
+        if (currentStep?.placement === 'right') {
+            const openPanel = document.querySelector('#notif-dropdown.open');
+            const openPanelRect = openPanel?.getBoundingClientRect();
+            const preferredTop = openPanelRect?.height
+                ? openPanelRect.bottom + 12
+                : rect.bottom + 18;
+            card.style.left = `${innerWidth - cardWidth - 12}px`;
+            card.style.top = `${Math.max(84, Math.min(innerHeight - estimatedHeight - 12, preferredTop))}px`;
+            return;
+        }
 
         const gap = 16;
         const clampLeft = (value) => Math.max(12, Math.min(innerWidth - cardWidth - 12, value));
