@@ -22,6 +22,7 @@ import {
     SHEET_MODE_CUMULATIVE,
     SHEET_MODE_MAIN,
 } from './sheet_import_modes.js';
+import { detectExactSheetAutoMapping } from './sheet_auto_mapping.js';
 
 const LS_KEY = 'tj_google_sheet_import_v1';
 const LS_KEY_CUMULATIVE = 'tj_google_sheet_cumulative_import_v1';
@@ -1024,15 +1025,17 @@ export function autoMapSheetColumns() {
         return;
     }
 
-    const detected = detectAutoMapHeader(_sheetPreviewRows);
-    if (!detected || !detected.mapped || !Object.keys(detected.mapped).length) {
-        showToast('Не вдалося знайти шапку. Перевірте перші 20 рядків або додайте alias.');
+    const detected = detectExactSheetAutoMapping(_sheetPreviewRows, { headerScanRows: 20 });
+    if (!detected.ok) {
+        showToast(detected.reason === 'ticker-header-not-found'
+            ? 'Автомапінг: не знайдено точний заголовок Ticker у перших 20 рядках.'
+            : 'Автомапінг: під заголовком Ticker не знайдено рядок, що починається з латинської літери.');
         return;
     }
 
     populateSheetMappingFromHeaders(detected.headers);
     _dynamicHeaders = detected.headers.filter((header) => String(header || '').trim());
-    const startRow = detected.bottom + 2;
+    const startRow = detected.startRow;
     let applied = 0;
 
     Object.entries(detected.mapped).forEach(([field, index]) => {

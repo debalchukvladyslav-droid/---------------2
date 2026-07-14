@@ -38,6 +38,7 @@ const { summarizeJournalPnl } = await import('../js/stats_math.js');
 const { getEffectiveDayPnl, isPureGoogleSheetTrade, visibleTradeRows } = await import('../js/trade_filters.js');
 const { normalizeBrokerTradeType } = await import('../js/trade_import_utils.js');
 const { duplicateSheetMappingConfig } = await import('../js/sheet_import_modes.js');
+const { detectExactSheetAutoMapping, normalizeExactSheetHeader } = await import('../js/sheet_auto_mapping.js');
 const { buildExceptionKfRows, buildHourlyKfBuckets, parseSheetProfitRisk } = await import('../js/stats_sheet_metrics.js');
 const { parseDecimalInput } = await import('../js/utils.js');
 const { buildServiceBotSnapshot, hasServiceBotPermission, parseServiceBotRange } = await import('../lib/service_bots.js');
@@ -749,6 +750,95 @@ test('duplicating sheet mapping copies columns and anchors but not source file',
     assert.deepEqual(duplicated.smartColumns, { date: 'A', symbol: 'B', tradeType: 'C' });
     assert.deepEqual(duplicated.smartAnchors, { date: 'A8', symbol: 'B8' });
     assert.equal(duplicated.dataStartRow, 8);
+});
+
+test('exact sheet automapping matches specified headers and starts at first ticker row', () => {
+    const grid = [
+        [],
+        [
+            'дата',
+            'Ticker',
+            'Тип угоди',
+            'Профіт факт',
+            'профіт в ризиках',
+            'PV=PV',
+            'Класифікація',
+            'Alt PV',
+            'Коментар\nтрейдера',
+            '',
+            'Коментар\nTEAMleader',
+            'Тип бумаги',
+            'Перiод',
+            'Виросла.%',
+            'Ризик в дол. на трейд',
+            'Консол.в цц.',
+            'Цiна входу  (нижня границя консолідації)',
+            'Скільки шер брав',
+            'Розрахункова к-ть шер',
+        ],
+        [],
+        [],
+        [],
+        ['2026-07-01', 'BRK.B', 'Long', '10', '1R', 'так', 'немає', '', '', 'стоп', '', '', '', '', '', '', '', '', ''],
+    ];
+    const result = detectExactSheetAutoMapping(grid);
+
+    assert.equal(result.ok, true);
+    assert.equal(result.startRow, 6);
+    assert.deepEqual(result.mapped, {
+        date: 0,
+        symbol: 1,
+        tradeType: 2,
+        profit: 3,
+        profitRisk: 4,
+        pv: 5,
+        exceptions: 6,
+        altPv: 7,
+        traderComment: 8,
+        teamLeadComment: 10,
+        paperType: 11,
+        period: 12,
+        growthPct: 13,
+        riskUsd: 14,
+        consolidateCents: 15,
+        entryPrice: 16,
+        qtyShares: 17,
+        qtySharesCalc: 18,
+        exit: 9,
+    });
+});
+
+test('exact sheet automapping normalizes whitespace but rejects broad aliases', () => {
+    assert.equal(normalizeExactSheetHeader('  Коментар\n  TEAMleader  '), 'коментар teamleader');
+    const result = detectExactSheetAutoMapping([
+        ['Date', 'Ticker Symbol', 'type', 'risk', 'comment', 'symbol'],
+        ['2026-07-01', 'AAPL', 'Long', '1R', 'note', 'AAPL'],
+    ]);
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, 'ticker-header-not-found');
+});
+
+test('exact sheet automapping maps exception phrase and explicit exit header', () => {
+    const result = detectExactSheetAutoMapping([
+        ['Ticker', 'Детально: в чому виключення сьогодні', 'Вихід з позиції'],
+        ['', '', ''],
+        ['TSLA', 'немає', 'по часу'],
+    ]);
+    assert.equal(result.ok, true);
+    assert.equal(result.startRow, 3);
+    assert.equal(result.mapped.exceptions, 1);
+    assert.equal(result.mapped.exit, 2);
+});
+
+test('failed ticker data detection does not return a partial mapping', () => {
+    const result = detectExactSheetAutoMapping([
+        ['дата', 'Ticker', 'Профіт факт'],
+        ['2026-07-01', '', '10'],
+        ['2026-07-02', '12345', '12'],
+    ]);
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, 'ticker-data-not-found');
+    assert.deepEqual(result.mapped, {});
 });
 
 test('service bot range parser supports date, inferred days, and max range', () => {
