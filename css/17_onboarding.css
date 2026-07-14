@@ -23,6 +23,7 @@
 .onboarding-settings-card { order: 30; }
 body.onboarding-active .notif-dropdown,
 body.onboarding-active #team-sidebar { z-index: 400002; }
+body.onboarding-active #session-modal { display: none !important; }
 
 @media (max-width: 720px) {
     .onboarding-card { left: 10px !important; right: 10px; bottom: max(10px, env(safe-area-inset-bottom)) !important; top: auto !important; width: auto !important; max-height: min(54vh, 480px); overflow-y: auto; padding: 20px; }
