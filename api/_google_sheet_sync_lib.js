@@ -6,6 +6,7 @@ import {
 } from '../js/sheet_sync_core.js';
 import { isPureGoogleSheetTrade } from '../js/trade_filters.js';
 import { mergeGoogleSheetTradesIntoJournal } from '../js/sheet_journal_merge.js';
+import { migrateLegacyClassificationMapping } from '../js/sheet_auto_mapping.js';
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets.readonly';
@@ -303,9 +304,11 @@ function syncTotalsFromTrades(day) {
 }
 
 export async function runGoogleSheetSync(config) {
-    const cfg = config.config && typeof config.config === 'object' ? config.config : config;
-    const spreadsheetId = cfg.spreadsheetId || config.spreadsheet_id;
-    const sheetTitle = cfg.sheetTitle || config.sheet_title || '';
+    const rawCfg = config.config && typeof config.config === 'object' ? config.config : config;
+    const spreadsheetId = rawCfg.spreadsheetId || config.spreadsheet_id;
+    const sheetTitle = rawCfg.sheetTitle || config.sheet_title || '';
+    const headerRows = spreadsheetId ? await fetchSheetValues(spreadsheetId, 'A1:ZZ20', sheetTitle) : [];
+    const cfg = migrateLegacyClassificationMapping(rawCfg, headerRows).config;
     const smartColumns = cfg.smartColumns || {};
     const startRow = Math.max(1, Number(cfg.dataStartRow || config.data_start_row) || SHEET_DATA_FIRST_ROW);
     if (!config.user_id) throw new Error('Missing user_id');

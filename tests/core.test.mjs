@@ -38,7 +38,7 @@ const { summarizeJournalPnl } = await import('../js/stats_math.js');
 const { getEffectiveDayPnl, isPureGoogleSheetTrade, visibleTradeRows } = await import('../js/trade_filters.js');
 const { normalizeBrokerTradeType } = await import('../js/trade_import_utils.js');
 const { duplicateSheetMappingConfig } = await import('../js/sheet_import_modes.js');
-const { detectExactSheetAutoMapping, normalizeExactSheetHeader } = await import('../js/sheet_auto_mapping.js');
+const { detectExactSheetAutoMapping, migrateLegacyClassificationMapping, normalizeExactSheetHeader } = await import('../js/sheet_auto_mapping.js');
 const { buildExceptionKfRows, buildHourlyKfBuckets, parseSheetProfitRisk } = await import('../js/stats_sheet_metrics.js');
 const { parseDecimalInput } = await import('../js/utils.js');
 const { buildServiceBotSnapshot, hasServiceBotPermission, parseServiceBotRange } = await import('../lib/service_bots.js');
@@ -868,6 +868,30 @@ test('explicit trade type header has priority over value-based detection', () =>
     ]);
     assert.equal(result.ok, true);
     assert.equal(result.mapped.tradeType, 1);
+});
+
+test('legacy Classification mapping migrates from trade type to exceptions', () => {
+    const result = migrateLegacyClassificationMapping({
+        version: 5,
+        sheetHeaders: ['Ticker', 'Класифікація', 'Тип угоди'],
+        smartColumns: { symbol: 'A', tradeType: 'B, C', exceptions: '' },
+        smartAnchors: { tradeType: 'B6' },
+    });
+    assert.equal(result.changed, true);
+    assert.equal(result.config.smartColumns.tradeType, 'C');
+    assert.equal(result.config.smartColumns.exceptions, 'B');
+    assert.equal(result.config.smartAnchors.tradeType, undefined);
+    assert.equal(result.config.smartAnchors.exceptions, 'B6');
+});
+
+test('legacy Classification migration uses live headers and preserves existing exceptions', () => {
+    const result = migrateLegacyClassificationMapping({
+        smartColumns: { tradeType: 'D', exceptions: 'F' },
+        smartAnchors: {},
+    }, ['Ticker', '', '', 'Класифікація', '', 'У чому виключення']);
+    assert.equal(result.changed, true);
+    assert.equal(result.config.smartColumns.tradeType, '');
+    assert.equal(result.config.smartColumns.exceptions, 'F, D');
 });
 
 test('failed ticker data detection does not return a partial mapping', () => {

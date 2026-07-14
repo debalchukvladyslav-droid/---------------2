@@ -22,7 +22,7 @@ import {
     SHEET_MODE_CUMULATIVE,
     SHEET_MODE_MAIN,
 } from './sheet_import_modes.js';
-import { detectExactSheetAutoMapping } from './sheet_auto_mapping.js';
+import { detectExactSheetAutoMapping, migrateLegacyClassificationMapping } from './sheet_auto_mapping.js';
 
 const LS_KEY = 'tj_google_sheet_import_v1';
 const LS_KEY_CUMULATIVE = 'tj_google_sheet_cumulative_import_v1';
@@ -1069,6 +1069,14 @@ export function populateSheetMappingFromHeaders(headers) {
     }));
     _dynamicHeaders = _dynamicColumnChoices.map((c) => c.header).filter((h) => h.length > 0);
 
+    const storedConfig = readStoredConfig(getActiveSheetMode());
+    if (storedConfig) {
+        const migrated = migrateLegacyClassificationMapping(storedConfig, row);
+        if (migrated.changed) {
+            setStoredValue(modeStorageKeys(getActiveSheetMode()).config, JSON.stringify(migrated.config));
+        }
+    }
+
     const mapping = el('sheet-smart-mapping');
     if (!mapping) return;
 
@@ -1652,7 +1660,10 @@ function readStoredConfig(mode = getActiveSheetMode()) {
         const raw = getStoredValue(modeStorageKeys(mode).config);
         if (!raw) return null;
         const o = JSON.parse(raw);
-        return o && typeof o === 'object' ? o : null;
+        if (!o || typeof o !== 'object') return null;
+        const migrated = migrateLegacyClassificationMapping(o);
+        if (migrated.changed) setStoredValue(modeStorageKeys(mode).config, JSON.stringify(migrated.config));
+        return migrated.config;
     } catch {
         return null;
     }

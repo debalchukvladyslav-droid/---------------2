@@ -1,4 +1,5 @@
 import { supabaseRest, verifySupabaseUser } from './_google_sheet_sync_lib.js';
+import { migrateLegacyClassificationMapping } from '../js/sheet_auto_mapping.js';
 
 function sendJson(res, status, body) {
     res.status(status).setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -31,9 +32,11 @@ export default async function handler(req, res) {
             ? { ...legacyColumns, ...cfg.smartColumns }
             : { ...legacyColumns };
         cfg.smartColumns = smartColumns;
+        const normalizedCfg = migrateLegacyClassificationMapping(cfg).config;
+        const normalizedSmartColumns = normalizedCfg.smartColumns || smartColumns;
 
         if (!spreadsheetId) return sendJson(res, 400, { ok: false, error: 'Missing spreadsheetId' });
-        if (!smartColumns.date || !smartColumns.symbol) {
+        if (!normalizedSmartColumns.date || !normalizedSmartColumns.symbol) {
             return sendJson(res, 400, { ok: false, error: 'Missing date/symbol mapping' });
         }
 
@@ -43,7 +46,7 @@ export default async function handler(req, res) {
             sheet_title: sheetTitle,
             selected_file_name: String(cfg.selectedFileName || '').trim(),
             data_start_row: Number(cfg.dataStartRow) || null,
-            config: cfg,
+            config: normalizedCfg,
             enabled: !!cfg.autoSync?.enabled,
             updated_at: new Date().toISOString(),
         };

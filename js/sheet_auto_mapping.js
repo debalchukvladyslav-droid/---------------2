@@ -159,3 +159,58 @@ export function detectExactSheetAutoMapping(grid = [], options = {}) {
 
     return { ok: true, mapped, headerRows, headers, startRow: tickerRow + 1 };
 }
+
+function columnLetterToIndex(value) {
+    const match = /^([A-Z]+)(?:\d+)?$/i.exec(String(value || '').trim());
+    if (!match) return -1;
+    let index = 0;
+    for (const char of match[1].toUpperCase()) index = index * 26 + char.charCodeAt(0) - 64;
+    return index - 1;
+}
+
+function splitMappingValues(value) {
+    return String(value || '').split(',').map((part) => part.trim()).filter(Boolean);
+}
+
+export function migrateLegacyClassificationMapping(config = {}, headersOverride = null) {
+    const cfg = config && typeof config === 'object' ? config : {};
+    const smartColumns = cfg.smartColumns && typeof cfg.smartColumns === 'object' ? cfg.smartColumns : null;
+    if (!smartColumns?.tradeType) return { config: cfg, changed: false };
+
+    const headers = Array.isArray(headersOverride) ? headersOverride : [];
+    const headerGrid = Array.isArray(headers[0]) ? headers : null;
+    const typeValues = splitMappingValues(smartColumns.tradeType);
+    const moved = [];
+    const retained = [];
+    typeValues.forEach((value) => {
+        const index = columnLetterToIndex(value);
+        const header = index >= 0
+            ? (headerGrid
+                ? headerGrid.map((row) => row?.[index]).find((cell) => normalizeExactSheetHeader(cell) === normalizeExactSheetHeader('Класифікація'))
+                : headers[index])
+            : value;
+        if (normalizeExactSheetHeader(header) === normalizeExactSheetHeader('Класифікація')) moved.push(value);
+        else retained.push(value);
+    });
+    if (!moved.length) return { config: cfg, changed: false };
+
+    const exceptions = [...splitMappingValues(smartColumns.exceptions), ...moved]
+        .filter((value, index, all) => all.findIndex((item) => item.toUpperCase() === value.toUpperCase()) === index);
+    const next = {
+        ...cfg,
+        version: Math.max(Number(cfg.version) || 0, 7),
+        smartColumns: {
+            ...smartColumns,
+            tradeType: retained.join(', '),
+            exceptions: exceptions.join(', '),
+        },
+        smartAnchors: { ...(cfg.smartAnchors || {}) },
+    };
+
+    const tradeAnchor = String(next.smartAnchors.tradeType || '').trim();
+    if (tradeAnchor && moved.some((value) => columnLetterToIndex(value) === columnLetterToIndex(tradeAnchor))) {
+        if (!next.smartAnchors.exceptions) next.smartAnchors.exceptions = tradeAnchor;
+        delete next.smartAnchors.tradeType;
+    }
+    return { config: next, changed: true };
+}
