@@ -132,9 +132,13 @@
                 <div class="dashboard-mentor-modal" id="dashboard-mentor-modal" hidden>
                     <div class="dashboard-mentor-dialog" role="dialog" aria-modal="true" aria-labelledby="dashboard-mentor-dialog-title">
                         <header><div><span>Твій наставник</span><h2 id="dashboard-mentor-dialog-title">Давай розберемось</h2></div><button type="button" data-action="dashboard-mentor-close" aria-label="Закрити">×</button></header>
-                        <div class="dashboard-mentor-context" id="dashboard-mentor-context"></div>
-                        <div class="dashboard-mentor-chat" id="dashboard-mentor-chat"></div>
-                        <form class="dashboard-mentor-compose" id="dashboard-mentor-compose"><textarea id="dashboard-mentor-input" rows="2" placeholder="Що зараз турбує у торгівлі?"></textarea><button type="submit">Написати</button></form>
+                        <nav class="dashboard-mentor-tabs" aria-label="Розділи наставника"><button type="button" class="active" data-action="dashboard-mentor-tab" data-mentor-tab="chat">Чат</button><button type="button" data-action="dashboard-mentor-tab" data-mentor-tab="theses">Усі тези <span id="dashboard-mentor-theses-count"></span></button></nav>
+                        <section class="dashboard-mentor-pane active" id="dashboard-mentor-pane-chat">
+                            <div class="dashboard-mentor-context" id="dashboard-mentor-context"></div>
+                            <div class="dashboard-mentor-chat" id="dashboard-mentor-chat"></div>
+                            <form class="dashboard-mentor-compose" id="dashboard-mentor-compose"><textarea id="dashboard-mentor-input" rows="2" placeholder="Можеш написати про будь-що…"></textarea><button type="submit">Написати</button></form>
+                        </section>
+                        <section class="dashboard-mentor-pane" id="dashboard-mentor-pane-theses"><div class="dashboard-mentor-theses" id="dashboard-mentor-theses"></div></section>
                     </div>
                 </div>
                 <div class="recent-trades-panel recent-trades-flex" id="recent-trades-panel">

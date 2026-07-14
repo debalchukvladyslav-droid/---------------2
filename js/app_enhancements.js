@@ -151,6 +151,7 @@ function activateAction(action, trigger, event = null) {
         'dashboard-ai-next': () => window.rotateDashboardAI?.(1),
         'dashboard-mentor-open': () => window.openDashboardMentor?.(),
         'dashboard-mentor-close': () => window.closeDashboardMentor?.(),
+        'dashboard-mentor-tab': () => window.switchDashboardMentorTab?.(trigger?.dataset?.mentorTab || 'chat'),
         'left-sidebar-toggle': () => window.toggleLeftSidebar?.(),
         'mobile-sidebar-toggle': () => window.toggleMobileSidebar?.(),
         'mobile-more-toggle': () => window.toggleMobileMoreMenu?.(),

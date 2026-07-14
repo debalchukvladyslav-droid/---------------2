@@ -11,6 +11,7 @@ let carouselItems = [];
 let carouselIndex = 0;
 let carouselTimer = null;
 let mentorBusy = false;
+let mentorAllItems = [];
 
 function pnlOf(day) {
     for (const value of [day?.fondexx?.pnl, day?.ppro?.pnl, day?.pnl]) {
@@ -167,15 +168,15 @@ function decorateWithNudge(brief, data) {
 function normalize(value, fallback) {
     const levels = ['good', 'attention', 'risk', 'neutral'];
     const tones = ['good', 'warn', 'risk', 'info'];
-    const items = Array.isArray(value?.items) ? value.items.slice(0, 2).map((item) => ({
+    const items = Array.isArray(value?.items) ? value.items.slice(0, 8).map((item) => ({
         tone: tones.includes(item?.tone) ? item.tone : 'info',
         title: compactText(item?.title, 58),
-        text: compactText(item?.text, 150),
+        text: String(item?.text || '').replace(/\s+/g, ' ').trim().slice(0, 360),
         action: ['learn', 'calendar', 'screens', 'stats', 'ai'].includes(item?.action) ? item.action : '',
         actionLabel: String(item?.actionLabel || '').trim().slice(0, 60),
         compareTrader: String(item?.compareTrader || '').trim().slice(0, 80),
     })).filter((item) => item.title && item.text) : [];
-    return { level: levels.includes(value?.level) ? value.level : fallback.level, status: compactText(value?.status || fallback.status, 42), summary: compactText(value?.summary || fallback.summary, 130), items: items.length ? items : fallback.items.slice(0, 2) };
+    return { level: levels.includes(value?.level) ? value.level : fallback.level, status: compactText(value?.status || fallback.status, 42), summary: compactText(value?.summary || fallback.summary, 130), items: items.length ? items : fallback.items };
 }
 
 function compactText(value, maxLength) {
@@ -197,7 +198,8 @@ function render(brief, updatedAt = '') {
     status.className = `dashboard-ai-status is-${brief.level}`;
     status.textContent = brief.status;
     summary.textContent = compactText(brief.summary, 90);
-    const visibleItems = brief.items.length ? brief.items.slice(-2) : [{ tone: 'info', title: brief.status, text: brief.summary }];
+    mentorAllItems = brief.items.length ? brief.items.map((item) => ({ ...item })) : [{ tone: 'info', title: brief.status, text: brief.summary }];
+    const visibleItems = mentorAllItems.slice(-2);
     carouselItems = visibleItems.map((item) => ({ ...item, title: compactText(item.title, 48), text: compactText(item.text, 100) }));
     carouselIndex = Math.min(carouselIndex, carouselItems.length - 1);
     renderCarouselItem();
@@ -351,6 +353,32 @@ function renderMentorConversation() {
     host.scrollTop = host.scrollHeight;
 }
 
+function renderMentorTheses() {
+    const host = document.getElementById('dashboard-mentor-theses');
+    const count = document.getElementById('dashboard-mentor-theses-count');
+    if (count) count.textContent = mentorAllItems.length ? `(${mentorAllItems.length})` : '';
+    if (!host) return;
+    host.textContent = '';
+    mentorAllItems.forEach((item) => {
+        const card = document.createElement('article'); card.className = `dashboard-mentor-thesis is-${item.tone || 'info'}`;
+        const title = document.createElement('strong'); title.textContent = item.title || 'Думка';
+        const text = document.createElement('p'); text.textContent = item.text || '';
+        card.append(title, text);
+        if (item.action && item.actionLabel) {
+            const action = document.createElement('button'); action.type = 'button'; action.dataset.tab = item.action; action.className = 'dashboard-ai-point__action'; if (item.compareTrader) action.dataset.compareTrader = item.compareTrader; action.textContent = `${item.actionLabel} →`; card.appendChild(action);
+        }
+        host.appendChild(card);
+    });
+}
+
+export function switchDashboardMentorTab(tab = 'chat') {
+    const safeTab = tab === 'theses' ? 'theses' : 'chat';
+    document.querySelectorAll('.dashboard-mentor-tabs [data-mentor-tab]').forEach((button) => button.classList.toggle('active', button.dataset.mentorTab === safeTab));
+    document.querySelectorAll('.dashboard-mentor-pane').forEach((pane) => pane.classList.toggle('active', pane.id === `dashboard-mentor-pane-${safeTab}`));
+    if (safeTab === 'theses') renderMentorTheses();
+    else setTimeout(() => document.getElementById('dashboard-mentor-input')?.focus(), 0);
+}
+
 export function openDashboardMentor() {
     const modal = document.getElementById('dashboard-mentor-modal');
     const context = document.getElementById('dashboard-mentor-context');
@@ -362,7 +390,8 @@ export function openDashboardMentor() {
     modal.hidden = false;
     document.body.classList.add('dashboard-mentor-open');
     renderMentorConversation();
-    setTimeout(() => document.getElementById('dashboard-mentor-input')?.focus(), 0);
+    renderMentorTheses();
+    switchDashboardMentorTab('chat');
 }
 
 export function closeDashboardMentor() {
@@ -389,7 +418,7 @@ export async function sendDashboardMentorMessage() {
         const data = snapshot(days);
         const memory = String(state.appData.settings.dashboardMentorMemory || '').slice(0, 2500);
         const dialogue = history.slice(-20).map((m) => `${m.role === 'user' ? 'Трейдер' : 'Наставник'}: ${m.text}`).join('\n');
-        const prompt = `Ти особистий наставник трейдера. Ти пам'ятаєш його підхід, характер і минулі розмови та відповідаєш у близькому йому темпі, але не копіюєш грубість. Не вигадуй фактів і не прогнозуй ринок. Допоможи побачити помилку й дай один конкретний наступний крок.
+        const prompt = `Ти особистий універсальний помічник і наставник людини. З тобою можна говорити про трейдинг, роботу, побут, плани, навчання, переживання або будь-яку іншу тему. Ти пам'ятаєш характер і минулі розмови та відповідаєш у близькому людині темпі, але не копіюєш грубість. Якщо питання про трейдинг — не вигадуй фактів, не прогнозуй ринок, допоможи побачити помилку й дай один конкретний крок. Якщо тема не про трейдинг — відповідай як звичайний розумний співрозмовник і не намагайся штучно повертати розмову до торгівлі.
 Пам'ять: ${memory || 'ще формується'}
 Останні дні: ${days.slice(0, 10).map((d) => `${d.date} ${d.pnl}$, помилки ${(d.day?.errors || []).join(', ') || 'немає'}, запис ${String(d.day?.notes || '').slice(0, 160) || 'немає'}`).join(' | ')}
 Дейлос: ${data.limit}$. Діалог:\n${dialogue}
