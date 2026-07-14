@@ -10,6 +10,7 @@ let teamMomentumCache = { at: 0, rows: [] };
 let carouselItems = [];
 let carouselIndex = 0;
 let carouselTimer = null;
+let mentorBusy = false;
 
 function pnlOf(day) {
     for (const value of [day?.fondexx?.pnl, day?.ppro?.pnl, day?.pnl]) {
@@ -195,13 +196,15 @@ function render(brief, updatedAt = '') {
     if (!host || !status || !summary) return;
     status.className = `dashboard-ai-status is-${brief.level}`;
     status.textContent = brief.status;
-    summary.textContent = compactText(brief.summary, 130);
+    summary.textContent = compactText(brief.summary, 90);
     const visibleItems = brief.items.length ? brief.items.slice(-2) : [{ tone: 'info', title: brief.status, text: brief.summary }];
-    carouselItems = visibleItems.map((item) => ({ ...item, title: compactText(item.title, 58), text: compactText(item.text, 150) }));
+    carouselItems = visibleItems.map((item) => ({ ...item, title: compactText(item.title, 48), text: compactText(item.text, 100) }));
     carouselIndex = Math.min(carouselIndex, carouselItems.length - 1);
     renderCarouselItem();
+    const carousel = document.querySelector('.dashboard-ai-carousel');
+    if (carousel) carousel.hidden = carouselItems.length < 2;
     restartCarousel();
-    if (updated) updated.textContent = updatedAt ? `Оновлено ${new Date(updatedAt).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' })}` : 'Швидка оцінка за журналом';
+    if (updated) updated.textContent = updatedAt ? new Date(updatedAt).toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit' }) : '';
     renderHistory();
 }
 
@@ -211,7 +214,7 @@ function renderCarouselItem() {
     if (!host || !carouselItems.length) return;
     const item = carouselItems[carouselIndex];
     host.textContent = '';
-    const card = document.createElement('article'); card.className = `dashboard-ai-point is-${item.tone}`;
+    const card = document.createElement('article'); card.className = `dashboard-ai-point is-${item.tone}`; card.tabIndex = 0; card.setAttribute('role', 'button'); card.setAttribute('aria-label', 'Відкрити наставника');
     const title = document.createElement('strong'); title.textContent = item.title;
     const text = document.createElement('p'); text.textContent = item.text;
     card.append(title, text);
@@ -219,6 +222,8 @@ function renderCarouselItem() {
         const action = document.createElement('button'); action.type = 'button'; action.className = 'dashboard-ai-point__action'; action.dataset.tab = item.action; if (item.compareTrader) action.dataset.compareTrader = item.compareTrader; action.textContent = `${item.actionLabel} →`; card.appendChild(action);
     }
     host.appendChild(card);
+    card.addEventListener('click', (event) => { if (!event.target.closest('button')) openDashboardMentor(); });
+    card.addEventListener('keydown', (event) => { if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('button')) { event.preventDefault(); openDashboardMentor(); } });
     if (position) position.textContent = `${carouselIndex + 1} / ${carouselItems.length}`;
 }
 
@@ -321,4 +326,87 @@ export function rotateDashboardAI(direction = 1) {
     carouselIndex = (carouselIndex + (Number(direction) < 0 ? -1 : 1) + carouselItems.length) % carouselItems.length;
     renderCarouselItem();
     restartCarousel();
+}
+
+function mentorHistory() {
+    return Array.isArray(state.appData?.settings?.dashboardMentorConversation) ? state.appData.settings.dashboardMentorConversation : [];
+}
+
+function renderMentorConversation() {
+    const host = document.getElementById('dashboard-mentor-chat');
+    if (!host) return;
+    host.textContent = '';
+    const history = mentorHistory();
+    if (!history.length) {
+        const welcome = document.createElement('p'); welcome.className = 'dashboard-mentor-empty'; welcome.textContent = 'Я пам’ятатиму наші розмови. Розкажи, що зараз не виходить.'; host.appendChild(welcome);
+    }
+    history.slice(-60).forEach((message) => {
+        const row = document.createElement('div'); row.className = `dashboard-mentor-message is-${message.role === 'user' ? 'user' : 'mentor'}`;
+        const text = document.createElement('p'); text.textContent = message.text || ''; row.appendChild(text);
+        if (message.action && message.actionLabel) {
+            const action = document.createElement('button'); action.type = 'button'; action.dataset.tab = message.action; action.className = 'dashboard-ai-point__action'; action.textContent = `${message.actionLabel} →`; row.appendChild(action);
+        }
+        host.appendChild(row);
+    });
+    host.scrollTop = host.scrollHeight;
+}
+
+export function openDashboardMentor() {
+    const modal = document.getElementById('dashboard-mentor-modal');
+    const context = document.getElementById('dashboard-mentor-context');
+    if (!modal) return;
+    if (context) {
+        context.textContent = '';
+        carouselItems.forEach((item) => { const p = document.createElement('p'); p.textContent = `${item.title}: ${item.text}`; context.appendChild(p); });
+    }
+    modal.hidden = false;
+    document.body.classList.add('dashboard-mentor-open');
+    renderMentorConversation();
+    setTimeout(() => document.getElementById('dashboard-mentor-input')?.focus(), 0);
+}
+
+export function closeDashboardMentor() {
+    const modal = document.getElementById('dashboard-mentor-modal');
+    if (modal) modal.hidden = true;
+    document.body.classList.remove('dashboard-mentor-open');
+}
+
+export async function sendDashboardMentorMessage() {
+    if (mentorBusy || state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) return;
+    const input = document.getElementById('dashboard-mentor-input');
+    const text = String(input?.value || '').trim();
+    if (!text) return;
+    if (!state.appData.settings) state.appData.settings = {};
+    const history = mentorHistory();
+    history.push({ role: 'user', text: text.slice(0, 1200), at: new Date().toISOString() });
+    state.appData.settings.dashboardMentorConversation = history.slice(-120);
+    if (input) input.value = '';
+    renderMentorConversation();
+    mentorBusy = true;
+    document.getElementById('dashboard-mentor-compose')?.classList.add('is-busy');
+    try {
+        const days = recentDays();
+        const data = snapshot(days);
+        const memory = String(state.appData.settings.dashboardMentorMemory || '').slice(0, 2500);
+        const dialogue = history.slice(-20).map((m) => `${m.role === 'user' ? 'Трейдер' : 'Наставник'}: ${m.text}`).join('\n');
+        const prompt = `Ти особистий наставник трейдера. Ти пам'ятаєш його підхід, характер і минулі розмови та відповідаєш у близькому йому темпі, але не копіюєш грубість. Не вигадуй фактів і не прогнозуй ринок. Допоможи побачити помилку й дай один конкретний наступний крок.
+Пам'ять: ${memory || 'ще формується'}
+Останні дні: ${days.slice(0, 10).map((d) => `${d.date} ${d.pnl}$, помилки ${(d.day?.errors || []).join(', ') || 'немає'}, запис ${String(d.day?.notes || '').slice(0, 160) || 'немає'}`).join(' | ')}
+Дейлос: ${data.limit}$. Діалог:\n${dialogue}
+Поверни лише JSON: {"reply":"коротка жива відповідь до 4 речень","memory":"стисле оновлене розуміння підходу, характеру й важливих фактів трейдера","action":"calendar|stats|trades|screens|learn|ai або порожньо","actionLabel":"коротка назва переходу"}.`;
+        const response = parseResponse(await callGemini(getGeminiKeys()[0], { contents: [{ parts: [{ text: prompt }] }] })) || {};
+        const reply = compactText(response.reply || 'Я почув. Давай спершу подивимось на останні входи й знайдемо один повторюваний момент.', 520);
+        history.push({ role: 'mentor', text: reply, action: ['calendar', 'stats', 'trades', 'screens', 'learn', 'ai'].includes(response.action) ? response.action : '', actionLabel: compactText(response.actionLabel, 40), at: new Date().toISOString() });
+        state.appData.settings.dashboardMentorConversation = history.slice(-120);
+        if (response.memory) state.appData.settings.dashboardMentorMemory = String(response.memory).slice(0, 2500);
+        await saveSettings();
+    } catch (error) {
+        history.push({ role: 'mentor', text: 'Зараз не зміг відповісти. Твоя думка збережена — повернемось до неї трохи пізніше.', at: new Date().toISOString() });
+        console.warn('[Dashboard mentor]', error?.message || error);
+    } finally {
+        mentorBusy = false;
+        document.getElementById('dashboard-mentor-compose')?.classList.remove('is-busy');
+        renderMentorConversation();
+        void saveSettings().catch((error) => console.warn('[Dashboard mentor memory]', error?.message || error));
+    }
 }

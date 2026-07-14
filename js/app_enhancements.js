@@ -149,6 +149,8 @@ function activateAction(action, trigger, event = null) {
         'dashboard-ai-history': () => window.toggleDashboardAIHistory?.(),
         'dashboard-ai-prev': () => window.rotateDashboardAI?.(-1),
         'dashboard-ai-next': () => window.rotateDashboardAI?.(1),
+        'dashboard-mentor-open': () => window.openDashboardMentor?.(),
+        'dashboard-mentor-close': () => window.closeDashboardMentor?.(),
         'left-sidebar-toggle': () => window.toggleLeftSidebar?.(),
         'mobile-sidebar-toggle': () => window.toggleMobileSidebar?.(),
         'mobile-more-toggle': () => window.toggleMobileMoreMenu?.(),
@@ -362,6 +364,7 @@ function activateMainTab(trigger) {
         if (tab === 'stats' && compareTrader) return window.openStatsComparisonWithTrader?.(compareTrader);
         return null;
     });
+    if (trigger?.closest?.('#dashboard-mentor-modal')) window.closeDashboardMentor?.();
     if (trigger.classList?.contains('mobile-more-item')) window.closeMobileMoreMenu?.();
     return true;
 }
@@ -471,6 +474,11 @@ function bindDeclarativeActions() {
 
     document.addEventListener('submit', (event) => {
         const form = event.target;
+        if (form?.matches?.('#dashboard-mentor-compose')) {
+            event.preventDefault();
+            window.sendDashboardMentorMessage?.();
+            return;
+        }
         if (!form?.matches?.('[data-action="sheet-mapping-form"]')) return;
         event.preventDefault();
         window.saveSheetMapping?.();

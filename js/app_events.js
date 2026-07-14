@@ -14,6 +14,7 @@ export function initGlobalAppEvents({ shiftDate, closeSOSModal }) {
             if (nameModal) nameModal.style.display = 'none';
             if (window.closeStatsDropdown) window.closeStatsDropdown();
             if (document.getElementById('team-sidebar')?.classList.contains('open')) window.closeTeamSidebar();
+            window.closeDashboardMentor?.();
             return;
         }
 
