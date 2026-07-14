@@ -112,7 +112,7 @@ window.state = state;
 
 let manualSyncInProgress = false;
 let manualSyncIntervalId = null;
-const MANUAL_SYNC_INTERVAL_MS = 15 * 60 * 1000;
+const MANUAL_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 
 async function runManualSyncStep(name, fn, options = {}) {
     const optional = options.optional !== false;
@@ -127,10 +127,11 @@ async function runManualSyncStep(name, fn, options = {}) {
     }
 }
 
-async function manualSyncAll(trigger = null) {
+async function manualSyncAll(trigger = null, options = {}) {
     if (manualSyncInProgress) return;
     manualSyncInProgress = true;
-    const btn = trigger || document.getElementById('manual-sync-btn');
+    const quiet = options.quiet === true;
+    const btn = quiet ? null : (trigger || document.getElementById('manual-sync-btn'));
     const prevTitle = btn?.getAttribute('title') || '';
     if (btn) {
         btn.classList.add('is-syncing');
@@ -139,7 +140,7 @@ async function manualSyncAll(trigger = null) {
         btn.setAttribute('title', 'Синхронізація...');
     }
 
-    showToast('Синхронізація запущена...');
+    if (!quiet) showToast('Синхронізація запущена...');
     try {
         const isOwnProfile = state.CURRENT_VIEWED_USER === state.USER_DOC_NAME;
         const steps = [
@@ -160,7 +161,7 @@ async function manualSyncAll(trigger = null) {
             await runManualSyncStep('drive-ui', () => updateDriveUI()),
         ];
         const failed = steps.filter((step) => step && !step.ok);
-        showToast(failed.length ? `Синхронізацію завершено, але ${failed.length} процес(и) пропущено/не вдалося.` : 'Синхронізацію завершено.');
+        if (!quiet) showToast(failed.length ? `Синхронізацію завершено, але ${failed.length} процес(и) пропущено/не вдалося.` : 'Синхронізацію завершено.');
     } finally {
         manualSyncInProgress = false;
         if (btn) {
@@ -173,11 +174,15 @@ async function manualSyncAll(trigger = null) {
 }
 
 function startManualSyncScheduler() {
-    if (manualSyncIntervalId) return;
-    manualSyncIntervalId = setInterval(() => {
+    stopManualSyncScheduler();
+    const runScheduledSync = () => {
         if (!state.USER_DOC_NAME) return;
-        void manualSyncAll();
-    }, MANUAL_SYNC_INTERVAL_MS);
+        void manualSyncAll(null, { quiet: true }).catch((error) => {
+            console.warn('[Scheduled sync]', error?.message || error);
+        });
+    };
+    runScheduledSync();
+    manualSyncIntervalId = setInterval(runScheduledSync, MANUAL_SYNC_INTERVAL_MS);
 }
 
 function stopManualSyncScheduler() {
@@ -1005,7 +1010,6 @@ async function bootApp(user) {
 
         applyPersistedBackground();
         loadBackgroundGallery();
-        startManualSyncScheduler();
     } catch (e) {
         console.error('[INIT] Помилка ініціалізації:', e);
     } finally {
@@ -1018,7 +1022,7 @@ async function bootApp(user) {
     await tryRestoreDriveToken();
     if (window.updateDriveUI) window.updateDriveUI();
     startDriveAutoSync();
-    syncDriveScreenshots(true);
+    startManualSyncScheduler();
     setTimeout(() => window._checkSessionModal?.(), 1500);
 }
 

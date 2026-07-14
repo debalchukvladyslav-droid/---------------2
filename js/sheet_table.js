@@ -122,7 +122,6 @@ const SHEET_PREVIEW_RENDER_MAX_ROWS = 60;
 const SHEET_PREVIEW_RENDER_MAX_COLS = 52;
 const SHEET_MAPPING_SELECT_MAX_COLS = 80;
 
-let _sheetAutoTimer = null;
 let _sheetSyncInProgress = false;
 
 function userScopedStorageKey(key) {
@@ -154,44 +153,9 @@ function removeStoredValue(key) {
     localStorage.removeItem(key);
 }
 
-/** Зупинити авто-синхронізацію (вихід з Google, зміна профілю). */
+/** Сумісність зі старими викликами: синхронізацією тепер керує загальний цикл застосунку. */
 export function stopSheetAutoSync() {
-    if (_sheetAutoTimer) {
-        clearInterval(_sheetAutoTimer);
-        _sheetAutoTimer = null;
-    }
-}
-
-function clampSheetIntervalMin(n) {
-    return Math.min(60, Math.max(5, Number(n) || 15));
-}
-
-/**
- * Інтервал з localStorage: лише якщо увімкнено, є файл і токен.
- * Не викликає API, коли вкладка прихована або вже йде синхронізація.
- */
-export function ensureSheetAutoSyncFromConfig() {
-    stopSheetAutoSync();
-    const cfg = readStoredConfig(SHEET_MODE_MAIN);
-    if (!cfg?.autoSync?.enabled) return;
-    if (getStoredValue(SESSION_GOOGLE) !== '1') return;
-    if (!getModeStoredItem('spreadsheetId', SHEET_MODE_MAIN)) return;
-    const min = clampSheetIntervalMin(cfg.autoSync.intervalMinutes);
-    _sheetAutoTimer = setInterval(() => {
-        if (!document.getElementById('view-table')?.classList.contains('active')) return;
-        if (document.visibilityState !== 'visible') return;
-        if (_sheetSyncInProgress) return;
-        if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
-        void (async () => {
-            try {
-                const c = readStoredConfig(SHEET_MODE_MAIN);
-                if (!c?.spreadsheetId || !c?.smartColumns) return;
-                await executeSyncWithCfg(c, { quiet: true, mode: SHEET_MODE_MAIN });
-            } catch (e) {
-                console.warn('[Google Sheets] авто-синхронізація:', e?.message || e);
-            }
-        })();
-    }, min * 60 * 1000);
+    // Навмисно порожньо.
 }
 
 /** Статичні приклади (старі збереження) + динаміка з таблиці. */
@@ -302,9 +266,6 @@ function syncSheetModeUi() {
 
     const duplicateBtn = el('sheet-duplicate-mapping-btn');
     if (duplicateBtn) duplicateBtn.hidden = !isCumulativeMode(mode);
-
-    const autoSync = el('sheet-auto-sync-block');
-    if (autoSync) autoSync.hidden = isCumulativeMode(mode);
 
     const syncBtn = el('sheet-save-sync-btn');
     if (syncBtn) syncBtn.textContent = isCumulativeMode(mode) ? 'Імпортувати накопичувальну' : BTN_DEFAULT;
@@ -1127,12 +1088,6 @@ export function populateSheetMappingFromHeaders(headers) {
             setSmartRowValue(k, cfg.smartColumns[k] || '', false);
         });
     }
-    if (cfg?.autoSync && typeof cfg.autoSync === 'object') {
-        const en = el('sheet-auto-sync-enabled');
-        const iv = el('sheet-auto-sync-interval');
-        if (en) en.checked = !!cfg.autoSync.enabled;
-        if (iv) iv.value = String(clampSheetIntervalMin(cfg.autoSync.intervalMinutes));
-    }
     syncActiveGridFieldUi();
 }
 
@@ -1691,12 +1646,6 @@ function applyConfigToForm(cfg) {
         });
     }
 
-    if (cfg.autoSync && typeof cfg.autoSync === 'object') {
-        const en = el('sheet-auto-sync-enabled');
-        const iv = el('sheet-auto-sync-interval');
-        if (en) en.checked = !!cfg.autoSync.enabled;
-        if (iv) iv.value = String(clampSheetIntervalMin(cfg.autoSync.intervalMinutes));
-    }
     if (!(cfg.smartColumns && typeof cfg.smartColumns === 'object') && cfg.columns && typeof cfg.columns === 'object') {
         const c = cfg.columns;
         setSmartRowValue('date', c.date || '', true);
@@ -1776,11 +1725,9 @@ export function initSheetTableView(options = {}) {
 
     const isImportTabActive = !!el('view-table')?.classList.contains('active');
     if (!isGoogleSheetPanelOpen() && !options?.forceGoogleRestore) {
-        stopSheetAutoSync();
         return;
     }
     if (options?.deferGoogleRestore && !isImportTabActive) {
-        ensureSheetAutoSyncFromConfig();
         return;
     }
 
@@ -1790,12 +1737,7 @@ export function initSheetTableView(options = {}) {
             .then((m) => m.restoreGoogleSession?.())
             .catch(() => {
                 /* конектор може бути недоступний офлайн */
-            })
-            .finally(() => {
-                ensureSheetAutoSyncFromConfig();
             });
-    } else {
-        ensureSheetAutoSyncFromConfig();
     }
 }
 
@@ -1829,11 +1771,6 @@ function collectFormConfig() {
         getModeStoredItem('spreadsheetTitle', mode) ||
         '';
 
-    const autoSync = {
-        enabled: !!el('sheet-auto-sync-enabled')?.checked,
-        intervalMinutes: clampSheetIntervalMin(Number(el('sheet-auto-sync-interval')?.value) || 15),
-    };
-
     return {
         version: 5,
         mode,
@@ -1845,7 +1782,6 @@ function collectFormConfig() {
         smartColumns,
         smartAnchors: { ..._sheetSmartAnchors },
         dataStartRow: deriveSheetStartRow(),
-        autoSync,
     };
 }
 
@@ -1969,7 +1905,6 @@ export async function saveSheetMapping() {
         if (!isCumulativeMode(mode)) void persistServerSheetSyncConfig(cfg);
 
         await executeSyncWithCfg(cfg, { quiet: false, mode });
-        ensureSheetAutoSyncFromConfig();
     } catch (e) {
         console.error('[Google Sheets] sync', e);
         showToast('Помилка синхронізації: ' + (e?.message || String(e)));
@@ -1993,5 +1928,4 @@ window.clearSheetMappingField = clearSheetMappingField;
 window.renderMappingDropdowns = renderMappingDropdowns;
 window.populateSheetMappingFromHeaders = populateSheetMappingFromHeaders;
 window.stopSheetAutoSync = stopSheetAutoSync;
-window.ensureSheetAutoSyncFromConfig = ensureSheetAutoSyncFromConfig;
 window.refreshSheetMatchesAfterTradesImport = refreshSheetMatchesAfterTradesImport;

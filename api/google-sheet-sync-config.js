@@ -47,7 +47,7 @@ export default async function handler(req, res) {
             selected_file_name: String(cfg.selectedFileName || '').trim(),
             data_start_row: Number(cfg.dataStartRow) || null,
             config: normalizedCfg,
-            enabled: !!cfg.autoSync?.enabled,
+            enabled: false,
             updated_at: new Date().toISOString(),
         };
 
