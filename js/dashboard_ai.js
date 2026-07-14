@@ -166,15 +166,25 @@ function decorateWithNudge(brief, data) {
 function normalize(value, fallback) {
     const levels = ['good', 'attention', 'risk', 'neutral'];
     const tones = ['good', 'warn', 'risk', 'info'];
-    const items = Array.isArray(value?.items) ? value.items.slice(0, 4).map((item) => ({
+    const items = Array.isArray(value?.items) ? value.items.slice(0, 2).map((item) => ({
         tone: tones.includes(item?.tone) ? item.tone : 'info',
-        title: String(item?.title || '').trim().slice(0, 80),
-        text: String(item?.text || '').trim().slice(0, 320),
+        title: compactText(item?.title, 58),
+        text: compactText(item?.text, 150),
         action: ['learn', 'calendar', 'screens', 'stats', 'ai'].includes(item?.action) ? item.action : '',
         actionLabel: String(item?.actionLabel || '').trim().slice(0, 60),
         compareTrader: String(item?.compareTrader || '').trim().slice(0, 80),
     })).filter((item) => item.title && item.text) : [];
-    return { level: levels.includes(value?.level) ? value.level : fallback.level, status: String(value?.status || fallback.status).slice(0, 60), summary: String(value?.summary || fallback.summary).slice(0, 360), items: items.length ? items : fallback.items };
+    return { level: levels.includes(value?.level) ? value.level : fallback.level, status: compactText(value?.status || fallback.status, 42), summary: compactText(value?.summary || fallback.summary, 130), items: items.length ? items : fallback.items.slice(0, 2) };
+}
+
+function compactText(value, maxLength) {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (text.length <= maxLength) return text;
+    const firstSentence = text.match(/^.*?[.!?](?:\s|$)/)?.[0]?.trim();
+    if (firstSentence && firstSentence.length <= maxLength) return firstSentence;
+    const cut = text.slice(0, maxLength - 1);
+    const boundary = cut.lastIndexOf(' ');
+    return `${cut.slice(0, boundary > maxLength * 0.65 ? boundary : cut.length).trim()}…`;
 }
 
 function render(brief, updatedAt = '') {
@@ -185,8 +195,9 @@ function render(brief, updatedAt = '') {
     if (!host || !status || !summary) return;
     status.className = `dashboard-ai-status is-${brief.level}`;
     status.textContent = brief.status;
-    summary.textContent = brief.summary;
-    carouselItems = brief.items.length ? brief.items : [{ tone: 'info', title: brief.status, text: brief.summary }];
+    summary.textContent = compactText(brief.summary, 130);
+    const visibleItems = brief.items.length ? brief.items.slice(-2) : [{ tone: 'info', title: brief.status, text: brief.summary }];
+    carouselItems = visibleItems.map((item) => ({ ...item, title: compactText(item.title, 58), text: compactText(item.text, 150) }));
     carouselIndex = Math.min(carouselIndex, carouselItems.length - 1);
     renderCarouselItem();
     restartCarousel();
@@ -213,12 +224,6 @@ function renderCarouselItem() {
 
 function restartCarousel() {
     clearInterval(carouselTimer);
-    if (carouselItems.length < 2) return;
-    carouselTimer = setInterval(() => {
-        if (document.hidden || !document.getElementById('view-dash')?.classList.contains('active')) return;
-        carouselIndex = (carouselIndex + 1) % carouselItems.length;
-        renderCarouselItem();
-    }, 11000);
 }
 
 function renderHistory() {
@@ -266,7 +271,7 @@ ${types}
 Сильні історичні дні трейдера: ${data.strongDays.map((item) => `${item.date}: ${item.pnl}$`).join(' | ') || 'немає'}.
 Ключові записи зі сильних днів: ${data.strongNotes.map((item) => `${item.date}: ${item.note}`).join(' | ') || 'немає записів'}.
 Помічник також може запропонувати навчання, запис дня, план сесії, скріншоти або порівняння. Для доречної тези можеш додати action: learn, calendar, screens, stats або ai та короткий actionLabel.
-Не вигадуй відсутні причини, не прогнозуй ринок і не радь відігруватися. Пиши українською, коротко й конкретно. Поверни лише JSON: {"level":"good|attention|risk|neutral","status":"до 5 слів","summary":"1-2 речення","items":[{"tone":"good|warn|risk|info","title":"заголовок","text":"теза або наступна дія"}]}. Дай 2-4 items.`;
+Не вигадуй відсутні причини, не прогнозуй ринок і не радь відігруватися. Говори як спокійний наставник: по-людськи, без канцеляризмів і довгого звіту. Назви одну головну помилку або скажи, що процес нормальний, та запропонуй одну дію. Поверни лише JSON: {"level":"good|attention|risk|neutral","status":"до 4 слів","summary":"одне коротке речення","items":[{"tone":"good|warn|risk|info","title":"до 5 слів","text":"одне коротке речення з порадою"}]}. Дай 1-2 items.`;
         const response = await callGemini(getGeminiKeys()[0], { contents: [{ parts: [{ text: prompt }] }] });
         const brief = normalize(parseResponse(response), fallback);
         const cache = { signature: dataSignature, updatedAt: new Date().toISOString(), brief };

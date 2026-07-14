@@ -1,4 +1,4 @@
-// === Міні-крива кумулятивного PnL на дашборді (поточний місяць) ===
+// === Міні-крива кумулятивного PnL за останні записані торгові дні ===
 import { state } from './state.js';
 import { ensureChartJs } from './vendor_loader.js';
 
@@ -300,13 +300,12 @@ export function updateDashMiniEquityChart(year, monthIndex) {
     }
     _lastMiniChartArgs = { year, monthIndex };
 
-    const mk = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
-    const prefix = `${mk}-`;
     const journal = state.appData?.journal || {};
 
     const days = Object.keys(journal)
-        .filter((d) => d.startsWith(prefix) && /^\d{4}-\d{2}-\d{2}$/.test(d))
-        .sort();
+        .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && Number.isFinite(parseFloat(journal[d]?.pnl)))
+        .sort()
+        .slice(-15);
 
     const labels = [];
     const cumSeries = [];
@@ -323,7 +322,7 @@ export function updateDashMiniEquityChart(year, monthIndex) {
         cum += pnl;
         const pullback = allTimeEquity[d]?.pullback ?? 0;
         currentPullback = pullback;
-        labels.push(d.slice(8));
+        labels.push(`${d.slice(8)}.${d.slice(5, 7)}`);
         seriesDays.push(d);
         dailySeries.push(parseFloat(pnl.toFixed(2)));
         pullbackSeries.push(pullback);
@@ -345,7 +344,10 @@ export function updateDashMiniEquityChart(year, monthIndex) {
     const muted = chartTheme.muted;
     const grid = chartTheme.grid;
     const lineColor = profit;
-    const dayloss = getMonthDayloss(year, monthIndex);
+    const latestDate = days[days.length - 1] || '';
+    const latestYear = Number(latestDate.slice(0, 4)) || year;
+    const latestMonthIndex = Number(latestDate.slice(5, 7)) - 1;
+    const dayloss = getMonthDayloss(latestYear, Number.isInteger(latestMonthIndex) && latestMonthIndex >= 0 ? latestMonthIndex : monthIndex);
     const minCurve = Math.min(...cumSeries, 0);
     const maxCurve = Math.max(...cumSeries, 0);
     const pointColors = cumSeries.map((value) => valueGradientColor(value, minCurve, maxCurve, chartTheme));
