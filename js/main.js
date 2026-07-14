@@ -6,7 +6,7 @@ import { state } from './state.js';
 import { getDefaultDayEntry } from './data_utils.js';
 import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm, canAccessMentorReviewQueue, mentorAcceptReviewRequest, ensureAuthUserProfile, rejectBlockedProfile, isPasswordRecoveryUrl, showPasswordRecoveryForm } from './auth.js';
 import { loadTeams, openTeamManager, createNewTeam, moveTrader, deleteTeam, renameTeam, deleteTraderProfile, renderTeamSidebar, switchUser } from './teams.js';
-import { saveToLocal, saveJournalData, markJournalDayDirty, markAllJournalDirty, initializeApp, resetRuntimeDataForAccountSwitch, exportData, importData, loadMonth, loadTradeDays, resolveViewedUserId, setCurrentViewedUserId,
+import { saveToLocal, saveJournalData, saveSettings, markJournalDayDirty, markAllJournalDirty, initializeApp, resetRuntimeDataForAccountSwitch, exportData, importData, loadMonth, loadTradeDays, resolveViewedUserId, setCurrentViewedUserId,
          loadBackgroundGallery } from './storage.js';
 import { applyTheme, saveThemeSettings, switchTab, toggleMobileSidebar, switchMainTab, scrollMainTabs, toggleMoreTabs, toggleMobileMoreMenu, closeMobileMoreMenu, bindMainTabRoutes, syncMainTabFromRoute, refreshCurrentMainTitle } from './ui.js';
 import { shiftDate, selectDateFromInput, saveEntry, renderView, selectDate, updateAutoFlags, initSelectors, renderSidebarTradesList } from './calendar.js';
@@ -47,6 +47,7 @@ import { loadPartials } from './partials.js';
 import { applyPersistedBackground, initBackgroundControls } from './backgrounds.js';
 import { initGlobalAppEvents } from './app_events.js';
 import { showGlobalLoader, hideGlobalLoader } from './loading.js';
+import { initOnboarding, startOnboardingTour, resetOnboardingRuntime } from './onboarding.js';
 
 let appShellPromise = null;
 let appShellEventsReady = false;
@@ -109,6 +110,7 @@ window.toggleRightSidebar = function() {
 };
 window.getDefaultDayEntry = getDefaultDayEntry;
 window.state = state;
+window.startOnboardingTour = startOnboardingTour;
 
 let manualSyncInProgress = false;
 let manualSyncIntervalId = null;
@@ -1023,6 +1025,7 @@ async function bootApp(user) {
     if (window.updateDriveUI) window.updateDriveUI();
     startDriveAutoSync();
     startManualSyncScheduler();
+    initOnboarding({ user, saveSettings, switchMainTab });
     setTimeout(() => window._checkSessionModal?.(), 1500);
 }
 
@@ -1036,6 +1039,7 @@ function resetRouteForLoginScreen() {
 function showLoginScreen() {
     _appInitialized = false;
     stopManualSyncScheduler();
+    resetOnboardingRuntime();
     resetRouteForLoginScreen();
     resetRuntimeDataForAccountSwitch();
     state.USER_DOC_NAME = '';
