@@ -169,6 +169,34 @@ async function fetchComparisonJournalForNick(nick = '') {
     return journal;
 }
 
+export async function getDashboardTeamMomentum(limit = 3) {
+    const ownNick = cleanStatsNick(state.USER_DOC_NAME || '').replace(/_stats$/, '');
+    const profiles = Object.values(state._teamProfiles || {})
+        .filter((profile) => profile?.nick && profile.nick !== ownNick && isStatsNickAllowed(profile.nick))
+        .slice(0, 16);
+    const rows = await Promise.all(profiles.map(async (profile) => {
+        try {
+            const journal = await fetchComparisonJournalForNick(profile.nick);
+            const days = Object.entries(journal || {})
+                .filter(([date, entry]) => /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(getEffectiveStatsPnl(entry)))
+                .sort((a, b) => b[0].localeCompare(a[0]))
+                .slice(0, 10)
+                .map(([, entry]) => getEffectiveStatsPnl(entry));
+            if (days.length < 3) return null;
+            const recent = days.slice(0, 5);
+            const previous = days.slice(5, 10);
+            const recentPnl = recent.reduce((sum, value) => sum + value, 0);
+            const previousPnl = previous.reduce((sum, value) => sum + value, 0);
+            const winrate = recent.filter((value) => value > 0).length / recent.length * 100;
+            if (recentPnl <= 0 || winrate < 50) return null;
+            return { nick: profile.nick, name: [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.nick, recentPnl, previousPnl, winrate, score: recentPnl + Math.max(0, recentPnl - previousPnl) };
+        } catch {
+            return null;
+        }
+    }));
+    return rows.filter(Boolean).sort((a, b) => b.score - a.score).slice(0, Math.max(1, Number(limit) || 3));
+}
+
 function getStatsDaylossForDate(settings = {}, dateStr = '') {
     const safeSettings = settings && typeof settings === 'object' ? settings : {};
     const monthKey = /^\d{4}-\d{2}/.test(String(dateStr || '')) ? String(dateStr).slice(0, 7) : '';

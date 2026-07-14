@@ -93,6 +93,17 @@
                 </div>
             </div>
 
+            <section class="dashboard-ai-brief" id="dashboard-ai-brief" aria-labelledby="dashboard-ai-title">
+                <div class="dashboard-ai-brief__head">
+                    <div><div class="dashboard-ai-brief__kicker">AI-помічник дня</div><h3 id="dashboard-ai-title" class="dashboard-ai-brief__title">Коротко про вашу торгівлю</h3></div>
+                    <div class="dashboard-ai-brief__actions"><span class="dashboard-ai-status is-neutral" id="dashboard-ai-status">Аналізую</span><button type="button" class="btn-secondary btn-auto" id="dashboard-ai-refresh" data-action="dashboard-ai-refresh">Оновити</button></div>
+                </div>
+                <p class="dashboard-ai-brief__summary" id="dashboard-ai-summary">Збираю останні торгові дні та перевіряю ризик, входи й стабільність.</p>
+                <div class="dashboard-ai-brief__items" id="dashboard-ai-items"></div>
+                <div class="dashboard-ai-brief__footer"><span id="dashboard-ai-updated"></span><div class="dashboard-ai-brief__footer-actions"><button type="button" class="dashboard-ai-open-chat" data-action="dashboard-ai-history">Історія</button><button type="button" class="dashboard-ai-open-chat" data-tab="ai">Поставити детальне питання AI →</button></div></div>
+                <div class="dashboard-ai-history" id="dashboard-ai-history" hidden></div>
+            </section>
+
             <!-- 2-COLUMN LAYOUT -->
             <div class="dash-3col">
 

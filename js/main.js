@@ -48,6 +48,7 @@ import { applyPersistedBackground, initBackgroundControls } from './backgrounds.
 import { initGlobalAppEvents } from './app_events.js';
 import { showGlobalLoader, hideGlobalLoader } from './loading.js';
 import { initOnboarding, startOnboardingTour, resetOnboardingRuntime } from './onboarding.js';
+import { renderDashboardAI, refreshDashboardAI, toggleDashboardAIHistory } from './dashboard_ai.js';
 
 let appShellPromise = null;
 let appShellEventsReady = false;
@@ -111,6 +112,9 @@ window.toggleRightSidebar = function() {
 window.getDefaultDayEntry = getDefaultDayEntry;
 window.state = state;
 window.startOnboardingTour = startOnboardingTour;
+window.renderDashboardAI = renderDashboardAI;
+window.refreshDashboardAI = refreshDashboardAI;
+window.toggleDashboardAIHistory = toggleDashboardAIHistory;
 
 let manualSyncInProgress = false;
 let manualSyncIntervalId = null;
@@ -158,6 +162,7 @@ async function manualSyncAll(trigger = null, options = {}) {
             await runManualSyncStep('datagrid-view', () => document.getElementById('view-datagrid')?.classList.contains('active') ? renderTradesDatagrid() : null),
             await runManualSyncStep('mentor-review', () => canAccessMentorReviewQueue() ? refreshMentorReviewQueue() : null),
             await runManualSyncStep('dashboard-news', () => document.getElementById('view-dash')?.classList.contains('active') ? renderDashboardNews() : null),
+            await runManualSyncStep('dashboard-ai', () => document.getElementById('view-dash')?.classList.contains('active') ? renderDashboardAI() : null),
             await runManualSyncStep('market-sentiment', () => document.getElementById('view-dash')?.classList.contains('active') ? renderMarketSentiment() : null),
             await runManualSyncStep('sidebar-account', () => refreshSidebarAccount()),
             await runManualSyncStep('drive-ui', () => updateDriveUI()),
@@ -1007,6 +1012,7 @@ async function bootApp(user) {
         syncMainTabFromRoute();
         if (window.loadAIChatHistory) window.loadAIChatHistory();
         if (window.renderDashboardNews) void window.renderDashboardNews();
+        void renderDashboardAI();
         if (window.renderMarketSentiment) void window.renderMarketSentiment();
         cleanupUnusedAIRequests();
 

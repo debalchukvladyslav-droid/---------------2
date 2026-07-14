@@ -1,0 +1,276 @@
+import { state } from './state.js';
+import { callGemini, getGeminiKeys } from './ai.js';
+import { buildTradeTypeAIContext } from './trade_type_analysis.js';
+import { saveSettings } from './storage.js';
+import { getDashboardTeamMomentum } from './stats.js';
+
+const CACHE_MS = 6 * 60 * 60 * 1000;
+let busy = false;
+let teamMomentumCache = { at: 0, rows: [] };
+
+function pnlOf(day) {
+    for (const value of [day?.fondexx?.pnl, day?.ppro?.pnl, day?.pnl]) {
+        const number = Number(value);
+        if (Number.isFinite(number)) return number;
+    }
+    return null;
+}
+
+function recentDays() {
+    return Object.entries(state.appData?.journal || {})
+        .filter(([date, day]) => /^\d{4}-\d{2}-\d{2}$/.test(date) && pnlOf(day) !== null)
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .slice(0, 20)
+        .map(([date, day]) => ({ date, day, pnl: pnlOf(day) }));
+}
+
+function signature(days) {
+    return days.map(({ date, day, pnl }) => `${date}:${pnl}:${day?.trades?.length || 0}:${day?.errors?.length || 0}`).join('|');
+}
+
+function snapshot(days) {
+    const latest = days[0] || null;
+    const five = days.slice(0, 5);
+    const total5 = five.reduce((sum, item) => sum + item.pnl, 0);
+    const wins5 = five.filter((item) => item.pnl > 0).length;
+    const worst = days.reduce((current, item) => !current || item.pnl < current.pnl ? item : current, null);
+    let lossStreak = 0;
+    for (const item of days) { if (item.pnl >= 0) break; lossStreak++; }
+    const errors = new Map();
+    days.slice(0, 10).forEach(({ day }) => (day?.errors || []).forEach((value) => {
+        const key = String(value || '').trim();
+        if (key) errors.set(key, (errors.get(key) || 0) + 1);
+    }));
+    const commonError = [...errors.entries()].sort((a, b) => b[1] - a[1])[0] || null;
+    const month = latest?.date?.slice(0, 7) || '';
+    const settings = state.appData?.settings || {};
+    const limit = Number(settings.monthlyDayloss?.[month] ?? settings.defaultDayloss ?? -100);
+    const allDays = Object.entries(state.appData?.journal || {})
+        .filter(([date, day]) => /^\d{4}-\d{2}-\d{2}$/.test(date) && pnlOf(day) !== null)
+        .map(([date, day]) => ({ date, day, pnl: pnlOf(day) }))
+        .sort((a, b) => b.pnl - a.pnl);
+    const strongDays = allDays.slice(0, 5);
+    const strongNotes = strongDays.map((item) => ({ date: item.date, pnl: item.pnl, note: String(item.day?.notes || '').trim().slice(0, 240) })).filter((item) => item.note);
+    return { latest, five, total5, wins5, worst, lossStreak, commonError, limit, bigLoss: !!worst && worst.pnl <= limit, strongDays, strongNotes };
+}
+
+function historicalItem(data) {
+    const example = data.strongNotes?.[0];
+    if (example) return { tone: 'good', title: `Згадайте сильний день ${example.date}`, text: `Тоді було ${example.pnl >= 0 ? '+' : ''}${example.pnl.toFixed(2)}$. Із вашого запису: «${example.note}»`, action: 'calendar', actionLabel: 'Переглянути календар' };
+    const best = data.strongDays?.[0];
+    if (best) return { tone: 'good', title: 'Порівняйте зі своїм сильним днем', text: `${best.date} ви закрили з результатом ${best.pnl >= 0 ? '+' : ''}${best.pnl.toFixed(2)}$. Перегляньте ті входи й умови, які тоді працювали.`, action: 'calendar', actionLabel: 'Знайти цей день' };
+    return null;
+}
+
+async function teamMomentum() {
+    if (Date.now() - teamMomentumCache.at < 30 * 60 * 1000) return teamMomentumCache.rows;
+    const rows = await getDashboardTeamMomentum(3).catch(() => []);
+    teamMomentumCache = { at: Date.now(), rows };
+    return rows;
+}
+
+function withTeamMomentum(brief, rows) {
+    if (!rows?.length || brief.level === 'risk') return brief;
+    const trader = rows[0];
+    const item = { tone: 'info', title: `Зверніть увагу на ${trader.name}`, text: `За останні дні трейдер рухається стабільно: ${trader.recentPnl >= 0 ? '+' : ''}${trader.recentPnl.toFixed(2)}$, зелених днів близько ${trader.winrate.toFixed(0)}%. Можна подивитися його входи в режимі порівняння.`, action: 'stats', actionLabel: 'Відкрити порівняння' };
+    return { ...brief, items: [...brief.items, item].slice(-4) };
+}
+
+function fallbackBrief(data) {
+    if (!data.latest) return { level: 'neutral', status: 'Мало даних', summary: 'Синхронізуйте кілька торгових днів — тоді помічник оцінить входи, ризик і стабільність.', items: [{ tone: 'info', title: 'Потрібні дані', text: 'Імпортуйте Trades і Google Sheets та відмічайте помилки після сесії.' }] };
+    const risk = data.bigLoss || data.lossStreak >= 3;
+    const attention = !risk && (data.total5 < 0 || data.commonError?.[1] >= 2);
+    const level = risk ? 'risk' : attention ? 'attention' : 'good';
+    const items = [];
+    if (data.bigLoss) items.push({ tone: 'risk', title: 'Великий мінус', text: `${data.worst.date}: ${data.worst.pnl.toFixed(2)}$. Це нижче дейлосу ${data.limit.toFixed(0)}$ — перегляньте розмір позиції та виконання стопа.` });
+    else items.push({ tone: data.total5 >= 0 ? 'good' : 'warn', title: 'Останні 5 днів', text: `${data.total5 >= 0 ? '+' : ''}${data.total5.toFixed(2)}$, зелених днів ${data.wins5} із ${data.five.length}.` });
+    if (data.commonError) items.push({ tone: 'warn', title: 'Повторювана помилка', text: `«${data.commonError[0]}» відмічено ${data.commonError[1]} раз(и). Перевірте її перед наступним входом.` });
+    items.push(level === 'good'
+        ? { tone: 'good', title: 'Що робити', text: 'Продовжуйте той самий процес без збільшення ризику. Не змінюйте робочу систему після короткої зеленої серії.' }
+        : level === 'risk'
+            ? { tone: 'risk', title: 'Що робити', text: 'Зменште робочий ризик і не намагайтеся відіграти мінус. Спершу проведіть чисту сесію без порушень.' }
+            : { tone: 'info', title: 'Що робити', text: 'Оберіть один обов’язковий фільтр входу й не форсуйте посередні сетапи наступної сесії.' });
+    return {
+        level,
+        status: risk ? 'Зменшити ризик' : attention ? 'Потрібна увага' : 'Все стабільно',
+        summary: risk ? 'Є ризиковий сигнал. Зараз важливіше захистити капітал і переглянути виконання, ніж відігруватися.' : attention ? 'Ситуація не критична, але один патерн краще виправити до наступної серії входів.' : 'Критичних сигналів немає. Процес стабільний — не підвищуйте ризик без причини.',
+        items: items.slice(0, 3),
+    };
+}
+
+function screenshotCount(day) {
+    return Object.values(day?.screenshots || {}).reduce((sum, list) => sum + (Array.isArray(list) ? list.length : 0), 0);
+}
+
+function rotatingNudge(data) {
+    const now = new Date();
+    const hour = now.getHours();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const todayEntry = state.appData?.journal?.[today];
+    const learnCache = state.appData?.learnCache;
+    const learnAge = Date.now() - Date.parse(learnCache?.date || '');
+    const rotation = Math.floor(Date.now() / 10800000);
+    if (todayEntry && pnlOf(todayEntry) !== null && hour >= 16 && !String(todayEntry.notes || '').trim()) {
+        return { status: 'Запиши день', item: { tone: 'info', title: 'Закрий день коротким розбором', text: 'Результат уже є, але думки за день не записані. Додайте 2–3 речення: що спрацювало, де поспішили та що повторити завтра.', action: 'calendar', actionLabel: 'Записати день' } };
+    }
+    if (!todayEntry && hour >= 16) {
+        return { status: 'Легке нагадування', item: { tone: 'info', title: 'Сьогоднішній день ще не записаний', text: 'Якщо торгували — синхронізуйте угоди й додайте короткий підсумок. Якщо не торгували, нічого робити не потрібно.', action: 'calendar', actionLabel: 'Відкрити календар' } };
+    }
+    if (todayEntry && hour < 16 && !String(todayEntry.sessionGoal || '').trim() && !String(todayEntry.sessionPlan || '').trim()) {
+        return { status: 'План перед входами', item: { tone: 'info', title: 'Сформулюйте план сесії', text: 'Запишіть допустимі сетапи, максимальну кількість входів і умову, після якої зупиняєтесь.', action: 'calendar', actionLabel: 'Додати план' } };
+    }
+    const history = historicalItem(data);
+    if (history && rotation % 4 === 0) return { status: 'Згадайте сильний день', item: history };
+    if (!learnCache || !Number.isFinite(learnAge) || learnAge > 7 * 86400000) {
+        return { status: 'Час на навчання', item: { tone: 'info', title: 'Можливо, час подивитися розбір', text: data.commonError ? `Підберіть відео навколо проблеми «${data.commonError[0]}». У навчанні можна вказати власний напрямок пошуку.` : 'AI може підібрати практичні відео за вашими входами. Напишіть тему, яку хочете підтягнути.', action: 'learn', actionLabel: 'Підібрати відео' } };
+    }
+    if (data.latest?.day && screenshotCount(data.latest.day) === 0) {
+        return { status: 'Збережи контекст', item: { tone: 'info', title: 'До останнього дня немає скріншотів', text: 'Один скрін входу й один скрін виходу часто дають більше користі, ніж довгий текстовий розбір.', action: 'screens', actionLabel: 'Додати скріншоти' } };
+    }
+    const chill = [
+        { title: 'Спокійний check-in', text: 'Термінових проблем не видно. Не шукайте, що зламати: тримайте звичайний ризик і беріть лише знайомі входи.' },
+        { title: 'Не форсуйте кількість', text: 'Хороший день не зобов’язаний мати багато угод. Якщо чистого сетапу немає — пропущений вхід теж правильна дія.' },
+        { title: 'Збережіть робочий ритм', text: 'Продовжуйте так само: той самий ризик, ті самі фільтри й короткий розбір після завершення.' },
+    ];
+    return { status: 'Все спокійно', item: { tone: 'good', ...chill[rotation % chill.length] } };
+}
+
+function decorateWithNudge(brief, data) {
+    if (brief.level === 'risk') return brief;
+    const nudge = rotatingNudge(data);
+    const items = [...brief.items];
+    if (!items.some((item) => item.title === nudge.item.title)) items.push(nudge.item);
+    return { ...brief, status: ['good', 'neutral'].includes(brief.level) ? nudge.status : brief.status, items: items.slice(-4) };
+}
+
+function normalize(value, fallback) {
+    const levels = ['good', 'attention', 'risk', 'neutral'];
+    const tones = ['good', 'warn', 'risk', 'info'];
+    const items = Array.isArray(value?.items) ? value.items.slice(0, 4).map((item) => ({
+        tone: tones.includes(item?.tone) ? item.tone : 'info',
+        title: String(item?.title || '').trim().slice(0, 80),
+        text: String(item?.text || '').trim().slice(0, 320),
+        action: ['learn', 'calendar', 'screens', 'stats', 'ai'].includes(item?.action) ? item.action : '',
+        actionLabel: String(item?.actionLabel || '').trim().slice(0, 60),
+    })).filter((item) => item.title && item.text) : [];
+    return { level: levels.includes(value?.level) ? value.level : fallback.level, status: String(value?.status || fallback.status).slice(0, 60), summary: String(value?.summary || fallback.summary).slice(0, 360), items: items.length ? items : fallback.items };
+}
+
+function render(brief, updatedAt = '') {
+    const host = document.getElementById('dashboard-ai-items');
+    const status = document.getElementById('dashboard-ai-status');
+    const summary = document.getElementById('dashboard-ai-summary');
+    const updated = document.getElementById('dashboard-ai-updated');
+    if (!host || !status || !summary) return;
+    status.className = `dashboard-ai-status is-${brief.level}`;
+    status.textContent = brief.status;
+    summary.textContent = brief.summary;
+    host.textContent = '';
+    brief.items.forEach((item) => {
+        const card = document.createElement('article'); card.className = `dashboard-ai-point is-${item.tone}`;
+        const title = document.createElement('strong'); title.textContent = item.title;
+        const text = document.createElement('p'); text.textContent = item.text;
+        card.append(title, text);
+        if (item.action && item.actionLabel) {
+            const action = document.createElement('button');
+            action.type = 'button';
+            action.className = 'dashboard-ai-point__action';
+            action.dataset.tab = item.action;
+            action.textContent = `${item.actionLabel} →`;
+            card.appendChild(action);
+        }
+        host.appendChild(card);
+    });
+    if (updated) updated.textContent = updatedAt ? `Оновлено ${new Date(updatedAt).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' })}` : 'Швидка оцінка за журналом';
+    renderHistory();
+}
+
+function renderHistory() {
+    const host = document.getElementById('dashboard-ai-history');
+    if (!host) return;
+    const history = Array.isArray(state.appData?.settings?.dashboardAIHistory) ? state.appData.settings.dashboardAIHistory : [];
+    host.textContent = '';
+    if (!history.length) {
+        const empty = document.createElement('p'); empty.textContent = 'Історія висновків з’явиться після перших AI-аналізів.'; host.appendChild(empty); return;
+    }
+    history.slice(0, 12).forEach((entry) => {
+        const row = document.createElement('article'); row.className = `dashboard-ai-history__item is-${entry.level || 'neutral'}`;
+        const head = document.createElement('strong'); head.textContent = `${entry.status || 'AI-висновок'} · ${new Date(entry.createdAt).toLocaleDateString('uk-UA')}`;
+        const text = document.createElement('p'); text.textContent = entry.summary || '';
+        row.append(head, text); host.appendChild(row);
+    });
+}
+
+function rememberBrief(brief, dataSignature) {
+    if (!state.appData.settings) state.appData.settings = {};
+    const history = Array.isArray(state.appData.settings.dashboardAIHistory) ? state.appData.settings.dashboardAIHistory : [];
+    const dayKey = new Date().toISOString().slice(0, 13);
+    const entryKey = `${dataSignature}|${dayKey}`;
+    const next = [{ key: entryKey, createdAt: new Date().toISOString(), level: brief.level, status: brief.status, summary: brief.summary, items: brief.items }, ...history.filter((item) => item?.key !== entryKey)].slice(0, 40);
+    state.appData.settings.dashboardAIHistory = next;
+}
+
+function parseResponse(text) {
+    const match = String(text || '').match(/\{[\s\S]*\}/);
+    try { return match ? JSON.parse(match[0]) : null; } catch { return null; }
+}
+
+async function askAI(days, fallback, dataSignature) {
+    if (busy || state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) return;
+    busy = true;
+    const button = document.getElementById('dashboard-ai-refresh');
+    if (button) { button.disabled = true; button.textContent = 'Аналізую…'; }
+    try {
+        const data = snapshot(days);
+        const types = buildTradeTypeAIContext(state.appData?.journal || {}, { tradeTypes: state.appData?.tradeTypes, recentDays: 45, limit: 6 });
+        const prompt = `Ти міні-помічник активного трейдера. Скажи, чи все гаразд, що переглянути у входах і ризику, чи був завеликий мінус, або чи варто продовжувати так само.
+Дні: ${days.slice(0, 10).map((item) => `${item.date}: ${item.pnl}$, угод ${item.day?.trades?.length || 0}, помилки ${(item.day?.errors || []).join(', ') || 'немає'}`).join(' | ')}
+Дейлос ${data.limit}$. Серія мінусів ${data.lossStreak}.
+${types}
+Сильні історичні дні трейдера: ${data.strongDays.map((item) => `${item.date}: ${item.pnl}$`).join(' | ') || 'немає'}.
+Ключові записи зі сильних днів: ${data.strongNotes.map((item) => `${item.date}: ${item.note}`).join(' | ') || 'немає записів'}.
+Помічник також може запропонувати навчання, запис дня, план сесії, скріншоти або порівняння. Для доречної тези можеш додати action: learn, calendar, screens, stats або ai та короткий actionLabel.
+Не вигадуй відсутні причини, не прогнозуй ринок і не радь відігруватися. Пиши українською, коротко й конкретно. Поверни лише JSON: {"level":"good|attention|risk|neutral","status":"до 5 слів","summary":"1-2 речення","items":[{"tone":"good|warn|risk|info","title":"заголовок","text":"теза або наступна дія"}]}. Дай 2-4 items.`;
+        const response = await callGemini(getGeminiKeys()[0], { contents: [{ parts: [{ text: prompt }] }] });
+        const brief = normalize(parseResponse(response), fallback);
+        const cache = { signature: dataSignature, updatedAt: new Date().toISOString(), brief };
+        state.appData.settings.dashboardAIBrief = cache;
+        rememberBrief(brief, dataSignature);
+        const peers = await teamMomentum();
+        render(withTeamMomentum(decorateWithNudge(brief, data), peers), cache.updatedAt);
+        await saveSettings();
+    } catch (error) {
+        console.warn('[Dashboard AI]', error?.message || error);
+        render(fallback);
+    } finally {
+        busy = false;
+        if (button) { button.disabled = false; button.textContent = 'Оновити'; }
+    }
+}
+
+export async function renderDashboardAI(options = {}) {
+    if (!document.getElementById('dashboard-ai-brief')) return;
+    const days = recentDays();
+    const key = signature(days);
+    const data = snapshot(days);
+    const fallback = fallbackBrief(data);
+    const cache = state.appData?.settings?.dashboardAIBrief;
+    const age = Date.now() - Date.parse(cache?.updatedAt || '');
+    const valid = cache?.signature === key && Number.isFinite(age) && age < CACHE_MS;
+    const baseBrief = valid ? normalize(cache.brief, fallback) : fallback;
+    const decorated = decorateWithNudge(baseBrief, data);
+    render(decorated, valid ? cache.updatedAt : '');
+    void teamMomentum().then((rows) => render(withTeamMomentum(decorated, rows), valid ? cache.updatedAt : ''));
+    if ((!valid || options.force) && days.length) void askAI(days, fallback, key);
+}
+
+export function refreshDashboardAI() {
+    return renderDashboardAI({ force: true });
+}
+
+export function toggleDashboardAIHistory() {
+    const host = document.getElementById('dashboard-ai-history');
+    if (!host) return;
+    host.hidden = !host.hidden;
+    if (!host.hidden) renderHistory();
+}
