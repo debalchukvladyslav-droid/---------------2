@@ -142,6 +142,24 @@ async function fetchStatsJournalForNick(nick = '', filters = [{ type: 'all-time'
     return fetchMonthsForPeriod(`${cleanNick}_stats`, filters, userId);
 }
 
+async function fetchComparisonJournalForNick(nick = '') {
+    const cleanNick = cleanStatsNick(nick).replace(/_stats$/, '');
+    if (!cleanNick || !isStatsNickAllowed(cleanNick)) return {};
+    const userId = await resolveStatsUserIdForNick(cleanNick);
+    if (!userId) return {};
+    const { data, error } = await supabase.rpc('get_stats_comparison_journal', {
+        target_user_id: userId,
+    });
+    if (error) throw error;
+    const journal = {};
+    (data || []).forEach((row) => {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(String(row.trade_date || ''))) {
+            journal[row.trade_date] = journalRowToEntry(row);
+        }
+    });
+    return journal;
+}
+
 function getStatsDaylossForDate(settings = {}, dateStr = '') {
     const safeSettings = settings && typeof settings === 'object' ? settings : {};
     const monthKey = /^\d{4}-\d{2}/.test(String(dateStr || '')) ? String(dateStr).slice(0, 7) : '';
@@ -652,10 +670,9 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
                     settings = state.appData.settings || {};
                 } else {
                     const cleanNick = nick.replace(/_stats$/, '');
-                    const data = await getStatsDocData(`${cleanNick}_stats`, [{ type: 'all-time', val: 'all' }]);
-                    journal = prepareStatsJournal(data.journal || {});
-                    tradeTypes = normalizeTradeTypesList([...(data.tradeTypes || []), ...extractTradeTypesFromJournal(journal)]);
-                    settings = data.settings || getStatsProfileSettingsByNick(cleanNick);
+                    journal = prepareStatsJournal(await fetchComparisonJournalForNick(cleanNick));
+                    tradeTypes = extractTradeTypesFromJournal(journal);
+                    settings = getStatsProfileSettingsByNick(cleanNick);
                 }
             }
         } else if (sel.type === 'all') {
@@ -670,7 +687,7 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
                     const c = _cacheGet(k);
                     const settings = getStatsProfileSettingsByNick(nick);
                     if (c) return { journal: c, settings };
-                    const j = await fetchStatsJournalForNick(nick);
+                    const j = await fetchComparisonJournalForNick(nick);
                     _cacheSet(k, j);
                     return { journal: j, settings };
                 }));
@@ -689,7 +706,7 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
                     const c = _cacheGet(k);
                     const settings = getStatsProfileSettingsByNick(nick);
                     if (c) return { journal: c, settings };
-                    const j = await fetchStatsJournalForNick(nick);
+                    const j = await fetchComparisonJournalForNick(nick);
                     _cacheSet(k, j);
                     return { journal: j, settings };
                 }));
@@ -708,7 +725,7 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
                 if (cached) {
                     journal = prepareStatsJournal(cached);
                 } else {
-                    journal = await fetchStatsJournalForNick(nick);
+                    journal = await fetchComparisonJournalForNick(nick);
                     journal = prepareStatsJournal(journal);
                     _cacheSet(cacheKey, journal);
                 }
