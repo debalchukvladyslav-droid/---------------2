@@ -490,6 +490,19 @@ function getStatsSourceOptionsHtml(selection = state.statsSourceSelection, dataP
         ? `<button class="${getStatsSourceButtonClass('current', currentKey, selection)}" ${typeAttr}="current" ${keyAttr}="${escapeHtml(currentKey)}">${isViewingOtherProfile ? '👤 Поточний профіль' : '🏠 Мій профіль'}</button>`
         : '';
 
+    if (dataPrefix === 'compare') {
+        const profiles = Object.values(state._teamProfiles || {})
+            .filter((profile) => profile?.nick && isStatsProfile(profile))
+            .sort((a, b) => String(a.nick).localeCompare(String(b.nick), 'uk'));
+        html += '<div class="stats-group-title">Усі трейдери та адміни</div>';
+        profiles.forEach((profile) => {
+            const nick = cleanStatsNick(profile.nick);
+            const roleLabel = profile.role === 'admin' ? ' · адмін' : '';
+            html += `<button class="${getStatsSourceButtonClass('trader', nick, selection)}" ${typeAttr}="trader" ${keyAttr}="${escapeHtml(nick)}">👤 ${escapeHtml(nick)}${roleLabel}</button>`;
+        });
+        return html;
+    }
+
     if (isViewingOtherProfile && myNick && isStatsNickAllowed(myNick)) {
         renderedTraderNicks.add(myNick);
         html += `<button class="${getStatsSourceButtonClass('trader', myNick, selection)}" ${typeAttr}="trader" ${keyAttr}="${escapeHtml(myNick)}">🏠 Мій профіль (${escapeHtml(myNick)})</button>`;
