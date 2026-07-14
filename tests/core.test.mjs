@@ -873,10 +873,9 @@ test('explicit trade type header has priority over value-based detection', () =>
 test('legacy Classification mapping migrates from trade type to exceptions', () => {
     const result = migrateLegacyClassificationMapping({
         version: 5,
-        sheetHeaders: ['Ticker', 'Класифікація', 'Тип угоди'],
         smartColumns: { symbol: 'A', tradeType: 'B, C', exceptions: '' },
         smartAnchors: { tradeType: 'B6' },
-    });
+    }, ['Ticker', 'Класифікація', 'Тип угоди']);
     assert.equal(result.changed, true);
     assert.equal(result.config.smartColumns.tradeType, 'C');
     assert.equal(result.config.smartColumns.exceptions, 'B');

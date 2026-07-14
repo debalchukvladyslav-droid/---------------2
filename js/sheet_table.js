@@ -915,6 +915,14 @@ export function setSheetPreviewData(rows) {
     _sheetPreviewRows = Array.isArray(rows)
         ? rows.slice(0, SHEET_PREVIEW_RENDER_MAX_ROWS).map((row) => Array.isArray(row) ? row.slice(0, SHEET_PREVIEW_RENDER_MAX_COLS) : [])
         : [];
+    const storedConfig = readStoredConfig(getActiveSheetMode());
+    if (storedConfig) {
+        const migrated = migrateLegacyClassificationMapping(storedConfig, _sheetPreviewRows.slice(0, 20));
+        if (migrated.changed) {
+            setStoredValue(modeStorageKeys(getActiveSheetMode()).config, JSON.stringify(migrated.config));
+            applyConfigToForm(migrated.config);
+        }
+    }
     _sheetPreviewHoverRef = null;
     buildSheetGridPreview();
 }
