@@ -229,13 +229,14 @@ function markDayEntryDetailsLoaded(entry, loaded) {
 }
 
 let _journalSaveQueue = Promise.resolve();
-let _settingsSaveQueue = Promise.resolve();
+let _settingsSavePromise = null;
+let _settingsSaveRequested = false;
 const _dirtyJournalDates = new Set();
 const _dayDetailsPromises = new Map();
 const _tradeDaysLoadedFor = new Set();
 
 export function saveToLocal() {
-    return Promise.all([saveJournalData(), saveSettingsQueued()])
+    return Promise.all([saveJournalData(), saveSettings()])
         .catch(e => console.error('saveToLocal queue error:', e));
 }
 
@@ -266,14 +267,7 @@ export function markAllJournalDirty() {
     Object.keys(journal).forEach(markJournalDayDirty);
 }
 
-function saveSettingsQueued() {
-    _settingsSaveQueue = _settingsSaveQueue
-        .then(() => saveSettings())
-        .catch(e => console.error('saveSettings queue error:', e));
-    return _settingsSaveQueue;
-}
-
-export async function saveSettings() {
+async function performSettingsSave() {
     try {
         const { user } = await getCurrentUserContext();
         if (!user) return;
@@ -309,6 +303,18 @@ export async function saveSettings() {
     } catch (e) {
         console.error('❌ Помилка збереження settings:', e);
     }
+}
+
+export function saveSettings() {
+    _settingsSaveRequested = true;
+    if (_settingsSavePromise) return _settingsSavePromise;
+    _settingsSavePromise = (async () => {
+        while (_settingsSaveRequested) {
+            _settingsSaveRequested = false;
+            await performSettingsSave();
+        }
+    })().finally(() => { _settingsSavePromise = null; });
+    return _settingsSavePromise;
 }
 
 export async function loadSettings() {

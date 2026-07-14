@@ -150,6 +150,7 @@ function rowToBackupEntry(row) {
         days: entry.days ?? row.days,
         encoding: entry.encoding || row.encoding,
         serverBackedUp: true,
+        serverUserId: row.user_id || '',
     };
 }
 
@@ -243,7 +244,7 @@ export async function refreshServerBackups() {
     if (!userId) return [];
     const { data, error } = await supabase
         .from('journal_backups')
-        .select('backup_id, reason, nick, backup_created_at, created_at, backup_data, raw_bytes, stored_bytes, days, encoding')
+        .select('backup_id, user_id, reason, nick, backup_created_at, created_at, raw_bytes, stored_bytes, days, encoding')
         .eq('user_id', userId)
         .order('backup_created_at', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false })
@@ -259,7 +260,7 @@ export async function listServerBackupsForUser(userId, limit = MAX_BACKUPS) {
     const safeLimit = Math.min(MAX_BACKUPS, Math.max(1, Number(limit) || 4));
     const { data, error } = await supabase
         .from('journal_backups')
-        .select('backup_id, reason, nick, backup_created_at, created_at, backup_data, raw_bytes, stored_bytes, days, encoding')
+        .select('backup_id, user_id, reason, nick, backup_created_at, created_at, raw_bytes, stored_bytes, days, encoding')
         .eq('user_id', userId)
         .order('backup_created_at', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false })
@@ -275,10 +276,24 @@ export async function readCompressedBackup(id) {
         entry = listCompressedBackups().find((item) => item.id === id);
     }
     if (!entry) throw new Error('Backup not found');
-    return readCompressedBackupEntry(entry);
+    return readCompressedBackupEntry(await hydrateServerBackup(entry));
+}
+
+async function hydrateServerBackup(entry) {
+    if (entry?.data) return entry;
+    if (!entry?.id || !entry?.serverBackedUp) throw new Error('Backup data is unavailable');
+    const userId = entry.serverUserId || await getServerBackupUserId();
+    let query = supabase.from('journal_backups').select('backup_data').eq('backup_id', entry.id);
+    if (userId) query = query.eq('user_id', userId);
+    const { data, error } = await query.single();
+    if (error) throw normalizeServerBackupError(error);
+    const hydrated = rowToBackupEntry({ ...entry, user_id: userId, backup_data: data?.backup_data });
+    serverBackupsCache = serverBackupsCache.map((item) => item.id === hydrated.id ? hydrated : item);
+    return hydrated;
 }
 
 export async function readCompressedBackupEntry(entry) {
+    entry = await hydrateServerBackup(entry);
     const text = await gunzipText(entry);
     const payload = JSON.parse(text);
     if (!payload?.appData || typeof payload.appData !== 'object') {
@@ -309,9 +324,10 @@ export function deleteCompressedBackup(id) {
         .catch((error) => console.warn('[Backups] server delete failed:', error?.message || error));
 }
 
-export function downloadCompressedBackup(id) {
-    const entry = listCompressedBackups().find((item) => item.id === id);
+export async function downloadCompressedBackup(id) {
+    let entry = listCompressedBackups().find((item) => item.id === id);
     if (!entry) throw new Error('Backup not found');
+    entry = await hydrateServerBackup(entry);
     const blob = new Blob([JSON.stringify(entry)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

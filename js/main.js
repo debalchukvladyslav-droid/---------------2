@@ -675,9 +675,9 @@ window.createSettingsBackup = async function() {
         showToast('Не вдалося створити бекап: ' + (error?.message || error));
     }
 };
-window.downloadSettingsBackup = function(id) {
+window.downloadSettingsBackup = async function(id) {
     try {
-        downloadCompressedBackup(id);
+        await downloadCompressedBackup(id);
     } catch (error) {
         showToast('Не вдалося скачати бекап: ' + (error?.message || error));
     }
