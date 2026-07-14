@@ -350,7 +350,16 @@ function renderMentorConversation() {
         }
         host.appendChild(row);
     });
+    if (mentorBusy) {
+        const thinking = document.createElement('div'); thinking.className = 'dashboard-mentor-message is-mentor is-thinking'; thinking.setAttribute('aria-label', 'Наставник думає');
+        thinking.innerHTML = '<span></span><span></span><span></span>';
+        host.appendChild(thinking);
+    }
     host.scrollTop = host.scrollHeight;
+}
+
+function isTradingConversation(text) {
+    return /трейд|угод|вхід|вихід|ризик|стоп|тейк|профіт|мінус|плюс|сетап|ринок|акці|тікер|шорт|лонг|депозит|день торг|pnl|trade|trading|entry|exit|stock|ticker/i.test(String(text || ''));
 }
 
 function renderMentorTheses() {
@@ -410,18 +419,19 @@ export async function sendDashboardMentorMessage() {
     history.push({ role: 'user', text: text.slice(0, 1200), at: new Date().toISOString() });
     state.appData.settings.dashboardMentorConversation = history.slice(-120);
     if (input) input.value = '';
-    renderMentorConversation();
     mentorBusy = true;
+    renderMentorConversation();
     document.getElementById('dashboard-mentor-compose')?.classList.add('is-busy');
     try {
         const days = recentDays();
         const data = snapshot(days);
         const memory = String(state.appData.settings.dashboardMentorMemory || '').slice(0, 2500);
         const dialogue = history.slice(-20).map((m) => `${m.role === 'user' ? 'Трейдер' : 'Наставник'}: ${m.text}`).join('\n');
-        const prompt = `Ти особистий універсальний помічник і наставник людини. З тобою можна говорити про трейдинг, роботу, побут, плани, навчання, переживання або будь-яку іншу тему. Ти пам'ятаєш характер і минулі розмови та відповідаєш у близькому людині темпі, але не копіюєш грубість. Якщо питання про трейдинг — не вигадуй фактів, не прогнозуй ринок, допоможи побачити помилку й дай один конкретний крок. Якщо тема не про трейдинг — відповідай як звичайний розумний співрозмовник і не намагайся штучно повертати розмову до торгівлі.
+        const tradingContext = isTradingConversation(text) ? `Останні торгові дні: ${days.slice(0, 10).map((d) => `${d.date} ${d.pnl}$, помилки ${(d.day?.errors || []).join(', ') || 'немає'}, запис ${String(d.day?.notes || '').slice(0, 160) || 'немає'}`).join(' | ')}\nДейлос: ${data.limit}$.` : 'Це не торгове питання. Не згадуй трейдинг, журнал, ризики чи роботу без прямого прохання користувача.';
+        const prompt = `Ти особистий універсальний співрозмовник людини, а не лише робочий чи торговий наставник. Можна вільно говорити про побут, стосунки, настрій, ідеї, розваги, техніку, навчання або будь-яку іншу тему. Ти пам'ятаєш характер і минулі розмови та відповідаєш природно, у близькому людині темпі, але не копіюєш грубість. Не давай непроханих порад: іноді достатньо просто нормально відповісти або підтримати. До трейдингу переходь лише якщо поточне повідомлення прямо про нього.
 Пам'ять: ${memory || 'ще формується'}
-Останні дні: ${days.slice(0, 10).map((d) => `${d.date} ${d.pnl}$, помилки ${(d.day?.errors || []).join(', ') || 'немає'}, запис ${String(d.day?.notes || '').slice(0, 160) || 'немає'}`).join(' | ')}
-Дейлос: ${data.limit}$. Діалог:\n${dialogue}
+${tradingContext}
+Діалог:\n${dialogue}
 Поверни лише JSON: {"reply":"коротка жива відповідь до 4 речень","memory":"стисле оновлене розуміння підходу, характеру й важливих фактів трейдера","action":"calendar|stats|trades|screens|learn|ai або порожньо","actionLabel":"коротка назва переходу"}.`;
         const response = parseResponse(await callGemini(getGeminiKeys()[0], { contents: [{ parts: [{ text: prompt }] }] })) || {};
         const reply = compactText(response.reply || 'Я почув. Давай спершу подивимось на останні входи й знайдемо один повторюваний момент.', 520);

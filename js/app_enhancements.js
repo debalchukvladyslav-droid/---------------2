@@ -393,6 +393,11 @@ function bindDeclarativeActions() {
     });
 
     document.addEventListener('keydown', (event) => {
+        if (event.target?.matches?.('#dashboard-mentor-input') && event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            window.sendDashboardMentorMessage?.();
+            return;
+        }
         if (event.target?.matches?.('[data-action="sos-input"]') && event.key === 'Enter') {
             event.preventDefault();
             window.sendSOSMessage?.();
