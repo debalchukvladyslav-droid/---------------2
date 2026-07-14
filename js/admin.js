@@ -3,7 +3,8 @@ import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { copyTextToClipboard, showToast } from './utils.js';
 import { loadTeams } from './teams.js';
-import { exportProfileData, resetProfileData } from './storage.js';
+import { exportProfileData, resetProfileData, restoreProfileData } from './storage.js';
+import { listServerBackupsForUser, readCompressedBackupEntry } from './backups.js';
 
 const ROLES = ['trader', 'mentor', 'admin'];
 const DEFAULT_TEAM = 'Без куща';
@@ -928,7 +929,92 @@ function buildUserCard(profile, teamChoices, options = {}) {
     card.appendChild(head);
     if (dataManager) card.appendChild(grid);
     card.appendChild(actions);
+    if (fullAdmin) card.appendChild(buildAdminBackupPanel(profile, card));
     return card;
+}
+
+function formatAdminBackupDate(value) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? 'невідома дата' : date.toLocaleString('uk-UA');
+}
+
+function buildAdminBackupPanel(profile, card) {
+    const panel = document.createElement('div');
+    panel.className = 'admin-backup-panel';
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'btn-admin-action';
+    toggle.textContent = 'Показати бекапи';
+    const list = document.createElement('div');
+    list.className = 'settings-backup-list';
+    list.hidden = true;
+    let visibleCount = 4;
+
+    const load = async () => {
+        list.innerHTML = '<p class="settings-copy-sm">Завантаження…</p>';
+        try {
+            const backups = await listServerBackupsForUser(profile.id, 12);
+            const visible = backups.slice(0, visibleCount);
+            if (!visible.length) {
+                list.innerHTML = '<p class="settings-copy-sm">Серверних бекапів ще немає.</p>';
+                return;
+            }
+            list.innerHTML = visible.map((backup, index) => `
+                <article class="settings-backup-item">
+                    <div class="settings-backup-meta">
+                        <div class="settings-backup-name">${escapeHtml(formatAdminBackupDate(backup.createdAt))} · ${escapeHtml(backup.reason || 'backup')}</div>
+                        <div class="settings-backup-sub">${Number(backup.days) || 0} днів · сервер</div>
+                    </div>
+                    <div class="settings-backup-actions">
+                        <button type="button" class="btn-admin-action" data-admin-backup-index="${index}">Відновити</button>
+                    </div>
+                </article>
+            `).join('');
+            list.querySelectorAll('[data-admin-backup-index]').forEach((button) => {
+                button.addEventListener('click', () => adminRestoreBackup(profile, visible[Number(button.dataset.adminBackupIndex)], card));
+            });
+            if (visibleCount < backups.length) {
+                const more = document.createElement('button');
+                more.type = 'button';
+                more.className = 'btn-admin-action settings-backup-more';
+                more.textContent = 'Показати ще';
+                more.addEventListener('click', () => {
+                    visibleCount += 4;
+                    void load();
+                });
+                list.appendChild(more);
+            }
+        } catch (error) {
+            list.innerHTML = `<p class="admin-error">Не вдалося завантажити бекапи: ${escapeHtml(error?.message || error)}</p>`;
+        }
+    };
+
+    toggle.addEventListener('click', () => {
+        list.hidden = !list.hidden;
+        toggle.textContent = list.hidden ? 'Показати бекапи' : 'Сховати бекапи';
+        if (!list.hidden) {
+            visibleCount = 4;
+            void load();
+        }
+    });
+    panel.append(toggle, list);
+    return panel;
+}
+
+async function adminRestoreBackup(profile, backup, card) {
+    if (!backup) return;
+    const confirmed = confirm(`Відновити профіль «${profile.nick || profile.email || profile.id}» з бекапу від ${formatAdminBackupDate(backup.createdAt)}? Поточний журнал буде замінено.`);
+    if (!confirmed) return;
+    card?.classList.add('admin-user-busy');
+    try {
+        const { payload } = await readCompressedBackupEntry(backup);
+        await restoreProfileData(profile.id, payload.appData, profile.nick);
+        showToast(`Профіль «${profile.nick || profile.email}» відновлено`);
+    } catch (error) {
+        showToast('Помилка відновлення: ' + (error?.message || error));
+    } finally {
+        card?.classList.remove('admin-user-busy');
+    }
 }
 
 async function adminToggleUserBlock(profile, blocked, cardEl) {

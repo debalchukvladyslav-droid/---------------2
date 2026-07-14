@@ -1010,6 +1010,42 @@ export async function resetProfileData(userId, nick = '') {
     }
 }
 
+export async function restoreProfileData(userId, appData, nick = '') {
+    if (!userId) throw new Error('Не вказано профіль для відновлення');
+    const restored = normalizeAppData(appData || {});
+    const journal = restored.journal && typeof restored.journal === 'object' ? restored.journal : {};
+    const rows = Object.entries(journal)
+        .filter(([date, entry]) => /^\d{4}-\d{2}-\d{2}$/.test(date) && entry?.__detailsLoaded !== false)
+        .map(([date, entry]) => dayEntryToJournalRow(userId, date, entry));
+
+    const { error: deleteError } = await supabase.from('journal_days').delete().eq('user_id', userId);
+    if (deleteError) throw deleteError;
+    for (let i = 0; i < rows.length; i += 200) {
+        const { error } = await supabase.from('journal_days').upsert(rows.slice(i, i + 200), { onConflict: 'user_id,trade_date' });
+        if (error) throw error;
+    }
+
+    const settings = {
+        ...restored.settings,
+        aiChatHistory: Array.isArray(restored.aiChatHistory) ? restored.aiChatHistory : [],
+        aiSavedChats: Array.isArray(restored.aiSavedChats) ? restored.aiSavedChats : [],
+        errorTypes: Array.isArray(restored.errorTypes) ? restored.errorTypes : [],
+        learnCache: restored.learnCache && typeof restored.learnCache === 'object' ? restored.learnCache : null,
+        tickers: restored.tickers && typeof restored.tickers === 'object' ? restored.tickers : {},
+        screenMeta: restored.screenMeta && typeof restored.screenMeta === 'object' ? restored.screenMeta : {},
+        tradeTypes: Array.isArray(restored.tradeTypes) ? restored.tradeTypes : [],
+        unassignedImages: Array.isArray(restored.unassignedImages) ? restored.unassignedImages : [],
+        screenTags: restored.screenTags && typeof restored.screenTags === 'object' ? restored.screenTags : {},
+        screenDiscipline: restored.screenDiscipline && typeof restored.screenDiscipline === 'object' ? restored.screenDiscipline : {},
+        sheetRows: restored.sheetRows && typeof restored.sheetRows === 'object' ? restored.sheetRows : {},
+        cumulativeSheetRows: restored.cumulativeSheetRows && typeof restored.cumulativeSheetRows === 'object' ? restored.cumulativeSheetRows : {},
+        weeklyComments: restored.weeklyComments && typeof restored.weeklyComments === 'object' ? restored.weeklyComments : {},
+    };
+    const { error: profileError } = await supabase.from('profiles').update({ settings }).eq('id', userId);
+    if (profileError) throw profileError;
+    if (nick) clearStatsCache(`${String(nick).replace(/_stats$/, '')}_stats`);
+}
+
 export function importData(event) {
     if (state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) {
         alert('❌ Імпорт заборонено: ви переглядаєте чужий профіль.');

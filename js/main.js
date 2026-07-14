@@ -598,7 +598,7 @@ function renderSettingsBackups() {
     const host = document.getElementById('settings-backup-list');
     if (!host) return;
     const toggle = document.getElementById('settings-backup-toggle');
-    const isHidden = localStorage.getItem('tj:settings-backups:hidden') === '1';
+    const isHidden = localStorage.getItem('tj:settings-backups:hidden') !== '0';
     host.hidden = isHidden;
     if (toggle) toggle.textContent = isHidden ? 'Показати список' : 'Сховати список';
     const backups = listCompressedBackups();
@@ -607,7 +607,9 @@ function renderSettingsBackups() {
         return;
     }
 
-    host.innerHTML = backups.map((backup) => `
+    const visibleCount = Math.max(4, Number(localStorage.getItem('tj:settings-backups:visible')) || 4);
+    const visibleBackups = backups.slice(0, visibleCount);
+    host.innerHTML = visibleBackups.map((backup) => `
         <article class="settings-backup-item">
             <div class="settings-backup-meta">
                 <div class="settings-backup-name">${escapeBackupHtml(formatBackupDate(backup.createdAt))} · ${escapeBackupHtml(backup.reason || 'backup')}</div>
@@ -621,7 +623,13 @@ function renderSettingsBackups() {
                 <button type="button" class="btn-secondary" data-action="backup-delete" data-backup-id="${escapeBackupHtml(backup.id)}">Видалити</button>
             </div>
         </article>
-    `).join('');
+    `).join('') + (visibleCount < backups.length ? `
+        <button type="button" class="btn-secondary settings-backup-more">Показати ще</button>
+    ` : '');
+    host.querySelector('.settings-backup-more')?.addEventListener('click', () => {
+        localStorage.setItem('tj:settings-backups:visible', String(visibleCount + 4));
+        renderSettingsBackups();
+    });
 }
 
 window.renderSettingsBackups = renderSettingsBackups;
@@ -629,6 +637,7 @@ window.toggleSettingsBackupList = function() {
     const host = document.getElementById('settings-backup-list');
     const nextHidden = !host?.hidden;
     localStorage.setItem('tj:settings-backups:hidden', nextHidden ? '1' : '0');
+    if (!nextHidden) localStorage.setItem('tj:settings-backups:visible', '4');
     renderSettingsBackups();
 };
 window.refreshSettingsBackups = async function() {

@@ -29,6 +29,13 @@ FOR SELECT
 TO authenticated
 USING (user_id = auth.uid());
 
+DROP POLICY IF EXISTS journal_backups_read_admin ON public.journal_backups;
+CREATE POLICY journal_backups_read_admin
+ON public.journal_backups
+FOR SELECT
+TO authenticated
+USING (public.app_is_admin());
+
 DROP POLICY IF EXISTS journal_backups_insert_own ON public.journal_backups;
 CREATE POLICY journal_backups_insert_own
 ON public.journal_backups

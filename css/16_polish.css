@@ -3817,6 +3817,17 @@ body.is-offline [data-needs-network="true"] {
     color: var(--text-main);
 }
 
+.settings-backup-more {
+    align-self: center;
+    margin-top: 2px;
+}
+
+.admin-backup-panel {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+}
+
 @media (max-width: 640px) {
     .settings-backup-head,
     .settings-backup-item {

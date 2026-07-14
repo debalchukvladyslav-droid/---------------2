@@ -254,6 +254,20 @@ export async function refreshServerBackups() {
     return serverBackupsCache;
 }
 
+export async function listServerBackupsForUser(userId, limit = MAX_BACKUPS) {
+    if (!userId) return [];
+    const safeLimit = Math.min(MAX_BACKUPS, Math.max(1, Number(limit) || 4));
+    const { data, error } = await supabase
+        .from('journal_backups')
+        .select('backup_id, reason, nick, backup_created_at, created_at, backup_data, raw_bytes, stored_bytes, days, encoding')
+        .eq('user_id', userId)
+        .order('backup_created_at', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+        .limit(safeLimit);
+    if (error) throw normalizeServerBackupError(error);
+    return Array.isArray(data) ? data.map(rowToBackupEntry) : [];
+}
+
 export async function readCompressedBackup(id) {
     let entry = listCompressedBackups().find((item) => item.id === id);
     if (!entry) {
