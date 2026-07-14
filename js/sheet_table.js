@@ -1735,16 +1735,23 @@ export function duplicateMainSheetMappingToCumulative() {
 }
 
 let _sheetFormHydratedFromStorage = false;
+let _sheetFormHydratedForUser = null;
+
+function sheetHydrationOwnerKey() {
+    return state.myUserId || '';
+}
 
 export function initSheetTableView(options = {}) {
     bindGoogleSheetPanelToggle();
     bindSheetGridPicker();
     syncSheetWorkspaceVisibility();
     applySheetGridZoom();
-    const needHydrate = !_sheetFormHydratedFromStorage;
+    const hydrationOwner = sheetHydrationOwnerKey();
+    const needHydrate = !_sheetFormHydratedFromStorage || _sheetFormHydratedForUser !== hydrationOwner;
     if (needHydrate) {
         applyConfigToForm(readStoredConfig(getActiveSheetMode()));
         _sheetFormHydratedFromStorage = true;
+        _sheetFormHydratedForUser = hydrationOwner;
     }
 
     const isImportTabActive = !!el('view-table')?.classList.contains('active');
