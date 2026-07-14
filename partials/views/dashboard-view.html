@@ -93,17 +93,6 @@
                 </div>
             </div>
 
-            <section class="dashboard-ai-brief" id="dashboard-ai-brief" aria-labelledby="dashboard-ai-title">
-                <div class="dashboard-ai-brief__head">
-                    <div><div class="dashboard-ai-brief__kicker">AI-помічник дня</div><h3 id="dashboard-ai-title" class="dashboard-ai-brief__title">Коротко про вашу торгівлю</h3></div>
-                    <div class="dashboard-ai-brief__actions"><span class="dashboard-ai-status is-neutral" id="dashboard-ai-status">Аналізую</span><button type="button" class="btn-secondary btn-auto" id="dashboard-ai-refresh" data-action="dashboard-ai-refresh">Оновити</button></div>
-                </div>
-                <p class="dashboard-ai-brief__summary" id="dashboard-ai-summary">Збираю останні торгові дні та перевіряю ризик, входи й стабільність.</p>
-                <div class="dashboard-ai-brief__items" id="dashboard-ai-items"></div>
-                <div class="dashboard-ai-brief__footer"><span id="dashboard-ai-updated"></span><div class="dashboard-ai-brief__footer-actions"><button type="button" class="dashboard-ai-open-chat" data-action="dashboard-ai-history">Історія</button><button type="button" class="dashboard-ai-open-chat" data-tab="ai">Поставити детальне питання AI →</button></div></div>
-                <div class="dashboard-ai-history" id="dashboard-ai-history" hidden></div>
-            </section>
-
             <!-- 2-COLUMN LAYOUT -->
             <div class="dash-3col">
 
@@ -129,6 +118,17 @@
 
                 <!-- COL 2: Recent trades -->
                 <div class="dash-col dash-col-recent">
+                <section class="dashboard-ai-brief" id="dashboard-ai-brief" aria-labelledby="dashboard-ai-title">
+                    <div class="dashboard-ai-brief__head">
+                        <div><div class="dashboard-ai-brief__kicker">AI-помічник</div><h3 id="dashboard-ai-title" class="dashboard-ai-brief__title">Теза дня</h3></div>
+                        <div class="dashboard-ai-brief__actions"><span class="dashboard-ai-status is-neutral" id="dashboard-ai-status">Аналізую</span><button type="button" class="dashboard-ai-refresh-icon" id="dashboard-ai-refresh" data-action="dashboard-ai-refresh" title="Оновити AI-аналіз" aria-label="Оновити AI-аналіз">↻</button></div>
+                    </div>
+                    <p class="dashboard-ai-brief__summary" id="dashboard-ai-summary">Перевіряю журнал.</p>
+                    <div class="dashboard-ai-brief__items" id="dashboard-ai-items"></div>
+                    <div class="dashboard-ai-carousel"><button type="button" data-action="dashboard-ai-prev" aria-label="Попередня теза">←</button><span id="dashboard-ai-position">1 / 1</span><button type="button" data-action="dashboard-ai-next" aria-label="Наступна теза">→</button></div>
+                    <div class="dashboard-ai-brief__footer"><span id="dashboard-ai-updated"></span><div class="dashboard-ai-brief__footer-actions"><button type="button" class="dashboard-ai-open-chat" data-action="dashboard-ai-history">Історія</button><button type="button" class="dashboard-ai-open-chat" data-tab="ai">Детальніше →</button></div></div>
+                    <div class="dashboard-ai-history" id="dashboard-ai-history" hidden></div>
+                </section>
                 <div class="recent-trades-panel recent-trades-flex" id="recent-trades-panel">
                         <div class="recent-trades-header">
                             <h3>Останні угоди</h3>

@@ -7,6 +7,9 @@ import { getDashboardTeamMomentum } from './stats.js';
 const CACHE_MS = 6 * 60 * 60 * 1000;
 let busy = false;
 let teamMomentumCache = { at: 0, rows: [] };
+let carouselItems = [];
+let carouselIndex = 0;
+let carouselTimer = null;
 
 function pnlOf(day) {
     for (const value of [day?.fondexx?.pnl, day?.ppro?.pnl, day?.pnl]) {
@@ -165,24 +168,39 @@ function render(brief, updatedAt = '') {
     status.className = `dashboard-ai-status is-${brief.level}`;
     status.textContent = brief.status;
     summary.textContent = brief.summary;
-    host.textContent = '';
-    brief.items.forEach((item) => {
-        const card = document.createElement('article'); card.className = `dashboard-ai-point is-${item.tone}`;
-        const title = document.createElement('strong'); title.textContent = item.title;
-        const text = document.createElement('p'); text.textContent = item.text;
-        card.append(title, text);
-        if (item.action && item.actionLabel) {
-            const action = document.createElement('button');
-            action.type = 'button';
-            action.className = 'dashboard-ai-point__action';
-            action.dataset.tab = item.action;
-            action.textContent = `${item.actionLabel} →`;
-            card.appendChild(action);
-        }
-        host.appendChild(card);
-    });
+    carouselItems = brief.items.length ? brief.items : [{ tone: 'info', title: brief.status, text: brief.summary }];
+    carouselIndex = Math.min(carouselIndex, carouselItems.length - 1);
+    renderCarouselItem();
+    restartCarousel();
     if (updated) updated.textContent = updatedAt ? `Оновлено ${new Date(updatedAt).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' })}` : 'Швидка оцінка за журналом';
     renderHistory();
+}
+
+function renderCarouselItem() {
+    const host = document.getElementById('dashboard-ai-items');
+    const position = document.getElementById('dashboard-ai-position');
+    if (!host || !carouselItems.length) return;
+    const item = carouselItems[carouselIndex];
+    host.textContent = '';
+    const card = document.createElement('article'); card.className = `dashboard-ai-point is-${item.tone}`;
+    const title = document.createElement('strong'); title.textContent = item.title;
+    const text = document.createElement('p'); text.textContent = item.text;
+    card.append(title, text);
+    if (item.action && item.actionLabel) {
+        const action = document.createElement('button'); action.type = 'button'; action.className = 'dashboard-ai-point__action'; action.dataset.tab = item.action; action.textContent = `${item.actionLabel} →`; card.appendChild(action);
+    }
+    host.appendChild(card);
+    if (position) position.textContent = `${carouselIndex + 1} / ${carouselItems.length}`;
+}
+
+function restartCarousel() {
+    clearInterval(carouselTimer);
+    if (carouselItems.length < 2) return;
+    carouselTimer = setInterval(() => {
+        if (document.hidden || !document.getElementById('view-dash')?.classList.contains('active')) return;
+        carouselIndex = (carouselIndex + 1) % carouselItems.length;
+        renderCarouselItem();
+    }, 11000);
 }
 
 function renderHistory() {
@@ -219,7 +237,7 @@ async function askAI(days, fallback, dataSignature) {
     if (busy || state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) return;
     busy = true;
     const button = document.getElementById('dashboard-ai-refresh');
-    if (button) { button.disabled = true; button.textContent = 'Аналізую…'; }
+    if (button) { button.disabled = true; button.textContent = '…'; button.setAttribute('aria-busy', 'true'); }
     try {
         const data = snapshot(days);
         const types = buildTradeTypeAIContext(state.appData?.journal || {}, { tradeTypes: state.appData?.tradeTypes, recentDays: 45, limit: 6 });
@@ -244,7 +262,7 @@ ${types}
         render(fallback);
     } finally {
         busy = false;
-        if (button) { button.disabled = false; button.textContent = 'Оновити'; }
+        if (button) { button.disabled = false; button.textContent = '↻'; button.removeAttribute('aria-busy'); }
     }
 }
 
@@ -273,4 +291,11 @@ export function toggleDashboardAIHistory() {
     if (!host) return;
     host.hidden = !host.hidden;
     if (!host.hidden) renderHistory();
+}
+
+export function rotateDashboardAI(direction = 1) {
+    if (!carouselItems.length) return;
+    carouselIndex = (carouselIndex + (Number(direction) < 0 ? -1 : 1) + carouselItems.length) % carouselItems.length;
+    renderCarouselItem();
+    restartCarousel();
 }

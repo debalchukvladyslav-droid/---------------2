@@ -48,7 +48,7 @@ import { applyPersistedBackground, initBackgroundControls } from './backgrounds.
 import { initGlobalAppEvents } from './app_events.js';
 import { showGlobalLoader, hideGlobalLoader } from './loading.js';
 import { initOnboarding, startOnboardingTour, resetOnboardingRuntime } from './onboarding.js';
-import { renderDashboardAI, refreshDashboardAI, toggleDashboardAIHistory } from './dashboard_ai.js';
+import { renderDashboardAI, refreshDashboardAI, toggleDashboardAIHistory, rotateDashboardAI } from './dashboard_ai.js';
 
 let appShellPromise = null;
 let appShellEventsReady = false;
@@ -115,6 +115,7 @@ window.startOnboardingTour = startOnboardingTour;
 window.renderDashboardAI = renderDashboardAI;
 window.refreshDashboardAI = refreshDashboardAI;
 window.toggleDashboardAIHistory = toggleDashboardAIHistory;
+window.rotateDashboardAI = rotateDashboardAI;
 
 let manualSyncInProgress = false;
 let manualSyncIntervalId = null;

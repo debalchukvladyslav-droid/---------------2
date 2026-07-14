@@ -147,6 +147,8 @@ function activateAction(action, trigger, event = null) {
         'learn-refresh': () => window.loadLearnContent?.(),
         'dashboard-ai-refresh': () => window.refreshDashboardAI?.(),
         'dashboard-ai-history': () => window.toggleDashboardAIHistory?.(),
+        'dashboard-ai-prev': () => window.rotateDashboardAI?.(-1),
+        'dashboard-ai-next': () => window.rotateDashboardAI?.(1),
         'left-sidebar-toggle': () => window.toggleLeftSidebar?.(),
         'mobile-sidebar-toggle': () => window.toggleMobileSidebar?.(),
         'mobile-more-toggle': () => window.toggleMobileMoreMenu?.(),
@@ -356,7 +358,7 @@ function bindDeclarativeActions() {
             return;
         }
 
-        const tabTrigger = event.target?.closest?.('.sidebar-nav-item[data-tab], .mobile-nav-btn[data-tab], .mobile-more-item[data-tab], .dash-open-calendar-tab-btn[data-tab], .recent-trades-link[data-tab]');
+        const tabTrigger = event.target?.closest?.('.sidebar-nav-item[data-tab], .mobile-nav-btn[data-tab], .mobile-more-item[data-tab], .dash-open-calendar-tab-btn[data-tab], .recent-trades-link[data-tab], .dashboard-ai-point__action[data-tab], .dashboard-ai-open-chat[data-tab]');
         if (tabTrigger && activateMainTab(tabTrigger)) event.preventDefault();
 
         const formTabTrigger = event.target?.closest?.('.sidebar .tab-btn[data-tab]');
@@ -383,7 +385,7 @@ function bindDeclarativeActions() {
             return;
         }
 
-        const tabTrigger = event.target?.closest?.('.sidebar-nav-item[data-tab], .mobile-nav-btn[data-tab], .mobile-more-item[data-tab], .dash-open-calendar-tab-btn[data-tab], .recent-trades-link[data-tab]');
+        const tabTrigger = event.target?.closest?.('.sidebar-nav-item[data-tab], .mobile-nav-btn[data-tab], .mobile-more-item[data-tab], .dash-open-calendar-tab-btn[data-tab], .recent-trades-link[data-tab], .dashboard-ai-point__action[data-tab], .dashboard-ai-open-chat[data-tab]');
         if (tabTrigger?.matches('button, [role="button"]') && activateMainTab(tabTrigger)) event.preventDefault();
 
         const formTabTrigger = event.target?.closest?.('.sidebar .tab-btn[data-tab]');
