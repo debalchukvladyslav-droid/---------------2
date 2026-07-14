@@ -5,6 +5,15 @@ import { saveSettings } from './storage.js';
 import { getDashboardTeamMomentum } from './stats.js';
 
 const CACHE_MS = 6 * 60 * 60 * 1000;
+const MENTOR_SYSTEM_PROMPT = `Ти — емпатійний і професійний ШІ-напарник проп-трейдера, інтегрований у корпоративний журнал угод.
+Говори живою, природною, сучасною українською без русизмів, кальок і граматичних помилок. Органічно використовуй трейдерський сленг: тільт, просадка, об'єми, структура, формація, лос, премаркет. Відповідай лаконічно, без стін тексту.
+Ти досвідчений напарник і психолог, а не токсичний наглядач:
+- спершу почуй емоцію, потім пропонуй рішення;
+- якщо людина каже, що втомилася, не хоче аналізувати або хоче відволіктися — підтримай і не змушуй робити розбір;
+- якщо є серія мінусів, метання або ознаки тільту — насамперед порадь закрити термінал, відійти від монітора й видихнути; аналізувати можна лише на холодну голову;
+- ніколи не принижуй, не залякуй і не кажи «не шукай виправдань», «без журналу ти ніхто» чи «ринок тебе знищить»;
+- якщо тема змінилася, природно підтримай нову тему й не повертай людину силоміць до угод.
+UI-перехід дозволено пропонувати лише коли користувач прямо попросив відповідну дію, погодився на неї або це безпосередня відповідь на його запит. Не додавай кнопку до кожної відповіді.`;
 let busy = false;
 let teamMomentumCache = { at: 0, rows: [] };
 let carouselItems = [];
@@ -362,6 +371,10 @@ function isTradingConversation(text) {
     return /трейд|угод|вхід|вихід|ризик|стоп|тейк|профіт|мінус|плюс|сетап|ринок|акці|тікер|шорт|лонг|депозит|день торг|pnl|trade|trading|entry|exit|stock|ticker/i.test(String(text || ''));
 }
 
+function allowsMentorAction(text) {
+    return /відкрий|покажи|перейд|давай|хочу (?:подив|переглян|запис|проаналіз)|згоден|згодна|можна (?:відкр|перейт)|аналізуй|розбери|переглянь/i.test(String(text || ''));
+}
+
 function renderMentorTheses() {
     const host = document.getElementById('dashboard-mentor-theses');
     const count = document.getElementById('dashboard-mentor-theses-count');
@@ -428,14 +441,16 @@ export async function sendDashboardMentorMessage() {
         const memory = String(state.appData.settings.dashboardMentorMemory || '').slice(0, 2500);
         const dialogue = history.slice(-20).map((m) => `${m.role === 'user' ? 'Трейдер' : 'Наставник'}: ${m.text}`).join('\n');
         const tradingContext = isTradingConversation(text) ? `Останні торгові дні: ${days.slice(0, 10).map((d) => `${d.date} ${d.pnl}$, помилки ${(d.day?.errors || []).join(', ') || 'немає'}, запис ${String(d.day?.notes || '').slice(0, 160) || 'немає'}`).join(' | ')}\nДейлос: ${data.limit}$.` : 'Це не торгове питання. Не згадуй трейдинг, журнал, ризики чи роботу без прямого прохання користувача.';
-        const prompt = `Ти особистий універсальний співрозмовник людини, а не лише робочий чи торговий наставник. Можна вільно говорити про побут, стосунки, настрій, ідеї, розваги, техніку, навчання або будь-яку іншу тему. Ти пам'ятаєш характер і минулі розмови та відповідаєш природно, у близькому людині темпі, але не копіюєш грубість. Не давай непроханих порад: іноді достатньо просто нормально відповісти або підтримати. До трейдингу переходь лише якщо поточне повідомлення прямо про нього.
+        const prompt = `${MENTOR_SYSTEM_PROMPT}
+Ти також універсальний співрозмовник: можна вільно говорити про побут, стосунки, настрій, ідеї, розваги, техніку, навчання або будь-яку іншу тему. Не давай непроханих порад: іноді достатньо просто відповісти або підтримати. Ти пам'ятаєш характер і минулі розмови та відповідаєш природно, у близькому людині темпі, але не копіюєш грубість.
 Пам'ять: ${memory || 'ще формується'}
 ${tradingContext}
 Діалог:\n${dialogue}
-Поверни лише JSON: {"reply":"коротка жива відповідь до 4 речень","memory":"стисле оновлене розуміння підходу, характеру й важливих фактів трейдера","action":"calendar|stats|trades|screens|learn|ai або порожньо","actionLabel":"коротка назва переходу"}.`;
+Поверни лише JSON: {"reply":"коротка жива відповідь до 4 речень","memory":"стисле оновлене розуміння підходу, характеру, емоційних тригерів і важливих фактів трейдера","action":"calendar|stats|trades|screens|learn|ai або порожньо","actionLabel":"коротка назва переходу"}. Якщо користувач не просив і не погоджувався на дію — action та actionLabel мають бути порожніми.`;
         const response = parseResponse(await callGemini(getGeminiKeys()[0], { contents: [{ parts: [{ text: prompt }] }] })) || {};
         const reply = compactText(response.reply || 'Я почув. Давай спершу подивимось на останні входи й знайдемо один повторюваний момент.', 520);
-        history.push({ role: 'mentor', text: reply, action: ['calendar', 'stats', 'trades', 'screens', 'learn', 'ai'].includes(response.action) ? response.action : '', actionLabel: compactText(response.actionLabel, 40), at: new Date().toISOString() });
+        const allowAction = allowsMentorAction(text);
+        history.push({ role: 'mentor', text: reply, action: allowAction && ['calendar', 'stats', 'trades', 'screens', 'learn', 'ai'].includes(response.action) ? response.action : '', actionLabel: allowAction ? compactText(response.actionLabel, 40) : '', at: new Date().toISOString() });
         state.appData.settings.dashboardMentorConversation = history.slice(-120);
         if (response.memory) state.appData.settings.dashboardMentorMemory = String(response.memory).slice(0, 2500);
         await saveSettings();
