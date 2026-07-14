@@ -73,10 +73,27 @@ async function teamMomentum() {
 }
 
 function withTeamMomentum(brief, rows) {
-    if (!rows?.length || brief.level === 'risk') return brief;
+    if (!rows?.length || brief.level === 'risk' || !isRelevantMoment('stats')) return brief;
     const trader = rows[0];
-    const item = { tone: 'info', title: `Зверніть увагу на ${trader.name}`, text: `За останні дні трейдер рухається стабільно: ${trader.recentPnl >= 0 ? '+' : ''}${trader.recentPnl.toFixed(2)}$, зелених днів близько ${trader.winrate.toFixed(0)}%. Можна подивитися його входи в режимі порівняння.`, action: 'stats', actionLabel: 'Відкрити порівняння' };
+    const item = { tone: 'info', title: `Зверніть увагу на ${trader.name}`, text: `За останні дні трейдер рухається стабільно: ${trader.recentPnl >= 0 ? '+' : ''}${trader.recentPnl.toFixed(2)}$, зелених днів близько ${trader.winrate.toFixed(0)}%. Можна подивитися його входи в режимі порівняння.`, action: 'stats', actionLabel: 'Відкрити порівняння', compareTrader: trader.nick };
     return { ...brief, items: [...brief.items, item].slice(-4) };
+}
+
+function getActivityProfile() {
+    try { return JSON.parse(localStorage.getItem('trader_workspace_activity_v1') || '{}'); }
+    catch { return {}; }
+}
+
+function isRelevantMoment(tab) {
+    const activity = getActivityProfile();
+    const now = new Date();
+    const bucket = `${now.getDay()}-${now.getHours()}`;
+    const exact = Number(activity.patterns?.[`${bucket}|${tab}`] || 0);
+    const sortedTabs = Object.entries(activity.tabs || {}).sort((a, b) => Number(b[1]) - Number(a[1]));
+    const favourite = sortedTabs[0]?.[0] || '';
+    if (exact >= 2 || activity.lastTab === tab || favourite === tab) return true;
+    const totalSamples = sortedTabs.reduce((sum, [, count]) => sum + Number(count || 0), 0);
+    return totalSamples < 5 && tab === 'stats' && now.getHours() >= 16;
 }
 
 function fallbackBrief(data) {
@@ -123,11 +140,11 @@ function rotatingNudge(data) {
         return { status: 'План перед входами', item: { tone: 'info', title: 'Сформулюйте план сесії', text: 'Запишіть допустимі сетапи, максимальну кількість входів і умову, після якої зупиняєтесь.', action: 'calendar', actionLabel: 'Додати план' } };
     }
     const history = historicalItem(data);
-    if (history && rotation % 4 === 0) return { status: 'Згадайте сильний день', item: history };
-    if (!learnCache || !Number.isFinite(learnAge) || learnAge > 7 * 86400000) {
+    if (history && isRelevantMoment('calendar') && rotation % 4 === 0) return { status: 'Згадайте сильний день', item: history };
+    if ((!learnCache || !Number.isFinite(learnAge) || learnAge > 7 * 86400000) && isRelevantMoment('learn')) {
         return { status: 'Час на навчання', item: { tone: 'info', title: 'Можливо, час подивитися розбір', text: data.commonError ? `Підберіть відео навколо проблеми «${data.commonError[0]}». У навчанні можна вказати власний напрямок пошуку.` : 'AI може підібрати практичні відео за вашими входами. Напишіть тему, яку хочете підтягнути.', action: 'learn', actionLabel: 'Підібрати відео' } };
     }
-    if (data.latest?.day && screenshotCount(data.latest.day) === 0) {
+    if (data.latest?.day && screenshotCount(data.latest.day) === 0 && isRelevantMoment('screens')) {
         return { status: 'Збережи контекст', item: { tone: 'info', title: 'До останнього дня немає скріншотів', text: 'Один скрін входу й один скрін виходу часто дають більше користі, ніж довгий текстовий розбір.', action: 'screens', actionLabel: 'Додати скріншоти' } };
     }
     const chill = [
@@ -155,6 +172,7 @@ function normalize(value, fallback) {
         text: String(item?.text || '').trim().slice(0, 320),
         action: ['learn', 'calendar', 'screens', 'stats', 'ai'].includes(item?.action) ? item.action : '',
         actionLabel: String(item?.actionLabel || '').trim().slice(0, 60),
+        compareTrader: String(item?.compareTrader || '').trim().slice(0, 80),
     })).filter((item) => item.title && item.text) : [];
     return { level: levels.includes(value?.level) ? value.level : fallback.level, status: String(value?.status || fallback.status).slice(0, 60), summary: String(value?.summary || fallback.summary).slice(0, 360), items: items.length ? items : fallback.items };
 }
@@ -187,7 +205,7 @@ function renderCarouselItem() {
     const text = document.createElement('p'); text.textContent = item.text;
     card.append(title, text);
     if (item.action && item.actionLabel) {
-        const action = document.createElement('button'); action.type = 'button'; action.className = 'dashboard-ai-point__action'; action.dataset.tab = item.action; action.textContent = `${item.actionLabel} →`; card.appendChild(action);
+        const action = document.createElement('button'); action.type = 'button'; action.className = 'dashboard-ai-point__action'; action.dataset.tab = item.action; if (item.compareTrader) action.dataset.compareTrader = item.compareTrader; action.textContent = `${item.actionLabel} →`; card.appendChild(action);
     }
     host.appendChild(card);
     if (position) position.textContent = `${carouselIndex + 1} / ${carouselItems.length}`;

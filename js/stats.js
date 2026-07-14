@@ -869,6 +869,15 @@ async function selectStatsCompareSource(type, key) {
     renderStatsTab();
 }
 
+export async function openStatsComparisonWithTrader(nick) {
+    const cleanNick = cleanStatsNick(nick).replace(/_stats$/, '');
+    if (!cleanNick || !isStatsNickAllowed(cleanNick)) return false;
+    state.statsCompareMode = true;
+    await selectStatsCompareSource('trader', cleanNick);
+    document.getElementById('stats-compare-pane')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return true;
+}
+
 function selectStatsCompareTradeType(type) {
     state.statsCompareTradeTypeFilter = type || null;
     state.statsComparePeriodKey = '';

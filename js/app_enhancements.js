@@ -335,10 +335,33 @@ function handleImportInput(event) {
     return true;
 }
 
+function recordMainTabActivity(tab) {
+    try {
+        const key = 'trader_workspace_activity_v1';
+        const now = new Date();
+        const bucket = `${now.getDay()}-${now.getHours()}`;
+        const data = JSON.parse(localStorage.getItem(key) || '{}');
+        data.tabs = data.tabs && typeof data.tabs === 'object' ? data.tabs : {};
+        data.hours = data.hours && typeof data.hours === 'object' ? data.hours : {};
+        data.patterns = data.patterns && typeof data.patterns === 'object' ? data.patterns : {};
+        data.tabs[tab] = Math.min(5000, Number(data.tabs[tab] || 0) + 1);
+        data.hours[bucket] = Math.min(5000, Number(data.hours[bucket] || 0) + 1);
+        data.patterns[`${bucket}|${tab}`] = Math.min(5000, Number(data.patterns[`${bucket}|${tab}`] || 0) + 1);
+        data.lastTab = tab;
+        data.updatedAt = now.toISOString();
+        localStorage.setItem(key, JSON.stringify(data));
+    } catch { /* Activity hints are optional. */ }
+}
+
 function activateMainTab(trigger) {
     const tab = trigger?.dataset?.tab;
     if (!tab || typeof window.switchMainTab !== 'function') return false;
-    window.switchMainTab(tab);
+    recordMainTabActivity(tab);
+    Promise.resolve(window.switchMainTab(tab)).then(() => {
+        const compareTrader = trigger?.dataset?.compareTrader;
+        if (tab === 'stats' && compareTrader) return window.openStatsComparisonWithTrader?.(compareTrader);
+        return null;
+    });
     if (trigger.classList?.contains('mobile-more-item')) window.closeMobileMoreMenu?.();
     return true;
 }
