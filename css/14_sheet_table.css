@@ -146,6 +146,53 @@ body[data-theme="light"] .btn-google-signin {
     flex: 1 1 280px;
 }
 
+.sheet-preset-picker {
+    width: min(100%, 760px);
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin: 4px 0 14px;
+}
+
+.sheet-preset-picker--workspace {
+    width: 100%;
+    margin-top: 0;
+}
+
+.sheet-preset-btn {
+    min-width: 0;
+    min-height: 76px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--bg-panel) 88%, var(--accent));
+    color: var(--text-main);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.18s ease, transform 0.18s ease, background 0.18s ease;
+}
+
+.sheet-preset-btn:hover {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--bg-panel) 78%, var(--accent));
+    transform: translateY(-1px);
+}
+
+.sheet-preset-btn strong {
+    font-size: 0.8rem;
+    line-height: 1.35;
+}
+
+.sheet-preset-btn span {
+    font-size: 0.72rem;
+    color: var(--accent);
+}
+
 .sheet-service-status {
     min-height: 18px;
     color: var(--text-muted);
@@ -1138,6 +1185,10 @@ body[data-theme="light"] .sheet-auto-sync__row select option {
 }
 
 @media (max-width: 560px) {
+    .sheet-preset-picker {
+        grid-template-columns: 1fr;
+    }
+
     .sheet-grid-picker__meta {
         width: 100%;
     }

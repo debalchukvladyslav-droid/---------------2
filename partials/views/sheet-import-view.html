@@ -2,7 +2,7 @@
             <div class="sheet-zapier-page">
                 <p class="sheet-zapier-kicker">Конектор</p>
                 <h2 class="sheet-zapier-title">Google Sheets</h2>
-                <p class="sheet-zapier-lead">Підключення в стилі Zapier / Make: стандартні таблиці вже задані, додайте service account у доступ до таблиці й оберіть свій лист.</p>
+                <p class="sheet-zapier-lead">Оберіть потрібну таблицю зі списку або вставте власне посилання. Без вибору статистика не завантажується.</p>
 
                 <section class="sheet-card broker-import-card" aria-labelledby="broker-import-title">
                     <h3 id="broker-import-title" class="sheet-card-title">Імпорт брокерських звітів</h3>
@@ -33,6 +33,20 @@
                     <h3 id="sheet-connect-title" class="sheet-card-title">Підключіть Google таблицю без входу</h3>
                     <p class="sheet-card-desc">Додайте service account email у доступ до таблиці як Viewer. Посилання потрібне тільки якщо у трейдера своя таблиця.</p>
                     <div class="sheet-service-email" id="sheet-service-email">service account email не налаштований</div>
+                    <div class="sheet-preset-picker" aria-label="Готові таблиці статистики">
+                        <button type="button" class="sheet-preset-btn" data-action="sheet-preset-load" data-spreadsheet-id="1A4sPWQTryHs4QofoM1p0oCaYDWcDM_OPwp3fOQEX4Co">
+                            <strong>Валенштак, Семенюк, Кость, Дмитрук, Скіпальський</strong>
+                            <span>Обрати таблицю</span>
+                        </button>
+                        <button type="button" class="sheet-preset-btn" data-action="sheet-preset-load" data-spreadsheet-id="1hw8HRN5w1AhXxrCccMD3dkKHRP86psdRWbKqzG4JXF4">
+                            <strong>Чачанко, Наход</strong>
+                            <span>Обрати таблицю</span>
+                        </button>
+                        <button type="button" class="sheet-preset-btn" data-action="sheet-preset-load" data-spreadsheet-id="1A91BIhJONSlJNo8RYwL-KUPLupaNMtAtWXQ-kgwEG24">
+                            <strong>Хомік, Mikulich</strong>
+                            <span>Обрати таблицю</span>
+                        </button>
+                    </div>
                     <input class="sheet-service-input" id="sheet-service-url-input" type="text" placeholder="Своя Google Sheets link або spreadsheet ID (необов’язково)">
                     <button type="button" class="btn-google-signin" data-action="sheet-service-load">Підключити таблицю</button>
                     <div class="sheet-service-status" id="sheet-service-status"></div>
@@ -56,6 +70,11 @@
                     <div class="sheet-file-actions">
                         <input class="sheet-service-input sheet-service-input-inline" id="sheet-service-url-input-workspace" type="text" placeholder="Своя Google Sheets link або spreadsheet ID">
                         <button type="button" class="btn-secondary sheet-btn-file" data-action="sheet-service-load">Змінити таблицю</button>
+                    </div>
+                    <div class="sheet-preset-picker sheet-preset-picker--workspace" aria-label="Змінити таблицю статистики">
+                        <button type="button" class="sheet-preset-btn" data-action="sheet-preset-load" data-spreadsheet-id="1A4sPWQTryHs4QofoM1p0oCaYDWcDM_OPwp3fOQEX4Co"><strong>Валенштак, Семенюк, Кость, Дмитрук, Скіпальський</strong><span>Обрати</span></button>
+                        <button type="button" class="sheet-preset-btn" data-action="sheet-preset-load" data-spreadsheet-id="1hw8HRN5w1AhXxrCccMD3dkKHRP86psdRWbKqzG4JXF4"><strong>Чачанко, Наход</strong><span>Обрати</span></button>
+                        <button type="button" class="sheet-preset-btn" data-action="sheet-preset-load" data-spreadsheet-id="1A91BIhJONSlJNo8RYwL-KUPLupaNMtAtWXQ-kgwEG24"><strong>Хомік, Mikulich</strong><span>Обрати</span></button>
                     </div>
 
                     <div id="sheet-mock-file-card" class="sheet-file-card" hidden>

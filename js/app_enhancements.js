@@ -208,6 +208,16 @@ function activateAction(action, trigger, event = null) {
         'sheet-service-load': () => window.loadSpreadsheetFromServiceInput
             ? window.loadSpreadsheetFromServiceInput(trigger)
             : import('./google_sheet_connector.js').then((m) => m.loadSpreadsheetFromServiceInput?.(trigger)),
+        'sheet-preset-load': () => {
+            const spreadsheetId = trigger?.dataset?.spreadsheetId || '';
+            const input = trigger?.closest?.('.sheet-workspace')
+                ? document.getElementById('sheet-service-url-input-workspace')
+                : document.getElementById('sheet-service-url-input');
+            if (input) input.value = spreadsheetId;
+            return window.loadSpreadsheetFromServiceInput
+                ? window.loadSpreadsheetFromServiceInput(trigger)
+                : import('./google_sheet_connector.js').then((m) => m.loadSpreadsheetFromServiceInput?.(trigger));
+        },
         'sheet-toggle-mapping': () => window.toggleMappingMode?.(trigger),
         'sheet-import-mode': () => window.switchSheetImportMode?.(trigger?.dataset?.sheetMode || 'main'),
         'sheet-duplicate-mapping': () => window.duplicateMainSheetMappingToCumulative?.(),
