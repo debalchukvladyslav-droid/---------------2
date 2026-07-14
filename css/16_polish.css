@@ -2430,6 +2430,57 @@ body {
     font-size: 0.85rem;
 }
 
+.learn-preference-panel {
+    margin: 18px 0 20px;
+    padding: 16px;
+    border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--accent) 5%, var(--bg-panel));
+}
+
+.learn-preference-label {
+    display: block;
+    margin-bottom: 5px;
+    color: var(--text-main);
+    font-size: 0.92rem;
+    font-weight: 700;
+}
+
+.learn-preference-hint {
+    margin: 0 0 10px;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    line-height: 1.45;
+}
+
+.learn-preference-input {
+    width: 100%;
+    min-height: 76px;
+    resize: vertical;
+    padding: 11px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-main);
+    color: var(--text-main);
+    font: inherit;
+    line-height: 1.45;
+}
+
+.learn-preference-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.learn-preference-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 7px;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+
 .learn-query-label {
     margin-bottom: 20px;
     color: var(--text-muted);

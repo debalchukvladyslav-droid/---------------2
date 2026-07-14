@@ -4,6 +4,12 @@
             <h3 class="section-title-accent">Навчання</h3>
             <button class="btn-primary btn-auto" id="learn-refresh-btn" data-action="learn-refresh">Оновити рекомендації</button>
         </div>
+        <div class="learn-preference-panel">
+            <label for="learn-preference-input" class="learn-preference-label">Ваше побажання до навчання</label>
+            <p class="learn-preference-hint">Напишіть, у якому напрямку шукати відео. Наприклад: «більше розборів шортів після пампу» або «ризик-менеджмент для low float».</p>
+            <textarea id="learn-preference-input" class="learn-preference-input" maxlength="500" rows="3" placeholder="Що саме ви хочете вивчити зараз?"></textarea>
+            <div class="learn-preference-meta"><span id="learn-preference-count">0 / 500</span><span>Побажання врахується разом зі статистикою вашого журналу</span></div>
+        </div>
         <p id="learn-query-label" class="learn-query-label"></p>
         <div id="learn-results" class="learn-results-grid">
             <div class="empty-grid-state">Натисніть “Оновити” щоб AI підібрав відео для вас</div>
