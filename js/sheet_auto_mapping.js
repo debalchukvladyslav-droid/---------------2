@@ -22,6 +22,38 @@ export const EXACT_SHEET_HEADER_ALIASES = {
 
 const EXCEPTION_HEADER_PHRASES = ['в чому виключення', 'у чому виключення'];
 const EXIT_VALUE_PHRASES = ['стоп', 'тейк', 'по часу'];
+export const SHEET_TRADE_TYPE_VALUES = [
+    'шорт',
+    'не брав',
+    'виключення',
+    'виключення візуально',
+    'візуально',
+    'виключення не брав',
+    'фіолетова не брав',
+    'не брав візуально',
+    'фіолетова',
+    'виключення-фіолетова',
+    'шортНС',
+    'РПвиключ',
+    'РПфіолетова',
+    'РПвізуально',
+    'Свій підхід',
+    'не брав свій підхід',
+    'RV підхід',
+    'виключення%',
+    'не брав OLD-трейд',
+    'виключення-OLD-трейд',
+    'Виключення Інплей',
+    'ЛП з відкриття',
+    'тренд-шорт',
+    'Візуально Потенціал',
+    'памп-тренд',
+    'Не брав памп-тренд',
+    'візуально-маркет',
+    'СИСТ-виключення',
+    'СИСТ-виключення не брав',
+    'памп-лонг',
+];
 
 export function normalizeExactSheetHeader(value) {
     return String(value ?? '')
@@ -47,6 +79,25 @@ function findExitColumnByValues(grid, startIndex, maxCols) {
         for (let row = startIndex; row < grid.length; row += 1) {
             const value = normalizeExactSheetHeader(grid[row]?.[col]);
             if (value && EXIT_VALUE_PHRASES.some((phrase) => value.includes(phrase))) score += 1;
+        }
+        if (score > bestScore) {
+            bestScore = score;
+            bestColumn = col;
+        }
+    }
+    return bestScore > 0 ? bestColumn : null;
+}
+
+function findTradeTypeColumnByValues(grid, startIndex, maxCols, excludedColumns = []) {
+    const allowed = new Set(SHEET_TRADE_TYPE_VALUES.map(normalizeExactSheetHeader));
+    const excluded = new Set(excludedColumns.filter((column) => Number.isInteger(column)));
+    let bestColumn = null;
+    let bestScore = 0;
+    for (let col = 0; col < maxCols; col += 1) {
+        if (excluded.has(col)) continue;
+        let score = 0;
+        for (let row = startIndex; row < grid.length; row += 1) {
+            if (allowed.has(normalizeExactSheetHeader(grid[row]?.[col]))) score += 1;
         }
         if (score > bestScore) {
             bestScore = score;
@@ -90,6 +141,15 @@ export function detectExactSheetAutoMapping(grid = [], options = {}) {
     }
     if (tickerRow == null) {
         return { ok: false, reason: 'ticker-data-not-found', mapped: {}, headers: [], startRow: null };
+    }
+
+    if (mapped.tradeType == null) {
+        const tradeTypeColumn = findTradeTypeColumnByValues(rows, tickerRow, maxCols, [
+            mapped.date,
+            mapped.symbol,
+            mapped.exceptions,
+        ]);
+        if (tradeTypeColumn != null) mapped.tradeType = tradeTypeColumn;
     }
 
     if (mapped.exit == null) {

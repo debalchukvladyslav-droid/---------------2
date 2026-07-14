@@ -848,6 +848,28 @@ test('exact sheet automapping maps exception phrase and explicit exit header', (
     assert.equal(result.mapped.exit, 2);
 });
 
+test('exact sheet automapping detects trade type column from approved values', () => {
+    const result = detectExactSheetAutoMapping([
+        ['Ticker', 'Невідомий заголовок', 'Класифікація'],
+        ['AAPL', '  ШОРТ  ', 'виключення'],
+        ['TSLA', 'не брав свій підхід', 'виключення'],
+        ['NVDA', 'СИСТ-виключення не брав', 'виключення'],
+    ]);
+    assert.equal(result.ok, true);
+    assert.equal(result.mapped.tradeType, 1);
+    assert.equal(result.mapped.exceptions, 2);
+});
+
+test('explicit trade type header has priority over value-based detection', () => {
+    const result = detectExactSheetAutoMapping([
+        ['Ticker', 'Тип угоди', 'Інша колонка'],
+        ['AAPL', '', 'шорт'],
+        ['TSLA', '', 'памп-лонг'],
+    ]);
+    assert.equal(result.ok, true);
+    assert.equal(result.mapped.tradeType, 1);
+});
+
 test('failed ticker data detection does not return a partial mapping', () => {
     const result = detectExactSheetAutoMapping([
         ['дата', 'Ticker', 'Профіт факт'],
