@@ -79,6 +79,24 @@ test('sheet date sequence parser infers day/month or month/day from row order', 
     );
 });
 
+test('sheet date sequence treats day-only rows after a month marker as the next month', () => {
+    assert.deepEqual(
+        parseSheetDateCellsToIsoSequence(['Серпень', '1', '2', '3', '31'], { year: 2025 }),
+        [null, '2025-09-01', '2025-09-02', '2025-09-03', null],
+    );
+    assert.deepEqual(
+        parseSheetDateCellsToIsoSequence(['Грудень 2025', '1', '2']),
+        [null, '2026-01-01', '2026-01-02'],
+    );
+});
+
+test('sheet date sequence still reads both 23/07 and 07/23 around month markers', () => {
+    assert.deepEqual(
+        parseSheetDateCellsToIsoSequence(['Червень', '1', '23/07', '07/23'], { year: 2025 }),
+        [null, '2025-07-01', '2025-07-23', '2025-07-23'],
+    );
+});
+
 test('PPRO report dates are parsed as month/day/year', () => {
     assert.equal(parsePPROReportDate('03/02/2026'), '2026-03-02');
     assert.equal(parsePPROReportDate('03/13/2026'), '2026-03-13');

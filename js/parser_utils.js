@@ -105,6 +105,46 @@ function scoreDateSequence(isos) {
     return score;
 }
 
+const SHEET_MONTH_MARKERS = new Map([
+    ['січень', 1], ['лютий', 2], ['березень', 3], ['квітень', 4],
+    ['травень', 5], ['червень', 6], ['липень', 7], ['серпень', 8],
+    ['вересень', 9], ['жовтень', 10], ['листопад', 11], ['грудень', 12],
+]);
+
+function parseSheetMonthMarker(value, fallbackYear) {
+    const normalized = String(value ?? '')
+        .trim()
+        .toLocaleLowerCase('uk-UA')
+        .replace(/\s+/g, ' ');
+    const match = /^([\p{L}]+)(?:\s+(\d{4}))?$/u.exec(normalized);
+    if (!match) return null;
+    const month = SHEET_MONTH_MARKERS.get(match[1]);
+    if (!month) return null;
+    const year = match[2] ? Number(match[2]) : fallbackYear;
+    return Number.isFinite(year) ? { month, year } : null;
+}
+
+function contextualNextMonthDates(values, options = {}) {
+    const fallbackYear = Number(options.year) || Number(todayIsoDate().slice(0, 4));
+    let context = null;
+    return values.map((value) => {
+        const marker = parseSheetMonthMarker(value, fallbackYear);
+        if (marker) {
+            const targetMonth = marker.month === 12 ? 1 : marker.month + 1;
+            const targetYear = marker.month === 12 ? marker.year + 1 : marker.year;
+            context = { month: targetMonth, year: targetYear };
+            return null;
+        }
+        if (!context) return null;
+        const dayText = String(value ?? '').trim();
+        if (!/^\d{1,2}$/.test(dayText)) return null;
+        const day = Number(dayText);
+        return calendarYmdValid(context.year, context.month, day)
+            ? toIsoFromParts(context.year, context.month, day)
+            : null;
+    });
+}
+
 /**
  * Sequence-aware Sheet/Excel date parser.
  * Uses neighboring rows to decide whether ambiguous 2-part/3-part dates are
@@ -113,6 +153,7 @@ function scoreDateSequence(isos) {
  */
 export function parseSheetDateCellsToIsoSequence(values, options = {}) {
     const candidateRows = values.map((value) => parseSheetDateCellCandidates(value, options));
+    const contextualDates = contextualNextMonthDates(values, options);
     const modes = ['DMY', 'MDY'];
     const modeScores = new Map();
     for (const mode of modes) {
@@ -123,12 +164,12 @@ export function parseSheetDateCellsToIsoSequence(values, options = {}) {
     }
     const preferredMode = (modeScores.get('MDY') > modeScores.get('DMY')) ? 'MDY' : 'DMY';
 
-    return candidateRows.map((candidates) => {
+    return candidateRows.map((candidates, index) => {
         if (!candidates.length) return null;
         return candidates.find((candidate) => candidate.mode === 'fixed')?.iso
             || candidates.find((candidate) => candidate.mode === preferredMode)?.iso
             || candidates[0].iso;
-    });
+    }).map((parsed, index) => parsed || contextualDates[index] || null);
 }
 
 /**
