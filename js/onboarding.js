@@ -13,6 +13,7 @@ let actionCleanup = null;
 let layoutFrame = 0;
 let eventsBound = false;
 let saveTimer = 0;
+let interfaceObserver = null;
 
 const steps = [
     { id: 'overview', tab: 'dash', target: ['.app-sidebar', '.mobile-bottom-nav'], title: 'Головна навігація', text: 'Звідси відкриваються календар, скріншоти, імпорт, аналітика, AI Ментор, навчання та налаштування.' },
@@ -170,6 +171,7 @@ function bindRequiredAction(step) {
         if (!event.target?.closest?.(step.action)) return;
         next.disabled = false;
         hint.hidden = true;
+        setTimeout(positionTour, 80);
     };
     document.addEventListener(eventName, listener, true);
     actionCleanup = () => document.removeEventListener(eventName, listener, true);
@@ -251,11 +253,43 @@ function positionTour() {
         const cardWidth = Math.min(390, innerWidth - 24);
         card.style.width = `${cardWidth}px`;
         const estimatedHeight = Math.min(card.offsetHeight || 320, innerHeight - 24);
-        const below = rect.bottom + 16;
-        const top = below + estimatedHeight <= innerHeight ? below : Math.max(12, rect.top - estimatedHeight - 16);
-        const left = Math.max(12, Math.min(innerWidth - cardWidth - 12, rect.left + rect.width / 2 - cardWidth / 2));
-        card.style.left = `${left}px`;
-        card.style.top = `${top}px`;
+        if (innerWidth <= 720) return;
+
+        const gap = 16;
+        const clampLeft = (value) => Math.max(12, Math.min(innerWidth - cardWidth - 12, value));
+        const clampTop = (value) => Math.max(12, Math.min(innerHeight - estimatedHeight - 12, value));
+        const candidates = [
+            { left: clampLeft(rect.left + rect.width / 2 - cardWidth / 2), top: clampTop(rect.bottom + gap) },
+            { left: clampLeft(rect.left + rect.width / 2 - cardWidth / 2), top: clampTop(rect.top - estimatedHeight - gap) },
+            { left: clampLeft(rect.right + gap), top: clampTop(rect.top + rect.height / 2 - estimatedHeight / 2) },
+            { left: clampLeft(rect.left - cardWidth - gap), top: clampTop(rect.top + rect.height / 2 - estimatedHeight / 2) },
+        ];
+        const blockers = [
+            '#team-sidebar.open',
+            '#notif-dropdown.open',
+            '#form-sidebar.open',
+            '.stats-bar-dropdown:not(.initially-hidden)',
+            '.mobile-more-menu.open',
+            '.app-modal-overlay[style*="display: flex"]',
+        ].flatMap((selector) => [...document.querySelectorAll(selector)])
+            .filter((element) => !root.contains(element) && element !== target)
+            .map((element) => element.getBoundingClientRect())
+            .filter((item) => item.width > 0 && item.height > 0);
+        const overlapArea = (a, b) => Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left))
+            * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+        const scored = candidates.map((candidate, order) => {
+            const box = {
+                left: candidate.left,
+                top: candidate.top,
+                right: candidate.left + cardWidth,
+                bottom: candidate.top + estimatedHeight,
+            };
+            const targetOverlap = overlapArea(box, rect) * 20;
+            const interfaceOverlap = blockers.reduce((sum, blocker) => sum + overlapArea(box, blocker), 0);
+            return { ...candidate, score: targetOverlap + interfaceOverlap + order };
+        }).sort((a, b) => a.score - b.score)[0];
+        card.style.left = `${scored.left}px`;
+        card.style.top = `${scored.top}px`;
     });
 }
 
@@ -318,6 +352,15 @@ export function initOnboarding(options) {
         });
         window.addEventListener('resize', positionTour, { passive: true });
         window.addEventListener('scroll', positionTour, { passive: true, capture: true });
+        interfaceObserver = new MutationObserver((mutations) => {
+            if (!active || mutations.every((mutation) => root?.contains(mutation.target))) return;
+            positionTour();
+        });
+        interfaceObserver.observe(document.body, {
+            attributes: true,
+            attributeFilter: ['class', 'style', 'hidden', 'aria-expanded'],
+            subtree: true,
+        });
     }
 
     const server = onboardingState();
