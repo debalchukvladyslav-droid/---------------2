@@ -814,7 +814,7 @@ async function selectStatsCompareSource(type, key) {
     state.statsCompareSourceSelection = { type, key: typeof key === 'string' ? key : '' };
     state.statsCompareTradeTypeFilter = null;
     state.statsComparePeriodKey = '';
-    state.statsCompareFilters = [];
+    state.statsCompareFilters = [{ type: 'all-time', val: 'all', label: 'За весь час' }];
     await loadCompareStatsContext(state.statsCompareSourceSelection);
     renderStatsTab();
 }
@@ -822,7 +822,9 @@ async function selectStatsCompareSource(type, key) {
 function selectStatsCompareTradeType(type) {
     state.statsCompareTradeTypeFilter = type || null;
     state.statsComparePeriodKey = '';
-    state.statsCompareFilters = [];
+    if (!state.statsCompareFilters?.length) {
+        state.statsCompareFilters = [{ type: 'all-time', val: 'all', label: 'За весь час' }];
+    }
     renderStatsTab();
 }
 
@@ -854,7 +856,7 @@ export async function toggleStatsCompareMode(forceOpen = null) {
         };
         state.statsCompareTradeTypeFilter = state.activeTradeTypeFilter || null;
         state.statsComparePeriodKey = '';
-        state.statsCompareFilters = (state.activeFilters || []).map(filter => ({ ...filter }));
+        state.statsCompareFilters = [{ type: 'all-time', val: 'all', label: 'За весь час' }];
         await loadCompareStatsContext(state.statsCompareSourceSelection);
     }
     renderStatsTab();

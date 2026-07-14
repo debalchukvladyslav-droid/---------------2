@@ -86,7 +86,7 @@ export const state = {
     statsCompareA: '',
     statsCompareB: '',
     statsComparePeriodKey: '',
-    statsCompareFilters: [],
+    statsCompareFilters: [{ type: 'all-time', val: 'all', label: 'За весь час' }],
     statsCompareSourceSelection: { type: 'current', key: '' },
     statsCompareTradeTypeFilter: null,
     statsCompareContext: { journal: {}, label: 'Мій профіль', tradeTypes: [] },
