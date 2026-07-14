@@ -5,6 +5,7 @@ import { saveSettings } from './storage.js';
 import { getDashboardTeamMomentum } from './stats.js';
 
 const CACHE_MS = 6 * 60 * 60 * 1000;
+const DASHBOARD_MENTOR_ENABLED = false;
 const MENTOR_SYSTEM_PROMPT = `Ти — емпатійний і професійний ШІ-напарник проп-трейдера, інтегрований у корпоративний журнал угод.
 Говори живою, природною, сучасною українською без русизмів, кальок і граматичних помилок. Органічно використовуй трейдерський сленг: тільт, просадка, об'єми, структура, формація, лос, премаркет. Відповідай лаконічно, без стін тексту.
 Ти досвідчений напарник і психолог, а не токсичний наглядач:
@@ -306,6 +307,15 @@ ${types}
 }
 
 export async function renderDashboardAI(options = {}) {
+    if (!DASHBOARD_MENTOR_ENABLED) {
+        clearInterval(carouselTimer);
+        const brief = document.getElementById('dashboard-ai-brief');
+        const modal = document.getElementById('dashboard-mentor-modal');
+        if (brief) brief.hidden = true;
+        if (modal) modal.hidden = true;
+        document.body.classList.remove('dashboard-mentor-open');
+        return;
+    }
     if (!document.getElementById('dashboard-ai-brief')) return;
     const days = recentDays();
     const key = signature(days);
@@ -322,6 +332,7 @@ export async function renderDashboardAI(options = {}) {
 }
 
 export function refreshDashboardAI() {
+    if (!DASHBOARD_MENTOR_ENABLED) return Promise.resolve();
     return renderDashboardAI({ force: true });
 }
 
@@ -402,6 +413,7 @@ export function switchDashboardMentorTab(tab = 'chat') {
 }
 
 export function openDashboardMentor() {
+    if (!DASHBOARD_MENTOR_ENABLED) return;
     const modal = document.getElementById('dashboard-mentor-modal');
     const context = document.getElementById('dashboard-mentor-context');
     if (!modal) return;
@@ -423,6 +435,7 @@ export function closeDashboardMentor() {
 }
 
 export async function sendDashboardMentorMessage() {
+    if (!DASHBOARD_MENTOR_ENABLED) return;
     if (mentorBusy || state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) return;
     const input = document.getElementById('dashboard-mentor-input');
     const text = String(input?.value || '').trim();
