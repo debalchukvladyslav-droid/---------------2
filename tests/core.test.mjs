@@ -41,6 +41,7 @@ const { duplicateSheetMappingConfig } = await import('../js/sheet_import_modes.j
 const { detectExactSheetAutoMapping, migrateLegacyClassificationMapping, normalizeExactSheetHeader } = await import('../js/sheet_auto_mapping.js');
 const { buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets, parseSheetProfitRisk } = await import('../js/stats_sheet_metrics.js');
 const { parseDecimalInput } = await import('../js/utils.js');
+const { getZonedClockParts, isEndOfSessionReviewTime } = await import('../js/session_schedule.js');
 const { buildServiceBotSnapshot, hasServiceBotPermission, parseServiceBotRange } = await import('../lib/service_bots.js');
 
 test('parser utils find ECN fee columns across supported header names', () => {
@@ -88,6 +89,15 @@ test('sheet date parser accepts weekday prefixes and rolls future compact dates 
         parseSheetDateCellsToIsoSequence(['3.11', '4.11'], { year: 2026 }),
         ['2025-11-03', '2025-11-04'],
     );
+});
+
+test('end-of-session review uses New York time regardless of Kyiv local time', () => {
+    const beforeClose = new Date('2026-07-15T20:29:00Z');
+    const afterClose = new Date('2026-07-15T20:30:00Z');
+    assert.deepEqual(getZonedClockParts(afterClose), { hour: 16, minute: 30 });
+    assert.equal(isEndOfSessionReviewTime(beforeClose), false);
+    assert.equal(isEndOfSessionReviewTime(afterClose), true);
+    assert.equal(isEndOfSessionReviewTime(new Date('2026-07-16T02:00:00Z')), true);
 });
 
 test('sheet date sequence treats day-only rows after a month marker as the next month', () => {

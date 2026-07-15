@@ -48,6 +48,7 @@ import { applyPersistedBackground, initBackgroundControls } from './backgrounds.
 import { initGlobalAppEvents } from './app_events.js';
 import { showGlobalLoader, hideGlobalLoader } from './loading.js';
 import { initOnboarding, startOnboardingTour, resetOnboardingRuntime } from './onboarding.js';
+import { isEndOfSessionReviewTime } from './session_schedule.js';
 import { renderDashboardAI, refreshDashboardAI, toggleDashboardAIHistory, rotateDashboardAI, openDashboardMentor, closeDashboardMentor, sendDashboardMentorMessage, switchDashboardMentorTab } from './dashboard_ai.js';
 import { analyzeLossPatterns, renderLossPatternAnalysis } from './loss_pattern_analysis.js';
 
@@ -492,9 +493,7 @@ let sessionReviewReviewed = new Set();
 let sessionReviewIncludesYesterday = false;
 
 function isSessionReviewTime() {
-    const now = new Date();
-    const minutes = now.getHours() * 60 + now.getMinutes();
-    return minutes >= 16 * 60 + 30 && minutes <= 21 * 60;
+    return isEndOfSessionReviewTime();
 }
 
 function localDateKey(value) {
@@ -664,8 +663,13 @@ function checkAndShowSessionReview() {
     openSessionReview();
 }
 
-setInterval(checkAndShowSessionReview, 5 * 60 * 1000);
+setInterval(checkAndShowSessionReview, 60 * 1000);
 window._checkSessionReview = checkAndShowSessionReview;
+
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') checkAndShowSessionReview();
+});
+window.addEventListener('focus', checkAndShowSessionReview);
 
 window.checkSessionReadiness = async function() {
     const goal = document.getElementById('session-goal')?.value || '';
