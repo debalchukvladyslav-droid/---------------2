@@ -7,7 +7,7 @@ import { escapeHtml, parseDecimalInput } from './utils.js';
 import { ensureChartJs } from './vendor_loader.js';
 import { buildTradeTypeInsightRows } from './trade_type_analysis.js';
 import { getEffectiveDayPnl } from './trade_filters.js';
-import { buildExceptionKfRows, buildHourlyKfBuckets } from './stats_sheet_metrics.js';
+import { buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets } from './stats_sheet_metrics.js';
 
 // ─── STATS CACHE ───────────────────────────────────────────────────────────────────────────────
 // Module-level Map survives filter switches and profile switches within the
@@ -50,6 +50,7 @@ export function disposeStatsView() {
         'pnlChartInstance',
         'daysChartInstance',
         'hourlyChartInstance',
+        'entryPriceChartInstance',
         'winLossChartInstance',
         'mistakeChartInstance',
         'comparePnlChartInstance',
@@ -2068,6 +2069,9 @@ function renderStatsBarChart(canvasId, stateKey, labels, values, theme, options 
                 tooltip: {
                     callbacks: {
                         label: (ctx) => {
+                            if (typeof options.tooltipLabel === 'function') {
+                                return options.tooltipLabel(ctx.dataIndex, ctx);
+                            }
                             const suffix = typeof options.tooltipSuffix === 'function'
                                 ? options.tooltipSuffix(ctx.dataIndex)
                                 : '';
@@ -2082,6 +2086,68 @@ function renderStatsBarChart(canvasId, stateKey, labels, values, theme, options 
             },
         },
     });
+}
+
+function sheetDateMatchesStatsFilters(dateStr, filters = []) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateStr || ''));
+    if (!match) return false;
+    const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    if (Number.isNaN(date.getTime())) return false;
+    if (filters.some(filter => filter.type === 'all-time')) return true;
+    if (!filters.length) {
+        const now = state.todayObj || new Date();
+        const firstVisibleMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        return date >= firstVisibleMonth;
+    }
+    return filters.some((filter) => {
+        if (filter.type === 'year') return date.getFullYear() === Number(filter.val);
+        const parts = String(filter.val || '').split('-');
+        if (filter.type === 'month') {
+            return date.getFullYear() === Number(parts[0]) && date.getMonth() === Number(parts[1]);
+        }
+        if (filter.type === 'week') {
+            return date.getFullYear() === Number(parts[0])
+                && date.getMonth() === Number(parts[1])
+                && getWeekOfMonth(date) === Number(parts[2]);
+        }
+        return false;
+    });
+}
+
+function renderEntryPriceSheetChart(theme) {
+    const panel = document.getElementById('stats-entry-price-panel');
+    const selection = state.statsSourceSelection || {};
+    const selectionKey = selection.key || state.CURRENT_VIEWED_USER || state.USER_DOC_NAME;
+    const isOwnSource = selection.type === 'current'
+        && selectionKey === state.USER_DOC_NAME
+        && state.CURRENT_VIEWED_USER === state.USER_DOC_NAME;
+    if (panel) panel.hidden = !isOwnSource;
+    if (!isOwnSource) {
+        if (state.entryPriceChartInstance) state.entryPriceChartInstance.destroy();
+        state.entryPriceChartInstance = null;
+        return;
+    }
+
+    const rows = buildSheetEntryPriceBuckets(state.appData?.sheetRows || {}, {
+        dateMatches: (dateStr) => sheetDateMatchesStatsFilters(dateStr, state.activeFilters || []),
+    });
+    renderStatsBarChart(
+        'entryPriceChart',
+        'entryPriceChartInstance',
+        rows.map(row => row.label),
+        rows.map(row => row.pnl),
+        theme,
+        {
+            tooltipLabel: (index) => {
+                const row = rows[index] || {};
+                return [
+                    ` Результат: ${fmtMoney(row.pnl || 0)}`,
+                    ` КФ: ${fmtKf(row.kf || 0)}`,
+                    ` Угод у таблиці: ${row.trades || 0}`,
+                ];
+            },
+        },
+    );
 }
 
 function renderExceptionCriteriaKfRows(rows = []) {
@@ -3208,6 +3274,7 @@ export function renderStatsTab() {
         { tooltipSuffix: index => `, ${hourlyBuckets[index]?.trades || 0} угод` },
     );
     
+    renderEntryPriceSheetChart(statsChartTheme);
     renderExceptionCriteriaKfRows(buildExceptionKfRows(filteredEntries, ttFilter));
 
     const ctxPie = document.getElementById('winLossChart').getContext('2d');

@@ -39,7 +39,7 @@ const { getEffectiveDayPnl, isPureGoogleSheetTrade, visibleTradeRows } = await i
 const { normalizeBrokerTradeType } = await import('../js/trade_import_utils.js');
 const { duplicateSheetMappingConfig } = await import('../js/sheet_import_modes.js');
 const { detectExactSheetAutoMapping, migrateLegacyClassificationMapping, normalizeExactSheetHeader } = await import('../js/sheet_auto_mapping.js');
-const { buildExceptionKfRows, buildHourlyKfBuckets, parseSheetProfitRisk } = await import('../js/stats_sheet_metrics.js');
+const { buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets, parseSheetProfitRisk } = await import('../js/stats_sheet_metrics.js');
 const { parseDecimalInput } = await import('../js/utils.js');
 const { buildServiceBotSnapshot, hasServiceBotPermission, parseServiceBotRange } = await import('../lib/service_bots.js');
 
@@ -397,6 +397,25 @@ test('sheet profit risk parser accepts dot, comma, and R suffix values', () => {
     assert.equal(parseSheetProfitRisk('-0,3R'), -0.3);
     assert.equal(parseSheetProfitRisk(''), null);
     assert.equal(parseSheetProfitRisk('no pnl'), null);
+});
+
+test('entry price buckets use raw Sheet rows even when no Trades import exists', () => {
+    const rows = buildSheetEntryPriceBuckets({
+        'sheet-main': {
+            '2026-07-01': [
+                { symbol: 'CENT', net: 10, sheet: { entryPrice: 0.75, sheetNet: 10, profitRisk: '1R' } },
+                { symbol: 'LOW', net: -5, sheet: { entryPrice: 2.5, sheetNet: -5, profitRisk: '-0,5R' } },
+                { symbol: 'MID', net: 20, sheet: { entryPrice: 5, sheetNet: 20, profitRisk: '2R' } },
+                { symbol: 'HIGH', net: 7, sheet: { entryPrice: 20, sheetNet: 7, profitRisk: '0,7R' } },
+                { symbol: 'OVER', net: -12, sheet: { entryPrice: 20.01, sheetNet: -12, profitRisk: '-1,2R' } },
+            ],
+        },
+    });
+
+    assert.deepEqual(rows.map((row) => row.label), ['Центовка', '$1–3', '$3–5', '$5–10', '$10–20', '>$20']);
+    assert.deepEqual(rows.map((row) => row.pnl), [10, -5, 0, 20, 7, -12]);
+    assert.deepEqual(rows.map((row) => row.kf), [1, -0.5, 0, 2, 0.7, -1.2]);
+    assert.deepEqual(rows.map((row) => row.trades), [1, 1, 0, 1, 1, 1]);
 });
 
 test('hourly KФ buckets use matched Sheet profitRisk instead of trade net', () => {

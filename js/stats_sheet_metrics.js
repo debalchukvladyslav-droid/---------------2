@@ -1,5 +1,6 @@
 import { classifyTradeTypeGroup } from './data_utils.js';
 import { isPureGoogleSheetTrade } from './trade_filters.js';
+import { pickSheetRowsSource } from './datagrid_rows.js';
 
 export function parseSheetProfitRisk(value) {
     if (value == null) return null;
@@ -20,6 +21,53 @@ export function parseTradeOpenHour(opened) {
     if (!match) return null;
     const hour = Number(match[1]);
     return Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : null;
+}
+
+const ENTRY_PRICE_BUCKETS = [
+    { key: 'cents', label: 'Центовка', accepts: (price) => price > 0 && price < 1 },
+    { key: '1-3', label: '$1–3', accepts: (price) => price >= 1 && price < 3 },
+    { key: '3-5', label: '$3–5', accepts: (price) => price >= 3 && price < 5 },
+    { key: '5-10', label: '$5–10', accepts: (price) => price >= 5 && price < 10 },
+    { key: '10-20', label: '$10–20', accepts: (price) => price >= 10 && price <= 20 },
+    { key: '20+', label: '>$20', accepts: (price) => price > 20 },
+];
+
+function parseSheetNumber(value) {
+    if (value == null || value === '') return null;
+    const cleaned = String(value).trim().replace(/\s/g, '').replace(',', '.').replace(/[^0-9.+-]/g, '');
+    if (!cleaned || ['+', '-', '.', '+.', '-.'].includes(cleaned)) return null;
+    const number = Number(cleaned);
+    return Number.isFinite(number) ? number : null;
+}
+
+/** Агрегує сирі збережені рядки Google Sheets, навіть якщо вони не зіставлені з Trades. */
+export function buildSheetEntryPriceBuckets(sheetRows = {}, options = {}) {
+    const source = pickSheetRowsSource(sheetRows, options.preferredSpreadsheetId || '');
+    const rowsByDay = source?.byDay || {};
+    const dateMatches = typeof options.dateMatches === 'function' ? options.dateMatches : () => true;
+    const buckets = ENTRY_PRICE_BUCKETS.map((bucket) => ({ ...bucket, pnl: 0, kf: 0, trades: 0, pnlRows: 0, kfRows: 0 }));
+
+    Object.entries(rowsByDay).forEach(([dateStr, rows]) => {
+        if (!dateMatches(dateStr) || !Array.isArray(rows)) return;
+        rows.forEach((row) => {
+            const sheet = row?.sheet && typeof row.sheet === 'object' ? row.sheet : {};
+            const entryPrice = parseSheetNumber(sheet.entryPrice ?? row?.entry);
+            if (entryPrice == null) return;
+            const bucket = buckets.find((candidate) => candidate.accepts(entryPrice));
+            if (!bucket) return;
+            const pnl = parseSheetNumber(sheet.sheetNet ?? row?.net);
+            const kf = parseSheetProfitRisk(sheet.profitRisk);
+            bucket.trades += 1;
+            if (pnl != null) { bucket.pnl += pnl; bucket.pnlRows += 1; }
+            if (kf != null) { bucket.kf += kf; bucket.kfRows += 1; }
+        });
+    });
+
+    return buckets.map(({ accepts, ...bucket }) => ({
+        ...bucket,
+        pnl: Number(bucket.pnl.toFixed(2)),
+        kf: Number(bucket.kf.toFixed(2)),
+    }));
 }
 
 function iterMatchedSheetTrades(entries = [], tradeTypeFilter = null, visitor = () => {}) {
