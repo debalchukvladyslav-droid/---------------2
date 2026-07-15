@@ -372,8 +372,7 @@ body[data-theme="light"] .btn-google-signin {
 
 .sheet-workspace:not(.is-mapping-editing) > .sheet-account-row,
 .sheet-workspace:not(.is-mapping-editing) > .sheet-import-mode-bar,
-.sheet-workspace:not(.is-mapping-editing) > .sheet-file-actions,
-.sheet-workspace:not(.is-mapping-editing) > .sheet-preset-picker--workspace {
+.sheet-workspace:not(.is-mapping-editing) > .sheet-file-actions {
     display: none !important;
 }
 
