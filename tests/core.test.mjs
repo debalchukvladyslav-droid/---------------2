@@ -91,10 +91,10 @@ test('sheet date parser accepts weekday prefixes and rolls future compact dates 
     );
 });
 
-test('end-of-session review uses New York time regardless of Kyiv local time', () => {
-    const beforeClose = new Date('2026-07-15T20:29:00Z');
-    const afterClose = new Date('2026-07-15T20:30:00Z');
-    assert.deepEqual(getZonedClockParts(afterClose), { hour: 16, minute: 30 });
+test('end-of-session review starts at 09:30 New York time regardless of Kyiv local time', () => {
+    const beforeClose = new Date('2026-07-15T13:29:00Z');
+    const afterClose = new Date('2026-07-15T13:30:00Z');
+    assert.deepEqual(getZonedClockParts(afterClose), { hour: 9, minute: 30 });
     assert.equal(isEndOfSessionReviewTime(beforeClose), false);
     assert.equal(isEndOfSessionReviewTime(afterClose), true);
     assert.equal(isEndOfSessionReviewTime(new Date('2026-07-16T02:00:00Z')), true);

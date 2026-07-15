@@ -334,6 +334,7 @@ function stopTour(status = 'later') {
     target = null;
     root.hidden = true;
     document.body.classList.remove('onboarding-active');
+    document.dispatchEvent(new CustomEvent('onboarding:closed'));
     writeState(status, { stepId: steps[stepIndex]?.id || null, updatedAt: new Date().toISOString() });
 }
 
@@ -343,6 +344,7 @@ function finishTour(goHome) {
     target?.classList.remove('onboarding-target');
     root.hidden = true;
     document.body.classList.remove('onboarding-active');
+    document.dispatchEvent(new CustomEvent('onboarding:closed'));
     if (goHome) void deps.switchMainTab('dash');
 }
 
@@ -369,6 +371,7 @@ export function resetOnboardingRuntime() {
     target = null;
     if (root) root.hidden = true;
     document.body.classList.remove('onboarding-active');
+    document.dispatchEvent(new CustomEvent('onboarding:closed'));
 }
 
 export function initOnboarding(options) {

@@ -670,6 +670,7 @@ document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') checkAndShowSessionReview();
 });
 window.addEventListener('focus', checkAndShowSessionReview);
+document.addEventListener('onboarding:closed', checkAndShowSessionReview);
 
 window.checkSessionReadiness = async function() {
     const goal = document.getElementById('session-goal')?.value || '';

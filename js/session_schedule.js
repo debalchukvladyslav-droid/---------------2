@@ -19,5 +19,5 @@ export function isEndOfSessionReviewTime(value = new Date()) {
     const clock = getZonedClockParts(value);
     if (!clock) return false;
     const minutes = clock.hour * 60 + clock.minute;
-    return minutes >= 16 * 60 + 30;
+    return minutes >= 9 * 60 + 30;
 }
