@@ -589,6 +589,11 @@ function openSessionReview() {
     void renderSessionReviewScreen();
 }
 
+window.openSessionReviewTest = function() {
+    if (state.myRole !== 'admin') return;
+    openSessionReview();
+};
+
 window.saveSessionReview = async function() {
     const today = getTodayEST();
     if (sessionReviewScreens.length && sessionReviewReviewed.size < sessionReviewScreens.length) {

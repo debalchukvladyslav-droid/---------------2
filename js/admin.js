@@ -16,8 +16,10 @@ export async function renderAdminPanel() {
     if (!container) return;
 
     const refreshUsersBtn = document.getElementById('admin-refresh-users-btn');
+    const sessionReviewTestBtn = document.getElementById('admin-session-review-test-btn');
     const botsPanel = document.getElementById('admin-service-bots-panel');
     const fullAdmin = state.myRole === 'admin';
+    if (sessionReviewTestBtn) sessionReviewTestBtn.hidden = !fullAdmin;
     const dataManager = fullAdmin || state.IS_MENTOR_MODE;
     if (botsPanel) botsPanel.hidden = !fullAdmin;
     if (!dataManager) {

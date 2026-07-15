@@ -247,6 +247,7 @@ function activateAction(action, trigger, event = null) {
         'file-picker': () => document.getElementById(trigger?.dataset?.target || '')?.click(),
         'logout': () => window.logout?.(),
         'admin-refresh': () => window.renderAdminPanel?.(),
+        'admin-session-review-test': () => window.openSessionReviewTest?.(),
         'team-manager-open': () => window.openTeamManager?.(),
         'profile-name-save': () => window.saveProfileName?.(),
         'session-modal-snooze': () => window.snoozeSessionModal?.(),
