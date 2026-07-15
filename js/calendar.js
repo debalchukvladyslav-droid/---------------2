@@ -8,7 +8,7 @@ import { updateDashMiniEquityChart } from './dash_mini_chart.js';
 import { hideGlobalLoader, setElementLoading, showGlobalLoader } from './loading.js';
 import { findScreenshotsForTicker, openScreenshotForTrade } from './gallery.js';
 import { getEffectiveDayPnl, isSheetOnlyPnl, visibleTradeRows } from './trade_filters.js';
-import { collectDatagridRows } from './datagrid_rows.js';
+import { pickSheetRowsSource } from './datagrid_rows.js';
 
 let _selectDateRequestId = 0;
 
@@ -25,6 +25,14 @@ function sanitizeHTML(str) {
     const div = document.createElement('div');
     div.textContent = String(str ?? '');
     return div.innerHTML;
+}
+
+function dashboardTradeKf(trade) {
+    const raw = trade?.sheet?.profitRisk ?? trade?.profitRisk ?? trade?.kf;
+    const normalized = String(raw ?? '').trim().replace(',', '.').replace(/\s*(?:r|кф)\s*$/i, '');
+    const value = Number.parseFloat(normalized);
+    if (!Number.isFinite(value)) return '';
+    return `${value.toLocaleString('uk-UA', { maximumFractionDigits: 2 })} КФ`;
 }
 
 function getRecentTradesEmptyStateHtml() {
@@ -181,20 +189,27 @@ export function updateDashboardWidgets(year, month) {
     if (list) {
         const rows = [];
         let preferredSpreadsheetId = '';
-        try { preferredSpreadsheetId = sessionStorage.getItem('sheet_spreadsheet_id') || ''; } catch {}
-        const imported = collectDatagridRows(state.appData || {}, preferredSpreadsheetId, new Date());
-        if (imported.source === 'sheet' && imported.rows.length) {
-            imported.rows.forEach((row) => {
-                const trade = row.trade || {};
-                rows.push({
-                    date: row.dateStr,
-                    idx: row.tradeIndex,
-                    sym: String(trade.symbol || '?').toUpperCase(),
-                    net: Number(trade.net) || 0,
-                    type: String(trade.type || trade.sheet?.tradeType || ''),
-                    opened: String(trade.opened || ''),
-                    trade,
-                    source: 'sheet',
+        try {
+            const storageKey = state.myUserId ? `sheet_spreadsheet_id:${state.myUserId}` : 'sheet_spreadsheet_id';
+            preferredSpreadsheetId = localStorage.getItem(storageKey) || sessionStorage.getItem(storageKey) || '';
+        } catch {}
+        const imported = pickSheetRowsSource(state.appData?.sheetRows || {}, preferredSpreadsheetId);
+        if (imported?.byDay) {
+            Object.keys(imported.byDay).filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)).forEach((date) => {
+                (Array.isArray(imported.byDay[date]) ? imported.byDay[date] : []).forEach((trade, sheetRowIndex) => {
+                    const sheet = trade?.sheet && typeof trade.sheet === 'object' ? trade.sheet : {};
+                    rows.push({
+                        date,
+                        idx: Number.isInteger(Number(sheet.matchedTradeIndex)) ? Number(sheet.matchedTradeIndex) : -1,
+                        sym: String(trade?.symbol || '?').toUpperCase(),
+                        net: Number(trade?.net) || 0,
+                        kf: dashboardTradeKf(trade),
+                        type: String(trade?.type || sheet.tradeType || ''),
+                        opened: String(trade?.opened || ''),
+                        trade: { ...(trade || {}), sheet },
+                        sheetRowIndex,
+                        source: 'sheet',
+                    });
                 });
             });
         } else {
@@ -204,7 +219,7 @@ export function updateDashboardWidgets(year, month) {
                 tradeRows.forEach(({ trade: t, index: idx }) => {
                     const net = parseFloat(t.net);
                     if (!Number.isFinite(net)) return;
-                    rows.push({ date, idx, sym: String(t.symbol || '?').toUpperCase(), net, type: String(t.type || ''), opened: String(t.opened || ''), trade: t, source: 'trades' });
+                    rows.push({ date, idx, sym: String(t.symbol || '?').toUpperCase(), net, kf: dashboardTradeKf(t), type: String(t.type || ''), opened: String(t.opened || ''), trade: t, source: 'trades' });
                 });
             }
         }
@@ -239,7 +254,7 @@ export function updateDashboardWidgets(year, month) {
                     </div>
                 </div>
                 <div class="recent-trade-right">
-                    <div class="recent-trade-pnl ${isPos ? 'pos' : 'neg'}">${isPos ? '+' : ''}$${r.net.toFixed(2)}</div>
+                    <div class="recent-trade-result"><div class="recent-trade-pnl ${isPos ? 'pos' : 'neg'}">${isPos ? '+' : ''}$${r.net.toFixed(2)}</div>${r.kf ? `<div class="recent-trade-kf">${sanitizeHTML(r.kf)}</div>` : ''}</div>
                 </div>
             </div>`;
                 })

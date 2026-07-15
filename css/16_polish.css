@@ -2523,6 +2523,8 @@ body {
 @media (max-width: 1100px) { .dash-3col .dash-col-recent { display: block; } .dash-col-recent .recent-trades-panel { display: none; } }
 @keyframes dashboard-ai-point-in { from { opacity: 0; transform: translateX(6px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes dashboard-mentor-thinking { 0%, 60%, 100% { opacity: .35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-4px); } }
+.recent-trade-result { display: grid; justify-items: end; gap: 2px; }
+.recent-trade-kf { color: var(--text-muted); font-family: var(--font-mono); font-size: .68rem; font-weight: 700; white-space: nowrap; }
 
 .learn-preference-panel {
     margin: 18px 0 20px;
