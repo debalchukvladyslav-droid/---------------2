@@ -237,6 +237,23 @@ function unassignedScreenshots() {
     return (state.appData?.unassignedImages || []).map(path => ({ path, category: 'unassigned' }));
 }
 
+const SCREEN_TRADE_MAX_AGE_MS = 5 * 24 * 60 * 60 * 1000;
+
+function screenCreatedMs(path) {
+    const meta = state.appData?.screenMeta?.[path] || {};
+    const value = meta.createdAt || meta.driveCreatedTime || meta.driveModifiedTime || '';
+    const timestamp = Date.parse(value);
+    return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function isScreenFreshForTrade(path, dateStr) {
+    const createdAt = screenCreatedMs(path);
+    if (createdAt === null) return true;
+    const tradeDate = Date.parse(`${dateStr}T00:00:00`);
+    if (!Number.isFinite(tradeDate)) return true;
+    return createdAt >= tradeDate - SCREEN_TRADE_MAX_AGE_MS;
+}
+
 function ensureScreenMeta(path, patch = {}) {
     if (!path) return null;
     if (!state.appData.screenMeta || typeof state.appData.screenMeta !== 'object') state.appData.screenMeta = {};
@@ -256,7 +273,10 @@ export function findScreenshotsForTicker(dateStr, symbol) {
     const wanted = normalizeTicker(symbol);
     if (!dateStr || !wanted) return [];
 
+    const seen = new Set();
     return [...screenshotsForDate(dateStr), ...unassignedScreenshots()].filter(({ path }) => {
+        if (!path || seen.has(path) || !isScreenFreshForTrade(path, dateStr)) return false;
+        seen.add(path);
         const savedTicker = normalizeTicker(state.appData?.tickers?.[path]);
         if (savedTicker && savedTicker === wanted) return true;
 
@@ -265,7 +285,7 @@ export function findScreenshotsForTicker(dateStr, symbol) {
 
         const filename = normalizeTicker(path.split(/[\\/]/).pop());
         return filename.includes(wanted);
-    });
+    }).sort((a, b) => (screenCreatedMs(b.path) ?? -Infinity) - (screenCreatedMs(a.path) ?? -Infinity));
 }
 
 export async function openScreenshotForTrade(dateStr, tradeOrSymbol) {
@@ -280,7 +300,8 @@ export async function openScreenshotForTrade(dateStr, tradeOrSymbol) {
     if (!matches.length) {
         const unknownScreens = [...screenshotsForDate(dateStr), ...unassignedScreenshots()]
             .map(({ path }) => path)
-            .filter(path => !normalizeTicker(state.appData?.tickers?.[path]) && window.runOCR);
+            .filter(path => isScreenFreshForTrade(path, dateStr) && !normalizeTicker(state.appData?.tickers?.[path]) && window.runOCR)
+            .sort((a, b) => (screenCreatedMs(b) ?? -Infinity) - (screenCreatedMs(a) ?? -Infinity));
 
         if (unknownScreens.length) {
             showToast(`Шукаю скрін для ${wanted}: запускаю OCR по скрінах...`);
