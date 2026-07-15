@@ -359,6 +359,8 @@ function fillSelectedDateUI(dateStr) {
     document.getElementById('trade-locates').value = !sheetOnlyPnl ? formatStoredDecimal(dayData.locates) : '';
     document.getElementById('trade-kf').value = formatStoredDecimal(dayData.kf);
     document.getElementById('trade-notes').value = dayData.notes || '';
+    const nextImprovement = document.getElementById('next-session-improvement');
+    if (nextImprovement) nextImprovement.value = dayData.nextSessionImprovement || '';
     document.getElementById('mentor-notes').value = dayData.mentor_comment || '';
     
     state.appData.errorTypes?.forEach((err, index) => { 
@@ -531,6 +533,7 @@ export function saveEntry() {
         locates: parseDecimalInput(locValRaw),
         kf: parseDecimalInput(kfValMain),
         notes: document.getElementById('trade-notes').value || "",
+        nextSessionImprovement: document.getElementById('next-session-improvement')?.value || "",
         errors: errors,
         checkedParams: checklist,
         sliders: sliders,
@@ -554,6 +557,8 @@ export function saveEntry() {
     if (oldData.sessionAiResult !== undefined) dayData.sessionAiResult = oldData.sessionAiResult;
     if (oldData.trades !== undefined) dayData.trades = oldData.trades;
     if (oldData.sessionDone !== undefined) dayData.sessionDone = oldData.sessionDone;
+    if (oldData.sessionReviewDone !== undefined) dayData.sessionReviewDone = oldData.sessionReviewDone;
+    if (oldData.sessionReviewCompletedAt !== undefined) dayData.sessionReviewCompletedAt = oldData.sessionReviewCompletedAt;
     if (oldData.review_requests !== undefined) dayData.review_requests = oldData.review_requests;
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(state.selectedDateStr) || Object.prototype.hasOwnProperty.call(Object.prototype, state.selectedDateStr)) return;

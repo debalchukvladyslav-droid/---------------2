@@ -59,6 +59,23 @@
     </div>
 </div>
 
+<div id="session-review-modal" class="app-modal-overlay session-review-overlay">
+    <div class="session-review-card" role="dialog" aria-modal="true" aria-labelledby="session-review-title">
+        <header class="session-review-head"><div><div class="session-modal-kicker">Після сесії</div><h2 id="session-review-title">Закрий торговий день</h2><div id="session-review-date" class="session-modal-date"></div></div></header>
+        <div class="session-review-grid">
+            <section class="session-review-notes">
+                <label class="session-field"><span class="session-field-label">Думка дня</span><textarea id="session-review-notes" rows="6" placeholder="Що сьогодні спрацювало, де поспішив, що відчував?"></textarea></label>
+                <label class="session-field session-review-improvement"><span class="session-field-label">Що покращити наступної торгівлі</span><textarea id="session-review-improvement" rows="4" placeholder="Одна конкретна дія для дисципліни наступного разу…"></textarea></label>
+            </section>
+            <section class="session-review-screens"><div class="session-review-screens-head"><div><strong>Скріншоти за сьогодні</strong><small>Переглянь кожен перед завершенням</small></div><span id="session-review-screen-progress">0 / 0</span></div>
+                <div class="session-review-screen-stage" id="session-review-screen-stage"><p>Скріншотів за сьогодні немає</p></div>
+                <div class="session-review-screen-nav"><button type="button" class="btn-secondary" data-action="session-review-screen-prev">←</button><div class="session-review-categories" id="session-review-categories"><button type="button" data-category="good">Добрий</button><button type="button" data-category="normal">Звичайний</button><button type="button" data-category="bad">Поганий</button><button type="button" data-category="error">Помилка</button></div><button type="button" class="btn-secondary" data-action="session-review-screen-next">→</button></div>
+            </section>
+        </div>
+        <div class="session-modal-actions"><button type="button" class="btn-primary btn-flex-2" data-action="session-review-save">Завершити день</button><button type="button" class="btn-secondary btn-flex-1" data-action="session-review-snooze">Пізніше</button></div>
+    </div>
+</div>
+
 <div id="live-news-modal" class="app-modal-overlay live-news-modal-overlay" data-action="live-news-backdrop">
     <div class="live-news-modal-card" role="dialog" aria-labelledby="live-news-title" aria-modal="true">
         <div class="live-news-modal-head">

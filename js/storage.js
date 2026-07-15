@@ -152,6 +152,9 @@ function dayEntryToJournalRow(userId, tradeDate, entry) {
             sessionSetups: Array.isArray(day.sessionSetups) ? day.sessionSetups : [],
             sessionAiResult: day.sessionAiResult ?? '',
             sessionDone: day.sessionDone ?? false,
+            nextSessionImprovement: day.nextSessionImprovement ?? '',
+            sessionReviewDone: day.sessionReviewDone ?? false,
+            sessionReviewCompletedAt: day.sessionReviewCompletedAt ?? '',
             trades: Array.isArray(day.trades) ? day.trades : [],
             review_requests: day.review_requests && typeof day.review_requests === 'object' ? day.review_requests : {},
         }
@@ -187,6 +190,9 @@ function journalRowToDayEntry(row) {
         sessionSetups: metrics.sessionSetups || [],
         sessionAiResult: metrics.sessionAiResult,
         sessionDone: metrics.sessionDone,
+        nextSessionImprovement: metrics.nextSessionImprovement,
+        sessionReviewDone: metrics.sessionReviewDone,
+        sessionReviewCompletedAt: metrics.sessionReviewCompletedAt,
         trades: metrics.trades || [],
         review_requests: metrics.review_requests && typeof metrics.review_requests === 'object' ? metrics.review_requests : {},
     });

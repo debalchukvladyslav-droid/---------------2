@@ -12,7 +12,7 @@ import { applyTheme, saveThemeSettings, switchTab, toggleMobileSidebar, switchMa
 import { shiftDate, selectDateFromInput, saveEntry, renderView, selectDate, updateAutoFlags, initSelectors, renderSidebarTradesList } from './calendar.js';
 import { toggleStatsDropdown, toggleTree, toggleStatsFilter, refreshStatsView, closeStatsDropdown, renderStatsSourceSelector, selectStatsSource, renderTradeTypeSelector, selectTradeTypeFilter, toggleStatsEquityMode, toggleStatsCompareMode, closeStatsCompareMode, openStatsComparisonWithTrader } from './stats.js';
 import { renderErrorsList, addNewErrorType, deleteErrorType, renderChecklistDisplay, renderSettingsChecklist, addNewChecklistItem, deleteChecklistItem, saveChecklist, renderSidebarSliders, renderSettingsSliders, addNewSliderItem, deleteSliderItem, saveSlidersSettings, renderSettingsTradeTypes, addNewTradeType, deleteTradeType, saveTradeTypes, renderMyTradeTypes, addMyTradeType, deleteMyTradeType, saveMyTradeTypes, renderSettingsSituations, addPlaybookSituation, deletePlaybookSituation, savePlaybookSituations } from './settings.js';
-import { openZoom, closeZoom, openOriginal, zoomStep, loadMoreUnassigned, assignImage, removeAssignedImage, deleteFileFromPC, loadImages, renderAssignedScreens, disposeScreensView, openScreenshotForTrade } from './gallery.js';
+import { openZoom, closeZoom, openOriginal, zoomStep, loadMoreUnassigned, assignImage, removeAssignedImage, deleteFileFromPC, loadImages, renderAssignedScreens, disposeScreensView, openScreenshotForTrade, getStorageUrl } from './gallery.js';
 import { getAIAdvice, analyzeChart, analyzeTagPatterns, openSOSModal, closeSOSModal, sendSOSMessage, sendDataChatMessage, renderAIAdviceUI, loadAIChatHistory, switchAITab, bookmarkAIChat, renderSavedAIChats, deleteSavedAI, applyAIQuickPrompt } from './ai.js';
 import { cleanupUnusedAIRequests } from './ai/client.js';
 import { setupOCRDrawing, loadLatestImageForOCR, saveVisualOCRSettings, editTicker, forceScan, updateBadgeUI, runOCR, enqueueOCR, enqueueBackgroundOCRForAllScreens, getOCRQueueStatus } from './ocr.js';
@@ -479,6 +479,155 @@ function checkAndShowSessionModal() {
 
 setInterval(checkAndShowSessionModal, 5 * 60 * 1000);
 window._checkSessionModal = checkAndShowSessionModal;
+
+// === END-OF-SESSION REVIEW ===
+let sessionReviewSnoozeUntil = 0;
+let sessionReviewScreens = [];
+let sessionReviewScreenIndex = 0;
+let sessionReviewRenderToken = 0;
+let sessionReviewReviewed = new Set();
+
+function isSessionReviewTime() {
+    const now = new Date();
+    const minutes = now.getHours() * 60 + now.getMinutes();
+    return minutes >= 16 * 60 + 30 && minutes <= 21 * 60;
+}
+
+function localDateKey(value) {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return '';
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function collectTodaySessionScreens(today) {
+    const day = state.appData.journal?.[today] || {};
+    const meta = state.appData.screenMeta || {};
+    const seen = new Set();
+    const rows = [];
+    ['good', 'normal', 'bad', 'error'].forEach((category) => {
+        (day.screenshots?.[category] || []).forEach((path) => {
+            if (!path || seen.has(path)) return;
+            const createdAt = meta[path]?.createdAt || meta[path]?.driveCreatedTime || '';
+            if (createdAt && localDateKey(createdAt) !== today) return;
+            seen.add(path);
+            rows.push({ path, category, createdAt });
+        });
+    });
+    (state.appData.unassignedImages || []).forEach((path) => {
+        if (!path || seen.has(path)) return;
+        const createdAt = meta[path]?.createdAt || meta[path]?.driveCreatedTime || '';
+        if (!createdAt || localDateKey(createdAt) !== today) return;
+        seen.add(path);
+        rows.push({ path, category: 'unassigned', createdAt });
+    });
+    return rows.sort((a, b) => Date.parse(a.createdAt || 0) - Date.parse(b.createdAt || 0));
+}
+
+async function renderSessionReviewScreen() {
+    const stage = document.getElementById('session-review-screen-stage');
+    const progress = document.getElementById('session-review-screen-progress');
+    const categories = document.getElementById('session-review-categories');
+    if (!stage || !progress) return;
+    const total = sessionReviewScreens.length;
+    sessionReviewScreenIndex = total ? Math.max(0, Math.min(sessionReviewScreenIndex, total - 1)) : 0;
+    progress.textContent = total ? `${sessionReviewScreenIndex + 1} / ${total} · перевірено ${sessionReviewReviewed.size}` : '0 / 0';
+    if (categories) categories.hidden = !total;
+    if (!total) { stage.innerHTML = '<p>Скріншотів за сьогодні немає</p>'; return; }
+    const current = sessionReviewScreens[sessionReviewScreenIndex];
+    categories?.querySelectorAll('[data-category]').forEach((button) => button.classList.toggle('active', button.dataset.category === current.category));
+    const token = ++sessionReviewRenderToken;
+    stage.innerHTML = '<p>Завантажую скріншот…</p>';
+    try {
+        const src = await getStorageUrl(current.path);
+        if (token !== sessionReviewRenderToken) return;
+        stage.textContent = '';
+        const image = document.createElement('img'); image.src = src; image.alt = `Скріншот ${sessionReviewScreenIndex + 1}`; stage.appendChild(image);
+    } catch {
+        if (token === sessionReviewRenderToken) stage.innerHTML = '<p>Не вдалося завантажити скріншот</p>';
+    }
+}
+
+window.stepSessionReviewScreen = function(direction = 1) {
+    if (!sessionReviewScreens.length) return;
+    sessionReviewScreenIndex = (sessionReviewScreenIndex + (Number(direction) < 0 ? -1 : 1) + sessionReviewScreens.length) % sessionReviewScreens.length;
+    void renderSessionReviewScreen();
+};
+
+function setSessionReviewCategory(category) {
+    if (!['good', 'normal', 'bad', 'error'].includes(category) || !sessionReviewScreens.length) return;
+    const today = getTodayEST();
+    const day = state.appData.journal?.[today];
+    const current = sessionReviewScreens[sessionReviewScreenIndex];
+    if (!day || !current) return;
+    if (!day.screenshots) day.screenshots = { good: [], normal: [], bad: [], error: [] };
+    Object.keys(day.screenshots).forEach((key) => { if (Array.isArray(day.screenshots[key])) day.screenshots[key] = day.screenshots[key].filter((path) => path !== current.path); });
+    if (Array.isArray(state.appData.unassignedImages)) state.appData.unassignedImages = state.appData.unassignedImages.filter((path) => path !== current.path);
+    day.screenshots[category] = [...new Set([...(day.screenshots[category] || []), current.path])];
+    current.category = category;
+    sessionReviewReviewed.add(current.path);
+    markJournalDayDirty(today);
+    void saveSettings();
+    void renderSessionReviewScreen();
+};
+
+function openSessionReview() {
+    const today = getTodayEST();
+    if (!state.appData.journal[today]) state.appData.journal[today] = getDefaultDayEntry();
+    const day = state.appData.journal[today];
+    document.getElementById('session-review-date').textContent = `📅 ${today}`;
+    document.getElementById('session-review-notes').value = day.notes || '';
+    document.getElementById('session-review-improvement').value = day.nextSessionImprovement || '';
+    sessionReviewScreens = collectTodaySessionScreens(today);
+    sessionReviewScreenIndex = 0;
+    sessionReviewReviewed = new Set();
+    const categories = document.getElementById('session-review-categories');
+    if (categories && !categories.dataset.bound) {
+        categories.dataset.bound = 'true';
+        categories.addEventListener('click', (event) => setSessionReviewCategory(event.target?.closest?.('[data-category]')?.dataset?.category || ''));
+    }
+    document.getElementById('session-review-modal').style.display = 'flex';
+    void renderSessionReviewScreen();
+}
+
+window.saveSessionReview = async function() {
+    const today = getTodayEST();
+    if (sessionReviewScreens.length && sessionReviewReviewed.size < sessionReviewScreens.length) {
+        const nextIndex = sessionReviewScreens.findIndex((screen) => !sessionReviewReviewed.has(screen.path));
+        if (nextIndex >= 0) sessionReviewScreenIndex = nextIndex;
+        showToast(`Переглянь і класифікуй усі скріншоти: ${sessionReviewReviewed.size} із ${sessionReviewScreens.length}`);
+        void renderSessionReviewScreen();
+        return;
+    }
+    const day = state.appData.journal?.[today] || getDefaultDayEntry();
+    day.notes = document.getElementById('session-review-notes')?.value || '';
+    day.nextSessionImprovement = document.getElementById('session-review-improvement')?.value || '';
+    day.sessionReviewDone = true;
+    day.sessionReviewCompletedAt = new Date().toISOString();
+    day.__detailsLoaded = true;
+    state.appData.journal[today] = day;
+    markJournalDayDirty(today);
+    await saveJournalData();
+    document.getElementById('session-review-modal').style.display = 'none';
+    if (state.selectedDateStr === today) renderView();
+};
+
+window.snoozeSessionReview = function() {
+    sessionReviewSnoozeUntil = Date.now() + 10 * 60 * 1000;
+    document.getElementById('session-review-modal').style.display = 'none';
+};
+
+function checkAndShowSessionReview() {
+    if (!state.USER_DOC_NAME || state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME || !isSessionReviewTime()) return;
+    if (Date.now() < sessionReviewSnoozeUntil || document.body.classList.contains('onboarding-active')) return;
+    const today = getTodayEST();
+    if (state.appData.journal?.[today]?.sessionReviewDone) return;
+    const modal = document.getElementById('session-review-modal');
+    if (!modal || modal.style.display === 'flex') return;
+    openSessionReview();
+}
+
+setInterval(checkAndShowSessionReview, 5 * 60 * 1000);
+window._checkSessionReview = checkAndShowSessionReview;
 
 window.checkSessionReadiness = async function() {
     const goal = document.getElementById('session-goal')?.value || '';
@@ -1039,6 +1188,7 @@ async function bootApp(user) {
     startManualSyncScheduler();
     initOnboarding({ user, saveSettings, switchMainTab });
     setTimeout(() => window._checkSessionModal?.(), 1500);
+    setTimeout(() => window._checkSessionReview?.(), 1800);
 }
 
 function resetRouteForLoginScreen() {

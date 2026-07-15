@@ -873,6 +873,25 @@ body {
     font-weight: 800;
 }
 
+.session-review-overlay { align-items: center; padding: 24px; }
+.session-review-card { width: min(1040px, 96vw); max-height: 92vh; overflow-y: auto; padding: 22px; border: 1px solid var(--border); border-radius: 20px; background: var(--bg-panel); box-shadow: 0 28px 90px rgba(0,0,0,.42); }
+.session-review-head { margin-bottom: 18px; }
+.session-review-head h2 { margin: 3px 0 0; font-size: 1.35rem; }
+.session-review-grid { display: grid; grid-template-columns: minmax(280px, .85fr) minmax(420px, 1.4fr); gap: 20px; }
+.session-review-notes { display: grid; align-content: start; gap: 14px; }
+.session-review-improvement { padding: 12px; border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.session-review-screens { min-width: 0; padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--bg-main); }
+.session-review-screens-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.session-review-screens-head strong, .session-review-screens-head small { display: block; } .session-review-screens-head small { margin-top: 3px; color: var(--text-muted); font-size: .75rem; }
+.session-review-screen-stage { display: grid; place-items: center; min-height: 340px; overflow: hidden; border-radius: 10px; background: #080b10; color: var(--text-muted); }
+.session-review-screen-stage img { display: block; width: 100%; max-height: 52vh; object-fit: contain; }
+.session-review-screen-nav { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; margin-top: 11px; }
+.session-review-categories { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; }
+.session-review-categories button { padding: 6px 9px; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--text-muted); cursor: pointer; }
+.session-review-categories button.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.session-review-card > .session-modal-actions { margin-top: 18px; }
+@media (max-width: 800px) { .session-review-overlay { padding: 0; } .session-review-card { width: 100%; max-height: 100dvh; min-height: 100dvh; border: 0; border-radius: 0; } .session-review-grid { grid-template-columns: 1fr; } .session-review-screen-stage { min-height: 240px; } .session-review-screen-nav { grid-template-columns: auto 1fr auto; } }
+
 .live-news-modal-overlay {
     padding: 18px;
 }

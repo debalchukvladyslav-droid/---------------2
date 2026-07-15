@@ -26,6 +26,7 @@ export function getDefaultDayEntry() {
     return {
         pnl: null, gross_pnl: null, commissions: null, locates: null, kf: null,
         notes: '', errors: [],
+        nextSessionImprovement: '', sessionReviewDone: false, sessionReviewCompletedAt: '',
         screenshots: { good: [], normal: [], bad: [], error: [] },
         checkedParams: [], sliders: {}, ai_advice: "", traded_tickers: [],
         fondexx: { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
@@ -200,6 +201,9 @@ export function normalizeDayEntry(entry) {
         locates: sanitizeNumberOrNull(safeEntry.locates),
         kf: sanitizeNumberOrNull(safeEntry.kf),
         notes: typeof safeEntry.notes === 'string' ? safeEntry.notes : '',
+        nextSessionImprovement: typeof safeEntry.nextSessionImprovement === 'string' ? safeEntry.nextSessionImprovement : '',
+        sessionReviewDone: safeEntry.sessionReviewDone === true,
+        sessionReviewCompletedAt: typeof safeEntry.sessionReviewCompletedAt === 'string' ? safeEntry.sessionReviewCompletedAt : '',
         errors: sanitizeStringArray(safeEntry.errors),
         screenshots: {
             good: sanitizeStringArray(screenshots.good),

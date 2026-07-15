@@ -385,6 +385,9 @@ function dayEntryToJournalRow(userId, tradeDate, entry) {
             sessionSetups: Array.isArray(day.sessionSetups) ? day.sessionSetups : [],
             sessionAiResult: day.sessionAiResult ?? '',
             sessionDone: day.sessionDone ?? false,
+            nextSessionImprovement: day.nextSessionImprovement ?? '',
+            sessionReviewDone: day.sessionReviewDone ?? false,
+            sessionReviewCompletedAt: day.sessionReviewCompletedAt ?? '',
             trades: Array.isArray(day.trades) ? day.trades : [],
             review_requests: day.review_requests && typeof day.review_requests === 'object' ? day.review_requests : {},
         }

@@ -75,6 +75,7 @@ function commitVisibleDayFormInputs() {
         locates: parseDecimalInput(document.getElementById('trade-locates')?.value),
         kf: parseDecimalInput(document.getElementById('trade-kf')?.value),
         notes: notesEl.value || '',
+        nextSessionImprovement: document.getElementById('next-session-improvement')?.value ?? oldData.nextSessionImprovement ?? '',
         errors: [...document.querySelectorAll('.error-checkbox:checked')].map((el) => el.value),
         checkedParams: checklist,
         sliders,
