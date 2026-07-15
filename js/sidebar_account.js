@@ -308,7 +308,43 @@ function bindOnce() {
             trigger.setAttribute('aria-expanded', 'false');
         });
     }
-    saveBtn?.addEventListener('click', () => saveSidebarProfile());
+    saveBtn?.addEventListener('click', () => runSidebarProfileSave(saveBtn));
+}
+
+function setSidebarProfileSaveState(button, stateName) {
+    if (!button) return;
+    button.classList.remove('is-saving', 'is-saved', 'is-error');
+    if (stateName === 'saving') {
+        button.classList.add('is-saving');
+        button.disabled = true;
+        button.textContent = 'Зберігаю…';
+    } else if (stateName === 'saved') {
+        button.classList.add('is-saved');
+        button.disabled = false;
+        button.textContent = 'Збережено ✓';
+    } else if (stateName === 'error') {
+        button.classList.add('is-error');
+        button.disabled = false;
+        button.textContent = 'Не збережено';
+    } else {
+        button.disabled = false;
+        button.textContent = 'Зберегти зміни';
+    }
+}
+
+async function runSidebarProfileSave(button) {
+    if (button?.disabled) return;
+    setSidebarProfileSaveState(button, 'saving');
+    let saved = false;
+    try {
+        saved = await saveSidebarProfile();
+        setSidebarProfileSaveState(button, saved ? 'saved' : 'error');
+    } catch (error) {
+        console.error('[Sidebar profile] save failed', error);
+        showToast('Не вдалося зберегти профіль');
+        setSidebarProfileSaveState(button, 'error');
+    }
+    window.setTimeout(() => setSidebarProfileSaveState(button, 'idle'), saved ? 1800 : 2400);
 }
 
 export function initSidebarAccount() {
@@ -384,7 +420,7 @@ export async function refreshSidebarAccount() {
 
 async function saveSidebarProfile() {
     const nick = myNick();
-    if (!nick) return;
+    if (!nick) return false;
 
     const fname = document.getElementById('sidebar-pf-fname')?.value.trim() || '';
     const lname = document.getElementById('sidebar-pf-lname')?.value.trim() || '';
@@ -393,13 +429,13 @@ async function saveSidebarProfile() {
 
     if (!fname || !lname) {
         showToast("Вкажіть ім'я та прізвище");
-        return;
+        return false;
     }
 
     const { data: existing, error: fetchErr } = await supabase.from('profiles').select('settings').eq('nick', nick).maybeSingle();
     if (fetchErr) {
         showToast('Помилка: ' + fetchErr.message);
-        return;
+        return false;
     }
 
     const prevSettings = existing?.settings && typeof existing.settings === 'object' ? existing.settings : {};
@@ -411,7 +447,7 @@ async function saveSidebarProfile() {
         else avatarPath = await migrateInlineAvatarIfNeeded(avatarPath);
     } catch (uploadErr) {
         showToast('Could not upload avatar: ' + (uploadErr?.message || uploadErr));
-        return;
+        return false;
     }
     if (avatarPath) {
         settings.avatar_url = avatarPath;
@@ -433,7 +469,7 @@ async function saveSidebarProfile() {
 
     if (error) {
         showToast('Не вдалося зберегти: ' + error.message);
-        return;
+        return false;
     }
 
     if (settings.avatar_url
@@ -459,4 +495,5 @@ async function saveSidebarProfile() {
     if (window.renderTeamSidebar) window.renderTeamSidebar();
     if (window.renderStatsSourceSelector) window.renderStatsSourceSelector();
     showToast('Профіль оновлено');
+    return true;
 }

@@ -959,6 +959,11 @@ body.is-calendar-tab .quick-trade-fab {
 }
 .sidebar-account-dropdown textarea { min-height: 72px; resize: vertical; }
 .sidebar-pf-save { margin-top: 6px; width: 100%; border-radius: 10px; }
+.sidebar-pf-save.is-saving { position: relative; cursor: wait; opacity: .82; }
+.sidebar-pf-save.is-saving::before { content: ''; display: inline-block; width: 13px; height: 13px; margin-right: 8px; vertical-align: -2px; border: 2px solid rgba(255,255,255,.38); border-top-color: currentColor; border-radius: 50%; animation: sidebar-profile-save-spin .7s linear infinite; }
+.sidebar-pf-save.is-saved { background: var(--profit); border-color: var(--profit); color: #fff; }
+.sidebar-pf-save.is-error { background: var(--loss); border-color: var(--loss); color: #fff; }
+@keyframes sidebar-profile-save-spin { to { transform: rotate(360deg); } }
 .sidebar-account-actions-section {
     padding: 0;
     margin: 8px 0 0;
