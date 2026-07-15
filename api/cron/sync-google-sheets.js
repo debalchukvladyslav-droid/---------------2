@@ -7,7 +7,11 @@ function sendJson(res, status, body) {
 
 export default async function handler(req, res) {
     const cronSecret = process.env.CRON_SECRET || '';
-    if (cronSecret && req.headers.authorization !== `Bearer ${cronSecret}`) {
+    if (!cronSecret) {
+        console.error('[Google Sheets cron] CRON_SECRET is not configured');
+        return sendJson(res, 503, { ok: false, error: 'Cron authentication is not configured' });
+    }
+    if (req.headers.authorization !== `Bearer ${cronSecret}`) {
         return sendJson(res, 401, { ok: false, error: 'Unauthorized' });
     }
 
@@ -49,4 +53,3 @@ export default async function handler(req, res) {
         return sendJson(res, 500, { ok: false, error: error?.message || String(error) });
     }
 }
-

@@ -3,6 +3,8 @@ import { getSupabaseEnv, verifySupabaseUser } from './_google_sheet_sync_lib.js'
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const OWNER_BUCKETS = new Set(['screenshots', 'backgrounds', 'avatars']);
 const AUTO_CREATE_BUCKETS = new Set(['screenshots', 'backgrounds', 'avatars']);
+const ALLOWED_BUCKETS = new Set(['screenshots', 'backgrounds', 'avatars']);
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
 export const config = {
     api: {
@@ -59,6 +61,32 @@ function cleanExpiresIn(value) {
     return Math.max(60, Math.min(24 * 60 * 60, Math.floor(n)));
 }
 
+async function getProfilesById({ url, serviceKey, ids }) {
+    const uniqueIds = [...new Set(ids.filter(isUuid))];
+    if (!uniqueIds.length) return new Map();
+    const query = uniqueIds.map(encodeURIComponent).join(',');
+    const response = await fetch(`${url}/rest/v1/profiles?id=in.(${query})&select=id,role,mentor_enabled`, {
+        headers: {
+            apikey: serviceKey,
+            Authorization: `Bearer ${serviceKey}`,
+        },
+    });
+    if (!response.ok) throw new Error('Could not verify storage access');
+    const rows = await response.json();
+    return new Map((rows || []).map(row => [row.id, row]));
+}
+
+async function canReadObject({ url, serviceKey, bucket, ownerKey, userId }) {
+    if (ownerKey === userId) return true;
+    if (bucket === 'avatars') return true;
+    if (!isUuid(ownerKey)) return false;
+
+    const profiles = await getProfilesById({ url, serviceKey, ids: [userId] });
+    const caller = profiles.get(userId);
+    if (caller?.role === 'admin') return true;
+    return bucket === 'screenshots' && (caller?.role === 'mentor' || caller?.mentor_enabled === true);
+}
+
 async function readBody(req) {
     const chunks = [];
     let total = 0;
@@ -72,6 +100,14 @@ async function readBody(req) {
         chunks.push(chunk);
     }
     return Buffer.concat(chunks);
+}
+
+function detectImageType(buffer) {
+    if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg';
+    if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+    if (buffer.length >= 12 && buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP') return 'image/webp';
+    if (buffer.length >= 6 && ['GIF87a', 'GIF89a'].includes(buffer.subarray(0, 6).toString('ascii'))) return 'image/gif';
+    return '';
 }
 
 async function createSignedUrl({ url, serviceKey, bucket, objectPath, expiresIn = 3600 }) {
@@ -139,6 +175,7 @@ export default async function handler(req, res) {
         const bucket = cleanBucket(req.query.bucket);
         const objectPath = cleanObjectPath(req.query.objectPath);
         if (!bucket || !objectPath) return sendJson(res, 400, { ok: false, error: 'Missing bucket or objectPath' });
+        if (!ALLOWED_BUCKETS.has(bucket)) return sendJson(res, 403, { ok: false, error: 'Bucket is not allowed' });
 
         const ownerKey = objectPath.split('/')[0] || '';
         if (req.method !== 'GET' && OWNER_BUCKETS.has(bucket) && (!isUuid(ownerKey) || ownerKey !== user.id)) {
@@ -147,9 +184,11 @@ export default async function handler(req, res) {
 
         const { url, serviceKey } = getSupabaseEnv();
         if (!serviceKey) return sendJson(res, 501, { ok: false, error: 'SUPABASE_SERVICE_ROLE_KEY is not configured' });
-        await ensureBucketExists({ url, serviceKey, bucket });
 
         if (req.method === 'GET') {
+            if (!await canReadObject({ url, serviceKey, bucket, ownerKey, userId: user.id })) {
+                return sendJson(res, 403, { ok: false, error: 'Storage access denied' });
+            }
             const signedUrl = await createSignedUrl({
                 url,
                 serviceKey,
@@ -164,7 +203,14 @@ export default async function handler(req, res) {
         const body = await readBody(req);
         if (!body.length) return sendJson(res, 400, { ok: false, error: 'Empty upload body' });
 
-        const contentType = req.headers['content-type'] || 'application/octet-stream';
+        const contentType = String(req.headers['content-type'] || '').split(';', 1)[0].trim().toLowerCase();
+        if (!ALLOWED_IMAGE_TYPES.has(contentType)) {
+            return sendJson(res, 415, { ok: false, error: 'Only JPEG, PNG, WebP, and GIF images are allowed' });
+        }
+        if (detectImageType(body) !== contentType) {
+            return sendJson(res, 415, { ok: false, error: 'File content does not match its image type' });
+        }
+        await ensureBucketExists({ url, serviceKey, bucket });
         const encodedPath = encodeStoragePath(objectPath);
         let uploadResponse = await fetch(`${url}/storage/v1/object/${bucket}/${encodedPath}`, {
             method: 'POST',
