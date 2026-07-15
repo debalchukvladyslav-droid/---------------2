@@ -79,6 +79,17 @@ test('sheet date sequence parser infers day/month or month/day from row order', 
     );
 });
 
+test('sheet date parser accepts weekday prefixes and rolls future compact dates to previous year', () => {
+    assert.deepEqual(
+        parseSheetDateCellsToIsoSequence(['Пн-1.06', '2.06'], { year: 2026 }),
+        ['2026-06-01', '2026-06-02'],
+    );
+    assert.deepEqual(
+        parseSheetDateCellsToIsoSequence(['3.11', '4.11'], { year: 2026 }),
+        ['2025-11-03', '2025-11-04'],
+    );
+});
+
 test('sheet date sequence treats day-only rows after a month marker as the next month', () => {
     assert.deepEqual(
         parseSheetDateCellsToIsoSequence(['Серпень', '1', '2', '3', '31'], { year: 2025 }),

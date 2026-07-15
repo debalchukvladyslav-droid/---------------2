@@ -884,6 +884,8 @@ export function setSheetPreviewData(rows) {
     }
     _sheetPreviewHoverRef = null;
     buildSheetGridPreview();
+    const hasRequiredMapping = REQUIRED_MAPPING_KEYS.every((key) => storedConfig?.smartColumns?.[key]);
+    if (!hasRequiredMapping) autoMapSheetColumns({ silent: true });
 }
 
 function normalizeAutoMapText(value) {
@@ -986,15 +988,16 @@ function detectAutoMapHeader(grid = []) {
     return best;
 }
 
-export function autoMapSheetColumns() {
+export function autoMapSheetColumns(options = {}) {
+    const silent = Boolean(options?.silent);
     if (!_sheetPreviewRows.length) {
-        showToast('Спочатку підключіть таблицю, щоб з’явилось прев’ю.');
+        if (!silent) showToast('Спочатку підключіть таблицю, щоб з’явилось прев’ю.');
         return;
     }
 
     const detected = detectExactSheetAutoMapping(_sheetPreviewRows, { headerScanRows: 20 });
     if (!detected.ok) {
-        showToast(detected.reason === 'ticker-header-not-found'
+        if (!silent) showToast(detected.reason === 'ticker-header-not-found'
             ? 'Автомапінг: не знайдено точний заголовок Ticker у перших 20 рядках.'
             : 'Автомапінг: під заголовком Ticker не знайдено рядок, що починається з латинської літери.');
         return;
@@ -1019,7 +1022,7 @@ export function autoMapSheetColumns() {
     persistSheetMappingDraft();
 
     const missing = REQUIRED_MAPPING_KEYS.filter((field) => detected.mapped[field] == null);
-    showToast(missing.length
+    if (!silent) showToast(missing.length
         ? `Автомапінг частковий: ${applied} полів. Не знайдено: ${missing.map(smartFieldLabel).join(', ')}.`
         : `Автомапінг готовий: ${applied} полів, старт з рядка ${startRow}.`);
 }

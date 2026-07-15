@@ -66,7 +66,9 @@ function parseSheetDateCellCandidates(value, options = {}) {
         return iso ? [{ iso, mode: 'fixed' }] : [];
     }
 
-    const datePart = s.split(/\s+/)[0];
+    const datePart = s
+        .split(/\s+/)[0]
+        .replace(/^[\p{L}]{1,3}\s*[-–—]\s*/u, '');
     const m = /^(\d{1,2})[.,/-](\d{1,2})(?:[.,/-](\d{2}|\d{4}))?$/.exec(datePart);
     if (!m) return [];
 
@@ -77,8 +79,8 @@ function parseSheetDateCellCandidates(value, options = {}) {
     if (!Number.isFinite(year) || year < 1990 || year > 2100) return [];
 
     const candidates = [
-        candidateFromParts(year, b, a, 'DMY'),
-        candidateFromParts(year, a, b, 'MDY'),
+        candidateFromParts(year, b, a, 'DMY') || (!m[3] ? candidateFromParts(year - 1, b, a, 'DMY') : null),
+        candidateFromParts(year, a, b, 'MDY') || (!m[3] ? candidateFromParts(year - 1, a, b, 'MDY') : null),
     ].filter(Boolean);
     const seen = new Set();
     return candidates.filter((candidate) => {
@@ -194,7 +196,9 @@ export function parseSheetDateCellToIso(value) {
         return isValidIsoDateString(iso) && !isFutureIsoDateString(iso) ? iso : null;
     }
 
-    const datePart = s.split(/\s+/)[0];
+    const datePart = s
+        .split(/\s+/)[0]
+        .replace(/^[\p{L}]{1,3}\s*[-–—]\s*/u, '');
     const m = /^(\d{1,2})[.,/-](\d{1,2})[.,/-](\d{2}|\d{4})$/.exec(datePart);
     if (!m) return null;
 
