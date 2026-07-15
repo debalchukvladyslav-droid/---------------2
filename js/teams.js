@@ -545,16 +545,13 @@ function _renderTeamSidebarDOM(container) {
             const profile = state._teamProfiles?.[cleanNick];
             const isMentor = isProfileMentor(profile);
             const isAdmin = isProfileAdmin(profile);
-            const isService = isServiceProfile(profile);
             const isActive = state.CURRENT_VIEWED_USER === `${cleanNick}_stats`;
             const isLoading = _isSwitching && loadingNick === cleanNick;
             const displayName = profile ? profileDisplayName(profile) : trader;
 
             const memberDiv = document.createElement('div');
             memberDiv.className = `team-member-item${isActive ? ' active' : ''}`;
-            if (isService) {
-                memberDiv.style.cursor = 'default';
-            } else if (_isSwitching) {
+            if (_isSwitching) {
                 memberDiv.style.pointerEvents = 'none';
                 memberDiv.style.opacity = isLoading ? '1' : '0.45';
                 memberDiv.style.cursor = 'not-allowed';
@@ -622,6 +619,7 @@ export async function switchUser(nick) {
     if (_isSwitching) return;
     if (state.CURRENT_VIEWED_USER === `${nick}_stats`) return;
 
+    const previousDocName = state.CURRENT_VIEWED_USER;
     _isSwitching = true;
     if (typeof window.stopSheetAutoSync === 'function') window.stopSheetAutoSync();
     const selectedDocName = `${nick}_stats`;
@@ -641,6 +639,8 @@ export async function switchUser(nick) {
         if (window.refreshStatsView) await window.refreshStatsView();
     } catch (e) {
         console.error('switchUser: initializeApp failed:', e);
+        state.CURRENT_VIEWED_USER = previousDocName;
+        showToast(`Не вдалося відкрити профіль ${nick}: ${e?.message || e}`);
     } finally {
         _isSwitching = false;
         renderTeamSidebar();
