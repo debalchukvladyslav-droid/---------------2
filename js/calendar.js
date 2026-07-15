@@ -8,6 +8,7 @@ import { updateDashMiniEquityChart } from './dash_mini_chart.js';
 import { hideGlobalLoader, setElementLoading, showGlobalLoader } from './loading.js';
 import { findScreenshotsForTicker, openScreenshotForTrade } from './gallery.js';
 import { getEffectiveDayPnl, isSheetOnlyPnl, visibleTradeRows } from './trade_filters.js';
+import { collectDatagridRows } from './datagrid_rows.js';
 
 let _selectDateRequestId = 0;
 
@@ -179,18 +180,38 @@ export function updateDashboardWidgets(year, month) {
     const list = document.getElementById('recent-trades-list');
     if (list) {
         const rows = [];
-        for (const [date, day] of Object.entries(journal)) {
-            if (!day || !date.startsWith(prefix) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
-            const tradeRows = visibleTradeRows(day.trades);
-            tradeRows.forEach(({ trade: t, index: idx }) => {
-                const net = parseFloat(t.net);
-                if (!Number.isFinite(net)) return;
-                rows.push({ date, idx, sym: String(t.symbol || '?').toUpperCase(), net, type: String(t.type || '') });
+        let preferredSpreadsheetId = '';
+        try { preferredSpreadsheetId = sessionStorage.getItem('sheet_spreadsheet_id') || ''; } catch {}
+        const imported = collectDatagridRows(state.appData || {}, preferredSpreadsheetId, new Date());
+        if (imported.source === 'sheet' && imported.rows.length) {
+            imported.rows.forEach((row) => {
+                const trade = row.trade || {};
+                rows.push({
+                    date: row.dateStr,
+                    idx: row.tradeIndex,
+                    sym: String(trade.symbol || '?').toUpperCase(),
+                    net: Number(trade.net) || 0,
+                    type: String(trade.type || trade.sheet?.tradeType || ''),
+                    opened: String(trade.opened || ''),
+                    trade,
+                    source: 'sheet',
+                });
             });
+        } else {
+            for (const [date, day] of Object.entries(journal)) {
+                if (!day || !date.startsWith(prefix) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+                const tradeRows = visibleTradeRows(day.trades);
+                tradeRows.forEach(({ trade: t, index: idx }) => {
+                    const net = parseFloat(t.net);
+                    if (!Number.isFinite(net)) return;
+                    rows.push({ date, idx, sym: String(t.symbol || '?').toUpperCase(), net, type: String(t.type || ''), opened: String(t.opened || ''), trade: t, source: 'trades' });
+                });
+            }
         }
         rows.sort((a, b) => {
             const c = b.date.localeCompare(a.date);
             if (c !== 0) return c;
+            if (a.source === 'sheet' || b.source === 'sheet') return b.opened.localeCompare(a.opened);
             return Math.abs(b.net) - Math.abs(a.net);
         });
         const top = rows.slice(0, 12);
@@ -199,7 +220,7 @@ export function updateDashboardWidgets(year, month) {
             list.innerHTML = getRecentTradesEmptyStateHtml();
         } else {
             list.innerHTML = top
-                .map((r) => {
+                .map((r, rowIndex) => {
                     const isPos = r.net >= 0;
                     const dateObj = new Date(r.date + 'T00:00:00');
                     const dateStr = dateObj.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
@@ -209,7 +230,7 @@ export function updateDashboardWidgets(year, month) {
                     const safeDate = sanitizeHTML(r.date);
                     const safeSym = sanitizeHTML(r.sym);
                     const hasScreen = findScreenshotsForTicker(r.date, r.sym).length > 0;
-                    return `<div class="recent-trade-item" role="button" tabindex="0" data-recent-date="${safeDate}" data-recent-idx="${r.idx}">
+                    return `<div class="recent-trade-item" role="button" tabindex="0" data-recent-date="${safeDate}" data-recent-idx="${r.idx}" data-recent-row="${rowIndex}">
                 <div class="recent-trade-left">
                     <div class="recent-trade-dir-icon ${isPos ? 'long' : 'short'}">${arrow}</div>
                     <div>
@@ -228,7 +249,9 @@ export function updateDashboardWidgets(year, month) {
                 el.addEventListener('click', () => {
                     const ds = el.getAttribute('data-recent-date');
                     const ix = parseInt(el.getAttribute('data-recent-idx') || '0', 10);
-                    const trade = state.appData?.journal?.[ds]?.trades?.[ix];
+                    const rowIndex = parseInt(el.getAttribute('data-recent-row') || '0', 10);
+                    const selectedRow = top[rowIndex];
+                    const trade = ix >= 0 ? state.appData?.journal?.[ds]?.trades?.[ix] || selectedRow?.trade : selectedRow?.trade;
                     void openScreenshotForTrade(ds, trade);
                 });
             });
