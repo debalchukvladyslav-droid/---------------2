@@ -63,6 +63,25 @@ export function buildSheetEntryPriceBuckets(sheetRows = {}, options = {}) {
         });
     });
 
+    if (!source && Array.isArray(options.entries)) {
+        const seen = new Set();
+        iterMatchedSheetTrades(options.entries, options.tradeTypeFilter || null, (trade, sheet, kf, entry) => {
+            const entryPrice = parseSheetNumber(sheet.entryPrice ?? trade?.entry);
+            const bucket = buckets.find((candidate) => candidate.accepts(entryPrice));
+            if (!bucket) return;
+            const rowKey = sheet.sheetRow != null
+                ? `${entry?.dateStr || ''}:${sheet.spreadsheetId || ''}:${sheet.sheetRow}`
+                : `${entry?.dateStr || ''}:${trade?.symbol || ''}:${trade?.opened || ''}:${kf}`;
+            if (seen.has(rowKey)) return;
+            seen.add(rowKey);
+            const pnl = parseSheetNumber(sheet.sheetNet ?? trade?.net);
+            bucket.trades += 1;
+            if (pnl != null) { bucket.pnl += pnl; bucket.pnlRows += 1; }
+            bucket.kf += kf;
+            bucket.kfRows += 1;
+        });
+    }
+
     return buckets.map(({ accepts, ...bucket }) => ({
         ...bucket,
         pnl: Number(bucket.pnl.toFixed(2)),
@@ -84,16 +103,50 @@ function iterMatchedSheetTrades(entries = [], tradeTypeFilter = null, visitor = 
     });
 }
 
-export function buildHourlyKfBuckets(entries = [], tradeTypeFilter = null) {
+export function buildHourlyKfBuckets(entries = [], tradeTypeFilter = null, options = {}) {
     const buckets = new Map([4, 5, 6, 7, 8, 9].map(hour => [hour, { hour, kf: 0, trades: 0 }]));
+    const source = pickSheetRowsSource(options.sheetRows || {}, options.preferredSpreadsheetId || '');
+    const entriesByDate = new Map(entries.map((entry) => [entry?.dateStr, entry]));
+    let usedRawSheetRows = false;
 
-    iterMatchedSheetTrades(entries, tradeTypeFilter, (trade, _sheet, kf) => {
-        const hour = parseTradeOpenHour(trade?.opened);
-        if (!buckets.has(hour)) return;
-        const bucket = buckets.get(hour);
-        bucket.kf += kf;
-        bucket.trades += 1;
-    });
+    if (source?.byDay) {
+        Object.entries(source.byDay).forEach(([dateStr, rows]) => {
+            if (!entriesByDate.has(dateStr) || !Array.isArray(rows)) return;
+            const entry = entriesByDate.get(dateStr);
+            const trades = Array.isArray(entry?.data?.trades) ? entry.data.trades : [];
+            rows.forEach((row) => {
+                const sheet = row?.sheet && typeof row.sheet === 'object' ? row.sheet : {};
+                const matchIndex = Number(sheet.matchedTradeIndex);
+                if (!Number.isInteger(matchIndex) || matchIndex < 0 || matchIndex >= trades.length) return;
+                const matchedTrade = trades[matchIndex];
+                if (!matchedTrade || isPureGoogleSheetTrade(matchedTrade)) return;
+                if (tradeTypeFilter && classifyTradeTypeGroup(matchedTrade) !== tradeTypeFilter) return;
+                const kf = parseSheetProfitRisk(sheet.profitRisk);
+                const hour = parseTradeOpenHour(matchedTrade.opened);
+                if (kf == null || !buckets.has(hour)) return;
+                const bucket = buckets.get(hour);
+                bucket.kf += kf;
+                bucket.trades += 1;
+                usedRawSheetRows = true;
+            });
+        });
+    }
+
+    if (!usedRawSheetRows) {
+        const seen = new Set();
+        iterMatchedSheetTrades(entries, tradeTypeFilter, (trade, sheet, kf, entry) => {
+            const hour = parseTradeOpenHour(trade?.opened);
+            if (!buckets.has(hour)) return;
+            const rowKey = sheet.sheetRow != null
+                ? `${entry?.dateStr || ''}:${sheet.spreadsheetId || ''}:${sheet.sheetRow}`
+                : `${entry?.dateStr || ''}:${trade?.symbol || ''}:${trade?.opened || ''}:${kf}`;
+            if (seen.has(rowKey)) return;
+            seen.add(rowKey);
+            const bucket = buckets.get(hour);
+            bucket.kf += kf;
+            bucket.trades += 1;
+        });
+    }
 
     return [4, 5, 6, 7, 8, 9]
         .filter(hour => hour >= 6 || buckets.get(hour).trades > 0)

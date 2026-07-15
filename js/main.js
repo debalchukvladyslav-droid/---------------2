@@ -48,7 +48,7 @@ import { applyPersistedBackground, initBackgroundControls } from './backgrounds.
 import { initGlobalAppEvents } from './app_events.js';
 import { showGlobalLoader, hideGlobalLoader } from './loading.js';
 import { initOnboarding, startOnboardingTour, resetOnboardingRuntime } from './onboarding.js';
-import { isEndOfSessionReviewTime } from './session_schedule.js';
+import { getTrustedServerNow, isEndOfSessionReviewTime } from './session_schedule.js';
 import { renderDashboardAI, refreshDashboardAI, toggleDashboardAIHistory, rotateDashboardAI, openDashboardMentor, closeDashboardMentor, sendDashboardMentorMessage, switchDashboardMentorTab } from './dashboard_ai.js';
 import { analyzeLossPatterns, renderLossPatternAnalysis } from './loss_pattern_analysis.js';
 
@@ -492,8 +492,8 @@ let sessionReviewRenderToken = 0;
 let sessionReviewReviewed = new Set();
 let sessionReviewIncludesYesterday = false;
 
-function isSessionReviewTime() {
-    return isEndOfSessionReviewTime();
+async function isSessionReviewTime() {
+    return isEndOfSessionReviewTime(await getTrustedServerNow());
 }
 
 function localDateKey(value) {
@@ -626,6 +626,11 @@ window.openSessionReviewTest = function() {
     openSessionReview();
 };
 
+window.openSessionReviewManual = function() {
+    if (!state.USER_DOC_NAME || state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) return;
+    openSessionReview();
+};
+
 window.saveSessionReview = async function() {
     const today = getTodayEST();
     if (sessionReviewScreens.length && sessionReviewReviewed.size < sessionReviewScreens.length) {
@@ -653,14 +658,21 @@ window.snoozeSessionReview = function() {
     document.getElementById('session-review-modal').style.display = 'none';
 };
 
-function checkAndShowSessionReview() {
-    if (!state.USER_DOC_NAME || state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME || !isSessionReviewTime()) return;
+let sessionReviewCheckRunning = false;
+async function checkAndShowSessionReview() {
+    if (sessionReviewCheckRunning) return;
+    if (!state.USER_DOC_NAME || state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) return;
     if (Date.now() < sessionReviewSnoozeUntil || document.body.classList.contains('onboarding-active')) return;
     const today = getTodayEST();
     if (state.appData.journal?.[today]?.sessionReviewDone) return;
     const modal = document.getElementById('session-review-modal');
     if (!modal || modal.style.display === 'flex') return;
-    openSessionReview();
+    sessionReviewCheckRunning = true;
+    try {
+        if (await isSessionReviewTime()) openSessionReview();
+    } finally {
+        sessionReviewCheckRunning = false;
+    }
 }
 
 setInterval(checkAndShowSessionReview, 60 * 1000);

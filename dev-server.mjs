@@ -369,6 +369,11 @@ const server = http.createServer((req, res) => {
         });
         return;
     }
+    if (u.pathname === '/api/server-time') {
+        const epochMs = Date.now();
+        sendJson(res, 200, { epochMs, iso: new Date(epochMs).toISOString() });
+        return;
+    }
     serveStatic(req, res);
 });
 

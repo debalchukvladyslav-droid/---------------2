@@ -97,7 +97,8 @@ test('end-of-session review starts at 09:30 New York time regardless of Kyiv loc
     assert.deepEqual(getZonedClockParts(afterClose), { hour: 9, minute: 30 });
     assert.equal(isEndOfSessionReviewTime(beforeClose), false);
     assert.equal(isEndOfSessionReviewTime(afterClose), true);
-    assert.equal(isEndOfSessionReviewTime(new Date('2026-07-16T02:00:00Z')), true);
+    assert.equal(isEndOfSessionReviewTime(new Date('2026-07-15T16:00:00Z')), true);
+    assert.equal(isEndOfSessionReviewTime(new Date('2026-07-15T16:01:00Z')), false);
 });
 
 test('sheet date sequence treats day-only rows after a month marker as the next month', () => {
@@ -458,6 +459,19 @@ test('hourly KФ buckets use matched Sheet profitRisk instead of trade net', () 
     assert.equal(hourNine.pnl, 1);
     assert.equal(hourNine.kf, 1);
     assert.equal(hourNine.trades, 2);
+});
+
+test('hourly KФ counts each Sheet row once when broker trades contain duplicates', () => {
+    const entries = [{
+        dateStr: '2026-04-01',
+        data: { trades: [
+            { symbol: 'AAPL', opened: '2026-04-01 09:31:00', sheet: { source: 'google', matchedBy: 'date+ticker+pnl', sheetRow: 8, profitRisk: '2R' } },
+            { symbol: 'AAPL', opened: '2026-04-01 09:31:00', sheet: { source: 'google', matchedBy: 'date+ticker+pnl', sheetRow: 8, profitRisk: '2R' } },
+        ] },
+    }];
+    const hourNine = buildHourlyKfBuckets(entries).find((row) => row.hour === 9);
+    assert.equal(hourNine.kf, 2);
+    assert.equal(hourNine.trades, 1);
 });
 
 test('exception criteria KФ rows group matched Sheet exceptions and skip incomplete rows', () => {

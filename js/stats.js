@@ -2114,6 +2114,19 @@ function sheetDateMatchesStatsFilters(dateStr, filters = []) {
     });
 }
 
+function renderEntryPriceRowsChart(canvasId, stateKey, rows, theme) {
+    renderStatsBarChart(canvasId, stateKey, rows.map(row => row.label), rows.map(row => row.pnl), theme, {
+        tooltipLabel: (index) => {
+            const row = rows[index] || {};
+            return [
+                ` Результат: ${fmtMoney(row.pnl || 0)}`,
+                ` КФ: ${fmtKf(row.kf || 0)}`,
+                ` Угод з таблиці: ${row.trades || 0}`,
+            ];
+        },
+    });
+}
+
 function renderEntryPriceSheetChart(theme) {
     const panel = document.getElementById('stats-entry-price-panel');
     const selection = state.statsSourceSelection || {};
@@ -2150,8 +2163,8 @@ function renderEntryPriceSheetChart(theme) {
     );
 }
 
-function renderExceptionCriteriaKfRows(rows = []) {
-    const container = document.getElementById('stats-exception-criteria-list');
+function renderExceptionCriteriaKfRows(rows = [], containerId = 'stats-exception-criteria-list') {
+    const container = document.getElementById(containerId);
     if (!container) return;
     if (!rows.length) {
         container.innerHTML = '<div class="stats-empty-note">Немає угод з КФ та полем "У чому виключення" за вибраний період.</div>';
@@ -2246,7 +2259,7 @@ function toggleStatsCompareFilter(type, val, labelName) {
     renderStatsTab();
 }
 
-function buildComparePaneSummary(entries, settings = {}, tradeTypeFilter = null, filters = []) {
+function buildComparePaneSummary(entries, settings = {}, tradeTypeFilter = null, filters = [], sheetRows = {}) {
     let winDays = 0, lossDays = 0, beDays = 0;
     let grossProfit = 0, grossLoss = 0;
     let bestDay = 0, worstDay = 0;
@@ -2293,7 +2306,13 @@ function buildComparePaneSummary(entries, settings = {}, tradeTypeFilter = null,
 
     const totalDays = winDays + lossDays + beDays;
     const totalPnl = parseFloat(periodSum.toFixed(2));
-    const hourlyBuckets = buildHourlyKfBuckets(entries, tradeTypeFilter);
+    const hourlyBuckets = buildHourlyKfBuckets(entries, tradeTypeFilter, { sheetRows });
+    const entryPriceBuckets = buildSheetEntryPriceBuckets(sheetRows, {
+        entries,
+        tradeTypeFilter,
+        dateMatches: (dateStr) => entries.some((entry) => entry.dateStr === dateStr),
+    });
+    const exceptionKfRows = buildExceptionKfRows(entries, tradeTypeFilter);
     return {
         totalPnl,
         winrate: totalDays ? (winDays / totalDays) * 100 : 0,
@@ -2310,6 +2329,8 @@ function buildComparePaneSummary(entries, settings = {}, tradeTypeFilter = null,
         totalLocates,
         dayTotals,
         hourlyBuckets,
+        entryPriceBuckets,
+        exceptionKfRows,
         periodLabels,
         periodCumData,
         settings,
@@ -2348,7 +2369,7 @@ function setCompareDelta(id, value, options = {}) {
 }
 
 function destroyCompareCharts() {
-    ['comparePnlChartInstance', 'compareDaysChartInstance', 'compareHourlyChartInstance', 'compareWinLossChartInstance'].forEach((key) => {
+    ['comparePnlChartInstance', 'compareDaysChartInstance', 'compareHourlyChartInstance', 'compareEntryPriceChartInstance', 'compareWinLossChartInstance'].forEach((key) => {
         if (state[key]) {
             state[key].destroy();
             state[key] = null;
@@ -2541,6 +2562,14 @@ function renderCompareCharts(entries, summary, theme, advancedEquityMode = false
         { tooltipSuffix: index => `, ${summary.hourlyBuckets[index]?.trades || 0} угод` },
     );
 
+    renderEntryPriceRowsChart(
+        'compare-entryPriceChart',
+        'compareEntryPriceChartInstance',
+        summary.entryPriceBuckets || [],
+        theme,
+    );
+    renderExceptionCriteriaKfRows(summary.exceptionKfRows || [], 'compare-exception-criteria-list');
+
     pieCanvas.$statsGlowColor = theme.profit;
     state.compareWinLossChartInstance = new Chart(pieCanvas.getContext('2d'), {
         type: 'doughnut',
@@ -2712,8 +2741,10 @@ function renderStatsComparePanel(validEntries) {
 
     const baseEntries = filterEntriesByStatsFilters(validEntries, state.activeFilters);
     const compareEntries = filterEntriesByStatsFilters(compareValidEntries, state.statsCompareFilters || []);
-    const base = buildComparePaneSummary(baseEntries, state.currentStatsContext.settings || state.appData.settings || {}, state.activeTradeTypeFilter, state.activeFilters || []);
-    const compare = buildComparePaneSummary(compareEntries, state.statsCompareContext.settings || {}, state.statsCompareTradeTypeFilter, state.statsCompareFilters || []);
+    const loadedSheetRows = state.appData?.sheetRows || {};
+    const compareUsesLoadedProfile = state.statsCompareSourceSelection?.key === state.CURRENT_VIEWED_USER;
+    const base = buildComparePaneSummary(baseEntries, state.currentStatsContext.settings || state.appData.settings || {}, state.activeTradeTypeFilter, state.activeFilters || [], loadedSheetRows);
+    const compare = buildComparePaneSummary(compareEntries, state.statsCompareContext.settings || {}, state.statsCompareTradeTypeFilter, state.statsCompareFilters || [], compareUsesLoadedProfile ? loadedSheetRows : {});
     const pfDelta = compare.pf - base.pf;
 
     const cssGreen = getComputedStyle(document.documentElement).getPropertyValue('--profit').trim() || '#10b981';
@@ -3264,7 +3295,9 @@ export function renderStatsTab() {
         }
     });
 
-    const hourlyBuckets = buildHourlyKfBuckets(filteredEntries, ttFilter);
+    const hourlyBuckets = buildHourlyKfBuckets(filteredEntries, ttFilter, {
+        sheetRows: state.appData?.sheetRows || {},
+    });
     renderStatsBarChart(
         'hourlyChart',
         'hourlyChartInstance',

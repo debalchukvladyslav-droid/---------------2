@@ -2,6 +2,10 @@
 .grid.stretch-rows { grid-template-rows: auto; grid-auto-rows: 1fr; }
 .day-header { text-align: right; font-weight: 600; color: var(--text-muted); padding-bottom: 8px; font-size: 0.9rem; }
 
+.calendar-session-review-btn {
+    white-space: nowrap;
+}
+
 /* FIX 2: week-label keeps a simple semi-transparent bg - no backdrop-filter */
 #tooltip {
     display: none;
