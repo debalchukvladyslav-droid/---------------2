@@ -49,6 +49,7 @@ import { initGlobalAppEvents } from './app_events.js';
 import { showGlobalLoader, hideGlobalLoader } from './loading.js';
 import { initOnboarding, startOnboardingTour, resetOnboardingRuntime } from './onboarding.js';
 import { renderDashboardAI, refreshDashboardAI, toggleDashboardAIHistory, rotateDashboardAI, openDashboardMentor, closeDashboardMentor, sendDashboardMentorMessage, switchDashboardMentorTab } from './dashboard_ai.js';
+import { analyzeLossPatterns, renderLossPatternAnalysis } from './loss_pattern_analysis.js';
 
 let appShellPromise = null;
 let appShellEventsReady = false;
@@ -120,6 +121,8 @@ window.openDashboardMentor = openDashboardMentor;
 window.closeDashboardMentor = closeDashboardMentor;
 window.sendDashboardMentorMessage = sendDashboardMentorMessage;
 window.switchDashboardMentorTab = switchDashboardMentorTab;
+window.analyzeLossPatterns = analyzeLossPatterns;
+window.renderLossPatternAnalysis = renderLossPatternAnalysis;
 
 let manualSyncInProgress = false;
 let manualSyncIntervalId = null;

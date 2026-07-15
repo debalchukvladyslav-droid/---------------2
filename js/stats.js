@@ -2875,6 +2875,7 @@ export function renderStatsTab() {
     statsJournal = prepareStatsJournal(statsJournal);
     let validEntries = buildStatsEntriesFromJournal(statsJournal, ttFilter);
     renderStatsComparePanel(validEntries);
+    window.renderLossPatternAnalysis?.();
     
     let cssGreen = getComputedStyle(document.documentElement).getPropertyValue('--profit').trim() || '#10b981';
     let cssRed = getComputedStyle(document.documentElement).getPropertyValue('--loss').trim() || '#ef4444';

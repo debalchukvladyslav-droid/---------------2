@@ -147,6 +147,21 @@
                     </div>
                 </div>
             </div>
+
+            <section id="stats-loss-patterns" class="panel stats-loss-patterns" hidden>
+                <div class="stats-loss-patterns__head">
+                    <div>
+                        <div class="stats-loss-patterns__kicker">AI · повторювані входи</div>
+                        <h3>Де мінус повторюється</h3>
+                        <p>AI зіставляє мінусові угоди зі скрінами та збирає схожі ситуації в групи.</p>
+                    </div>
+                    <button id="stats-loss-patterns-analyze" type="button" class="btn-primary" data-action="loss-pattern-analyze">
+                        Перевірити нові скріни
+                    </button>
+                </div>
+                <div id="stats-loss-patterns-status" class="stats-loss-patterns__status" aria-live="polite"></div>
+                <div id="stats-loss-patterns-groups" class="stats-loss-patterns__groups"></div>
+            </section>
             </section>
 
             <section id="stats-compare-pane" class="stats-pane stats-pane-compare initially-hidden" aria-hidden="true">

@@ -201,6 +201,7 @@ function activateAction(action, trigger, event = null) {
         'stats-dropdown': () => window.toggleStatsDropdown?.(trigger?.dataset?.dropdown || ''),
         'stats-compare-toggle': () => window.toggleStatsCompareMode?.(),
         'stats-compare-close': () => window.closeStatsCompareMode?.(),
+        'loss-pattern-analyze': () => window.analyzeLossPatterns?.(),
         'review-request': () => window.submitReviewRequest?.(trigger?.dataset?.reviewType || ''),
         'ai-tab': () => window.switchAITab?.(trigger?.dataset?.aiTab || 'chat'),
         'ai-quick-prompt': () => window.applyAIQuickPrompt?.(trigger?.dataset?.aiPrompt || ''),
