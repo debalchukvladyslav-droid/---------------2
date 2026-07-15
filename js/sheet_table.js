@@ -992,7 +992,7 @@ export function autoMapSheetColumns(options = {}) {
     const silent = Boolean(options?.silent);
     if (!_sheetPreviewRows.length) {
         if (!silent) showToast('Спочатку підключіть таблицю, щоб з’явилось прев’ю.');
-        return;
+        return { ok: false, reason: 'preview-empty' };
     }
 
     const detected = detectExactSheetAutoMapping(_sheetPreviewRows, { headerScanRows: 20 });
@@ -1000,7 +1000,7 @@ export function autoMapSheetColumns(options = {}) {
         if (!silent) showToast(detected.reason === 'ticker-header-not-found'
             ? 'Автомапінг: не знайдено точний заголовок Ticker у перших 20 рядках.'
             : 'Автомапінг: під заголовком Ticker не знайдено рядок, що починається з латинської літери.');
-        return;
+        return detected;
     }
 
     populateSheetMappingFromHeaders(detected.headers);
@@ -1025,6 +1025,7 @@ export function autoMapSheetColumns(options = {}) {
     if (!silent) showToast(missing.length
         ? `Автомапінг частковий: ${applied} полів. Не знайдено: ${missing.map(smartFieldLabel).join(', ')}.`
         : `Автомапінг готовий: ${applied} полів, старт з рядка ${startRow}.`);
+    return { ...detected, applied, missing };
 }
 
 /**

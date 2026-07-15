@@ -353,6 +353,30 @@ body[data-theme="light"] .btn-google-signin {
     border-radius: var(--radius-md, 10px);
 }
 
+.sheet-mapping-compact-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.sheet-mapping-advanced {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.sheet-mapping-advanced[hidden] {
+    display: none !important;
+}
+
+.sheet-workspace:not(.is-mapping-editing) > .sheet-account-row,
+.sheet-workspace:not(.is-mapping-editing) > .sheet-import-mode-bar,
+.sheet-workspace:not(.is-mapping-editing) > .sheet-file-actions,
+.sheet-workspace:not(.is-mapping-editing) > .sheet-preset-picker--workspace {
+    display: none !important;
+}
+
 @media (min-width: 1180px) {
     #view-table {
         padding-left: clamp(24px, 3vw, 48px);

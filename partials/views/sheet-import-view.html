@@ -95,6 +95,11 @@
 
                     <!-- Стан 3: розумний мапінг -->
                     <div id="sheet-smart-mapping" class="sheet-smart-mapping" hidden>
+                        <div class="sheet-mapping-compact-actions">
+                            <button type="button" class="btn-primary sheet-btn-compact" data-action="sheet-auto-map">Автомапінг</button>
+                            <button type="button" class="btn-secondary sheet-btn-compact" data-action="sheet-mapping-edit" aria-expanded="false">Редагувати</button>
+                        </div>
+                        <div id="sheet-mapping-advanced" class="sheet-mapping-advanced" hidden>
                         <div class="sheet-smart-head">
                             <h3 class="sheet-smart-title">Мапінг колонок</h3>
                             <p class="sheet-smart-sub">Перший рядок (A1…) — підписи для мапінгу. Старт імпорту береться з вибраної клітинки: якщо для «Дата» обрати A8, таблиця читається з 8-го рядка; усі нижчі рядки з тікером у колонці «Тікер» йдуть у цей день. Формат дати: день-місяць-рік, наприклад 15,05,26 / 15.05.26 / 15/05/26 / 15-05-2026.</p>
@@ -107,7 +112,6 @@
                                     <p class="sheet-grid-picker__hint">Оберіть поле нижче, потім наведіть або клікніть по клітинці. Наприклад, клік по <strong>A8</strong> для «Дата» вибере колонку <strong>A</strong> і почне рахувати рядки з <strong>8</strong>.</p>
                                 </div>
                                 <div class="sheet-grid-picker__meta">
-                                    <button type="button" class="btn-secondary sheet-btn-compact" data-action="sheet-auto-map">Автомапінг</button>
                                     <div class="sheet-grid-zoom" aria-label="Масштаб таблиці">
                                         <button type="button" class="sheet-grid-zoom__btn" data-action="sheet-grid-zoom" data-zoom-delta="-0.1">−</button>
                                         <span id="sheet-grid-zoom-label" class="sheet-grid-zoom__label">100%</span>
@@ -386,6 +390,7 @@
                                 <button type="submit" id="sheet-save-sync-btn" class="btn-primary sheet-save-sync-btn">Зберегти мапінг і синхронізувати угоди</button>
                             </div>
                         </form>
+                        </div>
                     </div>
                 </section>
             </div>

@@ -229,7 +229,21 @@ function activateAction(action, trigger, event = null) {
         'sheet-toggle-mapping': () => window.toggleMappingMode?.(trigger),
         'sheet-import-mode': () => window.switchSheetImportMode?.(trigger?.dataset?.sheetMode || 'main'),
         'sheet-duplicate-mapping': () => window.duplicateMainSheetMappingToCumulative?.(),
-        'sheet-auto-map': () => window.autoMapSheetColumns?.(),
+        'sheet-auto-map': async () => {
+            const result = window.autoMapSheetColumns?.();
+            if (result?.ok) await window.saveSheetMapping?.();
+        },
+        'sheet-mapping-edit': () => {
+            const workspace = trigger?.closest?.('.sheet-workspace');
+            const advanced = document.getElementById('sheet-mapping-advanced');
+            const expanded = trigger?.getAttribute('aria-expanded') !== 'true';
+            if (advanced) advanced.hidden = !expanded;
+            workspace?.classList.toggle('is-mapping-editing', expanded);
+            if (trigger) {
+                trigger.setAttribute('aria-expanded', String(expanded));
+                trigger.textContent = expanded ? 'Згорнути' : 'Редагувати';
+            }
+        },
         'sheet-add-mapping-column': () => window.armSheetMultiColumnAdd?.(trigger?.dataset?.sheetMapField || 'exceptions'),
         'sheet-clear-mapping': () => window.clearSheetMappingField?.(trigger?.dataset?.sheetMapField || ''),
         'sheet-grid-zoom': () => window.changeSheetGridZoom?.(Number(trigger?.dataset?.zoomDelta || 0)),
