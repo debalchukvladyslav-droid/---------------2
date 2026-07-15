@@ -486,6 +486,7 @@ let sessionReviewScreens = [];
 let sessionReviewScreenIndex = 0;
 let sessionReviewRenderToken = 0;
 let sessionReviewReviewed = new Set();
+let sessionReviewIncludesYesterday = false;
 
 function isSessionReviewTime() {
     const now = new Date();
@@ -499,26 +500,36 @@ function localDateKey(value) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-function collectTodaySessionScreens(today) {
-    const day = state.appData.journal?.[today] || {};
+function previousDateKey(dateKey) {
+    const date = new Date(`${dateKey}T12:00:00`);
+    date.setDate(date.getDate() - 1);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function collectSessionReviewScreens(today, includeYesterday = false) {
     const meta = state.appData.screenMeta || {};
     const seen = new Set();
     const rows = [];
-    ['good', 'normal', 'bad', 'error'].forEach((category) => {
-        (day.screenshots?.[category] || []).forEach((path) => {
-            if (!path || seen.has(path)) return;
-            const createdAt = meta[path]?.createdAt || meta[path]?.driveCreatedTime || '';
-            if (createdAt && localDateKey(createdAt) !== today) return;
-            seen.add(path);
-            rows.push({ path, category, createdAt });
+    const dates = includeYesterday ? [previousDateKey(today), today] : [today];
+    dates.forEach((dateKey) => {
+        const day = state.appData.journal?.[dateKey] || {};
+        ['good', 'normal', 'bad', 'error'].forEach((category) => {
+            (day.screenshots?.[category] || []).forEach((path) => {
+                if (!path || seen.has(path)) return;
+                const createdAt = meta[path]?.createdAt || meta[path]?.driveCreatedTime || '';
+                if (createdAt && !dates.includes(localDateKey(createdAt))) return;
+                seen.add(path);
+                rows.push({ path, category, createdAt, date: dateKey });
+            });
         });
     });
     (state.appData.unassignedImages || []).forEach((path) => {
         if (!path || seen.has(path)) return;
         const createdAt = meta[path]?.createdAt || meta[path]?.driveCreatedTime || '';
-        if (!createdAt || localDateKey(createdAt) !== today) return;
+        const createdDate = localDateKey(createdAt);
+        if (!createdAt || !dates.includes(createdDate)) return;
         seen.add(path);
-        rows.push({ path, category: 'unassigned', createdAt });
+        rows.push({ path, category: 'unassigned', createdAt, date: createdDate });
     });
     return rows.sort((a, b) => Date.parse(a.createdAt || 0) - Date.parse(b.createdAt || 0));
 }
@@ -555,9 +566,10 @@ window.stepSessionReviewScreen = function(direction = 1) {
 
 function setSessionReviewCategory(category) {
     if (!['good', 'normal', 'bad', 'error'].includes(category) || !sessionReviewScreens.length) return;
-    const today = getTodayEST();
-    const day = state.appData.journal?.[today];
     const current = sessionReviewScreens[sessionReviewScreenIndex];
+    const targetDate = current?.date || getTodayEST();
+    if (!state.appData.journal[targetDate]) state.appData.journal[targetDate] = getDefaultDayEntry();
+    const day = state.appData.journal[targetDate];
     if (!day || !current) return;
     if (!day.screenshots) day.screenshots = { good: [], normal: [], bad: [], error: [] };
     Object.keys(day.screenshots).forEach((key) => { if (Array.isArray(day.screenshots[key])) day.screenshots[key] = day.screenshots[key].filter((path) => path !== current.path); });
@@ -565,7 +577,7 @@ function setSessionReviewCategory(category) {
     day.screenshots[category] = [...new Set([...(day.screenshots[category] || []), current.path])];
     current.category = category;
     sessionReviewReviewed.add(current.path);
-    markJournalDayDirty(today);
+    markJournalDayDirty(targetDate);
     void saveSettings();
     void renderSessionReviewScreen();
 };
@@ -577,9 +589,14 @@ function openSessionReview() {
     document.getElementById('session-review-date').textContent = `📅 ${today}`;
     document.getElementById('session-review-notes').value = day.notes || '';
     document.getElementById('session-review-improvement').value = day.nextSessionImprovement || '';
-    sessionReviewScreens = collectTodaySessionScreens(today);
+    sessionReviewIncludesYesterday = false;
+    sessionReviewScreens = collectSessionReviewScreens(today, false);
     sessionReviewScreenIndex = 0;
     sessionReviewReviewed = new Set();
+    const yesterdayButton = document.getElementById('session-review-yesterday-btn');
+    const screensTitle = document.getElementById('session-review-screens-title');
+    if (yesterdayButton) { yesterdayButton.classList.remove('active'); yesterdayButton.textContent = 'Посортувати вчорашні'; }
+    if (screensTitle) screensTitle.textContent = 'Скріншоти за сьогодні';
     const categories = document.getElementById('session-review-categories');
     if (categories && !categories.dataset.bound) {
         categories.dataset.bound = 'true';
@@ -588,6 +605,19 @@ function openSessionReview() {
     document.getElementById('session-review-modal').style.display = 'flex';
     void renderSessionReviewScreen();
 }
+
+window.toggleSessionReviewYesterday = function() {
+    const today = getTodayEST();
+    sessionReviewIncludesYesterday = !sessionReviewIncludesYesterday;
+    sessionReviewScreens = collectSessionReviewScreens(today, sessionReviewIncludesYesterday);
+    sessionReviewScreenIndex = 0;
+    sessionReviewReviewed = new Set();
+    const button = document.getElementById('session-review-yesterday-btn');
+    const title = document.getElementById('session-review-screens-title');
+    if (button) { button.classList.toggle('active', sessionReviewIncludesYesterday); button.textContent = sessionReviewIncludesYesterday ? 'Лише сьогоднішні' : 'Посортувати вчорашні'; }
+    if (title) title.textContent = sessionReviewIncludesYesterday ? 'Скріншоти за сьогодні та вчора' : 'Скріншоти за сьогодні';
+    void renderSessionReviewScreen();
+};
 
 window.openSessionReviewTest = function() {
     if (state.myRole !== 'admin') return;

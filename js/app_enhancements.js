@@ -257,6 +257,7 @@ function activateAction(action, trigger, event = null) {
         'session-review-snooze': () => window.snoozeSessionReview?.(),
         'session-review-screen-prev': () => window.stepSessionReviewScreen?.(-1),
         'session-review-screen-next': () => window.stepSessionReviewScreen?.(1),
+        'session-review-yesterday': () => window.toggleSessionReviewYesterday?.(),
         'live-news-open': () => window.openLiveNewsModal?.(),
         'live-news-refresh': () => window.refreshLiveNewsModal?.(),
         'live-news-close': () => window.closeLiveNewsModal?.(),

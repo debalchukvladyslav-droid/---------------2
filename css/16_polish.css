@@ -883,6 +883,9 @@ body {
 .session-review-screens { min-width: 0; padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--bg-main); }
 .session-review-screens-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .session-review-screens-head strong, .session-review-screens-head small { display: block; } .session-review-screens-head small { margin-top: 3px; color: var(--text-muted); font-size: .75rem; }
+.session-review-screen-tools { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 9px; }
+.session-review-screen-tools .btn-secondary { margin: 0; padding: 6px 9px; font-size: .72rem; }
+.session-review-screen-tools .btn-secondary.active { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .session-review-screen-stage { display: grid; place-items: center; min-height: 340px; overflow: hidden; border-radius: 10px; background: #080b10; color: var(--text-muted); }
 .session-review-screen-stage img { display: block; width: 100%; max-height: 52vh; object-fit: contain; }
 .session-review-screen-nav { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; margin-top: 11px; }
