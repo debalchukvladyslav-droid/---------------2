@@ -13,5 +13,8 @@ verify_jwt = false
 [functions.polygon-aggs]
 verify_jwt = false
 
+[functions.market-best-exits]
+verify_jwt = false
+
 [functions.youtube-search]
 verify_jwt = false

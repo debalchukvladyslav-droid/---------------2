@@ -8,6 +8,7 @@ import { ensureChartJs } from './vendor_loader.js';
 import { buildTradeTypeInsightRows } from './trade_type_analysis.js';
 import { getEffectiveDayPnl } from './trade_filters.js';
 import { buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets } from './stats_sheet_metrics.js';
+import { renderBestExitAnalysis } from './best_exit_analysis.js';
 
 // ─── STATS CACHE ───────────────────────────────────────────────────────────────────────────────
 // Module-level Map survives filter switches and profile switches within the
@@ -3110,6 +3111,12 @@ export function renderStatsTab() {
         filters: state.activeFilters || [],
         tradeTypes: state.currentStatsContext.tradeTypes || state.appData.tradeTypes || DEFAULT_TRADE_TYPES,
         settings: state.currentStatsContext.settings || {},
+    });
+    const bestExitDates = new Set(filteredEntries.map((entry) => entry.dateStr));
+    void renderBestExitAnalysis({
+        journal: statsJournal,
+        periodDates: bestExitDates,
+        sourceType: state.statsSourceSelection?.type || 'current',
     });
     const longHorizon = !!equityAnalysis.longHorizon;
     const worstDrawdownAbs = Math.abs(equityAnalysis.worstDrawdown);

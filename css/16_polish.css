@@ -4286,3 +4286,44 @@ body.is-offline [data-needs-network="true"] {
     .stats-loss-pattern__totals { justify-content: flex-start; }
     .stats-loss-pattern { padding: 14px; }
 }
+/* Best exit analysis */
+.best-exit-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin: 14px 0;
+}
+
+.best-exit-metrics > div {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--bg-main) 72%, transparent);
+}
+
+.best-exit-metrics span { color: var(--text-muted); font-size: .76rem; }
+.best-exit-metrics strong { color: var(--text-main); font-size: 1.05rem; }
+.best-exit-table-wrap { overflow-x: auto; }
+.best-exit-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+.best-exit-table th,
+.best-exit-table td { padding: 8px 9px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+.best-exit-table th:first-child,
+.best-exit-table td:first-child,
+.best-exit-table th:nth-child(2),
+.best-exit-table td:nth-child(2) { text-align: left; }
+.best-exit-loading { display: flex; align-items: center; gap: 9px; padding: 20px 0; color: var(--text-muted); }
+.best-exit-loading span { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+.best-exit-progress { height: 7px; overflow: hidden; margin: 4px 0 10px; border-radius: 999px; background: var(--border); }
+.best-exit-progress i { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width .2s ease; }
+.best-exit-start { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0 8px; }
+.best-exit-start > div { display: flex; flex-direction: column; gap: 4px; }
+.best-exit-start span { color: var(--text-muted); font-size: .8rem; }
+.best-exit-retry { margin-top: 10px; }
+
+@media (max-width: 720px) {
+    .best-exit-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .best-exit-start { align-items: stretch; flex-direction: column; }
+}
