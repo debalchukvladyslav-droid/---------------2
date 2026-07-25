@@ -11,7 +11,6 @@
     "start": "node dev-server.mjs"
   },
   "devDependencies": {
-    "supabase": "^2.98.2",
-    "vercel": "^53.4.0"
+    "supabase": "^2.109.1"
   }
 }

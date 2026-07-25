@@ -1,4 +1,4 @@
-import { getGoogleAccessToken, verifySupabaseUser } from './_google_sheet_sync_lib.js';
+import { verifySupabaseUser } from './_google_sheet_sync_lib.js';
 
 function sendJson(res, status, body) {
     res.status(status).setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -117,7 +117,10 @@ export default async function handler(req, res) {
         const user = await verifySupabaseUser(req.headers.authorization || '');
         if (!user?.id) return sendJson(res, 401, { ok: false, error: 'Unauthorized' });
 
-        const token = await getGoogleAccessToken();
+        const token = String(req.headers['x-google-access-token'] || '').trim();
+        if (!token) {
+            return sendJson(res, 401, { ok: false, error: 'Google account authorization is required' });
+        }
         const action = String(req.query.action || 'metadata');
         if (action === 'metadata') return metadata(req, res, token);
         if (action === 'values') return values(req, res, token);
@@ -125,7 +128,6 @@ export default async function handler(req, res) {
     } catch (error) {
         const message = error?.message || String(error);
         console.error('[Sheets service] fatal', { message });
-        const missingServiceAccount = message.includes('Google service account env is not configured');
-        return sendJson(res, missingServiceAccount ? 501 : 500, { ok: false, error: message });
+        return sendJson(res, 500, { ok: false, error: message });
     }
 }

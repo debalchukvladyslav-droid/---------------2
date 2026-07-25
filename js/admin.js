@@ -8,7 +8,7 @@ import { listServerBackupsForUser, readCompressedBackupEntry } from './backups.j
 
 const ROLES = ['trader', 'mentor', 'admin'];
 const DEFAULT_TEAM = 'Без куща';
-const SERVICE_BOT_SECRET_STORAGE_KEY = 'tj_admin_service_bot_secret_key';
+let serviceBotSecretInMemory = '';
 const SERVICE_BOT_DATA_ENDPOINTS = ['snapshot', 'summary', 'tickers', 'orders', 'locates'];
 
 export async function renderAdminPanel() {
@@ -211,7 +211,7 @@ function renderServiceBotsPanel(profiles = []) {
                 </label>
                 <div class="admin-service-bot-query-actions">
                     <button type="submit" class="btn-admin-action">Load data</button>
-                    <button type="button" class="btn-admin-action" data-service-bot-secret-save>Save key</button>
+                    <button type="button" class="btn-admin-action" data-service-bot-secret-save>Keep for this tab</button>
                 </div>
             </form>
             <div class="admin-service-bot-result" data-service-bot-result hidden></div>
@@ -455,7 +455,7 @@ function setServiceBotExplorerKey(panel, apiKey, options = {}) {
     if (!key) return;
     const keyInput = panel.querySelector('[data-service-bot-query-form] [name="secret_key"]');
     if (keyInput) keyInput.value = key;
-    if (options.persist) localStorage.setItem(SERVICE_BOT_SECRET_STORAGE_KEY, key);
+    if (options.persist) serviceBotSecretInMemory = key;
 }
 
 function bindServiceBotExplorer(panel) {
@@ -463,18 +463,18 @@ function bindServiceBotExplorer(panel) {
     const keyInput = form?.elements?.secret_key;
     if (!form || !keyInput) return;
 
-    keyInput.value = localStorage.getItem(SERVICE_BOT_SECRET_STORAGE_KEY) || '';
+    keyInput.value = serviceBotSecretInMemory;
     panel.querySelector('[data-service-bot-secret-save]')?.addEventListener('click', () => {
         const key = String(keyInput.value || '').trim();
         if (!key) {
             showToast('Встав secret/API key');
             return;
         }
-        localStorage.setItem(SERVICE_BOT_SECRET_STORAGE_KEY, key);
-        showToast('Secret key saved locally');
+        serviceBotSecretInMemory = key;
+        showToast('Secret key kept only until this page is closed');
     });
     panel.querySelector('[data-service-bot-secret-clear]')?.addEventListener('click', () => {
-        localStorage.removeItem(SERVICE_BOT_SECRET_STORAGE_KEY);
+        serviceBotSecretInMemory = '';
         keyInput.value = '';
         renderServiceBotExplorerResult(panel, null);
         showToast('Secret key cleared');

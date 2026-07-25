@@ -42,14 +42,14 @@ DROP POLICY IF EXISTS google_sheet_sync_configs_insert_owner ON public.google_sh
 CREATE POLICY google_sheet_sync_configs_insert_owner
 ON public.google_sheet_sync_configs
 FOR INSERT
-WITH CHECK (auth.uid() = user_id);
+WITH CHECK (auth.uid() = user_id AND enabled = FALSE);
 
 DROP POLICY IF EXISTS google_sheet_sync_configs_update_owner ON public.google_sheet_sync_configs;
 CREATE POLICY google_sheet_sync_configs_update_owner
 ON public.google_sheet_sync_configs
 FOR UPDATE
 USING (auth.uid() = user_id)
-WITH CHECK (auth.uid() = user_id);
+WITH CHECK (auth.uid() = user_id AND enabled = FALSE);
 
 DROP TRIGGER IF EXISTS trg_google_sheet_sync_configs_updated_at ON public.google_sheet_sync_configs;
 CREATE TRIGGER trg_google_sheet_sync_configs_updated_at

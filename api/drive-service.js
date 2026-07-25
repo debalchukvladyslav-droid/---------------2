@@ -1,4 +1,4 @@
-import { GOOGLE_DRIVE_SCOPE, getGoogleAccessToken, verifySupabaseUser } from './_google_sheet_sync_lib.js';
+import { verifySupabaseUser } from './_google_sheet_sync_lib.js';
 
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
 
@@ -127,7 +127,10 @@ export default async function handler(req, res) {
         if (!user?.id) return sendJson(res, 401, { ok: false, error: 'Unauthorized' });
         console.log('[Drive service] supabase user ok', { userId: user.id });
 
-        const token = await getGoogleAccessToken(GOOGLE_DRIVE_SCOPE);
+        const token = String(req.headers['x-google-access-token'] || '').trim();
+        if (!token) {
+            return sendJson(res, 401, { ok: false, error: 'Google account authorization is required' });
+        }
         const action = String(req.query.action || 'list');
         if (action === 'list') return listFolder(req, res, token);
         if (action === 'media') return streamFile(req, res, token);
@@ -135,7 +138,6 @@ export default async function handler(req, res) {
     } catch (error) {
         const message = error?.message || String(error);
         console.error('[Drive service] fatal', { message });
-        const missingServiceAccount = message.includes('Google service account env is not configured');
-        return sendJson(res, missingServiceAccount ? 501 : 500, { ok: false, error: message });
+        return sendJson(res, 500, { ok: false, error: message });
     }
 }

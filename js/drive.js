@@ -62,7 +62,7 @@ function persistDriveAccessToken(token, expiresInSec) {
     const sec = Math.max(120, Number(expiresInSec) || 3600);
     const expiresAt = Date.now() + sec * 1000 - 90_000;
     try {
-        localStorage.setItem(k, JSON.stringify({ token, expiresAt }));
+        sessionStorage.setItem(k, JSON.stringify({ token, expiresAt }));
         const grantKey = driveGrantStorageKey();
         if (grantKey) localStorage.setItem(grantKey, '1');
     } catch (_) {}
@@ -72,7 +72,7 @@ function clearDriveAccessTokenStorage() {
     const k = driveAccessTokenStorageKey();
     if (k) {
         try {
-            localStorage.removeItem(k);
+            sessionStorage.removeItem(k);
         } catch (_) {}
     }
 }
@@ -98,11 +98,11 @@ export async function tryRestoreDriveToken() {
     const k = driveAccessTokenStorageKey();
     if (!k) return false;
     try {
-        const raw = localStorage.getItem(k);
+        const raw = sessionStorage.getItem(k);
         if (!raw) return false;
         const { token, expiresAt } = JSON.parse(raw);
         if (!token || !expiresAt || Date.now() >= expiresAt) {
-            localStorage.removeItem(k);
+            sessionStorage.removeItem(k);
             return false;
         }
         _accessToken = token;
@@ -226,7 +226,10 @@ async function fetchServiceDriveJson(params) {
         folderId: params.folderId || '',
     });
     const response = await fetch(url.toString(), {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: {
+            Authorization: `Bearer ${accessToken}`,
+            ...(_accessToken ? { 'X-Google-Access-Token': _accessToken } : {}),
+        },
     });
     const data = await response.json().catch(() => ({}));
     console.info('[Drive test] service response:', {
@@ -252,7 +255,10 @@ async function fetchServiceDriveBlob(fileId) {
     url.searchParams.set('fileId', fileId);
     console.info('[Drive test] media request:', { fileId });
     const response = await fetch(url.toString(), {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: {
+            Authorization: `Bearer ${accessToken}`,
+            ...(_accessToken ? { 'X-Google-Access-Token': _accessToken } : {}),
+        },
     });
     console.info('[Drive test] media response:', {
         fileId,

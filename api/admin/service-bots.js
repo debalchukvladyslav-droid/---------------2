@@ -2,6 +2,7 @@ import {
     buildServiceBotResponse,
     cleanBotPayload,
     createServiceBotApiKey,
+    hashServiceBotApiKey,
     requireAdmin,
     sendJson,
     SERVICE_BOT_PERMISSION,
@@ -120,7 +121,7 @@ export default async function handler(req, res) {
                 if (!allowed.has(endpoint)) return sendJson(res, 404, { ok: false, error: 'Service bot endpoint not found' });
                 const bots = await supabaseRest(`bots?id=eq.${encodeURIComponent(id)}&select=*&limit=1`);
                 const bot = bots?.[0];
-                if (!bot?.api_key) return sendJson(res, 404, { ok: false, error: 'Service bot key not found' });
+                if (!bot) return sendJson(res, 404, { ok: false, error: 'Service bot not found' });
                 const query = { ...(req.query || {}) };
                 delete query.id;
                 delete query.data;
@@ -128,10 +129,7 @@ export default async function handler(req, res) {
                 const response = await buildServiceBotResponse({
                     ...req,
                     query,
-                    headers: {
-                        ...(req.headers || {}),
-                        'x-bot-key': bot.api_key,
-                    },
+                    _authenticatedServiceBot: bot,
                 }, endpoint);
                 return sendJson(res, 200, {
                     ...response.payload,
@@ -216,7 +214,7 @@ export default async function handler(req, res) {
         const row = {
             name: payload.name,
             bot_type: 'service',
-            api_key: apiKey,
+            api_key_hash: hashServiceBotApiKey(apiKey),
             user_id: payload.allTraders ? null : payload.userId,
             extra_data: {
                 allowed_endpoints: [SERVICE_BOT_PERMISSION],

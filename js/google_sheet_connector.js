@@ -164,7 +164,10 @@ async function fetchSheetsService(params) {
     Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
     console.info('[Sheets service] request', params);
     const response = await fetch(url.toString(), {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+            Authorization: `Bearer ${token}`,
+            ...(accessToken ? { 'X-Google-Access-Token': accessToken } : {}),
+        },
     });
     const data = await response.json().catch(() => ({}));
     console.info('[Sheets service] response', {

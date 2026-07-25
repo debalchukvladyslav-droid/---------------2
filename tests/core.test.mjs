@@ -42,7 +42,7 @@ const { detectExactSheetAutoMapping, migrateLegacyClassificationMapping, normali
 const { buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets, parseSheetProfitRisk } = await import('../js/stats_sheet_metrics.js');
 const { parseDecimalInput } = await import('../js/utils.js');
 const { getZonedClockParts, isEndOfSessionReviewTime } = await import('../js/session_schedule.js');
-const { buildServiceBotSnapshot, hasServiceBotPermission, parseServiceBotRange } = await import('../lib/service_bots.js');
+const { buildServiceBotSnapshot, hashServiceBotApiKey, hasServiceBotPermission, parseServiceBotRange } = await import('../lib/service_bots.js');
 
 test('parser utils find ECN fee columns across supported header names', () => {
     assert.equal(ecnFeeColumnIndex({ Symbol: 0, 'Ecn Fee': 4 }), 4);
@@ -982,6 +982,15 @@ test('service bot permission accepts explicit endpoint, star, and all only', () 
     assert.equal(hasServiceBotPermission({ extra_data: { allowed_endpoints: ['*'] } }), true);
     assert.equal(hasServiceBotPermission({ extra_data: { allowed_endpoints: ['all'] } }), true);
     assert.equal(hasServiceBotPermission({ extra_data: { allowed_endpoints: ['other'] } }), false);
+});
+
+test('service bot API keys are stored as deterministic SHA-256 hashes', () => {
+    const key = 'shs_service_example_secret';
+    const hash = hashServiceBotApiKey(key);
+    assert.match(hash, /^[a-f0-9]{64}$/);
+    assert.equal(hash, hashServiceBotApiKey(key));
+    assert.notEqual(hash, key);
+    assert.notEqual(hash, hashServiceBotApiKey(`${key}x`));
 });
 
 test('service bot snapshot aggregates real and matched trades but skips pure sheet rows', () => {
