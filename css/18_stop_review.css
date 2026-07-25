@@ -220,8 +220,12 @@ body.stop-review-open {
     position: absolute;
     top: 14px;
     left: 14px;
-    right: 14px;
+    right: auto;
     z-index: 3;
+    display: inline-flex;
+    width: max-content;
+    max-width: calc(100% - 28px);
+    gap: 36px;
     margin: 0;
     border: 1px solid rgba(255,255,255,.13);
     border-radius: 12px;
@@ -304,7 +308,10 @@ body.stop-review-open {
     .stop-review-fullscreen .stop-review-meta {
         top: 8px;
         left: 8px;
-        right: 8px;
+        right: auto;
+        width: max-content;
+        max-width: calc(100% - 16px);
+        gap: 18px;
     }
     .stop-review-fullscreen .stop-review-trades {
         top: 70px;
