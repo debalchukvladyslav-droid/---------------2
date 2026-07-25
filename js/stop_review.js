@@ -2,6 +2,7 @@ import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { getSupabaseStorageUrl } from './supabase_storage.js';
 import { showToast } from './utils.js';
+import { markJournalDayDirty, saveToLocal } from './storage.js';
 import { buildStopReviewCandidates, googleDriveFileId, isStopExitReason, normalizeStopExitReason } from './stop_review_core.js';
 
 const STATUS_LABELS = {
@@ -99,6 +100,73 @@ async function loadRemoteData() {
     runtime.links = linksResult.data || [];
 }
 
+async function syncSharedMistakeCatalog() {
+    if (!isOwner()) return;
+    const dayTitles = [...new Set((state.appData?.errorTypes || []).map(title => String(title).trim()).filter(Boolean))];
+    const remoteTitles = new Set(runtime.mistakes.filter(item => !item.archived).map(item => item.title));
+    const missingRemote = dayTitles.filter(title => !remoteTitles.has(title));
+    if (missingRemote.length) {
+        const maxOrder = runtime.mistakes.reduce((max, item) => Math.max(max, Number(item.sort_order) || 0), -1);
+        const { error } = await supabase.from('stop_mistakes').insert(missingRemote.map((title, index) => ({
+            user_id: currentUserId(),
+            title,
+            sort_order: maxOrder + index + 1,
+        })));
+        if (error) throw error;
+        await loadRemoteData();
+    }
+    const localTitles = new Set(dayTitles);
+    const missingLocal = runtime.mistakes.filter(item => !item.archived && !localTitles.has(item.title)).map(item => item.title);
+    if (missingLocal.length) {
+        state.appData.errorTypes = [...dayTitles, ...missingLocal];
+        await saveToLocal();
+        window.renderErrorsList?.();
+    }
+}
+
+async function applySharedMistakeChange(detail = {}) {
+    if (!isOwner()) return;
+    if (detail.action === 'add' && detail.title) {
+        const exists = runtime.mistakes.some(item => item.title === detail.title && !item.archived);
+        if (!exists) {
+            const maxOrder = runtime.mistakes.reduce((max, item) => Math.max(max, Number(item.sort_order) || 0), -1);
+            await supabase.from('stop_mistakes').insert({
+                user_id: currentUserId(),
+                title: detail.title,
+                sort_order: maxOrder + 1,
+            });
+        }
+    } else if (detail.action === 'rename' && detail.oldTitle && detail.title) {
+        await supabase.from('stop_mistakes').update({
+            title: detail.title,
+            updated_at: new Date().toISOString(),
+        }).eq('user_id', currentUserId()).eq('title', detail.oldTitle);
+    } else if (detail.action === 'archive' && detail.oldTitle) {
+        await supabase.from('stop_mistakes').update({
+            archived: true,
+            updated_at: new Date().toISOString(),
+        }).eq('user_id', currentUserId()).eq('title', detail.oldTitle);
+    }
+    await loadRemoteData();
+    renderMistakeCatalog();
+    if (document.getElementById('stop-review-card')) await renderCurrentCard();
+}
+
+async function syncMistakeTitleToJournal(oldTitle, newTitle) {
+    if (!oldTitle || !newTitle || oldTitle === newTitle) return;
+    const types = Array.isArray(state.appData.errorTypes) ? state.appData.errorTypes : [];
+    const oldIndex = types.indexOf(oldTitle);
+    if (oldIndex >= 0) types[oldIndex] = newTitle;
+    else if (!types.includes(newTitle)) types.push(newTitle);
+    Object.entries(state.appData.journal || {}).forEach(([dateStr, day]) => {
+        if (!Array.isArray(day?.errors) || !day.errors.includes(oldTitle)) return;
+        day.errors = [...new Set(day.errors.map(title => title === oldTitle ? newTitle : title))];
+        if (day.__detailsLoaded !== false) markJournalDayDirty(dateStr);
+    });
+    await saveToLocal();
+    window.renderErrorsList?.();
+}
+
 async function syncCandidates(candidates) {
     if (!isOwner()) return;
     const userId = currentUserId();
@@ -141,6 +209,7 @@ function hydrateCandidates() {
 async function refreshData({ sync = true } = {}) {
     hydrateCandidates();
     await loadRemoteData();
+    await syncSharedMistakeCatalog();
     if (sync) {
         await syncCandidates(collectStopCandidates(state.appData));
         await loadRemoteData();
@@ -285,6 +354,7 @@ async function classify(review, status) {
     if (runtime.statusFilter === 'all') runtime.index = Math.min(runtime.index + 1, runtime.queue.length - 1);
     await renderCurrentCard();
     renderSummary();
+    closeReviewWhenFinished();
 }
 
 function skipCurrent() {
@@ -297,6 +367,7 @@ function skipCurrent() {
         runtime.index = Math.min(runtime.queue.length - 1, runtime.index + 1);
     }
     void renderCurrentCard();
+    closeReviewWhenFinished();
 }
 
 async function completeMistakes(review, host) {
@@ -319,6 +390,7 @@ async function completeMistakes(review, host) {
     await renderCurrentCard();
     renderMistakeCatalog();
     showToast('Розбір стопа збережено.');
+    closeReviewWhenFinished();
 }
 
 function renderSummary() {
@@ -398,6 +470,12 @@ async function addMistake() {
     const { data, error } = await supabase.from('stop_mistakes').insert({ user_id: currentUserId(), title, sort_order: maxOrder + 1 }).select().single();
     if (error) return showToast(error.message);
     runtime.selectedMistakeId = data.id;
+    if (!Array.isArray(state.appData.errorTypes)) state.appData.errorTypes = [];
+    if (!state.appData.errorTypes.includes(title)) {
+        state.appData.errorTypes.push(title);
+        await saveToLocal();
+        window.renderErrorsList?.();
+    }
     await loadRemoteData();
     renderMistakeCatalog();
     await renderCurrentCard();
@@ -415,6 +493,7 @@ async function quickEditMistake(id) {
         updated_at: new Date().toISOString(),
     }).eq('id', id);
     if (error) return showToast(error.message);
+    await syncMistakeTitleToJournal(mistake.title, title);
     await loadRemoteData();
     renderMistakeCatalog();
     await renderCurrentCard();
@@ -426,6 +505,7 @@ async function saveMistake(mistake, detail) {
     if (!title) return showToast('Назва помилки не може бути порожньою.');
     const { error } = await supabase.from('stop_mistakes').update({ title, description, updated_at: new Date().toISOString() }).eq('id', mistake.id);
     if (error) return showToast(error.message);
+    await syncMistakeTitleToJournal(mistake.title, title);
     await loadRemoteData();
     renderMistakeCatalog();
     showToast('Помилку збережено.');
@@ -434,6 +514,15 @@ async function saveMistake(mistake, detail) {
 async function toggleArchive(mistake) {
     const { error } = await supabase.from('stop_mistakes').update({ archived: !mistake.archived, updated_at: new Date().toISOString() }).eq('id', mistake.id);
     if (error) return showToast(error.message);
+    if (!mistake.archived) {
+        state.appData.errorTypes = (state.appData.errorTypes || []).filter(title => title !== mistake.title);
+        await saveToLocal();
+        window.renderErrorsList?.();
+    } else if (!state.appData.errorTypes.includes(mistake.title)) {
+        state.appData.errorTypes.push(mistake.title);
+        await saveToLocal();
+        window.renderErrorsList?.();
+    }
     await loadRemoteData();
     renderMistakeCatalog();
     await renderCurrentCard();
@@ -472,6 +561,21 @@ function mountFullscreenWorkspace() {
     if (!workspace) return null;
     if (workspace.parentElement !== document.body) document.body.appendChild(workspace);
     return workspace;
+}
+
+function closeReviewWorkspace() {
+    const workspace = document.getElementById('stop-review-workspace');
+    workspace?.classList.add('initially-hidden');
+    workspace?.classList.remove('stop-review-fullscreen', 'stop-ui-hidden');
+    document.body.classList.remove('stop-review-open');
+    document.getElementById('stop-review-setup')?.classList.remove('initially-hidden');
+}
+
+function closeReviewWhenFinished() {
+    if (runtime.queue.length || runtime.statusFilter !== 'pending') return;
+    closeReviewWorkspace();
+    renderMistakeCatalog();
+    showToast('Розбір завершено. Скріншоти додано до панелі помилок.');
 }
 
 async function renderAll(options = {}) {
@@ -524,11 +628,7 @@ function bindUI() {
         await renderAll();
     });
     root.querySelector('[data-stop-review-back]')?.addEventListener('click', () => {
-        const workspace = document.getElementById('stop-review-workspace');
-        workspace?.classList.add('initially-hidden');
-        workspace?.classList.remove('stop-review-fullscreen');
-        document.body.classList.remove('stop-review-open');
-        document.getElementById('stop-review-setup')?.classList.remove('initially-hidden');
+        closeReviewWorkspace();
     });
     root.querySelector('[data-stop-ui-toggle]')?.addEventListener('click', event => {
         const workspace = document.getElementById('stop-review-workspace');
@@ -556,12 +656,16 @@ export function refreshStopReview() {
 }
 
 document.addEventListener('app:shell-ready', initStopReview);
+window.addEventListener('journal:error-type-changed', event => {
+    void applySharedMistakeChange(event.detail).catch(error => {
+        console.error('[Stop review catalog sync]', error);
+        showToast(`Не вдалося синхронізувати помилки: ${error.message}`);
+    });
+});
 document.addEventListener('keydown', event => {
     if (event.key !== 'Escape') return;
     const workspace = document.getElementById('stop-review-workspace');
     if (!workspace?.classList.contains('stop-review-fullscreen')) return;
-    workspace.classList.add('initially-hidden');
-    workspace.classList.remove('stop-review-fullscreen');
-    document.body.classList.remove('stop-review-open');
+    closeReviewWorkspace();
     document.getElementById('stop-review-setup')?.classList.remove('initially-hidden');
 });

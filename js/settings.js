@@ -216,11 +216,20 @@ export function renderErrorsList() {
         const actions = document.createElement('div');
         actions.className = 'error-actions';
 
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'icon-btn';
+        editBtn.textContent = '✎';
+        editBtn.title = 'Перейменувати';
+        editBtn.onclick = () => renameErrorType(index);
+
         const delBtn = document.createElement('button');
+        delBtn.type = 'button';
         delBtn.className = 'icon-btn delete';
         delBtn.textContent = '❌';
         delBtn.onclick = () => deleteErrorType(index);
 
+        actions.appendChild(editBtn);
         actions.appendChild(delBtn);
         item.appendChild(label);
         item.appendChild(actions);
@@ -235,15 +244,40 @@ export function addNewErrorType() {
         state.appData.errorTypes.push(val); 
         input.value = ''; 
         renderErrorsList(); 
-        saveToLocal(); 
+        saveToLocal();
+        window.dispatchEvent(new CustomEvent('journal:error-type-changed', { detail: { action: 'add', title: val } }));
     } 
+}
+
+export async function renameErrorType(index) {
+    const oldTitle = state.appData.errorTypes[index];
+    const nextTitle = window.prompt('Нова назва помилки:', oldTitle)?.trim();
+    if (!nextTitle || nextTitle === oldTitle) return;
+    if (state.appData.errorTypes.some((title, itemIndex) => itemIndex !== index && title === nextTitle)) {
+        return showToast('Помилка з такою назвою вже існує.');
+    }
+    state.appData.errorTypes[index] = nextTitle;
+    Object.entries(state.appData.journal || {}).forEach(([dateStr, day]) => {
+        if (!Array.isArray(day?.errors) || !day.errors.includes(oldTitle)) return;
+        day.errors = [...new Set(day.errors.map(title => title === oldTitle ? nextTitle : title))];
+        markJournalDateDirtyIfLoaded(dateStr, day);
+    });
+    renderErrorsList();
+    await saveToLocal();
+    window.dispatchEvent(new CustomEvent('journal:error-type-changed', {
+        detail: { action: 'rename', oldTitle, title: nextTitle },
+    }));
 }
 
 export function deleteErrorType(index) { 
     showConfirm(`Видалити "${state.appData.errorTypes[index]}"?`).then(ok => { if (!ok) return;
+        const oldTitle = state.appData.errorTypes[index];
         state.appData.errorTypes.splice(index, 1); 
         saveToLocal(); 
-        renderErrorsList(); 
+        renderErrorsList();
+        window.dispatchEvent(new CustomEvent('journal:error-type-changed', {
+            detail: { action: 'archive', oldTitle },
+        }));
     }); 
 }
 
