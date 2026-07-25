@@ -182,12 +182,33 @@ body.stop-review-open {
 }
 
 .stop-review-fullscreen .stop-review-toolbar {
-    flex: 0 0 auto;
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 8;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid rgba(255,255,255,.13);
+    border-radius: 12px;
+    padding: 7px;
+    background: rgba(5,8,7,.72);
+    backdrop-filter: blur(12px);
 }
 
 .stop-review-fullscreen .stop-review-queue-head {
-    flex: 0 0 auto;
-    margin: 10px 0;
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 8;
+    display: flex;
+    width: auto;
+    margin: 0;
+    border: 1px solid rgba(255,255,255,.13);
+    border-radius: 12px;
+    padding: 7px 9px;
+    background: rgba(5,8,7,.72);
+    backdrop-filter: blur(12px);
 }
 
 .stop-review-fullscreen .stop-review-card {
@@ -218,7 +239,7 @@ body.stop-review-open {
 
 .stop-review-fullscreen .stop-review-meta {
     position: absolute;
-    top: 14px;
+    top: 82px;
     left: 14px;
     right: auto;
     z-index: 3;
@@ -245,7 +266,7 @@ body.stop-review-open {
 
 .stop-review-fullscreen .stop-review-trades {
     position: absolute;
-    top: 132px;
+    top: 200px;
     left: 14px;
     z-index: 3;
     align-items: flex-start;
@@ -396,7 +417,7 @@ body.stop-review-open {
 
 .stop-stage2-mistakes {
     position: absolute;
-    top: 12px;
+    top: 82px;
     right: 12px;
     bottom: 12px;
     z-index: 5;
@@ -409,6 +430,29 @@ body.stop-review-open {
     background: rgba(5,8,7,.9);
     box-shadow: -14px 0 36px rgba(0,0,0,.34);
     backdrop-filter: blur(14px);
+}
+
+.stop-review-fullscreen.stop-ui-hidden .stop-review-meta,
+.stop-review-fullscreen.stop-ui-hidden .stop-review-trades,
+.stop-review-fullscreen.stop-ui-hidden .stop-review-actions,
+.stop-review-fullscreen.stop-ui-hidden .stop-finalize,
+.stop-review-fullscreen.stop-ui-hidden .stop-stage2-mistakes,
+.stop-review-fullscreen.stop-ui-hidden .stop-review-queue-head,
+.stop-review-fullscreen.stop-ui-hidden .stop-review-toolbar > :not(.stop-ui-toggle) {
+    display: none;
+}
+
+.stop-review-fullscreen.stop-ui-hidden .stop-review-toolbar {
+    top: 10px;
+    right: 10px;
+    left: auto;
+    padding: 4px;
+    border-color: rgba(255,255,255,.08);
+    background: rgba(5,8,7,.48);
+}
+
+.stop-ui-toggle {
+    white-space: nowrap;
 }
 
 .stop-stage2-head {
@@ -479,7 +523,7 @@ body.stop-review-open {
 
 @media(max-width:760px) {
     .stop-review-workspace.stop-review-fullscreen {
-        padding: 10px;
+        padding: 6px;
     }
     .stop-review-fullscreen .stop-review-card {
         min-height: 0;
@@ -488,7 +532,7 @@ body.stop-review-open {
         min-height: 100%;
     }
     .stop-review-fullscreen .stop-review-meta {
-        top: 8px;
+        top: 72px;
         left: 8px;
         right: auto;
         width: max-content;
@@ -496,7 +540,7 @@ body.stop-review-open {
         gap: 4px;
     }
     .stop-review-fullscreen .stop-review-trades {
-        top: 124px;
+        top: 186px;
         left: 8px;
         max-width: min(230px, calc(100% - 16px));
     }

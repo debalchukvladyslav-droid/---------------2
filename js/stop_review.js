@@ -545,6 +545,11 @@ function bindUI() {
         document.body.classList.remove('stop-review-open');
         document.getElementById('stop-review-setup')?.classList.remove('initially-hidden');
     });
+    root.querySelector('[data-stop-ui-toggle]')?.addEventListener('click', event => {
+        const workspace = document.getElementById('stop-review-workspace');
+        const hidden = workspace?.classList.toggle('stop-ui-hidden') || false;
+        event.currentTarget.textContent = hidden ? 'Показати панелі' : 'Сховати панелі';
+    });
     root.querySelector('[data-stop-prev]')?.addEventListener('click', () => {
         runtime.index = Math.max(0, runtime.index - 1);
         void renderCurrentCard();
