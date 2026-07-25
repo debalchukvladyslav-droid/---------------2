@@ -456,11 +456,17 @@ function bindUI() {
         const selection = document.getElementById('stop-review-selection');
         if (selection) selection.textContent = `${labels[selected]} · ${range.from} — ${range.to}`;
         document.getElementById('stop-review-setup')?.classList.add('initially-hidden');
-        document.getElementById('stop-review-workspace')?.classList.remove('initially-hidden');
+        const workspace = document.getElementById('stop-review-workspace');
+        workspace?.classList.remove('initially-hidden');
+        workspace?.classList.add('stop-review-fullscreen');
+        document.body.classList.add('stop-review-open');
         await renderAll();
     });
     root.querySelector('[data-stop-review-back]')?.addEventListener('click', () => {
-        document.getElementById('stop-review-workspace')?.classList.add('initially-hidden');
+        const workspace = document.getElementById('stop-review-workspace');
+        workspace?.classList.add('initially-hidden');
+        workspace?.classList.remove('stop-review-fullscreen');
+        document.body.classList.remove('stop-review-open');
         document.getElementById('stop-review-setup')?.classList.remove('initially-hidden');
     });
     root.querySelector('[data-stop-prev]')?.addEventListener('click', () => {
@@ -484,3 +490,12 @@ export function refreshStopReview() {
 }
 
 document.addEventListener('app:shell-ready', initStopReview);
+document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape') return;
+    const workspace = document.getElementById('stop-review-workspace');
+    if (!workspace?.classList.contains('stop-review-fullscreen')) return;
+    workspace.classList.add('initially-hidden');
+    workspace.classList.remove('stop-review-fullscreen');
+    document.body.classList.remove('stop-review-open');
+    document.getElementById('stop-review-setup')?.classList.remove('initially-hidden');
+});

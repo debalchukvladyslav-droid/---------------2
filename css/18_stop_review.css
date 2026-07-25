@@ -145,3 +145,59 @@
         flex-direction: column;
     }
 }
+
+body.stop-review-open {
+    overflow: hidden;
+}
+
+.stop-review-workspace.stop-review-fullscreen {
+    position: fixed;
+    inset: 0;
+    z-index: 10050;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    border: 0;
+    padding: 16px 22px 20px;
+    overflow: hidden;
+    background: var(--bg-main);
+}
+
+.stop-review-fullscreen .stop-review-toolbar {
+    flex: 0 0 auto;
+}
+
+.stop-review-fullscreen .stop-review-queue-head {
+    flex: 0 0 auto;
+    margin: 10px 0;
+}
+
+.stop-review-fullscreen .stop-review-card {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.stop-review-fullscreen .stop-review-images {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+}
+
+.stop-review-fullscreen .stop-review-image img {
+    max-height: none;
+}
+
+@media(max-width:760px) {
+    .stop-review-workspace.stop-review-fullscreen {
+        padding: 10px;
+    }
+    .stop-review-fullscreen .stop-review-card {
+        min-height: 0;
+    }
+    .stop-review-fullscreen .stop-review-images {
+        min-height: 280px;
+    }
+}
