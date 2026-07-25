@@ -86,5 +86,11 @@ test('links a sheet ticker hyperlink to a synced Drive screenshot without OCR', 
         tickers: {},
     });
     assert.deepEqual(rows[0].screenshot_paths, [path]);
+    assert.equal(rows[0].trade_refs[0].screenshotUrl, `https://drive.google.com/file/d/${driveId}/view`);
     assert.equal(googleDriveFileId(`https://drive.google.com/open?id=${driveId}`), driveId);
+});
+
+test('extracts Drive ids from supported sheet link formats', () => {
+    assert.equal(googleDriveFileId('https://drive.google.com/uc?id=18UpVEcD0zAZWe0mv_MCln-n_Ictin_v6'), '18UpVEcD0zAZWe0mv_MCln-n_Ictin_v6');
+    assert.equal(googleDriveFileId('https://drive.google.com/file/d/1X3sjg_bqpcmpEGouj-ocEzc0alfQJikc/view?usp=drivesdk'), '1X3sjg_bqpcmpEGouj-ocEzc0alfQJikc');
 });

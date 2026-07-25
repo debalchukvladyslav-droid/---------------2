@@ -2,7 +2,7 @@ import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { getSupabaseStorageUrl } from './supabase_storage.js';
 import { showToast } from './utils.js';
-import { buildStopReviewCandidates, isStopExitReason, normalizeStopExitReason } from './stop_review_core.js';
+import { buildStopReviewCandidates, googleDriveFileId, isStopExitReason, normalizeStopExitReason } from './stop_review_core.js';
 
 const STATUS_LABELS = {
     normal: 'Нормальний стоп',
@@ -177,6 +177,29 @@ async function urlFor(path) {
     }
 }
 
+async function drivePreviewUrl(fileId) {
+    if (!fileId) return '';
+    const cacheKey = `drive:${fileId}`;
+    if (runtime.imageUrls.has(cacheKey)) return runtime.imageUrls.get(cacheKey);
+    try {
+        const { data } = await supabase.auth.getSession();
+        const token = data?.session?.access_token || '';
+        if (!token) return '';
+        const url = new URL('/api/drive-service', window.location.origin);
+        url.searchParams.set('action', 'media');
+        url.searchParams.set('fileId', fileId);
+        const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        if (!response.ok) return '';
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.startsWith('image/')) return '';
+        const objectUrl = URL.createObjectURL(await response.blob());
+        runtime.imageUrls.set(cacheKey, objectUrl);
+        return objectUrl;
+    } catch (_) {
+        return '';
+    }
+}
+
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 }
@@ -192,8 +215,12 @@ async function renderCurrentCard() {
         return;
     }
     const paths = Array.isArray(review.screenshot_paths) ? review.screenshot_paths : [];
-    const urls = await Promise.all(paths.map(urlFor));
     const refs = Array.isArray(review.trade_refs) ? review.trade_refs : [];
+    let urls = (await Promise.all(paths.map(urlFor))).filter(Boolean);
+    if (!urls.length) {
+        const driveIds = [...new Set(refs.map(ref => googleDriveFileId(ref.screenshotUrl)).filter(Boolean))];
+        urls = (await Promise.all(driveIds.map(drivePreviewUrl))).filter(Boolean);
+    }
     const total = refs.reduce((sum, ref) => sum + (Number(ref.net) || 0), 0);
     const chosen = new Set(runtime.links.filter(link => link.review_id === review.id).map(link => link.mistake_id));
     const mistakeOptions = runtime.mistakes.filter(item => !item.archived || chosen.has(item.id));
@@ -204,7 +231,7 @@ async function renderCurrentCard() {
         </div>
         <div class="stop-review-trades">${refs.map(ref => `<span>${escapeHtml(ref.type || 'Угода')} · стоп ${escapeHtml(ref.stop ?? '—')} · ${Number(ref.net || 0).toFixed(2)}$</span>`).join('')}</div>
         <div class="stop-review-images">
-            ${urls.some(Boolean) ? urls.map((url, index) => url ? `<button class="stop-review-image" type="button" data-stop-image="${escapeHtml(url)}"><img src="${escapeHtml(url)}" alt="${escapeHtml(review.symbol)} — скріншот ${index + 1}"></button>` : '').join('') : '<div class="stop-review-no-image">Не вдалося знайти скріншот за посиланням із таблиці або OCR-тікером. Оновіть імпорт таблиці та синхронізацію Drive.</div>'}
+            ${urls.length ? urls.map((url, index) => `<button class="stop-review-image" type="button" data-stop-image="${escapeHtml(url)}"><img src="${escapeHtml(url)}" alt="${escapeHtml(review.symbol)} — скріншот ${index + 1}"></button>`).join('') : '<div class="stop-review-no-image">Не вдалося відкрити скріншот. Надайте service account доступ до файлу або папки Drive, потім оновіть імпорт таблиці.</div>'}
         </div>
         ${runtime.stage === 'classify' ? `
             <div class="stop-review-actions">

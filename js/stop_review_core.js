@@ -77,6 +77,7 @@ export function buildStopReviewCandidates(appData = {}, from = '', to = '') {
                 type: String(trade?.type || sheet.tradeType || ''),
                 stop: trade?.stop ?? sheet.stopPrice ?? null,
                 exitReason: String(sheet.exit || ''),
+                screenshotUrl: String(sheet.screenshotUrl || ''),
             });
         });
     });
