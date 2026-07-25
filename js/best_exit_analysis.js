@@ -1,5 +1,5 @@
 import { supabase, SUPABASE_URL } from './supabase.js';
-import { attachBestExitResult, collectTimedShortTrades, summarizeBestExits } from './best_exit_core.js';
+import { attachBestExitResult, bestExitWindowNY, collectTimedShortTrades, summarizeBestExits } from './best_exit_core.js';
 
 const resultCache = new Map();
 let renderRequest = 0;
@@ -12,9 +12,13 @@ function money(value) {
         : '—';
 }
 
-function timeLabel(value = '') {
-    const match = String(value).match(/T(\d{2}:\d{2})/);
-    return match?.[1] || String(value).slice(0, 5) || '—';
+function bestWindowSummary(rows = []) {
+    const counts = new Map();
+    rows.forEach((row) => {
+        const window = bestExitWindowNY(row?.lowTime);
+        if (window) counts.set(window, (counts.get(window) || 0) + 1);
+    });
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0] || null;
 }
 
 async function fetchBatch(items) {
@@ -44,7 +48,10 @@ async function loadMarketResults(trades, onProgress = null) {
     for (let index = 0; index < missing.length; index += BATCH_SIZE) {
         const chunk = missing.slice(index, index + BATCH_SIZE);
         const results = await fetchBatch(chunk.map(({ symbol, date, entryMinute }) => ({ symbol, date, entryMinute })));
-        results.forEach((row) => resultCache.set(`${row.symbol}|${row.date}|${row.entryMinute}`, row));
+        results.forEach((row) => {
+            if (!bestExitWindowNY(row?.lowTime)) return;
+            resultCache.set(`${row.symbol}|${row.date}|${row.entryMinute}`, row);
+        });
         completed += chunk.length;
         onProgress?.(completed, trades.length);
     }
@@ -56,20 +63,22 @@ async function loadMarketResults(trades, onProgress = null) {
 
 function renderSummary(container, summary, unavailable = 0) {
     const topRows = summary.rows.slice(0, 8);
+    const commonWindow = bestWindowSummary(summary.rows);
     container.innerHTML = `
         <div class="best-exit-metrics">
             <div><span>Угод по часу</span><strong>${summary.count}</strong></div>
             <div><span>Макс. результат на low</span><strong>${money(summary.bestPnl)}</strong></div>
             <div><span>Не забрано до low</span><strong>${money(summary.extraPnl)}</strong></div>
             <div><span>Забрано руху</span><strong>${summary.avgCapturePct == null ? '—' : `${summary.avgCapturePct.toFixed(0)}%`}</strong></div>
+            <div><span>Найчастіший найкращий час</span><strong>${commonWindow ? `${commonWindow[0]} NY` : '—'}</strong></div>
         </div>
         ${unavailable ? `<p class="stats-chart-note">Без market data: ${unavailable}. Перевірте тариф Polygon для historical minute aggregates.</p>` : ''}
         <div class="best-exit-table-wrap">
             <table class="best-exit-table">
-                <thead><tr><th>Дата</th><th>Тікер</th><th>Найкраща ціна виходу</th><th>Найкращий вихід по часу (NY)</th><th>Макс. P&amp;L</th><th>Не забрано</th></tr></thead>
+                <thead><tr><th>Дата</th><th>Тікер</th><th>Найкраща ціна виходу</th><th>Найкращий 10-хв діапазон (NY)</th><th>Макс. P&amp;L</th><th>Не забрано</th></tr></thead>
                 <tbody>${topRows.map((row) => `<tr>
                     <td>${row.date}</td><td>${row.symbol}</td><td>${row.low.toFixed(2)}</td>
-                    <td>${timeLabel(row.lowTime)}</td><td>${money(row.bestPnl)}</td><td>${money(row.extraPnl)}</td>
+                    <td><strong>${bestExitWindowNY(row.lowTime) || '—'}</strong></td><td>${money(row.bestPnl)}</td><td>${money(row.extraPnl)}</td>
                 </tr>`).join('')}</tbody>
             </table>
         </div>`;

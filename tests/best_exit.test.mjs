@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     attachBestExitResult,
+    bestExitWindowNY,
     collectTimedShortTrades,
     isTimeExitTrade,
     summarizeBestExits,
@@ -54,4 +55,18 @@ test('calculates best short exit and aggregate opportunity', () => {
     const summary = summarizeBestExits([row]);
     assert.equal(summary.bestPnl, 200);
     assert.equal(summary.extraPnl, 100);
+});
+
+test('formats the profitable exit minute as an aligned ten-minute New York window', () => {
+    assert.equal(bestExitWindowNY('2026-07-10T14:47:00.000Z'), '10:40–10:49');
+    assert.equal(bestExitWindowNY('2026-01-10T16:59:00.000Z'), '11:50–11:59');
+    assert.equal(bestExitWindowNY('2026-07-10T16:00:00.000Z'), '');
+    assert.equal(bestExitWindowNY('2026-07-10T17:32:00.000Z'), '');
+    assert.equal(bestExitWindowNY('invalid'), '');
+});
+
+test('rejects cached best exits at noon or later in New York', () => {
+    const trade = { entryPrice: 10, actualExitPrice: 9, qty: 100, symbol: 'AAPL', date: '2026-07-10' };
+    assert.equal(attachBestExitResult(trade, { low: 8, lowTime: '2026-07-10T16:00:00.000Z' }), null);
+    assert.equal(attachBestExitResult(trade, { low: 7, lowTime: '2026-07-10T17:32:00.000Z' }), null);
 });

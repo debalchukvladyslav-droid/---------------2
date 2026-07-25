@@ -9,6 +9,31 @@ export function normalizeTradeClock(value = '') {
     return hour * 60 + minute;
 }
 
+export function marketMinuteNY(value) {
+    const date = value instanceof Date ? value : new Date(value);
+    if (!Number.isFinite(date.getTime())) return null;
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    }).formatToParts(date);
+    const hour = Number(parts.find((part) => part.type === 'hour')?.value);
+    const minute = Number(parts.find((part) => part.type === 'minute')?.value);
+    if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+    return hour * 60 + minute;
+}
+
+export function bestExitWindowNY(value) {
+    const marketMinute = marketMinuteNY(value);
+    if (marketMinute == null || marketMinute < 570 || marketMinute >= 720) return '';
+    const hour = Math.floor(marketMinute / 60);
+    const minute = marketMinute % 60;
+    const startMinute = Math.floor(minute / 10) * 10;
+    const endMinute = startMinute + 9;
+    return `${String(hour).padStart(2, '0')}:${String(startMinute).padStart(2, '0')}–${String(hour).padStart(2, '0')}:${String(endMinute).padStart(2, '0')}`;
+}
+
 export function isTimeExitTrade(trade = {}) {
     return TIME_EXIT_RE.test(String(trade?.sheet?.exit || trade?.exitReason || trade?.closeReason || '').trim());
 }
@@ -52,7 +77,8 @@ export function collectTimedShortTrades(journal = {}, allowedDates = null) {
 
 export function attachBestExitResult(trade, market = {}) {
     const low = Number(market.low);
-    if (!trade || !(low > 0)) return null;
+    const lowMinuteNY = marketMinuteNY(market.lowTime);
+    if (!trade || !(low > 0) || lowMinuteNY == null || lowMinuteNY < 570 || lowMinuteNY >= 720) return null;
     const perShare = trade.entryPrice - low;
     const actualPerShare = Number(trade.actualExitPrice) > 0
         ? trade.entryPrice - Number(trade.actualExitPrice)

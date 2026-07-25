@@ -28,6 +28,17 @@ function nyOffset(date: string) {
     return `${hour >= 0 ? '+' : '-'}${String(Math.abs(hour)).padStart(2, '0')}:${match?.[2] || '00'}`;
 }
 
+function minuteInNewYork(value: string) {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return null;
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(date);
+    const hour = Number(parts.find((part) => part.type === 'hour')?.value);
+    const minute = Number(parts.find((part) => part.type === 'minute')?.value);
+    return Number.isFinite(hour) && Number.isFinite(minute) ? hour * 60 + minute : null;
+}
+
 async function rest(path: string, init: RequestInit = {}) {
     const url = Deno.env.get('SUPABASE_URL')!;
     const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -58,7 +69,8 @@ Deno.serve(async (req) => {
         const query = `market_best_exit_cache?symbol=eq.${item.symbol}&trade_date=eq.${item.date}&entry_minute=eq.${item.entryMinute}&select=symbol,trade_date,entry_minute,low_price,low_at`;
         const cachedRes = await rest(query);
         const cached = cachedRes.ok ? await cachedRes.json() : [];
-        if (cached?.[0]) {
+        const cachedMinute = cached?.[0] ? minuteInNewYork(cached[0].low_at) : null;
+        if (cached?.[0] && cachedMinute != null && cachedMinute >= 570 && cachedMinute < 720) {
             return { item, result: { symbol: item.symbol, date: item.date, entryMinute: item.entryMinute, low: Number(cached[0].low_price), lowTime: cached[0].low_at, cached: true } };
         }
         return { item, result: null };
