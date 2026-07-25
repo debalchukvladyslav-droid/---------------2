@@ -204,22 +204,21 @@ body {
     border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
 }
 
-.sidebar-brand {
+.journal-score-wrap {
     position: relative;
 }
 
-.sidebar-brand .journal-score-chip {
-    min-width: 118px;
+.header-right .journal-score-chip {
+    min-width: 190px;
     height: 48px;
-    margin-left: auto;
-    padding-right: 7px;
+    padding-right: 12px;
     font-family: inherit;
     text-align: left;
     cursor: pointer;
 }
 
-.sidebar-brand .journal-score-chip:hover,
-.sidebar-brand .journal-score-chip[aria-expanded="true"] {
+.header-right .journal-score-chip:hover,
+.header-right .journal-score-chip[aria-expanded="true"] {
     border-color: var(--accent);
     background: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
 }
@@ -303,13 +302,8 @@ body {
     font-size: .76rem;
 }
 
-.app-sidebar.collapsed .journal-score-chip,
-.app-sidebar.collapsed .journal-score-popover {
-    display: none;
-}
-
 @media(max-width:760px) {
-    .journal-score-chip {
+    .header-right .journal-score-chip {
         min-width: 42px;
         width: 42px;
         padding: 4px;

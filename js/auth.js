@@ -841,6 +841,7 @@ export function applyAccessRights() {
     const isLookingAtSomeoneElse = isViewingOtherProfile();
     const mentorCommentAccess = canWriteMentorComment();
     const hasAccess = isSelf;
+    const safeProfileTabs = new Set(['dash', 'calendar', 'screens', 'trades', 'datagrid', 'stats']);
 
     let statusBanner = document.getElementById('status-banner');
     if (!statusBanner) {
@@ -905,15 +906,26 @@ export function applyAccessRights() {
     const showTeamAdmin = state.myRole === 'admin' || state.IS_MENTOR_MODE;
     if (btnAdminTeam) btnAdminTeam.style.display = showTeamAdmin ? 'inline-flex' : 'none';
 
-    const hideSettingsForOtherProfile = isLookingAtSomeoneElse;
-    document.querySelectorAll('[data-tab="settings"]').forEach((tab) => {
-        tab.style.display = hideSettingsForOtherProfile ? 'none' : '';
+    document.querySelectorAll('.sidebar-nav-item[data-tab], .mobile-nav-btn[data-tab], .mobile-more-item[data-tab]').forEach((tab) => {
+        const allowed = !isLookingAtSomeoneElse || safeProfileTabs.has(tab.dataset.tab);
+        tab.style.display = allowed ? '' : 'none';
     });
+    document.querySelectorAll('.sidebar-nav > .nav-divider').forEach((divider) => {
+        divider.style.display = isLookingAtSomeoneElse ? 'none' : '';
+    });
+    const hideSettingsForOtherProfile = isLookingAtSomeoneElse;
     const settingsView = document.getElementById('view-settings');
     if (settingsView) {
         settingsView.toggleAttribute('aria-disabled', hideSettingsForOtherProfile);
         if (hideSettingsForOtherProfile && settingsView.classList.contains('active') && window.switchMainTab) {
             window.switchMainTab('calendar');
+        }
+    }
+    if (isLookingAtSomeoneElse) {
+        const activeView = document.querySelector('.view-content.active');
+        const activeTab = activeView?.id?.replace(/^view-/, '') || '';
+        if (activeTab && !safeProfileTabs.has(activeTab) && window.switchMainTab) {
+            window.switchMainTab('dash');
         }
     }
     const importExportGrid = document.querySelector('.import-export-grid');
