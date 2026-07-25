@@ -204,7 +204,7 @@ async function renderCurrentCard() {
         </div>
         <div class="stop-review-trades">${refs.map(ref => `<span>${escapeHtml(ref.type || 'Угода')} · стоп ${escapeHtml(ref.stop ?? '—')} · ${Number(ref.net || 0).toFixed(2)}$</span>`).join('')}</div>
         <div class="stop-review-images">
-            ${urls.some(Boolean) ? urls.map((url, index) => url ? `<button class="stop-review-image" type="button" data-stop-image="${escapeHtml(url)}"><img src="${escapeHtml(url)}" alt="${escapeHtml(review.symbol)} — скріншот ${index + 1}"></button>` : '').join('') : '<div class="stop-review-no-image">Для цього тікера немає скріншотів із розпізнаним OCR-тікером.</div>'}
+            ${urls.some(Boolean) ? urls.map((url, index) => url ? `<button class="stop-review-image" type="button" data-stop-image="${escapeHtml(url)}"><img src="${escapeHtml(url)}" alt="${escapeHtml(review.symbol)} — скріншот ${index + 1}"></button>` : '').join('') : '<div class="stop-review-no-image">Не вдалося знайти скріншот за посиланням із таблиці або OCR-тікером. Оновіть імпорт таблиці та синхронізацію Drive.</div>'}
         </div>
         ${runtime.stage === 'classify' ? `
             <div class="stop-review-actions">

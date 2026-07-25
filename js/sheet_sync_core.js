@@ -255,6 +255,7 @@ export function parseSheetGridToTrades(values, smartColumns, spreadsheetId, star
         if (!activeDate || symRaw === '' || symRaw == null || !isLikelyTicker(symRaw)) continue;
 
         const symbol = String(symRaw).trim().toUpperCase();
+        const tickerScreenshotUrl = String(values?.hyperlinks?.[i]?.[symIdx] || '').trim();
         const profitRaw = profitIdx >= 0 ? getCell(row, profitIdx) : '';
         const hasProfitCell = profitRaw != null && String(profitRaw).trim() !== '';
         const net = hasProfitCell ? parseMoneyCell(profitRaw) : 0;
@@ -293,6 +294,7 @@ export function parseSheetGridToTrades(values, smartColumns, spreadsheetId, star
             exceptions: exceptionStr ? [exceptionStr] : undefined,
             traderComment: cellStr(row, cTrader) || undefined,
             exit: exitStr || undefined,
+            screenshotUrl: tickerScreenshotUrl || undefined,
             teamLeadComment: cellStr(row, cTeam) || undefined,
             paperType: cellStr(row, cPaper) || undefined,
             period: cellStr(row, cPeriod) || undefined,

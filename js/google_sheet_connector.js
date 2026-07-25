@@ -577,7 +577,9 @@ export async function fetchSpreadsheetValuesRange(spreadsheetId, range, sheetTit
         spreadsheetId,
         range: rangeForSelectedSheet(range, sheetTitle),
     });
-    return response.values || [];
+    const values = response.values || [];
+    values.hyperlinks = Array.isArray(response.hyperlinks) ? response.hyperlinks : [];
+    return values;
 }
 
 export async function googleSheetsLogout() {

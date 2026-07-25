@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildStopReviewCandidates, isStopExitReason, normalizeStopExitReason } from '../js/stop_review_core.js';
+import { buildStopReviewCandidates, googleDriveFileId, isStopExitReason, normalizeStopExitReason } from '../js/stop_review_core.js';
 
 test('normalizes and recognizes only the stop exit reason', () => {
     assert.equal(normalizeStopExitReason('  СтОп  '), 'стоп');
@@ -65,4 +65,26 @@ test('does not use Trades as a stop source when the sheet has no matching row', 
         },
     });
     assert.deepEqual(rows, []);
+});
+
+test('links a sheet ticker hyperlink to a synced Drive screenshot without OCR', () => {
+    const driveId = '1AbC_example-file-id';
+    const path = 'screenshots/user/chart.png';
+    const rows = buildStopReviewCandidates({
+        sheetRows: {
+            sheetA: {
+                '2026-07-13': [{
+                    symbol: 'META',
+                    net: -30,
+                    sheet: { exit: 'стоп', screenshotUrl: `https://drive.google.com/file/d/${driveId}/view` },
+                }],
+            },
+        },
+        journal: { '2026-07-13': { screenshots: { good: [], normal: [], bad: [], error: [] } } },
+        unassignedImages: [path],
+        screenMeta: { [path]: { driveId } },
+        tickers: {},
+    });
+    assert.deepEqual(rows[0].screenshot_paths, [path]);
+    assert.equal(googleDriveFileId(`https://drive.google.com/open?id=${driveId}`), driveId);
 });

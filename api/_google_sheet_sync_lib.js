@@ -148,7 +148,28 @@ async function fetchSheetValues(spreadsheetId, range, sheetTitle) {
     if (!response.ok) {
         throw new Error(`Google Sheets ${response.status}: ${data.error?.message || response.statusText}`);
     }
-    return data.values || [];
+    const values = data.values || [];
+    try {
+        const fullRange = buildRange(range, sheetTitle);
+        const gridUrl = new URL(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}`);
+        gridUrl.searchParams.set('ranges', fullRange);
+        gridUrl.searchParams.set('includeGridData', 'true');
+        gridUrl.searchParams.set('fields', 'sheets(data(rowData(values(hyperlink,userEnteredValue,textFormatRuns(format(link(uri)))))))');
+        const gridResponse = await fetch(gridUrl, { headers: { Authorization: `Bearer ${token}` } });
+        const grid = await gridResponse.json().catch(() => ({}));
+        if (gridResponse.ok) {
+            const rowData = grid.sheets?.[0]?.data?.[0]?.rowData || [];
+            values.hyperlinks = rowData.map(row => (row.values || []).map(cell => {
+                if (cell.hyperlink) return cell.hyperlink;
+                const richLink = (cell.textFormatRuns || []).map(run => run?.format?.link?.uri).find(Boolean);
+                if (richLink) return richLink;
+                return (cell.userEnteredValue?.formulaValue || '').match(/HYPERLINK\s*\(\s*"([^"]+)"/i)?.[1] || '';
+            }));
+        }
+    } catch (error) {
+        console.warn('[Sheet sync] hyperlinks skipped', error?.message || String(error));
+    }
+    return values;
 }
 
 function defaultDayEntry() {

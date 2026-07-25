@@ -82,8 +82,29 @@ async function values(req, res, token) {
         });
         return sendJson(res, response.status, { ok: false, error: data.error?.message || response.statusText });
     }
+    let hyperlinks = [];
+    try {
+        const gridResponse = await sheetsFetch(encodeURIComponent(spreadsheetId), token, {
+            ranges: fullRange,
+            includeGridData: 'true',
+            fields: 'sheets(data(rowData(values(hyperlink,userEnteredValue,textFormatRuns(format(link(uri)))))))',
+        });
+        const grid = await gridResponse.json().catch(() => ({}));
+        if (gridResponse.ok) {
+            const rowData = grid.sheets?.[0]?.data?.[0]?.rowData || [];
+            hyperlinks = rowData.map(row => (row.values || []).map(cell => {
+                if (cell.hyperlink) return cell.hyperlink;
+                const richLink = (cell.textFormatRuns || []).map(run => run?.format?.link?.uri).find(Boolean);
+                if (richLink) return richLink;
+                const formula = cell.userEnteredValue?.formulaValue || '';
+                return formula.match(/HYPERLINK\s*\(\s*"([^"]+)"/i)?.[1] || '';
+            }));
+        }
+    } catch (error) {
+        console.warn('[Sheets service] hyperlinks skipped', { message: error?.message || String(error) });
+    }
     console.log('[Sheets service] values ok', { spreadsheetId, range: fullRange, rows: data.values?.length || 0 });
-    return sendJson(res, 200, { ok: true, values: data.values || [] });
+    return sendJson(res, 200, { ok: true, values: data.values || [], hyperlinks });
 }
 
 export default async function handler(req, res) {
