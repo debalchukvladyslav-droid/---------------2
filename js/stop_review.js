@@ -247,7 +247,7 @@ async function renderCurrentCard() {
                 <div class="stop-mistake-picker">${mistakeOptions.length ? mistakeOptions.map(item => `<div class="stop-stage2-mistake ${item.archived ? 'archived' : ''}"><label><input type="checkbox" value="${item.id}" data-stop-mistake ${chosen.has(item.id) ? 'checked' : ''}><span>${escapeHtml(item.title)}</span></label><button type="button" data-stage2-edit="${item.id}" aria-label="Редагувати ${escapeHtml(item.title)}">✎</button></div>`).join('') : '<p>Додайте першу помилку кнопкою «+».</p>'}</div>
             </aside>
             <div class="stop-finalize">
-                <button type="button" class="btn-primary btn-auto" data-stop-complete>Зберегти й перейти далі</button>
+                <button type="button" class="btn-primary btn-auto" data-stop-complete ${chosen.size ? '' : 'disabled'}>Далі →</button>
             </div>`}
     `;
     host.querySelectorAll('[data-stop-image]').forEach(button => button.addEventListener('click', () => {
@@ -257,6 +257,10 @@ async function renderCurrentCard() {
     host.querySelectorAll('[data-stop-status]').forEach(button => button.addEventListener('click', () => classify(review, button.dataset.stopStatus)));
     host.querySelector('[data-stop-skip]')?.addEventListener('click', skipCurrent);
     host.querySelector('[data-stop-complete]')?.addEventListener('click', () => completeMistakes(review, host));
+    host.querySelectorAll('[data-stop-mistake]').forEach(input => input.addEventListener('change', () => {
+        const nextButton = host.querySelector('[data-stop-complete]');
+        if (nextButton) nextButton.disabled = !host.querySelector('[data-stop-mistake]:checked');
+    }));
     host.querySelector('[data-stage2-add]')?.addEventListener('click', addMistake);
     host.querySelectorAll('[data-stage2-edit]').forEach(button => button.addEventListener('click', () => quickEditMistake(button.dataset.stage2Edit)));
 }

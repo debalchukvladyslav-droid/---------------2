@@ -302,6 +302,12 @@ body.stop-review-open {
     backdrop-filter: blur(14px);
 }
 
+.stop-review-fullscreen [data-stop-complete]:disabled {
+    opacity: .38;
+    cursor: not-allowed;
+    filter: saturate(.35);
+}
+
 .stop-review-fullscreen .stop-review-actions {
     top: 50%;
     right: 14px;
