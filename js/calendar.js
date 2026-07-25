@@ -609,6 +609,7 @@ export function saveEntry() {
     // Тихе збереження
     import('./storage.js').then(module => {
         module.saveJournalData().then(() => {
+            window.dispatchEvent(new CustomEvent('journal:score-refresh'));
             showGlobalLoader('save-day', 'День збережено', { type: 'success' });
             hideGlobalLoader('save-day', 900);
             if (window.updateAutoFlags) {

@@ -14,6 +14,7 @@ import { toggleStatsDropdown, toggleTree, toggleStatsFilter, refreshStatsView, c
 import { renderErrorsList, addNewErrorType, deleteErrorType, renderChecklistDisplay, renderSettingsChecklist, addNewChecklistItem, deleteChecklistItem, saveChecklist, renderSidebarSliders, renderSettingsSliders, addNewSliderItem, deleteSliderItem, saveSlidersSettings, renderSettingsTradeTypes, addNewTradeType, deleteTradeType, saveTradeTypes, renderMyTradeTypes, addMyTradeType, deleteMyTradeType, saveMyTradeTypes, renderSettingsSituations, addPlaybookSituation, deletePlaybookSituation, savePlaybookSituations } from './settings.js';
 import { openZoom, openZoomGallery, closeZoom, openOriginal, zoomStep, loadMoreUnassigned, assignImage, removeAssignedImage, deleteFileFromPC, loadImages, renderAssignedScreens, disposeScreensView, openScreenshotForTrade, getStorageUrl } from './gallery.js';
 import { initStopReview, refreshStopReview } from './stop_review.js';
+import { renderJournalScore } from './journal_score.js';
 import { getAIAdvice, analyzeChart, analyzeTagPatterns, openSOSModal, closeSOSModal, sendSOSMessage, sendDataChatMessage, renderAIAdviceUI, loadAIChatHistory, switchAITab, bookmarkAIChat, renderSavedAIChats, deleteSavedAI, applyAIQuickPrompt } from './ai.js';
 import { cleanupUnusedAIRequests } from './ai/client.js';
 import { setupOCRDrawing, loadLatestImageForOCR, saveVisualOCRSettings, editTicker, forceScan, updateBadgeUI, runOCR, enqueueOCR, enqueueBackgroundOCRForAllScreens, getOCRQueueStatus } from './ocr.js';
@@ -272,6 +273,7 @@ window.toggleStatsCompareMode = toggleStatsCompareMode;
 window.closeStatsCompareMode = closeStatsCompareMode;
 window.openStatsComparisonWithTrader = openStatsComparisonWithTrader;
 window.renderErrorsList = renderErrorsList;
+window.renderJournalScore = renderJournalScore;
 window.addNewErrorType = addNewErrorType;
 window.deleteErrorType = deleteErrorType;
 window.renderChecklistDisplay = renderChecklistDisplay;
@@ -1228,6 +1230,7 @@ async function bootApp(user) {
         if (window.renderDashboardNews) void window.renderDashboardNews();
         void renderDashboardAI();
         if (window.renderMarketSentiment) void window.renderMarketSentiment();
+        void renderJournalScore();
         cleanupUnusedAIRequests();
 
         applyPersistedBackground();

@@ -390,6 +390,7 @@ async function completeMistakes(review, host) {
     await renderCurrentCard();
     renderMistakeCatalog();
     showToast('Розбір стопа збережено.');
+    window.dispatchEvent(new CustomEvent('journal:score-refresh'));
     closeReviewWhenFinished();
 }
 

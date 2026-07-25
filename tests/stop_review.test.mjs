@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildStopReviewCandidates, googleDriveFileId, isStopExitReason, normalizeStopExitReason } from '../js/stop_review_core.js';
+import { calculateJournalScore, isJournalActivityDay } from '../js/journal_score_core.js';
 
 test('normalizes and recognizes only the stop exit reason', () => {
     assert.equal(normalizeStopExitReason('  СтОп  '), 'стоп');
@@ -93,4 +94,31 @@ test('links a sheet ticker hyperlink to a synced Drive screenshot without OCR', 
 test('extracts Drive ids from supported sheet link formats', () => {
     assert.equal(googleDriveFileId('https://drive.google.com/uc?id=18UpVEcD0zAZWe0mv_MCln-n_Ictin_v6'), '18UpVEcD0zAZWe0mv_MCln-n_Ictin_v6');
     assert.equal(googleDriveFileId('https://drive.google.com/file/d/1X3sjg_bqpcmpEGouj-ocEzc0alfQJikc/view?usp=drivesdk'), '1X3sjg_bqpcmpEGouj-ocEzc0alfQJikc');
+});
+
+test('journal score ignores completely untouched days', () => {
+    assert.equal(isJournalActivityDay({ pnl: 0, trades: [] }), false);
+    assert.equal(calculateJournalScore({ journal: { '2026-07-01': { pnl: 0, trades: [] } } }).score, null);
+});
+
+test('daily journal work has more weight than learning', () => {
+    const journal = {
+        '2026-07-01': {
+            notes: 'Підсумок дня',
+            nextSessionImprovement: 'Чекати підтвердження',
+            sessionGoal: 'Торгувати план',
+            sessionReadiness: 8,
+            sessionReviewDone: true,
+            checkedParams: ['plan'],
+            trades: [{ net: -10 }],
+            screenshots: { good: ['one.png'] },
+        },
+    };
+    const withoutLearning = calculateJournalScore({ journal });
+    const withLearning = calculateJournalScore({
+        journal,
+        learnCache: { date: '2026-07-01', summaries: { video: 'Конспект' } },
+    });
+    assert.equal(withLearning.score - withoutLearning.score, 1);
+    assert.ok(withoutLearning.score >= 7);
 });

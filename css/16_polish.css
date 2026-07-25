@@ -141,6 +141,80 @@ body {
     gap: 8px;
 }
 
+.journal-score-chip {
+    --journal-score: 0%;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 132px;
+    height: 44px;
+    padding: 5px 10px 5px 6px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--bg-card) 88%, transparent);
+    color: var(--text-muted);
+}
+
+.journal-score-ring {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    border-radius: 50%;
+    background: conic-gradient(var(--accent) var(--journal-score), color-mix(in srgb, var(--text-muted) 18%, transparent) 0);
+    position: relative;
+}
+
+.journal-score-ring::after {
+    content: "";
+    position: absolute;
+    inset: 4px;
+    border-radius: inherit;
+    background: var(--background);
+}
+
+.journal-score-ring strong {
+    position: relative;
+    z-index: 1;
+    color: var(--text-main);
+    font-size: .78rem;
+}
+
+.journal-score-copy {
+    display: grid;
+    line-height: 1.05;
+}
+
+.journal-score-copy small {
+    color: var(--text-muted);
+    font-size: .58rem;
+    font-weight: 800;
+    letter-spacing: .1em;
+}
+
+.journal-score-copy b {
+    margin-top: 4px;
+    color: var(--text-main);
+    font-size: .72rem;
+    white-space: nowrap;
+}
+
+.journal-score-chip.has-score {
+    border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+}
+
+@media(max-width:760px) {
+    .journal-score-chip {
+        min-width: 42px;
+        width: 42px;
+        padding: 4px;
+    }
+    .journal-score-copy {
+        display: none;
+    }
+}
+
 .icon-button-plain {
     display: flex;
     align-items: center;
