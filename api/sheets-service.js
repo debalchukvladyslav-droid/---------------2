@@ -1,4 +1,4 @@
-import { verifySupabaseUser } from '../lib/google_sheet_sync.js';
+import { getGoogleAccessToken, verifySupabaseUser } from '../lib/google_sheet_sync.js';
 
 function sendJson(res, status, body) {
     res.status(status).setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -117,11 +117,24 @@ export default async function handler(req, res) {
         const user = await verifySupabaseUser(req.headers.authorization || '');
         if (!user?.id) return sendJson(res, 401, { ok: false, error: 'Unauthorized' });
 
-        const token = String(req.headers['x-google-access-token'] || '').trim();
+        let token = String(req.headers['x-google-access-token'] || '').trim();
+        let authMode = token ? 'user' : 'service-account';
         if (!token) {
-            return sendJson(res, 401, { ok: false, error: 'Google account authorization is required' });
+            try {
+                token = await getGoogleAccessToken();
+            } catch (error) {
+                console.warn('[Sheets service] service account token unavailable', {
+                    message: error?.message || String(error),
+                });
+                return sendJson(res, 503, {
+                    ok: false,
+                    code: 'GOOGLE_SERVICE_ACCOUNT_UNAVAILABLE',
+                    error: 'Google service account is not configured on the server',
+                });
+            }
         }
         const action = String(req.query.action || 'metadata');
+        console.log('[Sheets service] authorization', { action, authMode });
         if (action === 'metadata') return metadata(req, res, token);
         if (action === 'values') return values(req, res, token);
         return sendJson(res, 400, { ok: false, error: 'Unknown action' });
