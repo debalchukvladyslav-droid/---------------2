@@ -30,6 +30,19 @@ test('collects short time exits from the selected dates and clamps entry to mark
     assert.equal(rows[0].symbol, 'AAPL');
 });
 
+test('excludes a time exit opened at or after noon New York', () => {
+    const journal = {
+        '2026-07-10': {
+            trades: [
+                { symbol: 'AAPL', type: 'Short', opened: '11:59:00', entry: 10, sheet: { exit: 'по часу' } },
+                { symbol: 'TSLA', type: 'Short', opened: '12:00:00', entry: 20, sheet: { exit: 'по часу' } },
+            ],
+        },
+    };
+    const rows = collectTimedShortTrades(journal, new Set(['2026-07-10']));
+    assert.deepEqual(rows.map((row) => row.symbol), ['AAPL']);
+});
+
 test('calculates best short exit and aggregate opportunity', () => {
     const row = attachBestExitResult(
         { entryPrice: 10, actualExitPrice: 9, qty: 100, symbol: 'AAPL', date: '2026-07-10' },

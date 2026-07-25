@@ -66,7 +66,7 @@ function renderSummary(container, summary, unavailable = 0) {
         ${unavailable ? `<p class="stats-chart-note">Без market data: ${unavailable}. Перевірте тариф Polygon для historical minute aggregates.</p>` : ''}
         <div class="best-exit-table-wrap">
             <table class="best-exit-table">
-                <thead><tr><th>Дата</th><th>Тікер</th><th>Low</th><th>Час NY</th><th>Макс. P&amp;L</th><th>Не забрано</th></tr></thead>
+                <thead><tr><th>Дата</th><th>Тікер</th><th>Найкраща ціна виходу</th><th>Найкращий вихід по часу (NY)</th><th>Макс. P&amp;L</th><th>Не забрано</th></tr></thead>
                 <tbody>${topRows.map((row) => `<tr>
                     <td>${row.date}</td><td>${row.symbol}</td><td>${row.low.toFixed(2)}</td>
                     <td>${timeLabel(row.lowTime)}</td><td>${money(row.bestPnl)}</td><td>${money(row.extraPnl)}</td>
