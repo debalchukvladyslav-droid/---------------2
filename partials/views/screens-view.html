@@ -8,23 +8,43 @@
                     </div>
                     <button type="button" class="btn-primary btn-auto" data-stop-review-open>Відкрити розбір</button>
                 </div>
+                <div id="stop-review-setup" class="stop-review-setup initially-hidden">
+                    <div class="stop-setup-step">
+                        <span>1</span>
+                        <div>
+                            <h3>Оберіть період</h3>
+                            <p>За який час передивитися стопи?</p>
+                        </div>
+                    </div>
+                    <div class="stop-date-picker">
+                        <label><span>Від</span><input class="stop-review-date" id="stop-review-from" type="date"></label>
+                        <span class="stop-date-arrow">→</span>
+                        <label><span>До</span><input class="stop-review-date" id="stop-review-to" type="date"></label>
+                    </div>
+                    <div class="stop-setup-step">
+                        <span>2</span>
+                        <div>
+                            <h3>Які стопи переглянути?</h3>
+                            <p>Оберіть одну чергу для цього перегляду.</p>
+                        </div>
+                    </div>
+                    <div class="stop-queue-options">
+                        <button type="button" class="selected" data-stop-queue="pending">
+                            <strong>Нові стопи</strong><small>Ще не переглядалися</small>
+                        </button>
+                        <button type="button" data-stop-queue="mistakes">
+                            <strong>Погані та сумнівні</strong><small>Розібрати помилки</small>
+                        </button>
+                        <button type="button" data-stop-queue="all">
+                            <strong>Усі стопи</strong><small>Переглянути повторно</small>
+                        </button>
+                    </div>
+                    <button type="button" class="btn-primary stop-review-start" data-stop-review-start>Почати перегляд →</button>
+                </div>
                 <div id="stop-review-workspace" class="stop-review-workspace initially-hidden">
                     <div class="stop-review-toolbar">
-                        <div class="stop-review-stage-tabs" role="tablist" aria-label="Етап розбору стопів">
-                            <button type="button" class="active" data-stop-stage="classify">1. Швидкий відбір</button>
-                            <button type="button" data-stop-stage="mistakes">2. Розбір помилок</button>
-                        </div>
-                        <label>Від<input class="stop-review-date" id="stop-review-from" type="date"></label>
-                        <label>До<input class="stop-review-date" id="stop-review-to" type="date"></label>
-                        <label id="stop-status-filter-wrap">Показати
-                            <select id="stop-review-status">
-                                <option value="pending">Нерозібрані</option>
-                                <option value="all">Усі</option>
-                                <option value="normal">Нормальні</option>
-                                <option value="bad">Погані</option>
-                                <option value="uncertain">Сумнівні</option>
-                            </select>
-                        </label>
+                        <button type="button" class="btn-secondary btn-auto" data-stop-review-back>← Змінити вибір</button>
+                        <span id="stop-review-selection"></span>
                     </div>
                     <div class="stop-review-queue-head">
                         <span id="stop-review-summary"></span>

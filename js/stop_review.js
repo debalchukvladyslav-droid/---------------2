@@ -413,23 +413,29 @@ function bindUI() {
     document.getElementById('stop-review-from').value = defaults.from;
     document.getElementById('stop-review-to').value = defaults.to;
     root.querySelector('[data-stop-review-open]')?.addEventListener('click', () => {
-        document.getElementById('stop-review-workspace')?.classList.toggle('initially-hidden');
-        void renderAll();
+        document.getElementById('stop-review-setup')?.classList.toggle('initially-hidden');
+        document.getElementById('stop-review-workspace')?.classList.add('initially-hidden');
     });
-    root.querySelectorAll('[data-stop-stage]').forEach(button => button.addEventListener('click', () => {
-        runtime.stage = button.dataset.stopStage;
-        runtime.index = 0;
-        updateStageButtons();
-        rebuildQueue();
-        void renderCurrentCard();
+    root.querySelectorAll('[data-stop-queue]').forEach(button => button.addEventListener('click', () => {
+        root.querySelectorAll('[data-stop-queue]').forEach(item => item.classList.toggle('selected', item === button));
     }));
-    document.getElementById('stop-review-status')?.addEventListener('change', event => {
-        runtime.statusFilter = event.target.value;
+    root.querySelector('[data-stop-review-start]')?.addEventListener('click', async () => {
+        const selected = root.querySelector('[data-stop-queue].selected')?.dataset.stopQueue || 'pending';
+        runtime.stage = selected === 'mistakes' ? 'mistakes' : 'classify';
+        runtime.statusFilter = selected === 'all' ? 'all' : 'pending';
         runtime.index = 0;
-        rebuildQueue();
-        void renderCurrentCard();
+        const labels = { pending: 'Нові стопи', mistakes: 'Погані та сумнівні', all: 'Усі стопи' };
+        const range = selectedRange();
+        const selection = document.getElementById('stop-review-selection');
+        if (selection) selection.textContent = `${labels[selected]} · ${range.from} — ${range.to}`;
+        document.getElementById('stop-review-setup')?.classList.add('initially-hidden');
+        document.getElementById('stop-review-workspace')?.classList.remove('initially-hidden');
+        await renderAll();
     });
-    root.querySelectorAll('.stop-review-date').forEach(input => input.addEventListener('change', () => void renderAll()));
+    root.querySelector('[data-stop-review-back]')?.addEventListener('click', () => {
+        document.getElementById('stop-review-workspace')?.classList.add('initially-hidden');
+        document.getElementById('stop-review-setup')?.classList.remove('initially-hidden');
+    });
     root.querySelector('[data-stop-prev]')?.addEventListener('click', () => {
         runtime.index = Math.max(0, runtime.index - 1);
         void renderCurrentCard();
