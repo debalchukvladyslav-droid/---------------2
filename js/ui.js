@@ -588,6 +588,7 @@ async function runMainTabWork(tab) {
         tasks.push(Promise.resolve(refreshDashMiniEquityChartTheme()));
     }
     if (tab === 'screens') {
+        if (window.initStopReview) window.initStopReview();
         if (window.setupOCRDrawing) window.setupOCRDrawing();
         if (window.updateDriveUI) tasks.push(Promise.resolve(window.updateDriveUI()));
         if (window.restoreScreensDistributionState) tasks.push(Promise.resolve(window.restoreScreensDistributionState()));
@@ -598,6 +599,7 @@ async function runMainTabWork(tab) {
         }
         if (window.syncDriveScreenshots) tasks.push(Promise.resolve(window.syncDriveScreenshots(true)));
         if (window.refreshReviewRequestButtons) tasks.push(Promise.resolve(window.refreshReviewRequestButtons()));
+        if (window.refreshStopReview) tasks.push(Promise.resolve(window.refreshStopReview()));
     }
     if (tab === 'calendar' && window.refreshReviewRequestButtons) tasks.push(Promise.resolve(window.refreshReviewRequestButtons()));
     if (tab === 'settings' && window.renderDaylossSettings) tasks.push(Promise.resolve(window.renderDaylossSettings()));
