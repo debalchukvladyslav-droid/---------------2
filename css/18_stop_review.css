@@ -341,6 +341,10 @@ body.stop-review-open {
 .stop-review-fullscreen .stop-finalize {
     max-height: 44%;
     overflow-y: auto;
+    right: 292px;
+    left: auto;
+    width: min(720px, calc(100% - 324px));
+    transform: none;
 }
 
 .stop-review-fullscreen .stop-finalize .stop-review-actions {
@@ -363,6 +367,114 @@ body.stop-review-open {
     inset: 0;
     z-index: 2;
     min-height: 0;
+}
+
+.stop-review-complete {
+    align-content: center;
+    gap: 10px;
+    background: radial-gradient(circle at center,rgba(0,229,160,.09),transparent 45%),#050807;
+}
+
+.stop-review-complete h3,
+.stop-review-complete p {
+    margin: 0;
+}
+
+.stop-complete-icon {
+    display: grid;
+    place-items: center;
+    width: 54px;
+    height: 54px;
+    margin: 0 auto 4px;
+    border: 1px solid color-mix(in srgb,var(--profit) 65%,transparent);
+    border-radius: 17px;
+    color: var(--profit);
+    background: color-mix(in srgb,var(--profit) 10%,transparent);
+    font-size: 1.55rem;
+    font-weight: 900;
+}
+
+.stop-stage2-mistakes {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 5;
+    width: 264px;
+    border: 1px solid color-mix(in srgb,var(--accent) 58%,var(--border-color));
+    border-radius: 14px;
+    padding: 14px;
+    overflow-y: auto;
+    color: var(--text-main);
+    background: rgba(5,8,7,.9);
+    box-shadow: -14px 0 36px rgba(0,0,0,.34);
+    backdrop-filter: blur(14px);
+}
+
+.stop-stage2-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.stop-stage2-head h4 {
+    margin: 0;
+}
+
+.stop-stage2-head button {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border: 1px solid var(--accent);
+    border-radius: 9px;
+    color: var(--accent);
+    background: color-mix(in srgb,var(--accent) 8%,transparent);
+    cursor: pointer;
+}
+
+.stop-stage2-mistakes .stop-mistake-picker {
+    display: grid;
+    gap: 7px;
+    margin: 0;
+}
+
+.stop-stage2-mistake {
+    display: grid;
+    grid-template-columns: minmax(0,1fr) auto;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 9px;
+    padding: 8px;
+    background: rgba(255,255,255,.025);
+}
+
+.stop-stage2-mistake label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+}
+
+.stop-stage2-mistake label span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.stop-stage2-mistake > button {
+    border: 0;
+    color: var(--text-muted);
+    background: transparent;
+    cursor: pointer;
+}
+
+.stop-stage2-mistake:has(input:checked) {
+    border-color: var(--accent);
+    background: color-mix(in srgb,var(--accent) 9%,transparent);
 }
 
 @media(max-width:760px) {
@@ -392,5 +504,18 @@ body.stop-review-open {
     .stop-review-fullscreen .stop-finalize {
         bottom: 8px;
         width: calc(100% - 16px);
+    }
+    .stop-stage2-mistakes {
+        top: auto;
+        right: 8px;
+        bottom: 76px;
+        left: 8px;
+        width: auto;
+        max-height: 34%;
+    }
+    .stop-review-fullscreen .stop-finalize {
+        right: 8px;
+        left: 8px;
+        width: auto;
     }
 }

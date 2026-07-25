@@ -155,7 +155,12 @@ function rebuildQueue() {
     const { from, to } = selectedRange();
     const active = runtime.reviews.filter(row => row.active && (!from || row.trade_date >= from) && (!to || row.trade_date <= to));
     if (runtime.stage === 'mistakes') {
-        runtime.queue = active.filter(row => row.initial_status === 'bad' || row.initial_status === 'uncertain');
+        runtime.queue = active.filter(row => {
+            if (row.initial_status !== 'bad' && row.initial_status !== 'uncertain') return false;
+            if (row.final_status === 'normal') return false;
+            const hasMistake = runtime.links.some(link => link.review_id === row.id);
+            return !hasMistake;
+        });
     } else if (runtime.statusFilter === 'all') {
         runtime.queue = active;
     } else if (runtime.statusFilter === 'pending') {
@@ -211,7 +216,21 @@ async function renderCurrentCard() {
     const review = runtime.queue[runtime.index];
     if (progress) progress.textContent = runtime.queue.length ? `${runtime.index + 1} / ${runtime.queue.length}` : '0 / 0';
     if (!review) {
-        host.innerHTML = `<div class="stop-review-empty">${runtime.stage === 'mistakes' ? 'Немає поганих або сумнівних стопів у цьому періоді.' : 'У цій черзі стопів немає.'}</div>`;
+        const canContinue = runtime.stage === 'classify' && runtime.statusFilter === 'pending';
+        const { from, to } = selectedRange();
+        const nextCount = runtime.reviews.filter(row =>
+            row.active
+            && row.trade_date >= from
+            && row.trade_date <= to
+            && (row.initial_status === 'bad' || row.initial_status === 'uncertain')
+        ).length;
+        host.innerHTML = `<div class="stop-review-empty stop-review-complete">
+            <span class="stop-complete-icon">✓</span>
+            <h3>${canContinue ? 'Усі нові стопи переглянуто' : (runtime.stage === 'mistakes' ? 'Розбір помилок завершено' : 'У цій черзі стопів немає')}</h3>
+            <p>${canContinue ? `До наступного етапу потрапило: ${nextCount}` : 'Для вибраного періоду більше немає стопів.'}</p>
+            ${canContinue && nextCount ? '<button type="button" class="btn-primary btn-auto" data-go-mistakes>Перейти до розбору помилок →</button>' : ''}
+        </div>`;
+        host.querySelector('[data-go-mistakes]')?.addEventListener('click', goToMistakesStage);
         return;
     }
     const paths = Array.isArray(review.screenshot_paths) ? review.screenshot_paths : [];
@@ -239,10 +258,12 @@ async function renderCurrentCard() {
                 <button type="button" class="stop-choice bad ${review.initial_status === 'bad' ? 'selected' : ''}" data-stop-status="bad">Поганий стоп</button>
                 <button type="button" class="stop-choice uncertain ${review.initial_status === 'uncertain' ? 'selected' : ''}" data-stop-status="uncertain">Сумнівний</button>
             </div>` : `
+            <aside class="stop-stage2-mistakes">
+                <div class="stop-stage2-head"><h4>Помилки</h4><button type="button" data-stage2-add aria-label="Додати помилку">+</button></div>
+                <div class="stop-mistake-picker">${mistakeOptions.length ? mistakeOptions.map(item => `<div class="stop-stage2-mistake ${item.archived ? 'archived' : ''}"><label><input type="checkbox" value="${item.id}" data-stop-mistake ${chosen.has(item.id) ? 'checked' : ''}><span>${escapeHtml(item.title)}</span></label><button type="button" data-stage2-edit="${item.id}" aria-label="Редагувати ${escapeHtml(item.title)}">✎</button></div>`).join('') : '<p>Додайте першу помилку кнопкою «+».</p>'}</div>
+            </aside>
             <div class="stop-finalize">
                 ${review.initial_status === 'uncertain' ? `<div class="stop-review-actions compact"><button type="button" class="stop-choice normal ${review.final_status === 'normal' ? 'selected' : ''}" data-stop-final="normal">Все ж нормальний</button><button type="button" class="stop-choice bad ${review.final_status === 'bad' ? 'selected' : ''}" data-stop-final="bad">Поганий</button></div>` : ''}
-                <h4>Які помилки були в цій угоді?</h4>
-                <div class="stop-mistake-picker">${mistakeOptions.length ? mistakeOptions.map(item => `<label class="${item.archived ? 'archived' : ''}"><input type="checkbox" value="${item.id}" data-stop-mistake ${chosen.has(item.id) ? 'checked' : ''}>${escapeHtml(item.title)}</label>`).join('') : '<p>Спочатку додайте помилку в каталозі нижче.</p>'}</div>
                 <button type="button" class="btn-primary btn-auto" data-stop-complete>Зберегти й перейти далі</button>
             </div>`}
     `;
@@ -253,6 +274,18 @@ async function renderCurrentCard() {
     host.querySelectorAll('[data-stop-status]').forEach(button => button.addEventListener('click', () => classify(review, button.dataset.stopStatus)));
     host.querySelectorAll('[data-stop-final]').forEach(button => button.addEventListener('click', () => finalizeStatus(review, button.dataset.stopFinal)));
     host.querySelector('[data-stop-complete]')?.addEventListener('click', () => completeMistakes(review, host));
+    host.querySelector('[data-stage2-add]')?.addEventListener('click', addMistake);
+    host.querySelectorAll('[data-stage2-edit]').forEach(button => button.addEventListener('click', () => quickEditMistake(button.dataset.stage2Edit)));
+}
+
+function goToMistakesStage() {
+    runtime.stage = 'mistakes';
+    runtime.index = 0;
+    rebuildQueue();
+    const range = selectedRange();
+    const selection = document.getElementById('stop-review-selection');
+    if (selection) selection.textContent = `Погані та сумнівні · ${range.from} — ${range.to}`;
+    void renderCurrentCard();
 }
 
 async function classify(review, status) {
@@ -294,7 +327,6 @@ async function completeMistakes(review, host) {
         if (error) return showToast(error.message);
     }
     await loadRemoteData();
-    runtime.index = Math.min(runtime.index + 1, runtime.queue.length - 1);
     rebuildQueue();
     await renderCurrentCard();
     renderMistakeCatalog();
@@ -375,6 +407,23 @@ async function addMistake() {
     const { data, error } = await supabase.from('stop_mistakes').insert({ user_id: currentUserId(), title, sort_order: maxOrder + 1 }).select().single();
     if (error) return showToast(error.message);
     runtime.selectedMistakeId = data.id;
+    await loadRemoteData();
+    renderMistakeCatalog();
+    await renderCurrentCard();
+}
+
+async function quickEditMistake(id) {
+    const mistake = runtime.mistakes.find(item => item.id === id);
+    if (!mistake || !isOwner()) return;
+    const title = window.prompt('Назва помилки:', mistake.title)?.trim();
+    if (!title) return;
+    const description = window.prompt('Опис помилки:', mistake.description || '')?.trim() || '';
+    const { error } = await supabase.from('stop_mistakes').update({
+        title,
+        description,
+        updated_at: new Date().toISOString(),
+    }).eq('id', id);
+    if (error) return showToast(error.message);
     await loadRemoteData();
     renderMistakeCatalog();
     await renderCurrentCard();
