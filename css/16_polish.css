@@ -204,6 +204,110 @@ body {
     border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
 }
 
+.sidebar-brand {
+    position: relative;
+}
+
+.sidebar-brand .journal-score-chip {
+    min-width: 118px;
+    height: 48px;
+    margin-left: auto;
+    padding-right: 7px;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.sidebar-brand .journal-score-chip:hover,
+.sidebar-brand .journal-score-chip[aria-expanded="true"] {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
+}
+
+.journal-score-popover {
+    position: absolute;
+    z-index: 250;
+    top: calc(100% + 8px);
+    right: 10px;
+    width: 278px;
+    padding: 14px;
+    border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+    border-radius: 14px;
+    background: var(--bg-card);
+    box-shadow: 0 18px 55px rgba(0,0,0,.48);
+}
+
+.journal-score-popover[hidden] {
+    display: none;
+}
+
+.journal-score-popover-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.journal-score-popover-head strong {
+    color: var(--text-main);
+    font-size: .83rem;
+}
+
+.journal-score-popover-head span,
+.journal-score-hint {
+    color: var(--text-muted);
+    font-size: .67rem;
+}
+
+.journal-score-gaps {
+    display: grid;
+    gap: 11px;
+}
+
+.journal-score-gap {
+    display: grid;
+    grid-template-columns: minmax(0,1fr) auto;
+    gap: 5px 10px;
+    color: var(--text-muted);
+    font-size: .73rem;
+}
+
+.journal-score-gap strong {
+    color: var(--text-main);
+}
+
+.journal-score-gap i {
+    grid-column: 1 / -1;
+    height: 4px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--text-muted) 14%, transparent);
+}
+
+.journal-score-gap i b {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+}
+
+.journal-score-hint {
+    display: block;
+    margin-top: 13px;
+    line-height: 1.35;
+}
+
+.journal-score-all-good {
+    color: var(--profit);
+    font-size: .76rem;
+}
+
+.app-sidebar.collapsed .journal-score-chip,
+.app-sidebar.collapsed .journal-score-popover {
+    display: none;
+}
+
 @media(max-width:760px) {
     .journal-score-chip {
         min-width: 42px;

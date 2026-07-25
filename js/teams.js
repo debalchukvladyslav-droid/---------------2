@@ -620,14 +620,21 @@ export async function switchUser(nick) {
     if (state.CURRENT_VIEWED_USER === `${nick}_stats`) return;
 
     const previousDocName = state.CURRENT_VIEWED_USER;
+    const previousViewedUserId = state.currentViewedUserId;
+    let restoreViewedUserId = null;
     _isSwitching = true;
     if (typeof window.stopSheetAutoSync === 'function') window.stopSheetAutoSync();
     const selectedDocName = `${nick}_stats`;
     state.CURRENT_VIEWED_USER = selectedDocName;
+    const journalScoreValue = document.getElementById('journal-score-value');
+    const journalScoreLabel = document.getElementById('journal-score-label');
+    if (journalScoreValue) journalScoreValue.textContent = '…';
+    if (journalScoreLabel) journalScoreLabel.textContent = 'Завантаження';
     _renderTeamSidebarDOM(document.getElementById('team-list-container'));
 
     try {
         const { initializeApp, resolveViewedUserId, setCurrentViewedUserId } = await import('./storage.js');
+        restoreViewedUserId = setCurrentViewedUserId;
         const selectedUserId = await resolveViewedUserId(selectedDocName, { force: true });
         setCurrentViewedUserId(selectedUserId);
         state.statsLoadRequestId++;
@@ -637,9 +644,12 @@ export async function switchUser(nick) {
         if (window.renderView) window.renderView();
         await initializeApp();
         if (window.refreshStatsView) await window.refreshStatsView();
+        if (window.renderJournalScore) await window.renderJournalScore();
     } catch (e) {
         console.error('switchUser: initializeApp failed:', e);
         state.CURRENT_VIEWED_USER = previousDocName;
+        restoreViewedUserId?.(previousViewedUserId);
+        if (window.renderJournalScore) await window.renderJournalScore();
         showToast(`Не вдалося відкрити профіль ${nick}: ${e?.message || e}`);
     } finally {
         _isSwitching = false;

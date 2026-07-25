@@ -49,16 +49,42 @@ export function calculateJournalScore({ journal = {}, reviews = [], learnCache =
         reviewByDate.set(review.trade_date, current);
     });
     const activeDates = new Set(Object.entries(journal).filter(([, day]) => isJournalActivityDay(day)).map(([date]) => date));
-    if (!activeDates.size) return { score: null, label: 'Немає даних', activeDays: 0, details: 'Позначте день або сесію, щоб почати розрахунок.' };
+    if (!activeDates.size) return {
+        score: null,
+        label: 'Немає даних',
+        activeDays: 0,
+        details: 'Позначте день або сесію, щоб почати розрахунок.',
+        gaps: [{ label: 'Заповніть перший торговий день або план сесії', done: 0, total: 1 }],
+    };
     let total = 0;
+    const habits = {
+        reflection: { label: 'Підсумок і висновок дня', done: 0, weight: 6 },
+        session: { label: 'План і готовність до сесії', done: 0, weight: 5 },
+        review: { label: 'Чекліст або розбір помилок дня', done: 0, weight: 4 },
+        screenshots: { label: 'Скріншоти угод', done: 0, weight: 3 },
+        stops: { label: 'Розбір стопів', done: 0, weight: 2 },
+        learning: { label: 'Навчання з коротким конспектом', done: 0, weight: 1 },
+    };
     activeDates.forEach(date => {
-        let daily = dayJournalScore(journal[date] || {});
+        const day = journal[date] || {};
+        let daily = dayJournalScore(day);
         const review = reviewByDate.get(date);
         if (review?.total) daily += 2 * (review.completed / review.total);
         if (learnCache?.date === date && Object.keys(learnCache.summaries || {}).length) daily += 1;
+        if (hasText(day.notes) && hasText(day.nextSessionImprovement)) habits.reflection.done += 1;
+        if ((hasText(day.sessionGoal) || hasText(day.sessionPlan)) && (hasText(day.sessionReadiness) || day.sessionDone === true)) habits.session.done += 1;
+        if (day.sessionReviewDone === true || (Array.isArray(day.checkedParams) && day.checkedParams.length) || (Array.isArray(day.errors) && day.errors.length)) habits.review.done += 1;
+        if (screenshotsCount(day)) habits.screenshots.done += 1;
+        if (review?.total && review.completed === review.total) habits.stops.done += 1;
+        if (learnCache?.date === date && Object.keys(learnCache.summaries || {}).length) habits.learning.done += 1;
         total += Math.min(10, daily);
     });
     const score = Math.max(1, Math.min(10, Math.round((total / activeDates.size) * 10) / 10));
     const label = score >= 8.5 ? 'Системно' : score >= 7 ? 'Добре' : score >= 5 ? 'Нерегулярно' : 'Мало записів';
-    return { score, label, activeDays: activeDates.size, details: `Активних днів: ${activeDates.size}. Запис дня — до 7 балів, розбір стопів — до 2, навчання — до 1.` };
+    const gaps = Object.values(habits)
+        .map(item => ({ ...item, total: activeDates.size, ratio: item.done / activeDates.size }))
+        .filter(item => item.ratio < .8)
+        .sort((a, b) => a.ratio - b.ratio || b.weight - a.weight)
+        .slice(0, 5);
+    return { score, label, activeDays: activeDates.size, gaps, details: `Активних днів: ${activeDates.size}. Запис дня — до 7 балів, розбір стопів — до 2, навчання — до 1.` };
 }
