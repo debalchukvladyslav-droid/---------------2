@@ -286,6 +286,7 @@ body.stop-review-open {
 
 .stop-review-fullscreen .stop-review-actions,
 .stop-review-fullscreen .stop-finalize {
+    z-index: 6;
     position: absolute;
     left: 50%;
     bottom: 16px;
@@ -302,9 +303,16 @@ body.stop-review-open {
 }
 
 .stop-review-fullscreen .stop-review-actions {
+    top: 50%;
+    right: 14px;
+    bottom: auto;
+    left: auto;
+    grid-template-columns: 1fr;
+    width: 230px;
+    transform: translateY(-50%);
     box-shadow:
         0 0 0 1px rgba(255,255,255,.06) inset,
-        0 -12px 34px rgba(0,0,0,.3),
+        -12px 0 34px rgba(0,0,0,.3),
         0 0 26px rgba(0,229,160,.07);
 }
 
@@ -362,9 +370,11 @@ body.stop-review-open {
 .stop-review-fullscreen .stop-finalize {
     max-height: 44%;
     overflow-y: auto;
-    right: 292px;
+    right: 24px;
+    bottom: 24px;
     left: auto;
-    width: min(720px, calc(100% - 324px));
+    width: 240px;
+    padding: 8px;
     transform: none;
 }
 
@@ -377,6 +387,10 @@ body.stop-review-open {
     box-shadow: none;
     transform: none;
     backdrop-filter: none;
+}
+
+.stop-review-fullscreen .stop-finalize .stop-review-actions.compact {
+    grid-template-columns: 1fr;
 }
 
 .stop-review-fullscreen .stop-finalize h4 {
@@ -424,7 +438,7 @@ body.stop-review-open {
     width: 264px;
     border: 1px solid color-mix(in srgb,var(--accent) 58%,var(--border-color));
     border-radius: 14px;
-    padding: 14px;
+    padding: 14px 14px 86px;
     overflow-y: auto;
     color: var(--text-main);
     background: rgba(5,8,7,.9);
@@ -546,8 +560,12 @@ body.stop-review-open {
     }
     .stop-review-fullscreen .stop-review-actions,
     .stop-review-fullscreen .stop-finalize {
+        top: auto;
+        right: 8px;
         bottom: 8px;
+        left: 8px;
         width: calc(100% - 16px);
+        transform: none;
     }
     .stop-stage2-mistakes {
         top: auto;
