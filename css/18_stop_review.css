@@ -150,6 +150,23 @@ body.stop-review-open {
     overflow: hidden;
 }
 
+.stop-mistake-thumb {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    margin-bottom: 5px;
+    border-radius: 7px;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--text-muted) 8%, transparent);
+}
+
+.stop-mistake-thumb img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
 .stop-review-workspace.stop-review-fullscreen {
     position: fixed;
     inset: 0;

@@ -423,6 +423,7 @@ const TAB_TITLES = {
     datagrid: 'Таблиця Угод',
     table: 'Імпорт Sheets',
     screens: 'Скріншоти',
+    'stop-errors': 'Помилки',
     ai: 'AI Аналітик',
     'mentor-review': 'Черга рев’ю',
     playbook: 'Плейбук',
@@ -439,6 +440,7 @@ const NAV_TITLES = {
     datagrid: 'Таблиця',
     table: 'Імпорт',
     screens: 'Скріншоти',
+    'stop-errors': 'Помилки',
     ai: 'AI Ментор',
     'mentor-review': 'Черга ревʼю',
     playbook: 'Плейбук',
@@ -455,6 +457,7 @@ const TAB_ROUTES = {
     datagrid: '/datagrid',
     table: '/import',
     screens: '/screen',
+    'stop-errors': '/mistakes',
     ai: '/ai',
     'mentor-review': '/mentor-review',
     playbook: '/playbook',
@@ -478,6 +481,7 @@ const TAB_LOADING_TITLES = {
     datagrid: 'Готуємо таблицю угод',
     table: 'Готуємо імпорт',
     screens: 'Готуємо скріншоти',
+    'stop-errors': 'Готуємо розбір помилок',
     ai: 'Готуємо AI',
     'mentor-review': 'Готуємо ревʼю',
     playbook: 'Готуємо плейбук',
@@ -588,7 +592,6 @@ async function runMainTabWork(tab) {
         tasks.push(Promise.resolve(refreshDashMiniEquityChartTheme()));
     }
     if (tab === 'screens') {
-        if (window.initStopReview) window.initStopReview();
         if (window.setupOCRDrawing) window.setupOCRDrawing();
         if (window.updateDriveUI) tasks.push(Promise.resolve(window.updateDriveUI()));
         if (window.restoreScreensDistributionState) tasks.push(Promise.resolve(window.restoreScreensDistributionState()));
@@ -599,6 +602,9 @@ async function runMainTabWork(tab) {
         }
         if (window.syncDriveScreenshots) tasks.push(Promise.resolve(window.syncDriveScreenshots(true)));
         if (window.refreshReviewRequestButtons) tasks.push(Promise.resolve(window.refreshReviewRequestButtons()));
+    }
+    if (tab === 'stop-errors') {
+        if (window.initStopReview) window.initStopReview();
         if (window.refreshStopReview) tasks.push(Promise.resolve(window.refreshStopReview()));
     }
     if (tab === 'calendar' && window.refreshReviewRequestButtons) tasks.push(Promise.resolve(window.refreshReviewRequestButtons()));
@@ -662,6 +668,8 @@ const ROUTE_TABS = {
     '/sheet-import': 'table',
     '/screen': 'screens',
     '/screens': 'screens',
+    '/mistakes': 'stop-errors',
+    '/errors': 'stop-errors',
     '/ai': 'ai',
     '/mentor-review': 'mentor-review',
     '/playbook': 'playbook',

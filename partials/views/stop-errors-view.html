@@ -1,0 +1,57 @@
+        <div id="view-stop-errors" class="view-content">
+            <section class="panel stop-review-panel" id="stop-review-panel">
+                <div class="stop-review-header">
+                    <div>
+                        <span class="section-kicker">Робота над дисципліною</span>
+                        <h2>Розбір стопів</h2>
+                        <p>Відберіть стопи з імпортованої таблиці, оцініть якість входу та прив’яжіть повторювані помилки.</p>
+                    </div>
+                    <button type="button" class="btn-primary btn-auto" data-stop-review-open>Відкрити розбір</button>
+                </div>
+                <div id="stop-review-setup" class="stop-review-setup initially-hidden">
+                    <div class="stop-setup-step"><span>1</span><div><h3>Оберіть період</h3><p>За який час передивитися стопи?</p></div></div>
+                    <div class="stop-date-picker">
+                        <label><span>Від</span><input class="stop-review-date" id="stop-review-from" type="date"></label>
+                        <span class="stop-date-arrow">→</span>
+                        <label><span>До</span><input class="stop-review-date" id="stop-review-to" type="date"></label>
+                    </div>
+                    <div class="stop-setup-step"><span>2</span><div><h3>Які стопи переглянути?</h3><p>Оберіть одну чергу для цього перегляду.</p></div></div>
+                    <div class="stop-queue-options">
+                        <button type="button" class="selected" data-stop-queue="pending"><strong>Нові стопи</strong><small>Ще не переглядалися</small></button>
+                        <button type="button" data-stop-queue="mistakes"><strong>Погані та сумнівні</strong><small>Розібрати помилки</small></button>
+                        <button type="button" data-stop-queue="all"><strong>Усі стопи</strong><small>Переглянути повторно</small></button>
+                    </div>
+                    <button type="button" class="btn-primary stop-review-start" data-stop-review-start>Почати перегляд →</button>
+                </div>
+                <div id="stop-review-workspace" class="stop-review-workspace initially-hidden">
+                    <div class="stop-review-toolbar">
+                        <button type="button" class="btn-secondary btn-auto" data-stop-review-back>← Змінити вибір</button>
+                        <span id="stop-review-selection"></span>
+                    </div>
+                    <div class="stop-review-queue-head">
+                        <span id="stop-review-summary"></span>
+                        <div class="stop-review-navigation">
+                            <button type="button" class="btn-secondary btn-auto" data-stop-prev aria-label="Попередній стоп">←</button>
+                            <strong id="stop-review-progress">0 / 0</strong>
+                            <button type="button" class="btn-secondary btn-auto" data-stop-next aria-label="Наступний стоп">→</button>
+                        </div>
+                    </div>
+                    <div id="stop-review-card" class="stop-review-card"></div>
+                </div>
+            </section>
+
+            <section class="panel stop-mistakes-panel" id="stop-mistakes-panel">
+                <div class="stop-mistakes-head">
+                    <div>
+                        <span class="section-kicker">Власна база знань</span>
+                        <h2>Помилки</h2>
+                        <p>Список помилок і всі прив’язані до них стопи зі скріншотами.</p>
+                    </div>
+                    <button type="button" class="btn-primary btn-auto" data-mistake-add>+ Додати помилку</button>
+                </div>
+                <div class="stop-mistakes-layout">
+                    <aside id="stop-mistakes-list" class="stop-mistakes-list"></aside>
+                    <div id="stop-mistake-detail" class="stop-mistake-detail"></div>
+                </div>
+            </section>
+        </div>

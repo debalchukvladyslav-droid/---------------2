@@ -335,10 +335,11 @@ function renderMistakeCatalog() {
             <textarea class="stop-mistake-description" rows="5" placeholder="Опишіть детальніше, як розпізнати цю помилку та що робити інакше.">${escapeHtml(selected.description)}</textarea>
             <div class="stop-mistake-detail-actions"><button type="button" class="btn-primary btn-auto" data-mistake-save>Зберегти</button><button type="button" class="btn-secondary btn-auto" data-mistake-archive>${selected.archived ? 'Відновити' : 'Архівувати'}</button></div>
             <h4>Прив’язані стопи · ${linked.length}</h4>
-            <div class="stop-mistake-linked">${linked.length ? linked.map(review => `<button type="button" data-open-review="${review.id}"><strong>${escapeHtml(review.symbol)}</strong><span>${review.trade_date}</span><small>${STATUS_LABELS[reviewStatus(review)] || reviewStatus(review)}</small></button>`).join('') : '<p>До цієї помилки ще нічого не прив’язано.</p>'}</div>`;
+            <div class="stop-mistake-linked">${linked.length ? linked.map(review => `<button type="button" data-open-review="${review.id}"><span class="stop-mistake-thumb" data-mistake-thumb="${review.id}"></span><strong>${escapeHtml(review.symbol)}</strong><span>${review.trade_date}</span><small>${STATUS_LABELS[reviewStatus(review)] || reviewStatus(review)}</small></button>`).join('') : '<p>До цієї помилки ще нічого не прив’язано.</p>'}</div>`;
         detail.querySelector('[data-mistake-save]')?.addEventListener('click', () => saveMistake(selected, detail));
         detail.querySelector('[data-mistake-archive]')?.addEventListener('click', () => toggleArchive(selected));
         detail.querySelectorAll('[data-open-review]').forEach(button => button.addEventListener('click', () => openLinkedReview(button.dataset.openReview)));
+        void hydrateMistakeThumbnails(detail, linked);
     }
     list.querySelectorAll('[data-mistake-select]').forEach(button => button.addEventListener('click', event => {
         if (event.target.closest('[data-mistake-move]')) return;
@@ -348,6 +349,21 @@ function renderMistakeCatalog() {
     list.querySelectorAll('[data-mistake-move]').forEach(button => button.addEventListener('click', event => {
         event.stopPropagation();
         moveMistake(button.dataset.mistakeMove, Number(button.dataset.direction));
+    }));
+}
+
+async function hydrateMistakeThumbnails(detail, reviews) {
+    await Promise.all(reviews.map(async review => {
+        const target = detail.querySelector(`[data-mistake-thumb="${review.id}"]`);
+        if (!target) return;
+        const paths = Array.isArray(review.screenshot_paths) ? review.screenshot_paths : [];
+        let src = paths.length ? await urlFor(paths[0]) : '';
+        if (!src) {
+            const refs = Array.isArray(review.trade_refs) ? review.trade_refs : [];
+            const driveId = refs.map(ref => googleDriveFileId(ref.screenshotUrl)).find(Boolean);
+            if (driveId) src = await drivePreviewUrl(driveId);
+        }
+        if (src && target.isConnected) target.innerHTML = `<img src="${escapeHtml(src)}" alt="${escapeHtml(review.symbol)}">`;
     }));
 }
 
@@ -404,7 +420,11 @@ function openLinkedReview(id) {
     rebuildQueue();
     const index = runtime.queue.findIndex(item => item.id === id);
     if (index >= 0) runtime.index = index;
-    document.getElementById('stop-review-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const workspace = document.getElementById('stop-review-workspace');
+    document.getElementById('stop-review-setup')?.classList.add('initially-hidden');
+    workspace?.classList.remove('initially-hidden');
+    workspace?.classList.add('stop-review-fullscreen');
+    document.body.classList.add('stop-review-open');
     void renderCurrentCard();
 }
 
@@ -433,7 +453,7 @@ async function renderAll(options = {}) {
 
 function bindUI() {
     if (runtime.ready) return;
-    const root = document.getElementById('stop-review-panel');
+    const root = document.getElementById('view-stop-errors');
     if (!root) return;
     runtime.ready = true;
     const defaults = monthBounds();
