@@ -7,7 +7,8 @@ import {
     sendJson,
     SERVICE_BOT_PERMISSION,
 } from '../../lib/service_bots.js';
-import { supabaseRest } from '../_google_sheet_sync_lib.js';
+import { supabaseRest } from '../../lib/google_sheet_sync.js';
+import registrationRequestsHandler from '../../lib/registration_requests.js';
 
 function botSelect() {
     return 'id,name,bot_type,user_id,extra_data,enabled,last_used_at,created_at,updated_at';
@@ -110,6 +111,9 @@ async function fetchExternalPproProbe(body = {}) {
 }
 
 export default async function handler(req, res) {
+    if (String(req.query?.resource || '') === 'registration-requests') {
+        return registrationRequestsHandler(req, res);
+    }
     try {
         await requireAdmin(req);
         const id = String(req.query?.id || '').trim();

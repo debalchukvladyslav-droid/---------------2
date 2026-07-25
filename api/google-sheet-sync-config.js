@@ -1,4 +1,4 @@
-import { supabaseRest, verifySupabaseUser } from './_google_sheet_sync_lib.js';
+import { supabaseRest, verifySupabaseUser } from '../lib/google_sheet_sync.js';
 import { migrateLegacyClassificationMapping } from '../js/sheet_auto_mapping.js';
 
 function sendJson(res, status, body) {

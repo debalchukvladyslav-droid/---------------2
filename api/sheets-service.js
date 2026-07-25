@@ -1,4 +1,4 @@
-import { verifySupabaseUser } from './_google_sheet_sync_lib.js';
+import { verifySupabaseUser } from '../lib/google_sheet_sync.js';
 
 function sendJson(res, status, body) {
     res.status(status).setHeader('Content-Type', 'application/json; charset=utf-8');

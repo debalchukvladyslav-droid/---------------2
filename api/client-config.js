@@ -19,6 +19,12 @@ function serviceAccountEmail() {
 }
 
 export default function handler(req, res) {
+    if (String(req.query?.mode || '') === 'server-time') {
+        if (req.method !== 'GET') return res.status(405).json({ message: 'Method not allowed' });
+        const epochMs = Date.now();
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        return res.status(200).json({ epochMs, iso: new Date(epochMs).toISOString() });
+    }
     const config = {
         supabaseUrl: pickEnv('SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL'),
         supabaseAnonKey: pickEnv('SUPABASE_ANON_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY'),

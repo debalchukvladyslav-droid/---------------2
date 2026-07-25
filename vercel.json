@@ -7,6 +7,8 @@
   ],
   "rewrites": [
     { "source": "/config.js", "destination": "/api/client-config.js" },
+    { "source": "/api/server-time", "destination": "/api/client-config?mode=server-time" },
+    { "source": "/api/admin/registration-requests", "destination": "/api/admin/service-bots?resource=registration-requests" },
     { "source": "/dashboard", "destination": "/index.html" },
     { "source": "/calendar", "destination": "/index.html" },
     { "source": "/stats", "destination": "/index.html" },

@@ -1,4 +1,4 @@
-import { verifySupabaseUser } from './_google_sheet_sync_lib.js';
+import { verifySupabaseUser } from '../lib/google_sheet_sync.js';
 
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
 

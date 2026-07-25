@@ -1,4 +1,4 @@
-import { supabaseRest, verifySupabaseUser } from './_google_sheet_sync_lib.js';
+import { supabaseRest, verifySupabaseUser } from '../lib/google_sheet_sync.js';
 
 const ADMIN_EMAIL = process.env.REGISTRATION_ADMIN_EMAIL || 'debalchukvladyslav@gmail.com';
 
