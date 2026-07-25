@@ -7,7 +7,7 @@ import { buildStopReviewCandidates, googleDriveFileId, isStopExitReason, normali
 const STATUS_LABELS = {
     normal: 'Нормальний стоп',
     bad: 'Поганий стоп',
-    uncertain: 'Сумнівний',
+    uncertain: 'Нерозібраний',
 };
 
 const runtime = {
@@ -18,8 +18,8 @@ const runtime = {
     candidates: [],
     queue: [],
     index: 0,
-    stage: 'classify',
     statusFilter: 'pending',
+    skippedReviewIds: new Set(),
     selectedMistakeId: '',
     imageUrls: new Map(),
 };
@@ -154,17 +154,10 @@ function reviewStatus(review) {
 function rebuildQueue() {
     const { from, to } = selectedRange();
     const active = runtime.reviews.filter(row => row.active && (!from || row.trade_date >= from) && (!to || row.trade_date <= to));
-    if (runtime.stage === 'mistakes') {
-        runtime.queue = active.filter(row => {
-            if (row.initial_status !== 'bad' && row.initial_status !== 'uncertain') return false;
-            if (row.final_status === 'normal') return false;
-            const hasMistake = runtime.links.some(link => link.review_id === row.id);
-            return !hasMistake;
-        });
-    } else if (runtime.statusFilter === 'all') {
+    if (runtime.statusFilter === 'all') {
         runtime.queue = active;
     } else if (runtime.statusFilter === 'pending') {
-        runtime.queue = active.filter(row => !row.initial_status);
+        runtime.queue = active.filter(row => (!row.initial_status || row.initial_status === 'uncertain') && !runtime.skippedReviewIds.has(row.id));
     } else {
         runtime.queue = active.filter(row => reviewStatus(row) === runtime.statusFilter);
     }
@@ -216,21 +209,12 @@ async function renderCurrentCard() {
     const review = runtime.queue[runtime.index];
     if (progress) progress.textContent = runtime.queue.length ? `${runtime.index + 1} / ${runtime.queue.length}` : '0 / 0';
     if (!review) {
-        const canContinue = runtime.stage === 'classify' && runtime.statusFilter === 'pending';
-        const { from, to } = selectedRange();
-        const nextCount = runtime.reviews.filter(row =>
-            row.active
-            && row.trade_date >= from
-            && row.trade_date <= to
-            && (row.initial_status === 'bad' || row.initial_status === 'uncertain')
-        ).length;
+        const canContinue = runtime.statusFilter === 'pending';
         host.innerHTML = `<div class="stop-review-empty stop-review-complete">
             <span class="stop-complete-icon">✓</span>
-            <h3>${canContinue ? 'Усі нові стопи переглянуто' : (runtime.stage === 'mistakes' ? 'Розбір помилок завершено' : 'У цій черзі стопів немає')}</h3>
-            <p>${canContinue ? `До наступного етапу потрапило: ${nextCount}` : 'Для вибраного періоду більше немає стопів.'}</p>
-            ${canContinue && nextCount ? '<button type="button" class="btn-primary btn-auto" data-go-mistakes>Перейти до розбору помилок →</button>' : ''}
+            <h3>${canContinue ? 'Усі нові стопи переглянуто' : 'У цій черзі стопів немає'}</h3>
+            <p>${canContinue ? 'Можна відкрити всі стопи або змінити період.' : 'Для вибраного періоду більше немає стопів.'}</p>
         </div>`;
-        host.querySelector('[data-go-mistakes]')?.addEventListener('click', goToMistakesStage);
         return;
     }
     const paths = Array.isArray(review.screenshot_paths) ? review.screenshot_paths : [];
@@ -252,18 +236,17 @@ async function renderCurrentCard() {
         <div class="stop-review-images">
             ${urls.length ? urls.map((url, index) => `<button class="stop-review-image" type="button" data-stop-image="${escapeHtml(url)}"><img src="${escapeHtml(url)}" alt="${escapeHtml(review.symbol)} — скріншот ${index + 1}"></button>`).join('') : '<div class="stop-review-no-image">Не вдалося відкрити скріншот. Надайте service account доступ до файлу або папки Drive, потім оновіть імпорт таблиці.</div>'}
         </div>
-        ${runtime.stage === 'classify' ? `
+        ${review.initial_status !== 'bad' ? `
             <div class="stop-review-actions">
                 <button type="button" class="stop-choice normal ${review.initial_status === 'normal' ? 'selected' : ''}" data-stop-status="normal">Нормальний стоп</button>
                 <button type="button" class="stop-choice bad ${review.initial_status === 'bad' ? 'selected' : ''}" data-stop-status="bad">Поганий стоп</button>
-                <button type="button" class="stop-choice uncertain ${review.initial_status === 'uncertain' ? 'selected' : ''}" data-stop-status="uncertain">Сумнівний</button>
+                <button type="button" class="stop-choice uncertain" data-stop-skip>Пропустити</button>
             </div>` : `
             <aside class="stop-stage2-mistakes">
                 <div class="stop-stage2-head"><h4>Помилки</h4><button type="button" data-stage2-add aria-label="Додати помилку">+</button></div>
                 <div class="stop-mistake-picker">${mistakeOptions.length ? mistakeOptions.map(item => `<div class="stop-stage2-mistake ${item.archived ? 'archived' : ''}"><label><input type="checkbox" value="${item.id}" data-stop-mistake ${chosen.has(item.id) ? 'checked' : ''}><span>${escapeHtml(item.title)}</span></label><button type="button" data-stage2-edit="${item.id}" aria-label="Редагувати ${escapeHtml(item.title)}">✎</button></div>`).join('') : '<p>Додайте першу помилку кнопкою «+».</p>'}</div>
             </aside>
             <div class="stop-finalize">
-                ${review.initial_status === 'uncertain' ? `<div class="stop-review-actions compact"><button type="button" class="stop-choice normal ${review.final_status === 'normal' ? 'selected' : ''}" data-stop-final="normal">Все ж нормальний</button><button type="button" class="stop-choice bad ${review.final_status === 'bad' ? 'selected' : ''}" data-stop-final="bad">Поганий</button></div>` : ''}
                 <button type="button" class="btn-primary btn-auto" data-stop-complete>Зберегти й перейти далі</button>
             </div>`}
     `;
@@ -272,24 +255,20 @@ async function renderCurrentCard() {
         window.openZoomGallery?.(button.dataset.stopImage, all);
     }));
     host.querySelectorAll('[data-stop-status]').forEach(button => button.addEventListener('click', () => classify(review, button.dataset.stopStatus)));
-    host.querySelectorAll('[data-stop-final]').forEach(button => button.addEventListener('click', () => finalizeStatus(review, button.dataset.stopFinal)));
+    host.querySelector('[data-stop-skip]')?.addEventListener('click', skipCurrent);
     host.querySelector('[data-stop-complete]')?.addEventListener('click', () => completeMistakes(review, host));
     host.querySelector('[data-stage2-add]')?.addEventListener('click', addMistake);
     host.querySelectorAll('[data-stage2-edit]').forEach(button => button.addEventListener('click', () => quickEditMistake(button.dataset.stage2Edit)));
 }
 
-function goToMistakesStage() {
-    runtime.stage = 'mistakes';
-    runtime.index = 0;
-    rebuildQueue();
-    const range = selectedRange();
-    const selection = document.getElementById('stop-review-selection');
-    if (selection) selection.textContent = `Погані та сумнівні · ${range.from} — ${range.to}`;
-    void renderCurrentCard();
-}
-
 async function classify(review, status) {
     if (!isOwner()) return showToast('Рев’ю може змінювати лише власник профілю.');
+    if (status === 'bad') {
+        review.initial_status = 'bad';
+        review.final_status = 'bad';
+        await renderCurrentCard();
+        return;
+    }
     const finalStatus = status === 'normal' ? 'normal' : (status === 'bad' ? 'bad' : null);
     const { error } = await supabase.from('stop_reviews').update({
         initial_status: status,
@@ -304,30 +283,35 @@ async function classify(review, status) {
     renderSummary();
 }
 
-async function finalizeStatus(review, status) {
-    if (!isOwner()) return;
-    const { error } = await supabase.from('stop_reviews').update({ final_status: status, updated_at: new Date().toISOString() }).eq('id', review.id);
-    if (error) showToast(`Не вдалося зберегти: ${error.message}`);
-    else {
-        review.final_status = status;
-        await renderCurrentCard();
+function skipCurrent() {
+    const review = runtime.queue[runtime.index];
+    if (!review) return;
+    if (runtime.statusFilter === 'pending') {
+        runtime.skippedReviewIds.add(review.id);
+        rebuildQueue();
+    } else {
+        runtime.index = Math.min(runtime.queue.length - 1, runtime.index + 1);
     }
+    void renderCurrentCard();
 }
 
 async function completeMistakes(review, host) {
     if (!isOwner()) return showToast('Рев’ю може змінювати лише власник профілю.');
-    const finalStatus = review.final_status || (review.initial_status === 'bad' ? 'bad' : null);
     const ids = [...host.querySelectorAll('[data-stop-mistake]:checked')].map(input => input.value);
-    if (!finalStatus) return showToast('Спочатку уточніть: нормальний це стоп чи поганий.');
-    if (finalStatus === 'bad' && !ids.length) return showToast('Для поганого стопа виберіть хоча б одну помилку.');
+    if (!ids.length) return showToast('Для поганого стопа виберіть хоча б одну помилку.');
     const { error: deleteError } = await supabase.from('stop_review_mistakes').delete().eq('review_id', review.id);
     if (deleteError) return showToast(deleteError.message);
-    if (finalStatus === 'bad') {
-        const { error } = await supabase.from('stop_review_mistakes').insert(ids.map(mistakeId => ({ review_id: review.id, mistake_id: mistakeId })));
-        if (error) return showToast(error.message);
-    }
+    const { error } = await supabase.from('stop_review_mistakes').insert(ids.map(mistakeId => ({ review_id: review.id, mistake_id: mistakeId })));
+    if (error) return showToast(error.message);
+    const { error: statusError } = await supabase.from('stop_reviews').update({
+        initial_status: 'bad',
+        final_status: 'bad',
+        updated_at: new Date().toISOString(),
+    }).eq('id', review.id);
+    if (statusError) return showToast(statusError.message);
     await loadRemoteData();
     rebuildQueue();
+    if (runtime.statusFilter === 'all') runtime.index = Math.min(runtime.index + 1, runtime.queue.length - 1);
     await renderCurrentCard();
     renderMistakeCatalog();
     showToast('Розбір стопа збережено.');
@@ -338,9 +322,12 @@ function renderSummary() {
     if (!el) return;
     const { from, to } = selectedRange();
     const rows = runtime.reviews.filter(row => row.active && row.trade_date >= from && row.trade_date <= to);
-    const counts = { pending: 0, normal: 0, bad: 0, uncertain: 0 };
-    rows.forEach(row => { counts[reviewStatus(row)] = (counts[reviewStatus(row)] || 0) + 1; });
-    el.textContent = `Нерозібрані ${counts.pending} · Нормальні ${counts.normal} · Погані ${counts.bad} · Сумнівні ${counts.uncertain}`;
+    const counts = { pending: 0, normal: 0, bad: 0 };
+    rows.forEach(row => {
+        const status = reviewStatus(row);
+        counts[status === 'uncertain' ? 'pending' : status] = (counts[status === 'uncertain' ? 'pending' : status] || 0) + 1;
+    });
+    el.textContent = `Нерозібрані ${counts.pending} · Нормальні ${counts.normal} · Погані ${counts.bad}`;
 }
 
 function renderMistakeCatalog() {
@@ -464,8 +451,7 @@ async function moveMistake(id, direction) {
 }
 
 function openLinkedReview(id) {
-    runtime.stage = 'mistakes';
-    updateStageButtons();
+    runtime.statusFilter = 'all';
     rebuildQueue();
     const index = runtime.queue.findIndex(item => item.id === id);
     if (index >= 0) runtime.index = index;
@@ -475,11 +461,6 @@ function openLinkedReview(id) {
     workspace?.classList.add('stop-review-fullscreen');
     document.body.classList.add('stop-review-open');
     void renderCurrentCard();
-}
-
-function updateStageButtons() {
-    document.querySelectorAll('[data-stop-stage]').forEach(button => button.classList.toggle('active', button.dataset.stopStage === runtime.stage));
-    document.getElementById('stop-status-filter-wrap')?.classList.toggle('initially-hidden', runtime.stage !== 'classify');
 }
 
 function mountFullscreenWorkspace() {
@@ -524,10 +505,10 @@ function bindUI() {
     }));
     root.querySelector('[data-stop-review-start]')?.addEventListener('click', async () => {
         const selected = root.querySelector('[data-stop-queue].selected')?.dataset.stopQueue || 'pending';
-        runtime.stage = selected === 'mistakes' ? 'mistakes' : 'classify';
         runtime.statusFilter = selected === 'all' ? 'all' : 'pending';
+        runtime.skippedReviewIds.clear();
         runtime.index = 0;
-        const labels = { pending: 'Нові стопи', mistakes: 'Погані та сумнівні', all: 'Усі стопи' };
+        const labels = { pending: 'Нові стопи', all: 'Усі стопи' };
         const range = selectedRange();
         const selection = document.getElementById('stop-review-selection');
         if (selection) selection.textContent = `${labels[selected]} · ${range.from} — ${range.to}`;
