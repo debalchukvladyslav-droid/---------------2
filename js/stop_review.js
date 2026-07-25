@@ -420,7 +420,7 @@ function openLinkedReview(id) {
     rebuildQueue();
     const index = runtime.queue.findIndex(item => item.id === id);
     if (index >= 0) runtime.index = index;
-    const workspace = document.getElementById('stop-review-workspace');
+    const workspace = mountFullscreenWorkspace();
     document.getElementById('stop-review-setup')?.classList.add('initially-hidden');
     workspace?.classList.remove('initially-hidden');
     workspace?.classList.add('stop-review-fullscreen');
@@ -433,8 +433,15 @@ function updateStageButtons() {
     document.getElementById('stop-status-filter-wrap')?.classList.toggle('initially-hidden', runtime.stage !== 'classify');
 }
 
-async function renderAll(options = {}) {
+function mountFullscreenWorkspace() {
     const workspace = document.getElementById('stop-review-workspace');
+    if (!workspace) return null;
+    if (workspace.parentElement !== document.body) document.body.appendChild(workspace);
+    return workspace;
+}
+
+async function renderAll(options = {}) {
+    const workspace = mountFullscreenWorkspace();
     if (!workspace) return;
     workspace.classList.add('loading');
     try {
@@ -476,7 +483,7 @@ function bindUI() {
         const selection = document.getElementById('stop-review-selection');
         if (selection) selection.textContent = `${labels[selected]} · ${range.from} — ${range.to}`;
         document.getElementById('stop-review-setup')?.classList.add('initially-hidden');
-        const workspace = document.getElementById('stop-review-workspace');
+        const workspace = mountFullscreenWorkspace();
         workspace?.classList.remove('initially-hidden');
         workspace?.classList.add('stop-review-fullscreen');
         document.body.classList.add('stop-review-open');
