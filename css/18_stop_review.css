@@ -581,3 +581,52 @@ body.stop-review-open {
         width: auto;
     }
 }
+
+/* Desktop: dedicated left/right rails keep every control outside the screenshot. */
+@media(min-width:761px) {
+    .stop-review-fullscreen .stop-review-card { margin-top:68px; border-radius:12px; }
+    .stop-review-fullscreen .stop-review-images {
+        inset:0 198px 0 218px;
+        min-height:0;
+        height:auto;
+        border-right:1px solid rgba(255,255,255,.1);
+        border-left:1px solid rgba(255,255,255,.1);
+        background:#020303;
+    }
+    .stop-review-fullscreen .stop-review-meta {
+        top:12px; left:12px; width:190px; max-width:190px;
+        border-color:var(--border-color); background:var(--bg-main);
+        box-shadow:none; backdrop-filter:none;
+    }
+    .stop-review-fullscreen .stop-review-trades {
+        top:132px; left:12px; width:190px; max-width:190px;
+    }
+    .stop-review-fullscreen .stop-review-trades span {
+        width:100%; white-space:normal; background:var(--bg-main);
+        box-shadow:none; backdrop-filter:none;
+    }
+    .stop-review-fullscreen .stop-review-actions {
+        top:50%; right:12px; width:174px; padding:7px;
+        border-color:var(--border-color); background:var(--bg-main);
+        box-shadow:none; backdrop-filter:none;
+    }
+    .stop-review-fullscreen .stop-choice {
+        min-height:42px; padding:8px 8px 8px 38px; font-size:.82rem;
+    }
+    .stop-review-fullscreen .stop-choice::before {
+        left:10px; width:18px; height:18px;
+    }
+    .stop-review-card:has(.stop-stage2-mistakes) .stop-review-images { right:246px; }
+    .stop-stage2-mistakes {
+        top:12px; right:12px; bottom:12px; width:220px;
+        padding:12px 12px 76px; border-color:var(--border-color);
+        background:var(--bg-main); box-shadow:none; backdrop-filter:none;
+    }
+    .stop-review-fullscreen .stop-finalize {
+        right:22px; bottom:22px; width:200px;
+        border-color:var(--border-color); background:var(--bg-panel);
+        box-shadow:none; backdrop-filter:none;
+    }
+    .stop-review-fullscreen.stop-ui-hidden .stop-review-card { margin-top:0; }
+    .stop-review-fullscreen.stop-ui-hidden .stop-review-images { inset:0; border:0; }
+}
