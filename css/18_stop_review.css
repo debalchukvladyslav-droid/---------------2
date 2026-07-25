@@ -223,9 +223,11 @@ body.stop-review-open {
     right: auto;
     z-index: 3;
     display: inline-flex;
+    align-items: flex-start;
+    flex-direction: column;
     width: max-content;
-    max-width: calc(100% - 28px);
-    gap: 36px;
+    max-width: min(240px, calc(100% - 28px));
+    gap: 5px;
     margin: 0;
     border: 1px solid rgba(255,255,255,.13);
     border-radius: 12px;
@@ -235,16 +237,26 @@ body.stop-review-open {
     backdrop-filter: blur(12px);
 }
 
+.stop-review-fullscreen .stop-review-meta > div:first-child {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+}
+
 .stop-review-fullscreen .stop-review-trades {
     position: absolute;
-    top: 78px;
+    top: 132px;
     left: 14px;
     z-index: 3;
-    max-width: calc(100% - 28px);
+    align-items: flex-start;
+    flex-direction: column;
+    max-width: min(280px, calc(100% - 28px));
     margin: 0;
 }
 
 .stop-review-fullscreen .stop-review-trades span {
+    width: max-content;
+    max-width: 100%;
     color: rgba(255,255,255,.82);
     background: rgba(5, 8, 7, .72);
     box-shadow: 0 7px 20px rgba(0,0,0,.2);
@@ -260,12 +272,70 @@ body.stop-review-open {
     width: min(900px, calc(100% - 32px));
     margin: 0;
     transform: translateX(-50%);
-    border: 1px solid rgba(255,255,255,.13);
+    border: 1px solid rgba(255,255,255,.28);
     border-radius: 14px;
     padding: 10px;
     background: rgba(5, 8, 7, .76);
     box-shadow: 0 -12px 34px rgba(0,0,0,.3);
     backdrop-filter: blur(14px);
+}
+
+.stop-review-fullscreen .stop-review-actions {
+    box-shadow:
+        0 0 0 1px rgba(255,255,255,.06) inset,
+        0 -12px 34px rgba(0,0,0,.3),
+        0 0 26px rgba(0,229,160,.07);
+}
+
+.stop-review-fullscreen .stop-choice {
+    position: relative;
+    min-height: 48px;
+    padding-left: 44px;
+    font-weight: 700;
+    letter-spacing: .01em;
+}
+
+.stop-review-fullscreen .stop-choice::before {
+    position: absolute;
+    top: 50%;
+    left: 15px;
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border: 1px solid currentColor;
+    border-radius: 7px;
+    transform: translateY(-50%);
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.stop-review-fullscreen .stop-choice.normal {
+    border-color: color-mix(in srgb,var(--profit) 62%,transparent);
+}
+.stop-review-fullscreen .stop-choice.normal::before {
+    content: "✓";
+    color: var(--profit);
+}
+.stop-review-fullscreen .stop-choice.bad {
+    border-color: color-mix(in srgb,var(--loss) 62%,transparent);
+}
+.stop-review-fullscreen .stop-choice.bad::before {
+    content: "!";
+    color: var(--loss);
+    border-radius: 50%;
+}
+.stop-review-fullscreen .stop-choice.uncertain {
+    border-color: color-mix(in srgb,#eab308 62%,transparent);
+}
+.stop-review-fullscreen .stop-choice.uncertain::before {
+    content: "?";
+    color: #eab308;
+}
+
+.ti-alert-triangle {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.3 2.9 1.8 17a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 2.9a2 2 0 0 0-3.4 0Z'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.3 2.9 1.8 17a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 2.9a2 2 0 0 0-3.4 0Z'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E");
 }
 
 .stop-review-fullscreen .stop-finalize {
@@ -310,13 +380,13 @@ body.stop-review-open {
         left: 8px;
         right: auto;
         width: max-content;
-        max-width: calc(100% - 16px);
-        gap: 18px;
+        max-width: min(210px, calc(100% - 16px));
+        gap: 4px;
     }
     .stop-review-fullscreen .stop-review-trades {
-        top: 70px;
+        top: 124px;
         left: 8px;
-        max-width: calc(100% - 16px);
+        max-width: min(230px, calc(100% - 16px));
     }
     .stop-review-fullscreen .stop-review-actions,
     .stop-review-fullscreen .stop-finalize {
