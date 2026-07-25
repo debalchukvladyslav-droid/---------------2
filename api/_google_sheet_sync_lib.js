@@ -55,7 +55,7 @@ export async function supabaseRest(path, options = {}) {
     return text ? JSON.parse(text) : null;
 }
 
-export async function verifySupabaseUser(authHeader) {
+export async function verifySupabaseUser(authHeader, options = {}) {
     const { url, anonKey } = getSupabaseEnv();
     const token = String(authHeader || '').startsWith('Bearer ') ? String(authHeader).slice(7) : '';
     if (!anonKey) throw new Error('SUPABASE_ANON_KEY is not configured');
@@ -67,7 +67,14 @@ export async function verifySupabaseUser(authHeader) {
         },
     });
     if (!response.ok) return null;
-    return response.json();
+    const user = await response.json();
+    if (options.requireApproved === false) return user;
+    const profiles = await supabaseRest(
+        `profiles?id=eq.${encodeURIComponent(user.id)}&select=settings,role&limit=1`,
+    );
+    const profile = profiles?.[0];
+    const approved = profile?.role === 'admin' || profile?.settings?.account_approved === true;
+    return approved ? user : null;
 }
 
 function base64Url(input) {

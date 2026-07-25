@@ -4,7 +4,7 @@
 import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { getDefaultDayEntry } from './data_utils.js';
-import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm, canAccessMentorReviewQueue, mentorAcceptReviewRequest, ensureAuthUserProfile, rejectBlockedProfile, isPasswordRecoveryUrl, showPasswordRecoveryForm } from './auth.js';
+import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm, canAccessMentorReviewQueue, mentorAcceptReviewRequest, ensureAuthUserProfile, rejectBlockedProfile, rejectPendingProfile, submitRegistrationRequest, isPasswordRecoveryUrl, showPasswordRecoveryForm } from './auth.js';
 import { loadTeams, openTeamManager, createNewTeam, moveTrader, deleteTeam, renameTeam, deleteTraderProfile, renderTeamSidebar, switchUser } from './teams.js';
 import { saveToLocal, saveJournalData, saveSettings, markJournalDayDirty, markAllJournalDirty, initializeApp, resetRuntimeDataForAccountSwitch, exportData, importData, loadMonth, loadTradeDays, resolveViewedUserId, setCurrentViewedUserId,
          loadBackgroundGallery } from './storage.js';
@@ -1171,7 +1171,26 @@ async function bootApp(user) {
         }
     }
 
+    if (bootProfile?.role !== 'admin' && bootProfile?.settings?.account_approved !== true) {
+        try {
+            await submitRegistrationRequest();
+            const refreshed = await supabase
+                .from('profiles')
+                .select('nick, role, mentor_enabled, settings')
+                .eq('id', user.id)
+                .maybeSingle();
+            bootProfile = refreshed.data || bootProfile;
+        } catch (error) {
+            console.error('[AUTH] registration request:', error);
+        }
+    }
+
     if (await rejectBlockedProfile(bootProfile)) {
+        _appInitialized = false;
+        hideAuthSpinner();
+        return;
+    }
+    if (await rejectPendingProfile(bootProfile)) {
         _appInitialized = false;
         hideAuthSpinner();
         return;

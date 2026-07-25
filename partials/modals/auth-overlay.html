@@ -13,11 +13,18 @@
             <select id="auth-team" class="auth-input">
                 <option value="" disabled selected>Оберіть свій кущ...</option>
             </select>
+            <p class="reset-text">Після підтвердження email заявка очікує схвалення адміністратора. Для захисту сервісу зберігаються IP, приблизна локація, час і дані браузера. Пароль адміністратору не передається.</p>
         </div>
 
         <div id="auth-error" class="auth-error" role="alert" aria-live="polite">Помилка</div>
         <button class="btn-primary" id="btn-submit" data-action="auth-submit">Увійти</button>
         
+        <div id="auth-pending-notice" class="reset-text" role="status" aria-live="polite" hidden>
+            ✅ Email підтверджено. Акаунт очікує схвалення адміністратора.<br>
+            Якщо потрібно зв’язатися з адміністратором:
+            <a class="auth-link" href="https://t.me/kofer563" target="_blank" rel="noopener noreferrer">@kofer563</a>
+        </div>
+
         <div class="auth-links">
             <span id="auth-switch-text">Ще немає акаунта?</span> 
             <span class="auth-link" id="auth-mode-toggle" role="button" tabindex="0" data-action="auth-toggle-mode">Створити</span>

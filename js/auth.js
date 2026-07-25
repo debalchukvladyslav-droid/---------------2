@@ -12,6 +12,7 @@ import {
 const PROFILE_SUFFIX = '_stats';
 export const ACCOUNT_BLOCKED_MESSAGE = 'Акаунт заблоковано. Зверніться до адміна.';
 let authRequestInProgress = false;
+export const ACCOUNT_PENDING_MESSAGE = 'Email підтверджено. Акаунт очікує схвалення адміністратора. Telegram: @kofer563';
 
 function getNickFromDocName(docName = '') {
     return String(docName).replace(/_stats$/, '');
@@ -40,6 +41,32 @@ export async function rejectBlockedProfile(profile) {
     if (!isProfileBlocked(profile)) return false;
     await supabase.auth.signOut().catch(() => {});
     showError(ACCOUNT_BLOCKED_MESSAGE);
+    return true;
+}
+
+export async function submitRegistrationRequest() {
+    const { data, error } = await supabase.auth.getSession();
+    const token = data?.session?.access_token;
+    if (error || !token) return null;
+    const response = await fetch('/api/registration-request', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload.ok === false) {
+        throw new Error(payload.error || 'Не вдалося надіслати заявку адміністратору');
+    }
+    return payload;
+}
+
+export async function rejectPendingProfile(profile) {
+    if (profile?.role === 'admin' || profile?.settings?.account_approved === true) return false;
+    await supabase.auth.signOut().catch(() => {});
+    const overlay = document.getElementById('auth-overlay');
+    if (overlay) overlay.style.display = '';
+    const notice = document.getElementById('auth-pending-notice');
+    if (notice) notice.hidden = false;
+    showError('');
     return true;
 }
 
@@ -439,6 +466,8 @@ export function toggleAuthMode() {
 
 export async function handleAuth() {
     if (authRequestInProgress) return;
+    const pendingNotice = document.getElementById('auth-pending-notice');
+    if (pendingNotice) pendingNotice.hidden = true;
     const rawLogin = document.getElementById('auth-nick').value.trim();
     const loginValue = rawLogin.toLowerCase();
     const pass = document.getElementById('auth-pass').value;

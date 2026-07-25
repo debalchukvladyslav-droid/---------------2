@@ -60,6 +60,7 @@ export async function renderAdminPanel() {
     const teamChoices = teamListForSelect();
 
     container.innerHTML = '';
+    if (fullAdmin) await renderRegistrationRequests(container);
     if (fullAdmin) renderServiceBotsPanel(profiles || []);
     visibleProfiles.forEach((p) => container.appendChild(buildUserCard(p, teamChoices, { fullAdmin, dataManager })));
 }
@@ -81,6 +82,63 @@ async function adminApiFetch(path, options = {}) {
         throw new Error(payload?.error || response.statusText || `HTTP ${response.status}`);
     }
     return payload;
+}
+
+async function renderRegistrationRequests(container) {
+    let requests = [];
+    try {
+        const payload = await adminApiFetch('/api/admin/registration-requests');
+        requests = Array.isArray(payload.requests) ? payload.requests : [];
+    } catch (error) {
+        const message = document.createElement('p');
+        message.className = 'admin-error';
+        message.textContent = `Заявки на реєстрацію: ${error?.message || error}`;
+        container.appendChild(message);
+        return;
+    }
+    if (!requests.length) return;
+
+    const title = document.createElement('h3');
+    title.className = 'admin-section-title';
+    title.textContent = `Очікують схвалення (${requests.length})`;
+    container.appendChild(title);
+
+    requests.forEach((profile) => {
+        const registration = profile.settings?.registration_request || {};
+        const card = document.createElement('div');
+        card.className = 'admin-user-card';
+        const location = [registration.city, registration.region, registration.country].filter(Boolean).join(', ') || 'Невідомо';
+        card.innerHTML = `
+            <div class="admin-user-head">
+                <div class="admin-user-title"><span>${escapeHtml(profile.nick || profile.email || profile.id)}</span></div>
+                <div class="admin-user-meta">${escapeHtml([profile.first_name, profile.last_name].filter(Boolean).join(' ') || '—')} · ${escapeHtml(profile.email || '—')}</div>
+                <div class="admin-user-meta">Команда: ${escapeHtml(profile.team || '—')}</div>
+                <div class="admin-user-meta">IP: ${escapeHtml(registration.ip || 'Невідомо')} · ${escapeHtml(location)}</div>
+                <div class="admin-user-meta">Заявка: ${escapeHtml(registration.requested_at ? new Date(registration.requested_at).toLocaleString() : 'після підтвердження email')}</div>
+            </div>
+            <div class="admin-user-actions">
+                <button type="button" class="btn-admin-action" data-registration-approve>Схвалити</button>
+                <button type="button" class="btn-admin-danger" data-registration-reject>Відхилити</button>
+            </div>
+        `;
+        const decide = async (action) => {
+            card.classList.add('admin-user-busy');
+            try {
+                await adminApiFetch('/api/admin/registration-requests', {
+                    method: 'PATCH',
+                    body: JSON.stringify({ user_id: profile.id, action }),
+                });
+                showToast(action === 'approve' ? 'Акаунт схвалено' : 'Заявку відхилено');
+                await renderAdminPanel();
+            } catch (error) {
+                card.classList.remove('admin-user-busy');
+                showToast(`Помилка: ${error?.message || error}`);
+            }
+        };
+        card.querySelector('[data-registration-approve]')?.addEventListener('click', () => decide('approve'));
+        card.querySelector('[data-registration-reject]')?.addEventListener('click', () => decide('reject'));
+        container.appendChild(card);
+    });
 }
 
 function renderServiceBotsPanel(profiles = []) {
