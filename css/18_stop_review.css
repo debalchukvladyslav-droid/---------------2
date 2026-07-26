@@ -486,6 +486,12 @@ body.stop-review-open {
     margin: 0;
 }
 
+.stop-stage2-head small,
+.stop-mistakes-source-note {
+    color: var(--text-muted);
+    font-size: .72rem;
+}
+
 .stop-stage2-head button {
     display: grid;
     place-items: center;
@@ -539,6 +545,10 @@ body.stop-review-open {
 .stop-stage2-mistake:has(input:checked) {
     border-color: var(--accent);
     background: color-mix(in srgb,var(--accent) 9%,transparent);
+}
+
+.stop-mistake-list-item {
+    padding-right: 12px;
 }
 
 @media(max-width:760px) {
