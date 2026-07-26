@@ -76,6 +76,43 @@
     </div>
 </div>
 
+<div id="cumulative-weekly-modal" class="app-modal-overlay cumulative-weekly-overlay" data-action="cumulative-weekly-backdrop">
+    <div class="cumulative-weekly-card" role="dialog" aria-modal="true" aria-labelledby="cumulative-weekly-title">
+        <header class="cumulative-weekly-head">
+            <div>
+                <div class="session-modal-kicker">Тижневий підсумок</div>
+                <h2 id="cumulative-weekly-title">Накопичувальна</h2>
+                <div id="cumulative-week-range" class="session-modal-date"></div>
+            </div>
+            <button type="button" class="cumulative-weekly-close" data-action="cumulative-weekly-close" aria-label="Закрити">×</button>
+        </header>
+        <label class="cumulative-week-picker">
+            <span>Тиждень</span>
+            <select id="cumulative-week-select" class="strip-select"></select>
+        </label>
+        <div class="cumulative-metrics">
+            <div><span>Профіт таблиця</span><strong id="cumulative-table-profit">$0.00</strong></div>
+            <div><span>Результат з метро</span><strong id="cumulative-metro-result">$0.00</strong></div>
+            <div><span>Результат PV/PV</span><strong id="cumulative-pv-result">0</strong></div>
+            <div><span>Результат не брав</span><strong id="cumulative-not-taken">0</strong></div>
+            <div class="cumulative-effectiveness-row">
+                <span>Результативність <button type="button" class="cumulative-settings-btn" data-action="cumulative-dayloss-toggle" title="Налаштувати дейлос" aria-label="Налаштувати дейлос">⚙</button></span>
+                <strong id="cumulative-effectiveness">—</strong>
+            </div>
+            <div><span>Виключення</span><strong id="cumulative-exceptions">$0.00</strong></div>
+            <div><span>Фіолетова</span><strong id="cumulative-purple">$0.00</strong></div>
+            <div><span>Візуально</span><strong id="cumulative-visual">$0.00</strong></div>
+        </div>
+        <div id="cumulative-dayloss-editor" class="cumulative-dayloss-editor initially-hidden">
+            <label>Дейлос для <span id="cumulative-dayloss-month"></span>
+                <input id="cumulative-dayloss-input" type="number" step="0.01" placeholder="100 або -100">
+            </label>
+            <button type="button" class="btn-primary" data-action="cumulative-dayloss-save">Зберегти</button>
+        </div>
+        <p id="cumulative-week-hint" class="cumulative-week-hint"></p>
+    </div>
+</div>
+
 <div id="live-news-modal" class="app-modal-overlay live-news-modal-overlay" data-action="live-news-backdrop">
     <div class="live-news-modal-card" role="dialog" aria-labelledby="live-news-title" aria-modal="true">
         <div class="live-news-modal-head">

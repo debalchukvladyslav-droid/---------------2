@@ -43,6 +43,55 @@ const { buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets,
 const { parseDecimalInput } = await import('../js/utils.js');
 const { getZonedClockParts, isEndOfSessionReviewTime } = await import('../js/session_schedule.js');
 const { buildServiceBotSnapshot, hashServiceBotApiKey, hasServiceBotPermission, parseServiceBotRange } = await import('../lib/service_bots.js');
+const { calculateCumulativeWeek, collectWeekStarts, getWeekRange, getWeekStartIso, parseCumulativeNumber } = await import('../js/cumulative_weekly.js');
+
+test('cumulative week uses Monday through Friday and parses supported numbers', () => {
+    assert.deepEqual(getWeekRange('2026-07-29').dates, ['2026-07-27', '2026-07-28', '2026-07-29', '2026-07-30', '2026-07-31']);
+    assert.equal(getWeekStartIso('2026-08-02'), '2026-07-27');
+    assert.equal(parseCumulativeNumber(' -1,25R '), -1.25);
+    assert.equal(parseCumulativeNumber('$42.50'), 42.5);
+    assert.equal(parseCumulativeNumber('none'), null);
+});
+
+test('cumulative week aggregates exact sheet types and authoritative imported pnl', () => {
+    const result = calculateCumulativeWeek({
+        weekStart: '2026-07-27',
+        dayloss: -100,
+        journal: {
+            '2026-07-27': {
+                fondexxSource: 'summary-by-date',
+                fondexx: { net: 25 },
+                pproSource: 'ppro-total-report',
+                ppro: { net: -5 },
+            },
+            '2026-07-28': { fondexxSource: 'trades', fondexx: { net: 999 } },
+            '2026-08-01': { pproSource: 'ppro-total-report', ppro: { net: 999 } },
+        },
+        rowsByDay: {
+            '2026-07-27': [
+                { sheet: { sheetNet: '$10', pv: '1,5R', tradeType: 'не брав' } },
+                { sheet: { sheetNet: '-3', pv: '-0.5', tradeType: 'виключення' } },
+                { sheet: { sheetNet: '7', pv: '2', tradeType: 'РПфіолетова' } },
+                { sheet: { sheetNet: '4', pv: '1', tradeType: 'РПвізуально' } },
+                { sheet: { sheetNet: '50', pv: '3', tradeType: 'Виключення' } },
+            ],
+            '2026-08-01': [{ sheet: { sheetNet: 999, pv: 999, tradeType: 'не брав' } }],
+        },
+    });
+    assert.equal(result.tableProfit, 68);
+    assert.equal(result.metroResult, 20);
+    assert.equal(result.pvResult, 7);
+    assert.equal(result.notTakenResult, 1.5);
+    assert.equal(result.exceptions, -3);
+    assert.equal(result.purple, 7);
+    assert.equal(result.visual, 4);
+    assert.equal(result.effectiveness, 0.2);
+});
+
+test('cumulative week list always includes current week', () => {
+    const weeks = collectWeekStarts({}, {}, new Date(2026, 6, 29));
+    assert.deepEqual(weeks, ['2026-07-27']);
+});
 
 test('parser utils find ECN fee columns across supported header names', () => {
     assert.equal(ecnFeeColumnIndex({ Symbol: 0, 'Ecn Fee': 4 }), 4);

@@ -53,6 +53,7 @@ import { initOnboarding, startOnboardingTour, resetOnboardingRuntime } from './o
 import { getTrustedServerNow, isEndOfSessionReviewTime } from './session_schedule.js';
 import { renderDashboardAI, refreshDashboardAI, toggleDashboardAIHistory, rotateDashboardAI, openDashboardMentor, closeDashboardMentor, sendDashboardMentorMessage, switchDashboardMentorTab } from './dashboard_ai.js';
 import { analyzeLossPatterns, renderLossPatternAnalysis } from './loss_pattern_analysis.js';
+import { closeCumulativeWeekly, openCumulativeWeekly, saveCumulativeDayloss, toggleCumulativeDayloss } from './cumulative_weekly_ui.js';
 
 let appShellPromise = null;
 let appShellEventsReady = false;
@@ -752,6 +753,10 @@ window.importFondexxReport = importFondexxReport;
 window.importFondexxSummaryByDate = importFondexxSummaryByDate;
 window.importPPROReport = importPPROReport;
 window.importFondexxTrades = importFondexxTrades;
+window.openCumulativeWeekly = openCumulativeWeekly;
+window.closeCumulativeWeekly = closeCumulativeWeekly;
+window.toggleCumulativeDayloss = toggleCumulativeDayloss;
+window.saveCumulativeDayloss = saveCumulativeDayloss;
 window.loadTradeChart = loadTradeChart;
 window.populateDateSelect = populateDateSelect;
 window.populateSymbolSelect = populateSymbolSelect;

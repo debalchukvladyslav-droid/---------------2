@@ -274,6 +274,15 @@ function activateAction(action, trigger, event = null) {
         'session-review-screen-prev': () => window.stepSessionReviewScreen?.(-1),
         'session-review-screen-next': () => window.stepSessionReviewScreen?.(1),
         'session-review-yesterday': () => window.toggleSessionReviewYesterday?.(),
+        'cumulative-weekly-open': () => window.openCumulativeWeekly?.(),
+        'cumulative-weekly-close': () => window.closeCumulativeWeekly?.(),
+        'cumulative-weekly-backdrop': () => {
+            if (event?.target !== trigger) return false;
+            window.closeCumulativeWeekly?.();
+            return true;
+        },
+        'cumulative-dayloss-toggle': () => window.toggleCumulativeDayloss?.(),
+        'cumulative-dayloss-save': () => window.saveCumulativeDayloss?.(),
         'live-news-open': () => window.openLiveNewsModal?.(),
         'live-news-refresh': () => window.refreshLiveNewsModal?.(),
         'live-news-close': () => window.closeLiveNewsModal?.(),
