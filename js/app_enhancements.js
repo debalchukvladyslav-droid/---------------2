@@ -134,7 +134,10 @@ function activateAction(action, trigger, event = null) {
         try {
             localStorage.setItem('tj:settings-backups:hidden', nextHidden ? '1' : '0');
         } catch {}
-        if (button) button.textContent = nextHidden ? 'Показати список' : 'Сховати список';
+        if (button) {
+            button.textContent = nextHidden ? 'Показати список' : 'Сховати список';
+            button.setAttribute('aria-expanded', String(!nextHidden));
+        }
         return true;
     };
 

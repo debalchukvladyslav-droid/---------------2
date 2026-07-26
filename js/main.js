@@ -843,7 +843,10 @@ function renderSettingsBackups() {
     const toggle = document.getElementById('settings-backup-toggle');
     const isHidden = localStorage.getItem('tj:settings-backups:hidden') !== '0';
     host.hidden = isHidden;
-    if (toggle) toggle.textContent = isHidden ? 'Показати список' : 'Сховати список';
+    if (toggle) {
+        toggle.textContent = isHidden ? 'Показати список' : 'Сховати список';
+        toggle.setAttribute('aria-expanded', String(!isHidden));
+    }
     const backups = listCompressedBackups();
     if (!backups.length) {
         host.innerHTML = '<p class="settings-copy-sm">Бекапів ще немає. Натисніть “Створити зараз” або запустіть синхронізацію.</p>';

@@ -4068,8 +4068,8 @@ body.is-offline [data-needs-network="true"] {
 }
 /* Settings backups */
 .settings-backup-panel {
-    margin-top: 14px;
-    padding-top: 14px;
+    margin-top: 10px;
+    padding-top: 10px;
     border-top: 1px solid var(--border);
 }
 
@@ -4077,13 +4077,13 @@ body.is-offline [data-needs-network="true"] {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 10px;
+    gap: 8px;
+    margin-bottom: 7px;
 }
 
 .settings-backup-title {
-    margin: 0 0 4px;
-    font-size: 0.95rem;
+    margin: 0 0 2px;
+    font-size: 0.86rem;
     font-weight: 800;
     color: var(--text-main);
 }
@@ -4091,15 +4091,19 @@ body.is-offline [data-needs-network="true"] {
 .settings-backup-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 4px;
+    max-height: 310px;
+    overflow-y: auto;
+    padding-right: 2px;
 }
+.settings-backup-list[hidden] { display: none !important; }
 
 .settings-backup-item {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 10px;
+    gap: 7px;
     align-items: center;
-    padding: 10px;
+    padding: 6px 8px;
     border: 1px solid var(--border);
     border-radius: 8px;
     background: color-mix(in srgb, var(--bg-panel) 86%, var(--bg-main));
@@ -4110,28 +4114,28 @@ body.is-offline [data-needs-network="true"] {
 }
 
 .settings-backup-name {
-    font-size: 0.86rem;
+    font-size: 0.78rem;
     font-weight: 750;
     color: var(--text-main);
 }
 
 .settings-backup-sub {
-    margin-top: 2px;
-    font-size: 0.74rem;
+    margin-top: 1px;
+    font-size: 0.68rem;
     color: var(--text-muted);
 }
 
 .settings-backup-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 4px;
     justify-content: flex-end;
 }
 
 .settings-backup-actions button {
-    min-height: 28px;
-    padding: 5px 8px;
-    font-size: 0.74rem;
+    min-height: 25px;
+    padding: 4px 7px;
+    font-size: 0.68rem;
 }
 
 #settings-backup-toggle {
