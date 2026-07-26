@@ -390,6 +390,7 @@ function recordMainTabActivity(tab) {
 function activateMainTab(trigger) {
     const tab = trigger?.dataset?.tab;
     if (!tab || typeof window.switchMainTab !== 'function') return false;
+    window.closeMobileMoreMenu?.();
     recordMainTabActivity(tab);
     Promise.resolve(window.switchMainTab(tab)).then(() => {
         const compareTrader = trigger?.dataset?.compareTrader;

@@ -736,7 +736,7 @@ export async function switchMainTab(tab, options = {}) {
         b.classList.toggle('active', b.dataset.tab === tab);
     });
     // Якщо активна вкладка в more menu — підсвічуємо кнопку Ще
-    const moreTabIds = ['trades', 'datagrid', 'table', 'calendar', /* 'playbook', */ 'learn', 'settings', 'mentor-review'];
+    const moreTabIds = ['trades', 'datagrid', 'table', 'calendar', 'stop-errors', /* 'playbook', */ 'learn', 'settings', 'mentor-review', 'admin'];
     const moreBtn = document.querySelector('.mobile-nav-more-btn');
     if (moreBtn) moreBtn.classList.toggle('more-open', moreTabIds.includes(tab));
 
@@ -787,20 +787,31 @@ export function toggleMobileMoreMenu() {
     const menu = document.getElementById('mobile-more-menu');
     if (!menu) return;
     const isOpen = menu.classList.contains('open');
-    if (isOpen) {
-        menu.classList.remove('open');
-    } else {
-        menu.classList.add('open');
-    }
+    menu.classList.toggle('open', !isOpen);
+    document.querySelector('.mobile-more-backdrop')?.classList.toggle('open', !isOpen);
+    document.body.classList.toggle('mobile-nav-open', !isOpen);
     const btn = document.querySelector('.mobile-nav-more-btn');
-    if (btn) btn.classList.toggle('more-open', !isOpen);
+    if (btn) {
+        btn.classList.toggle('more-open', !isOpen);
+        btn.setAttribute('aria-expanded', String(!isOpen));
+    }
+    if (!isOpen) {
+        window.setTimeout(() => menu.querySelector('.mobile-more-item.active, .mobile-more-item')?.focus(), 50);
+    } else {
+        btn?.focus();
+    }
 }
 
 export function closeMobileMoreMenu() {
     const menu = document.getElementById('mobile-more-menu');
     if (menu) menu.classList.remove('open');
+    document.querySelector('.mobile-more-backdrop')?.classList.remove('open');
+    document.body.classList.remove('mobile-nav-open');
     const btn = document.querySelector('.mobile-nav-more-btn');
-    if (btn) btn.classList.remove('more-open');
+    if (btn) {
+        btn.classList.remove('more-open');
+        btn.setAttribute('aria-expanded', 'false');
+    }
 }
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -816,6 +827,15 @@ window.addEventListener('DOMContentLoaded', () => {
         if (!e.target.closest('.stats-bar-item') && window.closeStatsDropdown) {
             window.closeStatsDropdown();
         }
+    });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && document.getElementById('mobile-more-menu')?.classList.contains('open')) {
+            closeMobileMoreMenu();
+            document.querySelector('.mobile-nav-more-btn')?.focus();
+        }
+    });
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 1024) closeMobileMoreMenu();
     });
 });
 

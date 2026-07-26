@@ -32,44 +32,69 @@
             </div>
         </header>
 
-        <!-- Старий mobile-tabs-wrapper для мобільних -->
+        <!-- Mobile compact header -->
         <div class="mobile-tabs-wrapper">
-            <button id="mobile-menu-btn" class="mobile-menu-btn" data-action="mobile-sidebar-toggle">☰</button>
+            <span class="mobile-brand-mark" aria-hidden="true">TJ</span>
             <span id="mobile-section-title" class="mobile-section-title">Огляд</span>
+            <button id="mobile-quick-add-btn" class="mobile-menu-btn" data-action="right-sidebar-toggle" aria-label="Додати запис" title="Додати запис">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
         </div>
 
         <!-- Bottom Navigation (mobile only) -->
-        <nav class="mobile-bottom-nav">
-            <button class="mobile-nav-btn active" data-tab="dash">
+        <nav class="mobile-bottom-nav" aria-label="Основна навігація">
+            <button class="mobile-nav-btn active" data-tab="dash" aria-label="Огляд">
+                <span class="mobile-nav-icon ti-icon ti-chart-bar" aria-hidden="true"></span>
                 <span>Огляд</span>
             </button>
-            <button class="mobile-nav-btn" data-tab="stats">
+            <button class="mobile-nav-btn" data-tab="stats" aria-label="Аналітика">
+                <span class="mobile-nav-icon ti-icon ti-chart-line" aria-hidden="true"></span>
                 <span>Аналітика</span>
             </button>
-            <button class="mobile-nav-btn" data-tab="screens">
+            <button class="mobile-nav-btn" data-tab="screens" aria-label="Скріншоти">
+                <span class="mobile-nav-icon ti-icon ti-image" aria-hidden="true"></span>
                 <span>Скріни</span>
             </button>
-            <button class="mobile-nav-btn" data-tab="ai">
+            <button class="mobile-nav-btn" data-tab="ai" aria-label="AI Ментор">
+                <span class="mobile-nav-icon ti-icon ti-brain" aria-hidden="true"></span>
                 <span>AI</span>
             </button>
-            <button class="mobile-nav-btn mobile-nav-more-btn" data-action="mobile-more-toggle">
+            <button class="mobile-nav-btn mobile-nav-more-btn" data-action="mobile-more-toggle" aria-expanded="false" aria-controls="mobile-more-menu" aria-label="Усі розділи">
+                <span class="mobile-nav-more-icon" aria-hidden="true"><i></i><i></i><i></i></span>
                 <span>Ще</span>
             </button>
         </nav>
 
-        <div id="mobile-more-menu" class="mobile-more-menu">
+        <button type="button" class="mobile-more-backdrop" data-action="mobile-more-toggle" aria-label="Закрити меню" tabindex="-1"></button>
+        <div id="mobile-more-menu" class="mobile-more-menu" role="dialog" aria-modal="true" aria-labelledby="mobile-more-title">
+            <div class="mobile-more-handle" aria-hidden="true"></div>
+            <div class="mobile-more-head">
+                <div>
+                    <small>НАВІГАЦІЯ</small>
+                    <strong id="mobile-more-title">Усі розділи</strong>
+                </div>
+                <button type="button" class="mobile-more-close" data-action="mobile-more-toggle" aria-label="Закрити меню">×</button>
+            </div>
             <div class="mobile-more-grid">
                 <button class="mobile-more-item" data-tab="trades">
+                    <span class="ti-icon ti-list-check" aria-hidden="true"></span>
                     <span>Журнал</span>
                 </button>
                 <button class="mobile-more-item" data-tab="datagrid">
+                    <span class="ti-icon ti-table" aria-hidden="true"></span>
                     <span>Таблиця</span>
                 </button>
                 <button class="mobile-more-item" data-tab="table">
+                    <span class="ti-icon ti-columns" aria-hidden="true"></span>
                     <span>Імпорт</span>
                 </button>
                 <button class="mobile-more-item" data-tab="calendar">
+                    <span class="ti-icon ti-calendar" aria-hidden="true"></span>
                     <span>Календар</span>
+                </button>
+                <button class="mobile-more-item" data-tab="stop-errors">
+                    <span class="ti-icon ti-alert-triangle" aria-hidden="true"></span>
+                    <span>Помилки</span>
                 </button>
                 <!-- Playbook temporarily hidden.
                 <button class="mobile-more-item" data-tab="playbook">
@@ -77,6 +102,7 @@
                 </button>
                 -->
                 <button class="mobile-more-item" data-tab="learn">
+                    <span class="ti-icon ti-graduation" aria-hidden="true"></span>
                     <span>Навчання</span>
                 </button>
             <button class="mobile-more-item mentor-review-nav-item initially-hidden" data-tab="mentor-review">
@@ -84,6 +110,7 @@
                     <span class="mentor-review-nav-badge mentor-review-nav-badge--inline" hidden aria-label="Кількість у черзі">0</span>
                 </button>
                 <button class="mobile-more-item" data-tab="settings">
+                    <span class="ti-icon ti-settings" aria-hidden="true"></span>
                     <span>Налаштування</span>
                 </button>
             <button class="mobile-more-item admin-tab-mobile initially-hidden" data-tab="admin">
