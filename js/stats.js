@@ -800,6 +800,61 @@ async function loadCompareStatsContext(selection = state.statsCompareSourceSelec
     }
 }
 
+export function getStatsExportSourceOptions() {
+    const options = [{
+        id: 'current',
+        type: 'current',
+        key: state.CURRENT_VIEWED_USER || state.USER_DOC_NAME || '',
+        label: getStatsSelectionLabel('current', state.CURRENT_VIEWED_USER || state.USER_DOC_NAME || ''),
+        group: 'Профіль',
+    }, {
+        id: 'all:',
+        type: 'all',
+        key: '',
+        label: 'Всі трейдери разом',
+        group: 'Зведені',
+    }];
+    Object.keys(state.TEAM_GROUPS || {}).sort((a, b) => a.localeCompare(b, 'uk')).forEach((team) => {
+        const nicks = getStatsNicksForGroup(team);
+        if (!nicks.length) return;
+        options.push({ id: `team:${team}`, type: 'team', key: team, label: `Кущ: ${team}`, group: 'Команди' });
+        nicks.forEach((nick) => {
+            if (!options.some((item) => item.type === 'trader' && item.key === nick)) {
+                options.push({ id: `trader:${nick}`, type: 'trader', key: nick, label: nick, group: team });
+            }
+        });
+    });
+    getStatsAdminNicks().forEach((nick) => {
+        if (!options.some((item) => item.type === 'trader' && item.key === nick)) {
+            options.push({ id: `trader:${nick}`, type: 'trader', key: nick, label: nick, group: 'Адміни' });
+        }
+    });
+    return options;
+}
+
+export async function loadStatsExportContext(selection = {}) {
+    const previousSelection = state.statsCompareSourceSelection;
+    const previousContext = state.statsCompareContext;
+    const previousType = state.statsCompareTradeTypeFilter;
+    try {
+        const normalized = {
+            type: selection.type || 'current',
+            key: typeof selection.key === 'string' ? selection.key : '',
+        };
+        await loadCompareStatsContext(normalized);
+        return {
+            label: state.statsCompareContext?.label || getStatsSelectionLabel(normalized.type, normalized.key),
+            journal: { ...(state.statsCompareContext?.journal || {}) },
+            settings: { ...(state.statsCompareContext?.settings || {}) },
+            tradeTypes: [...(state.statsCompareContext?.tradeTypes || [])],
+        };
+    } finally {
+        state.statsCompareSourceSelection = previousSelection;
+        state.statsCompareContext = previousContext;
+        state.statsCompareTradeTypeFilter = previousType;
+    }
+}
+
 async function loadStatsPeriodTreeJournal(selection = state.statsSourceSelection, currentUserId = null) {
     const sel = selection || { type: 'current', key: state.CURRENT_VIEWED_USER || state.USER_DOC_NAME || '' };
     try {

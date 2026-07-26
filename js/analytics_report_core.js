@@ -1,7 +1,7 @@
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export const REPORT_SECTION_DEFAULTS = {
-    cover: true, kpis: true, equity: true, weekdays: true, hourly: true,
+    cover: true, calendar: true, kpis: true, equity: true, weekdays: true, hourly: true,
     entryPrice: true, winLoss: true, drawdown: true, costs: true,
     insights: true, tradeTypes: true, bestExit: false, comparison: true, trades: false,
 };
@@ -82,6 +82,8 @@ function flattenTrades(dateStr, day, selectedTypes) {
             type: String(trade.type || trade.tradeType || trade.sheet?.tradeType || '—'),
             entry: String(trade.entryTime || trade.time || trade.sheet?.entryTime || '—'),
             exit: String(trade.exitTime || trade.sheet?.exitTime || '—'),
+            entryPrice: finite(trade.entryPrice ?? trade.price ?? trade.sheet?.entryPrice),
+            exitPrice: finite(trade.exitPrice ?? trade.sheet?.exitPrice),
             pnl: finite(trade.net ?? trade.pnl ?? trade.profit ?? trade.sheet?.profitFact),
             kf: finite(trade.kf ?? trade.profitRisk ?? trade.sheet?.profitRisk),
         }));
@@ -137,7 +139,7 @@ export function summarizeReportPeriod({ journal = {}, period, selectedTypes = []
         dayTrades.forEach((trade) => {
             const hour = String(trade.entry || '').match(/^(\d{1,2})/)?.[1];
             if (hour !== undefined) hourlyMap.set(hour, (hourlyMap.get(hour) || 0) + trade.pnl);
-            const rawEntry = Number(String((day.trades || []).find((item) => String(item.symbol || item.ticker || item.sheet?.ticker || '—') === trade.ticker)?.entryPrice || '').replace(',', '.'));
+            const rawEntry = trade.entryPrice;
             if (Number.isFinite(rawEntry) && rawEntry > 0) {
                 const bucket = rawEntry < 5 ? '< $5' : rawEntry < 10 ? '$5–10' : rawEntry < 20 ? '$10–20' : rawEntry < 50 ? '$20–50' : '$50+';
                 entryPriceMap.set(bucket, (entryPriceMap.get(bucket) || 0) + trade.pnl);

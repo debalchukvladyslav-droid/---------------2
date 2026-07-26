@@ -1,5 +1,6 @@
 import { state } from './state.js';
 import { ensurePdfTools } from './vendor_loader.js';
+import { getStatsExportSourceOptions, loadStatsExportContext } from './stats.js';
 import {
     REPORT_SECTION_DEFAULTS, buildAnalyticsReportData as buildReportData,
     makeAnalyticsPdfFilename, normalizeReportPeriod, reportPeriodLabel,
@@ -10,7 +11,7 @@ const STORAGE_KEY = 'tj_analytics_export_settings_v1';
 const PRESET_KEY = 'tj_analytics_export_presets_v1';
 const STEPS = ['Джерела', 'Періоди', 'Фільтри', 'Склад', 'Стиль', 'Готово'];
 const SECTION_LABELS = {
-    cover: 'Титульна сторінка', kpis: 'Основні KPI', equity: 'Крива дохідності',
+    cover: 'Титульна сторінка', calendar: 'Календар місяців', kpis: 'Основні KPI', equity: 'Крива дохідності',
     weekdays: 'PnL за днями тижня', hourly: 'Результат за часом входу',
     entryPrice: 'Результат за ціною входу', winLoss: 'Співвідношення днів',
     drawdown: 'Максимальна просадка', costs: 'Комісії та локейти',
@@ -36,22 +37,37 @@ function currentIdentity() {
     const name = [settings.first_name, settings.last_name].filter(Boolean).join(' ') || state.CURRENT_VIEWED_USER || state.USER_DOC_NAME || '';
     return { name, nick: state.CURRENT_VIEWED_USER || state.USER_DOC_NAME || '', team: settings.team || settings.team_name || '' };
 }
-function availableContexts() {
-    const main = {
-        id: 'main',
-        label: state.currentStatsContext?.label || 'Поточний профіль',
-        journal: state.currentStatsContext?.journal || state.appData?.journal || {},
-    };
-    const contexts = [main];
-    const compareJournal = state.statsCompareContext?.journal || {};
-    if (Object.keys(compareJournal).length) contexts.push({
-        id: 'compare', label: state.statsCompareContext?.label || 'Порівняння', journal: compareJournal,
+function availableSourceOptions() {
+    return getStatsExportSourceOptions();
+}
+function cachedAvailableContexts() {
+    return availableSourceOptions().map((source) => {
+        if (source.type === 'current') return {
+            ...source, journal: state.currentStatsContext?.journal || state.appData?.journal || {},
+        };
+        const cacheKey = source.type === 'trader' ? `${source.key}_stats|all-time`
+            : source.type === 'team' ? `__compare_team__${source.key}|all-time`
+                : '__compare_all__|all-time';
+        return { ...source, journal: state.statsDocCache?.[cacheKey] || {} };
     });
+}
+async function resolveExportContexts(sourceIds, onProgress = () => {}) {
+    const selected = availableSourceOptions().filter((source) => sourceIds.includes(source.id));
+    const contexts = [];
+    for (let index = 0; index < selected.length; index++) {
+        const source = selected[index];
+        onProgress(3 + Math.round(index / Math.max(1, selected.length) * 10), `Завантажую: ${source.label}…`);
+        if (source.type === 'current') {
+            contexts.push({ label: source.label, journal: state.currentStatsContext?.journal || state.appData?.journal || {} });
+        } else {
+            contexts.push(await loadStatsExportContext(source));
+        }
+    }
     return contexts;
 }
 function defaultConfig() {
     return {
-        sourceIds: ['main'],
+        sourceIds: ['current'],
         periods: [{ id: 'all', type: 'all', value: '', label: 'За весь час' }],
         tradeTypes: [],
         comparison: true,
@@ -63,7 +79,20 @@ function defaultConfig() {
     };
 }
 function storedConfig() {
-    try { return { ...defaultConfig(), ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') }; }
+    try {
+        const defaults = defaultConfig();
+        const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+        const stored = {
+            ...defaults,
+            ...raw,
+            sections: { ...defaults.sections, ...(raw.sections || {}) },
+            trades: { ...defaults.trades, ...(raw.trades || {}) },
+            appearance: { ...defaults.appearance, ...(raw.appearance || {}) },
+            identity: { ...defaults.identity, ...(raw.identity || {}) },
+        };
+        if (stored.sourceIds?.includes('main')) stored.sourceIds = stored.sourceIds.map((id) => id === 'main' ? 'current' : id);
+        return stored;
+    }
     catch { return defaultConfig(); }
 }
 
@@ -85,10 +114,19 @@ function setStep(step) {
     if (exportStep === 5) renderSummary();
 }
 function renderSources(config) {
-    el('analytics-export-sources').innerHTML = availableContexts().map((context) =>
-        `<label class="analytics-export-check"><input type="checkbox" data-export-source="${escapeHtml(context.id)}" ${config.sourceIds.includes(context.id) ? 'checked' : ''}><span>${escapeHtml(context.label)}</span></label>`
+    const groups = new Map();
+    availableSourceOptions().forEach((source) => {
+        if (!groups.has(source.group)) groups.set(source.group, []);
+        groups.get(source.group).push(source);
+    });
+    el('analytics-export-sources').innerHTML = [...groups.entries()].map(([group, sources]) =>
+        `<fieldset class="analytics-source-group"><legend>${escapeHtml(group)}</legend>${sources.map((source) =>
+            `<label class="analytics-export-check"><input type="checkbox" data-export-source="${escapeHtml(source.id)}" ${config.sourceIds.includes(source.id) ? 'checked' : ''}><span>${escapeHtml(source.label)}</span></label>`
+        ).join('')}</fieldset>`
     ).join('');
-    el('analytics-import-comparison').checked = config.sourceIds.includes('compare');
+    const compareId = state.statsCompareSourceSelection?.type && state.statsCompareMode
+        ? (state.statsCompareSourceSelection.type === 'current' ? 'current' : `${state.statsCompareSourceSelection.type}:${state.statsCompareSourceSelection.key || ''}`) : '';
+    el('analytics-import-comparison').checked = !!compareId && config.sourceIds.includes(compareId);
 }
 function renderTradeTypes(config) {
     const types = state.currentStatsContext?.tradeTypes || state.appData?.tradeTypes || [];
@@ -141,7 +179,7 @@ function collectConfig() {
     const identity = {};
     document.querySelectorAll('[data-identity]').forEach((input) => { identity[input.dataset.identity] = input.checked; });
     return {
-        sourceIds: sourceIds.length ? sourceIds : ['main'],
+        sourceIds: sourceIds.length ? sourceIds : ['current'],
         periods: reportPeriods,
         tradeTypes: selectedTypes,
         comparison: el('analytics-export-comparison').checked,
@@ -163,7 +201,7 @@ function collectConfig() {
 function renderSummary() {
     const config = collectConfig();
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...config, appearance: { ...config.appearance, logo: '' } }));
-    const contexts = availableContexts().filter((context) => config.sourceIds.includes(context.id));
+    const contexts = availableSourceOptions().filter((context) => config.sourceIds.includes(context.id));
     const estimate = Math.max(1, (config.sections.cover ? 1 : 0) + contexts.length * config.periods.length * 2 + (config.comparison && config.periods.length > 1 ? 1 : 0) + (config.sections.trades ? 1 : 0));
     const validation = validateAnalyticsExportConfig(config);
     el('analytics-export-summary').innerHTML = `
@@ -263,6 +301,10 @@ function lineChart(ctx, colors, rows, x, y, w, h) {
     if (!rows.length) { text(ctx, 'Немає даних', x + w / 2, y + h / 2, 20, colors.muted, 500, 'center'); return; }
     const values = rows.map((row) => row.equity);
     const min = Math.min(0, ...values), max = Math.max(0, ...values), span = max - min || 1;
+    text(ctx, money(max), x + 20, y + 18, 13, colors.muted);
+    text(ctx, money(min), x + 20, y + h - 58, 13, colors.muted);
+    text(ctx, rows[0]?.date || '—', x + 30, y + h - 25, 12, colors.muted);
+    text(ctx, rows.at(-1)?.date || '—', x + w - 22, y + h - 25, 12, colors.muted, 500, 'right');
     ctx.strokeStyle = colors.line; ctx.beginPath(); ctx.moveTo(x + 28, y + h - 35); ctx.lineTo(x + w - 22, y + h - 35); ctx.stroke();
     ctx.strokeStyle = colors.accent; ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.beginPath();
     rows.forEach((row, index) => {
@@ -307,7 +349,8 @@ function periodPages(config, group, period) {
     const pages = [];
     if (config.sections.kpis || config.sections.equity || config.sections.drawdown || config.sections.costs) {
         const page = makePage(config.appearance);
-        addHeader(page, config, `${group.label} · ${period.label}`);
+        const actualRange = period.range.from ? `${period.range.from} — ${period.range.to}` : 'даних немає';
+        addHeader(page, config, `${group.label} · ${period.label} · фактичний діапазон ${actualRange} · ${period.equity.length} точок`);
         const kpis = [
         ['Загальний PnL', money(period.kpis.totalPnl)], ['Winrate', `${period.kpis.winRate.toFixed(1)}%`],
         ['Profit Factor', Number.isFinite(period.kpis.profitFactor) ? period.kpis.profitFactor.toFixed(2) : '∞'],
@@ -323,7 +366,8 @@ function periodPages(config, group, period) {
         });
         if (config.sections.equity) {
             text(page.ctx, 'Крива дохідності', 70, 430, 20, page.colors.text, 700);
-            lineChart(page.ctx, page.colors, period.equity, 70, 470, 1260, 395);
+            text(page.ctx, 'Вісь X — торгові дати. Вісь Y — накопичений чистий PnL у доларах. Верхня/нижня межі підписані.', 70, 456, 13, page.colors.muted);
+            lineChart(page.ctx, page.colors, period.equity, 70, 485, 1260, 380);
         }
         pages.push(page);
     }
@@ -361,6 +405,34 @@ function periodPages(config, group, period) {
         });
         pages.push(details);
     }
+    if (config.sections.hourly || config.sections.entryPrice || config.sections.tradeTypes || config.sections.winLoss || config.sections.costs) {
+        const breakdown = makePage(config.appearance);
+        addHeader(breakdown, config, `${group.label} · структура результату · ${period.label}`);
+        const leftRows = config.sections.hourly ? period.hourly : period.tradeTypes.map((item) => ({ label: item.label, value: item.pnl }));
+        const rightRows = config.sections.entryPrice ? period.entryPrice : [
+            { label: 'Плюсові дні', value: period.kpis.wins },
+            { label: 'Мінусові дні', value: period.kpis.losses },
+            { label: 'Беззбиткові дні', value: period.kpis.breakeven },
+        ];
+        text(breakdown.ctx, config.sections.hourly ? 'PnL за часом входу' : 'PnL за типами угод', 70, 150, 21, breakdown.colors.text, 750);
+        text(breakdown.ctx, config.sections.hourly ? 'Час наведено за значенням входу, збереженим в угоді. Значення — сума PnL угод у часовій групі.' : 'Сума PnL і кількість торгових днів для кожного типу.', 70, 180, 13, breakdown.colors.muted);
+        (leftRows.length ? leftRows : [{ label: 'Немає даних', value: 0 }]).slice(0, 12).forEach((item, index) => {
+            const y = 225 + index * 45;
+            text(breakdown.ctx, item.label, 80, y, 15, breakdown.colors.text, 600);
+            text(breakdown.ctx, money(item.value), 650, y, 15, item.value >= 0 ? breakdown.colors.profit : breakdown.colors.loss, 700, 'right');
+        });
+        text(breakdown.ctx, config.sections.entryPrice ? 'PnL за ціною входу' : 'Співвідношення торгових днів', 745, 150, 21, breakdown.colors.text, 750);
+        text(breakdown.ctx, config.sections.entryPrice ? 'Цінові діапазони формуються з entry price кожної угоди; значення — сумарний PnL.' : 'Кількість плюс/мінус/беззбиток за фактичним денним результатом.', 745, 180, 13, breakdown.colors.muted);
+        (rightRows.length ? rightRows : [{ label: 'Немає даних', value: 0 }]).slice(0, 12).forEach((item, index) => {
+            const y = 225 + index * 45;
+            text(breakdown.ctx, item.label, 755, y, 15, breakdown.colors.text, 600);
+            text(breakdown.ctx, config.sections.entryPrice ? money(item.value) : item.value, 1320, y, 15, breakdown.colors.text, 700, 'right');
+        });
+        card(breakdown.ctx, breakdown.colors, 70, 810, 1260, 85);
+        text(breakdown.ctx, 'Витрати за період', 90, 830, 14, breakdown.colors.muted, 700);
+        text(breakdown.ctx, `Комісії ${money(period.kpis.commissions)}   ·   Локейти ${money(period.kpis.locates)}   ·   Разом ${money(period.kpis.commissions + period.kpis.locates)}`, 90, 856, 18, breakdown.colors.text, 700);
+        pages.push(breakdown);
+    }
     return pages;
 }
 function comparisonPage(config, group) {
@@ -377,6 +449,59 @@ function comparisonPage(config, group) {
     });
     return page;
 }
+function calendarPages(config, group, period) {
+    const monthNames = ['Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень', 'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень'];
+    const weekdayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
+    const rowsByDate = new Map(period.equity.map((row) => [row.date, row]));
+    const months = [...new Set(period.equity.map((row) => row.date.slice(0, 7)))].sort();
+    if (!months.length) return [];
+    return months.map((monthKey) => {
+        const [year, month] = monthKey.split('-').map(Number);
+        const page = makePage(config.appearance);
+        const monthRows = period.equity.filter((row) => row.date.startsWith(`${monthKey}-`));
+        const monthPnl = monthRows.reduce((sum, row) => sum + row.pnl, 0);
+        const wins = monthRows.filter((row) => row.pnl > 0).length;
+        const losses = monthRows.filter((row) => row.pnl < 0).length;
+        addHeader(page, config, `${group.label} · календар · ${monthNames[month - 1]} ${year}`);
+        text(page.ctx, `${monthNames[month - 1]} ${year}`, 70, 145, 30, page.colors.text, 750);
+        text(page.ctx, `PnL ${money(monthPnl)}  ·  Торгових днів ${monthRows.length}  ·  Плюс ${wins}  ·  Мінус ${losses}`, 1330, 152, 16, monthPnl >= 0 ? page.colors.profit : page.colors.loss, 700, 'right');
+
+        const gridX = 70, gridY = 220, cellW = 180, cellH = 108;
+        weekdayNames.forEach((name, index) => {
+            text(page.ctx, name, gridX + index * cellW + cellW / 2, 194, 14, page.colors.muted, 750, 'center');
+        });
+        const firstWeekday = (new Date(year, month - 1, 1).getDay() + 6) % 7;
+        const daysInMonth = new Date(year, month, 0).getDate();
+        for (let slot = 0; slot < 42; slot++) {
+            const column = slot % 7, row = Math.floor(slot / 7);
+            const x = gridX + column * cellW, y = gridY + row * cellH;
+            const dayNumber = slot - firstWeekday + 1;
+            page.ctx.fillStyle = column >= 5 ? colorWithAlpha(page.colors.card, .62) : page.colors.card;
+            page.ctx.strokeStyle = page.colors.line;
+            page.ctx.beginPath(); page.ctx.roundRect(x + 3, y + 3, cellW - 7, cellH - 7, 10); page.ctx.fill(); page.ctx.stroke();
+            if (dayNumber < 1 || dayNumber > daysInMonth) continue;
+            const date = `${monthKey}-${String(dayNumber).padStart(2, '0')}`;
+            const data = rowsByDate.get(date);
+            text(page.ctx, dayNumber, x + 17, y + 14, 16, column >= 5 ? page.colors.muted : page.colors.text, 700);
+            if (data) {
+                const resultColor = data.pnl > 0 ? page.colors.profit : data.pnl < 0 ? page.colors.loss : page.colors.muted;
+                page.ctx.fillStyle = colorWithAlpha(resultColor, .14);
+                page.ctx.beginPath(); page.ctx.roundRect(x + 12, y + 44, cellW - 24, 44, 9); page.ctx.fill();
+                text(page.ctx, money(data.pnl), x + cellW / 2, y + 55, 18, resultColor, 750, 'center');
+            } else {
+                text(page.ctx, column >= 5 ? 'Вихідний' : '—', x + cellW / 2, y + 58, 13, page.colors.muted, 500, 'center');
+            }
+        }
+        card(page.ctx, page.colors, 70, 880, 1260, 44);
+        text(page.ctx, 'Зелений — прибутковий день · червоний — збитковий · «—» — немає збереженого результату', 700, 894, 13, page.colors.muted, 600, 'center');
+        return page;
+    });
+}
+function colorWithAlpha(hex, alpha) {
+    const clean = String(hex || '#000000').replace('#', '');
+    if (!/^[0-9a-f]{6}$/i.test(clean)) return `rgba(0,0,0,${alpha})`;
+    return `rgba(${parseInt(clean.slice(0, 2), 16)},${parseInt(clean.slice(2, 4), 16)},${parseInt(clean.slice(4, 6), 16)},${alpha})`;
+}
 function tradePages(config, group) {
     const all = group.periods.flatMap((period) => period.trades);
     const sort = config.trades.sort;
@@ -387,14 +512,17 @@ function tradePages(config, group) {
     return (chunks.length ? chunks : [[]]).map((chunk, pageIndex) => {
         const page = makePage(config.appearance);
         addHeader(page, config, `${group.label} · таблиця угод · ${pageIndex + 1}/${Math.max(1, chunks.length)}`);
-        const xs = [70, 230, 410, 590, 770, 950, 1130, 1310];
-        ['Дата', 'Тікер', 'Side', 'Тип', 'Вхід', 'Вихід', 'PnL', 'КФ'].forEach((header, index) => text(page.ctx, header, xs[index], 160, 13, page.colors.muted, 750, index > 5 ? 'right' : 'left'));
+        const xs = [55, 180, 300, 400, 585, 700, 815, 930, 1130, 1325];
+        ['Дата', 'Тікер', 'Side', 'Тип', 'Час входу', 'Ціна входу', 'Час виходу', 'Ціна виходу', 'PnL', 'КФ'].forEach((header, index) => text(page.ctx, header, xs[index], 160, 11, page.colors.muted, 750, index > 4 ? 'right' : 'left'));
         chunk.forEach((trade, index) => {
             const y = 205 + index * 39;
             if (index % 2 === 0) { page.ctx.fillStyle = page.colors.card; page.ctx.fillRect(60, y - 9, 1280, 32); }
-            [trade.date, trade.ticker, trade.side, trade.type, trade.entry, trade.exit].forEach((value, col) => text(page.ctx, value, xs[col], y, 13, page.colors.text));
-            text(page.ctx, money(trade.pnl), xs[6], y, 13, trade.pnl >= 0 ? page.colors.profit : page.colors.loss, 650, 'right');
-            text(page.ctx, trade.kf.toFixed(2), xs[7], y, 13, page.colors.text, 650, 'right');
+            [trade.date, trade.ticker, trade.side, trade.type, trade.entry].forEach((value, col) => text(page.ctx, value, xs[col], y, 11, page.colors.text));
+            text(page.ctx, trade.entryPrice ? trade.entryPrice.toFixed(2) : '—', xs[5], y, 11, page.colors.text, 600, 'right');
+            text(page.ctx, trade.exit, xs[6], y, 11, page.colors.text, 600, 'right');
+            text(page.ctx, trade.exitPrice ? trade.exitPrice.toFixed(2) : '—', xs[7], y, 11, page.colors.text, 600, 'right');
+            text(page.ctx, money(trade.pnl), xs[8], y, 11, trade.pnl >= 0 ? page.colors.profit : page.colors.loss, 650, 'right');
+            text(page.ctx, trade.kf.toFixed(2), xs[9], y, 11, page.colors.text, 650, 'right');
         });
         return page;
     });
@@ -402,7 +530,7 @@ function tradePages(config, group) {
 
 export { validateAnalyticsExportConfig };
 export function buildAnalyticsReportData(config) {
-    const contexts = availableContexts().filter((context) => config.sourceIds.includes(context.id));
+    const contexts = cachedAvailableContexts().filter((context) => config.sourceIds.includes(context.id));
     return buildReportData(config, contexts);
 }
 export async function generateAnalyticsPdf(reportData, appearance = reportData.config.appearance, onProgress = () => {}) {
@@ -411,10 +539,24 @@ export async function generateAnalyticsPdf(reportData, appearance = reportData.c
     const pages = [];
     if (config.sections.cover) pages.push(coverPage(config, identity, reportData.groups.map((group) => group.label).join(', ')));
     reportData.groups.forEach((group) => {
-        group.periods.forEach((period) => pages.push(...periodPages(config, group, period)));
+        group.periods.forEach((period) => {
+            if (config.sections.calendar) pages.push(...calendarPages(config, group, period));
+            pages.push(...periodPages(config, group, period));
+        });
         if (config.comparison && config.sections.comparison && group.periods.length > 1) pages.push(comparisonPage(config, group));
         if (config.sections.trades) pages.push(...tradePages(config, group));
     });
+    if (config.comparison && config.sections.comparison && reportData.groups.length > 1) {
+        config.periods.forEach((rawPeriod, periodIndex) => {
+            pages.push(comparisonPage(config, {
+                label: `Порівняння профілів · ${reportPeriodLabel(rawPeriod)}`,
+                periods: reportData.groups.map((group) => ({
+                    ...group.periods[periodIndex],
+                    label: group.label,
+                })),
+            }));
+        });
+    }
     pages.forEach((page, index) => addFooter(page, config, index + 1));
     onProgress(18, 'Завантажую модуль PDF…');
     const { jsPDF } = await ensurePdfTools();
@@ -436,7 +578,10 @@ export async function generateCurrentAnalyticsPdf() {
     try {
         button.disabled = true;
         const config = collectConfig();
-        const reportData = buildAnalyticsReportData(config);
+        const contexts = await resolveExportContexts(config.sourceIds, (percent, message) => {
+            bar.style.width = `${percent}%`; status.textContent = message;
+        });
+        const reportData = buildReportData(config, contexts);
         await generateAnalyticsPdf(reportData, config.appearance, (percent, message) => {
             bar.style.width = `${percent}%`; status.textContent = message; status.classList.remove('error');
         });
@@ -453,7 +598,9 @@ document.addEventListener('change', (event) => {
     if (event.target?.id === 'analytics-period-type') updateAnalyticsPeriodInputs();
     if (event.target?.dataset?.exportSection === 'trades') el('analytics-trade-options').hidden = !event.target.checked;
     if (event.target?.id === 'analytics-import-comparison') {
-        const compare = document.querySelector('[data-export-source="compare"]');
+        const id = state.statsCompareSourceSelection?.type && state.statsCompareMode
+            ? (state.statsCompareSourceSelection.type === 'current' ? 'current' : `${state.statsCompareSourceSelection.type}:${state.statsCompareSourceSelection.key || ''}`) : '';
+        const compare = id ? document.querySelector(`[data-export-source="${CSS.escape(id)}"]`) : null;
         if (compare) compare.checked = event.target.checked;
     }
     if (event.target?.id === 'analytics-report-logo') {
