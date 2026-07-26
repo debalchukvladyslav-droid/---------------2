@@ -1,0 +1,106 @@
+<div id="analytics-export-modal" class="analytics-export-overlay" aria-hidden="true">
+    <div class="analytics-export-dialog" role="dialog" aria-modal="true" aria-labelledby="analytics-export-title">
+        <header class="analytics-export-head">
+            <div>
+                <span class="analytics-export-kicker">PDF REPORT BUILDER</span>
+                <h2 id="analytics-export-title">Експорт аналітики</h2>
+            </div>
+            <button type="button" class="analytics-export-close" data-action="analytics-export-close" aria-label="Закрити">×</button>
+        </header>
+
+        <div class="analytics-export-progress" id="analytics-export-progress" aria-label="Кроки конструктора"></div>
+
+        <form id="analytics-export-form" class="analytics-export-body">
+            <section class="analytics-export-step" data-export-step="0">
+                <h3>1. Джерела та профілі</h3>
+                <p>Звіт використовує лише дані, до яких у вас уже є доступ.</p>
+                <div id="analytics-export-sources" class="analytics-export-choice-grid"></div>
+                <label class="analytics-export-check"><input type="checkbox" id="analytics-import-comparison"> <span>Додати поточний профіль із режиму порівняння</span></label>
+            </section>
+
+            <section class="analytics-export-step" data-export-step="1" hidden>
+                <h3>2. Часові проміжки</h3>
+                <p>Додайте декілька періодів — кожен отримає власний розділ у PDF.</p>
+                <div class="analytics-period-builder">
+                    <select id="analytics-period-type">
+                        <option value="all">За весь час</option>
+                        <option value="year">Рік</option>
+                        <option value="month">Місяць</option>
+                        <option value="week">Тиждень від дати</option>
+                        <option value="custom">Власний діапазон</option>
+                    </select>
+                    <input id="analytics-period-value" type="text" placeholder="2026">
+                    <input id="analytics-period-from" type="date" hidden>
+                    <input id="analytics-period-to" type="date" hidden>
+                    <button type="button" class="btn-secondary" data-action="analytics-period-add">Додати</button>
+                </div>
+                <div id="analytics-period-list" class="analytics-period-list"></div>
+            </section>
+
+            <section class="analytics-export-step" data-export-step="2" hidden>
+                <h3>3. Фільтри та порівняння</h3>
+                <div class="analytics-export-field">
+                    <span>Типи угод</span>
+                    <div id="analytics-export-trade-types" class="analytics-export-choice-grid"></div>
+                </div>
+                <label class="analytics-export-check"><input type="checkbox" id="analytics-export-comparison" checked> <span>Додати порівняльну сторінку з дельтами</span></label>
+                <label class="analytics-export-check"><input type="checkbox" id="analytics-export-analysis-mode"> <span>Використати розширений режим аналізу кривої</span></label>
+            </section>
+
+            <section class="analytics-export-step" data-export-step="3" hidden>
+                <h3>4. Склад PDF</h3>
+                <div id="analytics-export-sections" class="analytics-export-choice-grid analytics-export-sections"></div>
+                <div id="analytics-trade-options" class="analytics-trade-options" hidden>
+                    <label>Максимум угод <input type="number" id="analytics-trade-limit" min="10" max="1000" value="100"></label>
+                    <label>Сортування
+                        <select id="analytics-trade-sort"><option value="date-desc">Нові спочатку</option><option value="date-asc">Старі спочатку</option><option value="pnl-desc">Найбільший PnL</option><option value="pnl-asc">Найменший PnL</option></select>
+                    </label>
+                    <label class="analytics-export-check"><input type="checkbox" id="analytics-trades-new-page" checked> <span>Таблиця з нової сторінки</span></label>
+                </div>
+            </section>
+
+            <section class="analytics-export-step" data-export-step="4" hidden>
+                <h3>5. Оформлення та приватність</h3>
+                <div class="analytics-export-theme-grid">
+                    <label><input type="radio" name="analytics-report-theme" value="light" checked><span class="report-theme-preview report-theme-light">Light Report</span></label>
+                    <label><input type="radio" name="analytics-report-theme" value="dark"><span class="report-theme-preview report-theme-dark">Dark Report</span></label>
+                    <label><input type="radio" name="analytics-report-theme" value="brand"><span class="report-theme-preview report-theme-brand">Brand</span></label>
+                </div>
+                <div class="analytics-export-form-grid">
+                    <label>Назва звіту <input type="text" id="analytics-report-title" value="Trading Analytics Report" maxlength="80"></label>
+                    <label>Акцент <input type="color" id="analytics-report-accent" value="#2563eb"></label>
+                    <label>Щільність <select id="analytics-report-density"><option value="comfortable">Комфортна</option><option value="compact">Компактна</option></select></label>
+                    <label>Логотип <input type="file" id="analytics-report-logo" accept="image/png,image/jpeg,image/webp"></label>
+                </div>
+                <div class="analytics-export-choice-grid">
+                    <label class="analytics-export-check"><input type="checkbox" data-identity="name"><span>Ім’я</span></label>
+                    <label class="analytics-export-check"><input type="checkbox" data-identity="nick"><span>Нік</span></label>
+                    <label class="analytics-export-check"><input type="checkbox" data-identity="team"><span>Команда</span></label>
+                    <label class="analytics-export-check"><input type="checkbox" data-identity="source"><span>Назва джерела</span></label>
+                    <label class="analytics-export-check"><input type="checkbox" id="analytics-report-footer" checked><span>Колонтитули</span></label>
+                    <label class="analytics-export-check"><input type="checkbox" id="analytics-report-page-numbers" checked><span>Нумерація сторінок</span></label>
+                </div>
+            </section>
+
+            <section class="analytics-export-step" data-export-step="5" hidden>
+                <h3>6. Підсумок і генерація</h3>
+                <div id="analytics-export-summary" class="analytics-export-summary"></div>
+                <div id="analytics-export-status" class="analytics-export-status" aria-live="polite"></div>
+                <div class="analytics-export-progressbar"><i id="analytics-export-progressbar"></i></div>
+            </section>
+        </form>
+
+        <footer class="analytics-export-footer">
+            <div class="analytics-export-presets">
+                <button type="button" class="btn-secondary" data-action="analytics-preset-save">Зберегти пресет</button>
+                <button type="button" class="btn-secondary" data-action="analytics-preset-load">Завантажити</button>
+                <button type="button" class="btn-secondary" data-action="analytics-export-reset">Скинути</button>
+            </div>
+            <div class="analytics-export-nav">
+                <button type="button" id="analytics-export-prev" class="btn-secondary" data-action="analytics-export-prev">Назад</button>
+                <button type="button" id="analytics-export-next" class="btn-primary" data-action="analytics-export-next">Далі</button>
+                <button type="button" id="analytics-export-generate" class="btn-primary" data-action="analytics-export-generate" hidden>Створити PDF</button>
+            </div>
+        </footer>
+    </div>
+</div>

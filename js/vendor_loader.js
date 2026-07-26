@@ -56,6 +56,17 @@ export async function ensureXlsx() {
     return window.XLSX;
 }
 
+export async function ensurePdfTools() {
+    if (!window.jspdf?.jsPDF) {
+        await loadScriptOnce('https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js');
+    }
+    if (!window.jspdf?.jsPDF) throw new Error('Не вдалося завантажити генератор PDF');
+    if (!window.jspdf.jsPDF.API?.autoTable) {
+        await loadScriptOnce('https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js');
+    }
+    return { jsPDF: window.jspdf.jsPDF, autoTable: window.jspdf.jsPDF.API?.autoTable };
+}
+
 export async function ensureGoogleApi() {
     if (!window.gapi) await loadScriptOnce('https://apis.google.com/js/api.js');
     if (!window.gapi) throw new Error('Google API не завантажився');
