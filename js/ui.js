@@ -148,6 +148,38 @@ const THEME_PRESETS = {
         accentHover: '#f9a8d4', profit: '#34d399', loss: '#fb7185', gold: '#fbbf24',
         aiBg: 'rgba(244,114,182,0.06)', aiBorder: 'rgba(244,114,182,0.27)',
     },
+    obsidian: {
+        background: '#07090d', card: '#11151c', primary: '#4f8cff', primaryForeground: '#ffffff',
+        muted: '#191f2a', mutedForeground: '#8994a7', border: '#252d3a', ring: '#4f8cff',
+        sidebarBg: '#090c11', sidebarAccentBg: '#151b24', bgColor: '#07090d', panelColor: '#11151c',
+        primaryColor: '#4f8cff', textPrimary: '#f1f5fb', textSecondary: '#8994a7', bgHover: '#1a2230',
+        accentHover: '#75a6ff', profit: '#36d399', loss: '#ff667a', gold: '#f4bc5e',
+        aiBg: 'rgba(79,140,255,0.07)', aiBorder: 'rgba(79,140,255,0.3)',
+    },
+    aurora: {
+        background: '#090a1a', card: '#12152b', primary: '#7c6cff', primaryForeground: '#ffffff',
+        muted: '#1c2040', mutedForeground: '#9198bd', border: '#292e52', ring: '#7c6cff',
+        sidebarBg: '#080918', sidebarAccentBg: '#171a34', bgColor: '#090a1a', panelColor: '#12152b',
+        primaryColor: '#7c6cff', textPrimary: '#f0f1ff', textSecondary: '#9198bd', bgHover: '#1d2243',
+        accentHover: '#9b90ff', profit: '#31e6b0', loss: '#ff668d', gold: '#ffc857',
+        aiBg: 'rgba(124,108,255,0.08)', aiBorder: 'rgba(92,225,230,0.3)',
+    },
+    graphite: {
+        background: '#111214', card: '#191b1f', primary: '#d2ff45', primaryForeground: '#111214',
+        muted: '#23262b', mutedForeground: '#92979f', border: '#30343a', ring: '#d2ff45',
+        sidebarBg: '#0d0e10', sidebarAccentBg: '#1d2024', bgColor: '#111214', panelColor: '#191b1f',
+        primaryColor: '#d2ff45', textPrimary: '#f4f5f6', textSecondary: '#92979f', bgHover: '#24272c',
+        accentHover: '#deff73', profit: '#76e6a6', loss: '#ff6b6b', gold: '#f5c451',
+        aiBg: 'rgba(210,255,69,0.05)', aiBorder: 'rgba(210,255,69,0.24)',
+    },
+    ivory: {
+        background: '#f5f1e9', card: '#fffdf8', primary: '#2563eb', primaryForeground: '#ffffff',
+        muted: '#ebe5da', mutedForeground: '#726c63', border: '#ddd5c8', ring: '#2563eb',
+        sidebarBg: '#eee8dd', sidebarAccentBg: '#e1eaff', bgColor: '#f5f1e9', panelColor: '#fffdf8',
+        primaryColor: '#2563eb', textPrimary: '#24211d', textSecondary: '#726c63', bgHover: '#eee8dd',
+        accentHover: '#1d4ed8', profit: '#16805d', loss: '#d13c4b', gold: '#b7791f',
+        aiBg: 'rgba(37,99,235,0.05)', aiBorder: 'rgba(37,99,235,0.2)',
+    },
 };
 
 // --- РОЗУМНИЙ АЛГОРИТМ КОНТРАСТУ ТА РОЗДІЛЕННЯ ---
@@ -348,8 +380,24 @@ export function applyTheme(forceSync = false) {
         document.body.style.removeProperty('--tabs-bg');
     }
 
-    const fontMap = { roboto: "'Roboto', sans-serif", montserrat: "'Montserrat', sans-serif", playfair: "'Playfair Display', serif", mono: "'Courier New', Courier, monospace" };
-    document.body.style.fontFamily = fontMap[font] || "'Inter', sans-serif";
+    const fontMap = {
+        dm: { main: "'DM Sans', sans-serif", head: "'Space Grotesk', 'DM Sans', sans-serif" },
+        inter: { main: "'Inter', sans-serif", head: "'Inter', sans-serif" },
+        manrope: { main: "'Manrope', sans-serif", head: "'Manrope', sans-serif" },
+        space: { main: "'Space Grotesk', sans-serif", head: "'Space Grotesk', sans-serif" },
+        sora: { main: "'Sora', sans-serif", head: "'Sora', sans-serif" },
+        mono: { main: "'DM Mono', monospace", head: "'DM Mono', monospace" },
+        roboto: { main: "'Inter', sans-serif", head: "'Inter', sans-serif" },
+        montserrat: { main: "'Manrope', sans-serif", head: "'Manrope', sans-serif" },
+        playfair: { main: "'Sora', sans-serif", head: "'Sora', sans-serif" },
+    };
+    const resolvedFont = fontMap[font] || fontMap.inter;
+    [root, document.body].forEach((target) => {
+        target.style.setProperty('--font-main', resolvedFont.main);
+        target.style.setProperty('--font-head', resolvedFont.head);
+        target.style.setProperty('--font-mono', "'DM Mono', monospace");
+    });
+    document.body.style.fontFamily = resolvedFont.main;
 
     setTimeout(() => {
         if (window.Chart) {

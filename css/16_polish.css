@@ -4327,3 +4327,148 @@ body.is-offline [data-needs-network="true"] {
     .best-exit-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .best-exit-start { align-items: stretch; flex-direction: column; }
 }
+
+/* Premium appearance settings */
+.theme-section-hint {
+    margin: -4px 0 14px;
+    color: var(--text-muted);
+    font-size: .8rem;
+    line-height: 1.5;
+}
+.theme-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(126px, 1fr));
+    gap: 10px;
+}
+.theme-card {
+    min-width: 0;
+    align-items: stretch;
+    gap: 6px;
+    padding: 10px;
+    border-width: 1px;
+    border-radius: 13px;
+    transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+.theme-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+.theme-card:has(input:checked) {
+    box-shadow: 0 0 0 1px var(--accent), var(--shadow-accent-sm);
+}
+.theme-card-preview {
+    width: 100%;
+    height: 54px;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 8px;
+}
+.theme-card-preview::after {
+    content: "";
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 9px;
+    height: 4px;
+    border-radius: 99px;
+    background: currentColor;
+    opacity: .85;
+}
+.theme-preview-dark { color: #00e5a0; }
+.theme-preview-light { color: #00966a; }
+.theme-preview-matrix { color: #00ff41; }
+.theme-preview-dracula { color: #bd93f9; }
+.theme-preview-ocean { color: #22d3ee; }
+.theme-preview-nord { color: #88c0d0; }
+.theme-preview-sunset { color: #fb923c; }
+.theme-preview-rose { color: #f472b6; }
+.theme-preview-obsidian {
+    color: #4f8cff;
+    background: radial-gradient(circle at 75% 15%, #263b69 0, transparent 36%), linear-gradient(135deg, #07090d 45%, #171d28);
+}
+.theme-preview-aurora {
+    color: #63e6e2;
+    background: radial-gradient(circle at 76% 18%, #493ca8 0, transparent 38%), linear-gradient(135deg, #090a1a, #191d40);
+}
+.theme-preview-graphite {
+    color: #d2ff45;
+    background: linear-gradient(145deg, #0d0e10 0 38%, #24272c 38% 62%, #17191d 62%);
+}
+.theme-preview-ivory {
+    color: #2563eb;
+    background: linear-gradient(135deg, #f5f1e9 48%, #fffdf8 48%);
+    border-color: #d9d1c4;
+}
+.theme-card-name {
+    color: var(--text-main);
+    font-size: .78rem;
+    font-weight: 700;
+    line-height: 1.1;
+}
+.theme-card-note {
+    color: var(--text-muted);
+    font-size: .66rem;
+    line-height: 1.1;
+}
+.theme-card-badge {
+    position: absolute;
+    z-index: 2;
+    top: 15px;
+    right: 15px;
+    padding: 3px 5px;
+    border-radius: 5px;
+    background: rgba(0,0,0,.62);
+    color: #fff;
+    font-size: .52rem;
+    font-weight: 800;
+    letter-spacing: .08em;
+    backdrop-filter: blur(8px);
+}
+.font-pills {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+    gap: 8px;
+}
+.font-pill {
+    display: block;
+    min-width: 0;
+}
+.font-pill span {
+    min-height: 58px;
+    padding: 10px 12px;
+    border-radius: 11px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+}
+.font-pill span b { color: var(--text-main); font-weight: 650; }
+.font-pill span small { color: var(--text-muted); font-size: .66rem; }
+.font-pill input:checked + span {
+    box-shadow: 0 0 0 1px var(--accent);
+}
+.font-pill input:checked + span b { color: var(--accent); }
+.font-dm span { font-family: 'DM Sans', sans-serif; }
+.font-inter span { font-family: 'Inter', sans-serif; }
+.font-manrope span { font-family: 'Manrope', sans-serif; }
+.font-space span { font-family: 'Space Grotesk', sans-serif; }
+.font-sora span { font-family: 'Sora', sans-serif; }
+.font-mono span { font-family: 'DM Mono', monospace; }
+
+body[data-theme="obsidian"] .app-header,
+body[data-theme="aurora"] .app-header {
+    background-image: linear-gradient(90deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 42%);
+}
+body[data-theme="obsidian"] .panel,
+body[data-theme="aurora"] .panel,
+body[data-theme="graphite"] .panel {
+    border-color: color-mix(in srgb, var(--border) 78%, var(--accent) 22%);
+}
+
+@media (max-width: 600px) {
+    .theme-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .theme-card { min-width: 0; padding: 8px; }
+    .theme-card-preview { width: 100%; height: 48px; }
+    .font-pills { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

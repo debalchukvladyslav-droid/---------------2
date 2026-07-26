@@ -66,8 +66,9 @@
         <h3 class="panel-title">Вигляд</h3>
 
         <div class="theme-section">
-            <label class="theme-section-label">Колірна тема</label>
-            <div class="theme-cards" role="group">
+            <label class="theme-section-label">Дизайн інтерфейсу</label>
+            <p class="theme-section-hint">Кожен пресет змінює палітру, глибину панелей і характер інтерфейсу.</p>
+            <div class="theme-cards" role="radiogroup" aria-label="Дизайн інтерфейсу">
                 <label class="theme-card" data-theme="dark">
                     <input type="radio" name="theme" value="dark" id="theme-dark">
                     <span class="theme-card-preview theme-preview-dark"></span>
@@ -108,6 +109,34 @@
                     <span class="theme-card-preview theme-preview-rose"></span>
                     <span class="theme-card-name">Rose</span>
                 </label>
+                <label class="theme-card theme-card-featured" data-theme="obsidian">
+                    <input type="radio" name="theme" value="obsidian" id="theme-obsidian">
+                    <span class="theme-card-badge">NEW</span>
+                    <span class="theme-card-preview theme-preview-obsidian"></span>
+                    <span class="theme-card-name">Obsidian</span>
+                    <span class="theme-card-note">Преміальна</span>
+                </label>
+                <label class="theme-card theme-card-featured" data-theme="aurora">
+                    <input type="radio" name="theme" value="aurora" id="theme-aurora">
+                    <span class="theme-card-badge">NEW</span>
+                    <span class="theme-card-preview theme-preview-aurora"></span>
+                    <span class="theme-card-name">Aurora</span>
+                    <span class="theme-card-note">Неонова</span>
+                </label>
+                <label class="theme-card theme-card-featured" data-theme="graphite">
+                    <input type="radio" name="theme" value="graphite" id="theme-graphite">
+                    <span class="theme-card-badge">NEW</span>
+                    <span class="theme-card-preview theme-preview-graphite"></span>
+                    <span class="theme-card-name">Graphite</span>
+                    <span class="theme-card-note">Мінімальна</span>
+                </label>
+                <label class="theme-card theme-card-featured" data-theme="ivory">
+                    <input type="radio" name="theme" value="ivory" id="theme-ivory">
+                    <span class="theme-card-badge">NEW</span>
+                    <span class="theme-card-preview theme-preview-ivory"></span>
+                    <span class="theme-card-name">Ivory</span>
+                    <span class="theme-card-note">Тепла світла</span>
+                </label>
                 <label class="theme-card" data-theme="custom">
                     <input type="radio" name="theme" value="custom" id="theme-custom">
                     <span class="theme-card-preview theme-preview-custom">🎨</span>
@@ -146,13 +175,15 @@
         </div>
 
         <div class="theme-section">
-            <label class="theme-section-label">Шрифт</label>
-            <div class="font-pills">
-                <label class="font-pill"><input type="radio" name="font" value="inter" id="font-inter"><span>Inter</span></label>
-                <label class="font-pill"><input type="radio" name="font" value="roboto" id="font-roboto"><span>Roboto</span></label>
-                <label class="font-pill"><input type="radio" name="font" value="montserrat" id="font-montserrat"><span>Montserrat</span></label>
-                <label class="font-pill"><input type="radio" name="font" value="playfair" id="font-playfair"><span>Playfair</span></label>
-                <label class="font-pill"><input type="radio" name="font" value="mono" id="font-mono"><span>Mono</span></label>
+            <label class="theme-section-label">Типографіка</label>
+            <p class="theme-section-hint">Шрифт змінюється одразу. Числа залишаються моноширинними для зручного порівняння.</p>
+            <div class="font-pills" role="radiogroup" aria-label="Типографіка">
+                <label class="font-pill font-dm"><input type="radio" name="font" value="dm" id="font-dm"><span><b>DM Sans</b><small>Рекомендовано</small></span></label>
+                <label class="font-pill font-inter"><input type="radio" name="font" value="inter" id="font-inter"><span><b>Inter</b><small>Чистий UI</small></span></label>
+                <label class="font-pill font-manrope"><input type="radio" name="font" value="manrope" id="font-manrope"><span><b>Manrope</b><small>Сучасний</small></span></label>
+                <label class="font-pill font-space"><input type="radio" name="font" value="space" id="font-space"><span><b>Space Grotesk</b><small>Характерний</small></span></label>
+                <label class="font-pill font-sora"><input type="radio" name="font" value="sora" id="font-sora"><span><b>Sora</b><small>Технологічний</small></span></label>
+                <label class="font-pill font-mono"><input type="radio" name="font" value="mono" id="font-mono"><span><b>DM Mono</b><small>Термінал</small></span></label>
             </div>
         </div>
 
