@@ -44,6 +44,25 @@ const { parseDecimalInput } = await import('../js/utils.js');
 const { getZonedClockParts, isEndOfSessionReviewTime } = await import('../js/session_schedule.js');
 const { buildServiceBotSnapshot, hashServiceBotApiKey, hasServiceBotPermission, parseServiceBotRange } = await import('../lib/service_bots.js');
 const { calculateCumulativeWeek, collectWeekStarts, getWeekRange, getWeekStartIso, parseCumulativeNumber } = await import('../js/cumulative_weekly.js');
+const { getNyseDaySchedule } = await import('../js/nyse_calendar.js');
+
+test('NYSE calendar marks official holidays and shortened sessions', () => {
+    assert.deepEqual(getNyseDaySchedule('2026-07-03'), {
+        type: 'closed',
+        name: 'День незалежності США',
+        message: 'NYSE зачинена: День незалежності США',
+    });
+    assert.equal(getNyseDaySchedule('2026-11-27')?.type, 'early-close');
+    assert.equal(getNyseDaySchedule('2026-11-27')?.closeTime, '13:00 ET');
+    assert.equal(getNyseDaySchedule('2026-12-24')?.name, 'Переддень Різдва');
+    assert.equal(getNyseDaySchedule('2026-07-02'), null);
+});
+
+test('NYSE calendar applies movable holiday rules', () => {
+    assert.equal(getNyseDaySchedule('2027-03-26')?.name, 'Страсна п’ятниця');
+    assert.equal(getNyseDaySchedule('2027-06-18')?.name, 'Juneteenth');
+    assert.equal(getNyseDaySchedule('2028-01-01'), null);
+});
 
 test('cumulative week uses Monday through Friday and parses supported numbers', () => {
     assert.deepEqual(getWeekRange('2026-07-29').dates, ['2026-07-27', '2026-07-28', '2026-07-29', '2026-07-30', '2026-07-31']);

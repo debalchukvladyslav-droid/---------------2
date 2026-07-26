@@ -9,6 +9,7 @@ import { hideGlobalLoader, setElementLoading, showGlobalLoader } from './loading
 import { findScreenshotsForTicker, openScreenshotForTrade } from './gallery.js';
 import { getEffectiveDayPnl, isSheetOnlyPnl, visibleTradeRows } from './trade_filters.js';
 import { pickSheetRowsSource } from './datagrid_rows.js';
+import { getNyseDaySchedule } from './nyse_calendar.js';
 
 let _selectDateRequestId = 0;
 
@@ -726,8 +727,10 @@ function buildDayDetailBody(dateKey, data, currentMonthDayloss) {
 
 function buildCalendarDayHoverText(dateKey, currentMonthDayloss) {
     const data = state.appData.journal[dateKey];
+    const marketSchedule = getNyseDaySchedule(dateKey);
+    const marketLine = marketSchedule ? `\n\n🏛 ${marketSchedule.message}` : '';
     if (!data) {
-        return formatLongDateUk(dateKey) + '\n\nНемає збереженого дня.' + appendWeekSummaryForDate(dateKey);
+        return formatLongDateUk(dateKey) + marketLine + '\n\nНемає збереженого дня.' + appendWeekSummaryForDate(dateKey);
     }
 
     const body = buildDayDetailBody(dateKey, data, currentMonthDayloss);
@@ -738,6 +741,7 @@ function buildCalendarDayHoverText(dateKey, currentMonthDayloss) {
     }
 
     return formatLongDateUk(dateKey) +
+        marketLine +
         (body ? `\n\n${body}` : '\n\nЗапис є — додайте PnL чи думки в формі дня.') +
         reviewLine +
         appendWeekSummaryForDate(dateKey);
@@ -896,6 +900,11 @@ export async function renderView() {
         
         let dateKey = `${year}-${(month+1).toString().padStart(2, '0')}-${i.toString().padStart(2, '0')}`;
         let cell = document.createElement('div'); cell.className = 'day-cell'; cell.id = `cell-${dateKey}`;
+        const marketSchedule = getNyseDaySchedule(dateKey);
+        if (marketSchedule) {
+            cell.classList.add(marketSchedule.type === 'closed' ? 'nyse-market-closed' : 'nyse-early-close');
+            cell.dataset.marketSchedule = marketSchedule.message;
+        }
         cell.style.gridColumn = String(d.getDay() + 1);
         let pnlDisplay = ''; let data = state.appData.journal[dateKey];
 
@@ -903,6 +912,12 @@ export async function renderView() {
         dayNum.className = 'day-number';
         dayNum.style.cssText = 'display:flex; align-items:center; justify-content:space-between;';
         dayNum.textContent = i;
+        if (marketSchedule) {
+            const marketBadge = document.createElement('span');
+            marketBadge.className = 'nyse-market-badge';
+            marketBadge.textContent = marketSchedule.type === 'closed' ? 'Вихідний' : 'До 13:00';
+            dayNum.appendChild(marketBadge);
+        }
         const dayPnl = document.createElement('div');
 
         if (data) {
