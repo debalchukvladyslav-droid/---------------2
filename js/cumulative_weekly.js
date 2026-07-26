@@ -77,11 +77,18 @@ export function calculateCumulativeWeek({ weekStart, journal = {}, rowsByDay = {
 
     range.dates.forEach((dateStr) => {
         const day = journal?.[dateStr] || {};
-        if (day.fondexxSource === 'summary-by-date') {
-            totals.metroResult += parseCumulativeNumber(day.fondexx?.net) || 0;
-        }
-        if (day.pproSource === 'ppro-total-report') {
-            totals.metroResult += parseCumulativeNumber(day.ppro?.net) || 0;
+        const hasSummary = day.fondexxSource === 'summary-by-date';
+        const hasPpro = day.pproSource === 'ppro-total-report';
+        if (hasSummary || hasPpro) {
+            const calendarPnl = parseCumulativeNumber(day.pnl);
+            if (calendarPnl !== null) {
+                totals.metroResult += calendarPnl;
+            } else {
+                const fondexxNet = hasSummary ? (parseCumulativeNumber(day.fondexx?.net) || 0) : 0;
+                const fondexxLocates = hasSummary ? (parseCumulativeNumber(day.fondexx?.locates) || 0) : 0;
+                const pproNet = hasPpro ? (parseCumulativeNumber(day.ppro?.net) || 0) : 0;
+                totals.metroResult += fondexxNet - fondexxLocates + pproNet;
+            }
         }
     });
 
@@ -109,4 +116,3 @@ export function calculateCumulativeWeek({ weekStart, journal = {}, rowsByDay = {
     totals.effectiveness = limit ? round(totals.metroResult / limit, 4) : null;
     return { ...range, ...totals, dayloss: limit || null };
 }
-

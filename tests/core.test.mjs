@@ -60,9 +60,10 @@ test('cumulative week aggregates exact sheet types and authoritative imported pn
         journal: {
             '2026-07-27': {
                 fondexxSource: 'summary-by-date',
-                fondexx: { net: 25 },
+                fondexx: { net: 25, comm: 4, locates: 3 },
                 pproSource: 'ppro-total-report',
                 ppro: { net: -5 },
+                pnl: 17,
             },
             '2026-07-28': { fondexxSource: 'trades', fondexx: { net: 999 } },
             '2026-08-01': { pproSource: 'ppro-total-report', ppro: { net: 999 } },
@@ -79,13 +80,28 @@ test('cumulative week aggregates exact sheet types and authoritative imported pn
         },
     });
     assert.equal(result.tableProfit, 68);
-    assert.equal(result.metroResult, 20);
+    assert.equal(result.metroResult, 17);
     assert.equal(result.pvResult, 7);
     assert.equal(result.notTakenResult, 1.5);
     assert.equal(result.exceptions, -3);
     assert.equal(result.purple, 7);
     assert.equal(result.visual, 4);
-    assert.equal(result.effectiveness, 0.2);
+    assert.equal(result.effectiveness, 0.17);
+});
+
+test('cumulative metro result falls back to calendar import formula with locates', () => {
+    const result = calculateCumulativeWeek({
+        weekStart: '2026-07-27',
+        journal: {
+            '2026-07-27': {
+                fondexxSource: 'summary-by-date',
+                fondexx: { net: 120, comm: 8, locates: 20 },
+                pproSource: 'ppro-total-report',
+                ppro: { net: -10, comm: 2, locates: 0 },
+            },
+        },
+    });
+    assert.equal(result.metroResult, 90);
 });
 
 test('cumulative week list always includes current week', () => {
