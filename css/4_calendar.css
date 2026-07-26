@@ -204,36 +204,33 @@
 .day-cell.nyse-market-closed,
 .day-cell.nyse-market-closed:hover:not(.empty) {
     background:
-        radial-gradient(circle at 85% 15%, rgba(255, 255, 255, .14), transparent 32%),
-        linear-gradient(145deg, #ef233c, #a60018) !important;
-    border-color: #ff7184 !important;
-    box-shadow: 0 0 0 1px rgba(255, 75, 99, .62), 0 10px 28px rgba(210, 0, 31, .28) !important;
+        linear-gradient(145deg, color-mix(in srgb, #9f3a4d 16%, var(--bg-panel)), color-mix(in srgb, #71303d 10%, var(--bg-panel))) !important;
+    border-color: color-mix(in srgb, #d46a7d 48%, var(--border)) !important;
+    box-shadow: inset 3px 0 0 color-mix(in srgb, #d46a7d 72%, transparent) !important;
 }
 .day-cell.nyse-early-close,
 .day-cell.nyse-early-close:hover:not(.empty) {
     background:
-        radial-gradient(circle at 85% 15%, rgba(255, 255, 255, .12), transparent 32%),
-        linear-gradient(145deg, #f43f5e, #7f1d1d) !important;
-    border-color: #fb7185 !important;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08), 0 9px 24px rgba(190, 24, 45, .24) !important;
+        linear-gradient(145deg, color-mix(in srgb, #b7791f 13%, var(--bg-panel)), color-mix(in srgb, #8f5e1b 8%, var(--bg-panel))) !important;
+    border-color: color-mix(in srgb, #d6a04b 46%, var(--border)) !important;
+    box-shadow: inset 3px 0 0 color-mix(in srgb, #d6a04b 68%, transparent) !important;
 }
 .day-cell.nyse-market-closed .day-number,
-.day-cell.nyse-early-close .day-number,
-.day-cell.nyse-market-closed .day-pnl,
-.day-cell.nyse-early-close .day-pnl {
-    color: #fff !important;
-}
+.day-cell.nyse-early-close .day-number { color: var(--text-main); }
 .nyse-market-badge {
     margin-left: auto;
     padding: 2px 6px;
-    border: 1px solid rgba(255, 255, 255, .34);
+    border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
     border-radius: 999px;
-    background: rgba(70, 0, 10, .25);
-    color: #fff;
+    background: color-mix(in srgb, currentColor 9%, transparent);
+    color: color-mix(in srgb, var(--text-main) 76%, #d46a7d);
     font-size: .61rem;
     font-weight: 800;
     letter-spacing: .02em;
     white-space: nowrap;
+}
+.day-cell.nyse-early-close .nyse-market-badge {
+    color: color-mix(in srgb, var(--text-main) 72%, #d6a04b);
 }
 
 .day-cell.record-day {
