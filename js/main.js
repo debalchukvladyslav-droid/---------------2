@@ -36,7 +36,6 @@ import { connectGoogleDrive, syncDriveScreenshots, updateDriveUI, disconnectGoog
 import { initPlaybookChart } from './playbook_chart.js';
 import { renderDashboardNews, refreshDashboardNews, refreshLiveNewsModal, openLiveNewsModal, closeLiveNewsModal } from './news.js';
 import { renderMarketSentiment, refreshMarketSentiment, openMarketSentimentSource } from './market_sentiment.js';
-import { buildTradeTypeAIContext } from './trade_type_analysis.js';
 import {
     createCompressedBackup,
     deleteCompressedBackup,
@@ -465,15 +464,9 @@ window.checkSessionModalReadiness = async function() {
     resultEl.textContent = '⏳ AI аналізує...';
     try {
         const { callGemini, getGeminiKeys } = await import('./ai.js');
-        const today = getTodayEST();
-        const recentDays = Object.entries(state.appData.journal)
-            .filter(([d, v]) => d.match(/^\d{4}-\d{2}-\d{2}$/) && v.pnl !== null && v.pnl !== undefined)
-            .sort((a, b) => b[0].localeCompare(a[0])).slice(0, 5)
-            .map(([d, v]) => `${d}: PnL=${v.pnl}$, помилки=${(v.errors||[]).join(',') || 'немає'}`).join('\n');
-        const tradeTypeContext = buildTradeTypeAIContext(state.appData.journal || {}, { tradeTypes: state.appData.tradeTypes, recentDays: 90, limit: 5 });
-        const prompt = `Початок дня. Ціль: ${goal || 'не вказана'}. План: ${plan || 'не вказаний'}. Сетапи: ${setups.join(', ') || 'не обрані'}. Готовність: ${readiness}/10.\n\nОстанні 5 сесій:\n${recentDays || 'немає даних'}\n${tradeTypeContext}\n\nДай коротке спостереження (3-4 речення). Врахуй, які типи входу зараз тягнуть результат, а які краще фільтрувати.`;
+        const prompt = buildSessionReadinessPrompt({ goal, plan, readiness, setups });
         const res = await callGemini(getGeminiKeys()[0], {
-            systemInstruction: { parts: [{ text: 'Ти досвідчений напарник-трейдер. Говориш коротко, по-людськи, українською.' }] },
+            systemInstruction: { parts: [{ text: 'Ти передторговий ментальний чекер. Оцінюй лише поточну психологічну та процесну готовність. Фінансові результати не є доказом готовності або неготовності.' }] },
             contents: [{ parts: [{ text: prompt }] }]
         });
         resultEl.style.background = 'rgba(139,92,246,0.08)';
@@ -511,6 +504,34 @@ let sessionReviewIncludesYesterday = false;
 
 async function isSessionReviewTime() {
     return isEndOfSessionReviewTime(await getTrustedServerNow());
+}
+
+function buildSessionReadinessPrompt({ goal = '', plan = '', readiness = 5, setups = [], stateSignals = [] } = {}) {
+    const previousReadiness = Object.entries(state.appData.journal || {})
+        .filter(([date, day]) => /^\d{4}-\d{2}-\d{2}$/.test(date) && day?.sessionReadiness)
+        .sort(([a], [b]) => b.localeCompare(a))
+        .slice(0, 5)
+        .map(([date, day]) => `${date}: самооцінка ${day.sessionReadiness}/10`)
+        .join('; ');
+
+    return `Це ПЕРЕДТОРГОВА перевірка ментальної та процесної готовності, а не аналіз результатів.
+
+Поточний стан:
+- Самооцінка готовності: ${readiness}/10
+- Ціль сесії: ${goal || 'не сформульована'}
+- План сесії: ${plan || 'не сформульований'}
+- Дозволені сетапи: ${setups.join(', ') || 'не обрані'}
+- Самооцінки стану: ${stateSignals.join(', ') || 'не заповнені'}
+- Попередні самооцінки готовності: ${previousReadiness || 'немає даних'}
+
+Оціни лише готовність трейдера до безпечного виконання плану зараз: ясність плану, емоційний стан, концентрацію, втому/напруження, імпульсивність і наявність обмежень.
+Не аналізуй PnL, прибутковість, winrate, типи входів, минулі плюси/мінуси та не роби висновок про готовність із фінансового результату.
+Якщо даних про стан недостатньо, прямо скажи, що саме потрібно уточнити.
+
+Відповідь українською у 3 коротких рядках:
+Вердикт: Готовий / Обережно / Не готовий
+Чому: одна конкретна причина
+Перед стартом: одна конкретна дія або умова.`;
 }
 
 function localDateKey(value) {
@@ -717,15 +738,15 @@ window.checkSessionReadiness = async function() {
     resultEl.textContent = '⏳ AI аналізує...';
     try {
         const { callGemini, getGeminiKeys } = await import('./ai.js');
-        const recentDays = Object.entries(state.appData.journal)
-            .filter(([d, v]) => d.match(/^\d{4}-\d{2}-\d{2}$/) && v.pnl !== null && v.pnl !== undefined)
-            .sort((a, b) => b[0].localeCompare(a[0])).slice(0, 5)
-            .map(([d, v]) => `${d}: PnL=${v.pnl}$, помилки=${(v.errors||[]).join(',') || 'немає'}, готовність=${v.sessionReadiness || '-'}/10`)
-            .join('\n');
-        const tradeTypeContext = buildTradeTypeAIContext(state.appData.journal || {}, { tradeTypes: state.appData.tradeTypes, recentDays: 90, limit: 5 });
-        const prompt = `Початок дня. Ось мій стан і контекст:\nЦіль: ${goal || 'не вказана'}\nПлан: ${plan || 'не вказаний'}\nСетапи: ${setups.join(', ') || 'не обрані'}\nГотовність: ${readiness}/10\nСтан: ${sliders.join(', ')}\n\nОстанні 5 сесій:\n${recentDays || 'немає даних'}\n${tradeTypeContext}\n\nДай коротке спостереження (3-4 речення). Врахуй, на яких типах входу сьогодні краще робити акцент, а які не форсити.`;
+        const prompt = buildSessionReadinessPrompt({
+            goal,
+            plan,
+            readiness,
+            setups,
+            stateSignals: sliders,
+        });
         const res = await callGemini(getGeminiKeys()[0], {
-            systemInstruction: { parts: [{ text: 'Ти досвідчений напарник-трейдер. Говориш коротко, по-людськи, українською. Не командуєш і не лякаєш.' }] },
+            systemInstruction: { parts: [{ text: 'Ти передторговий ментальний чекер. Оцінюй лише поточну психологічну та процесну готовність. Фінансові результати не є доказом готовності або неготовності. Не командуй і не залякуй.' }] },
             contents: [{ parts: [{ text: prompt }] }]
         });
         resultEl.style.background = 'rgba(139,92,246,0.08)';
