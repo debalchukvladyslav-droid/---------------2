@@ -249,6 +249,7 @@
     .stats-main-panel { overflow: visible !important; }
     .stats-charts-row { flex-direction: column !important; gap: 14px !important; }
     .stats-chart-panel-wide, .stats-chart-panel { min-width: 0 !important; flex: 1 1 auto !important; }
+    .stats-chart-panel-third { width: 100% !important; }
     .stats-bar-dropdown {
         position: absolute;
         top: calc(100% + 6px);

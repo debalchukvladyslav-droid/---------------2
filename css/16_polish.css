@@ -1555,9 +1555,16 @@ body {
 }
 
 .stats-charts-row > .stats-chart-panel-third {
-    flex: 1 1 calc((100% - 24px) / 3);
-    min-width: 210px;
+    box-sizing: border-box;
+    flex: 0 0 calc((100% - 24px) / 3);
+    width: calc((100% - 24px) / 3);
+    min-width: 0;
     padding: 16px;
+}
+
+.stats-chart-panel-third .chart-container {
+    min-width: 0;
+    width: 100%;
 }
 
 .stats-chart-panel {
