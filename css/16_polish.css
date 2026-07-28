@@ -1554,10 +1554,16 @@ body {
     padding: 20px;
 }
 
-.stats-charts-row > .stats-chart-panel-third {
+.stats-three-chart-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    width: 100%;
+}
+
+.stats-three-chart-grid > .stats-chart-panel-third {
     box-sizing: border-box;
-    flex: 0 0 calc((100% - 24px) / 3);
-    width: calc((100% - 24px) / 3);
+    width: 100%;
     min-width: 0;
     padding: 16px;
 }
@@ -1565,6 +1571,12 @@ body {
 .stats-chart-panel-third .chart-container {
     min-width: 0;
     width: 100%;
+}
+
+@media (max-width: 680px) {
+    .stats-three-chart-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 .stats-chart-panel {
