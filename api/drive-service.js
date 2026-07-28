@@ -1,4 +1,4 @@
-import { verifySupabaseUser } from '../lib/google_sheet_sync.js';
+import { getGoogleAccessToken, verifySupabaseUser } from '../lib/google_sheet_sync.js';
 
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
 
@@ -127,9 +127,18 @@ export default async function handler(req, res) {
         if (!user?.id) return sendJson(res, 401, { ok: false, error: 'Unauthorized' });
         console.log('[Drive service] supabase user ok', { userId: user.id });
 
-        const token = String(req.headers['x-google-access-token'] || '').trim();
-        if (!token) {
-            return sendJson(res, 401, { ok: false, error: 'Google account authorization is required' });
+        let token;
+        try {
+            token = await getGoogleAccessToken('https://www.googleapis.com/auth/drive.readonly');
+        } catch (error) {
+            console.warn('[Drive service] service account token unavailable', {
+                message: error?.message || String(error),
+            });
+            return sendJson(res, 503, {
+                ok: false,
+                code: 'GOOGLE_SERVICE_ACCOUNT_UNAVAILABLE',
+                error: 'Google service account is not configured on the server',
+            });
         }
         const action = String(req.query.action || 'list');
         if (action === 'list') return listFolder(req, res, token);

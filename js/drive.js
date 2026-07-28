@@ -228,7 +228,6 @@ async function fetchServiceDriveJson(params) {
     const response = await fetch(url.toString(), {
         headers: {
             Authorization: `Bearer ${accessToken}`,
-            ...(_accessToken ? { 'X-Google-Access-Token': _accessToken } : {}),
         },
     });
     const data = await response.json().catch(() => ({}));
@@ -257,7 +256,6 @@ async function fetchServiceDriveBlob(fileId) {
     const response = await fetch(url.toString(), {
         headers: {
             Authorization: `Bearer ${accessToken}`,
-            ...(_accessToken ? { 'X-Google-Access-Token': _accessToken } : {}),
         },
     });
     console.info('[Drive test] media response:', {
@@ -397,8 +395,7 @@ export async function syncDriveScreenshots(silent = false) {
                     console.info('[Drive test] service account list OK:', { count: files.length });
                     setDriveServiceStatus(`Service account бачить папку: ${files.length} файлів`, 'success');
                 } catch (error) {
-                    _serviceDriveAvailable = false;
-                    console.warn('[Drive] service account list failed, falling back to browser OAuth', error);
+                    console.warn('[Drive] service account list failed', error);
                     console.warn('[Drive test] service account list failed:', {
                         status: error?.status || '',
                         message: error?.message || String(error),
@@ -409,6 +406,7 @@ export async function syncDriveScreenshots(silent = false) {
                         if (statusEl) statusEl.textContent = message;
                         if (!silent) showToast(message);
                     }
+                    throw error;
                 }
             }
             if (!loadedViaService) {
@@ -451,6 +449,11 @@ export async function syncDriveScreenshots(silent = false) {
         }
 
         const existingPaths = new Set(state.appData.unassignedImages || []);
+        const existingDriveIds = new Set();
+        for (const [path, meta] of Object.entries(state.appData.screenMeta || {})) {
+            existingPaths.add(path);
+            if (meta?.driveId) existingDriveIds.add(String(meta.driveId));
+        }
         const ignored = new Set(state.appData?.settings?.driveIgnored || []);
         for (const day of Object.values(state.appData.journal || {})) {
             for (const arr of Object.values(day.screenshots || {})) {
@@ -461,7 +464,9 @@ export async function syncDriveScreenshots(silent = false) {
         const fileRecords = files.map(file => {
             if (!/^[a-zA-Z0-9_-]+$/.test(file.id)) return null;
             const variants = buildScreenshotPathVariants(`${file.id}_${file.name}`);
-            const existingPath = variants.find(path => existingPaths.has(path)) || '';
+            const metaPath = Object.entries(state.appData.screenMeta || {})
+                .find(([, meta]) => String(meta?.driveId || '') === String(file.id))?.[0] || '';
+            const existingPath = metaPath || variants.find(path => existingPaths.has(path)) || '';
             return {
                 file,
                 variants,
@@ -477,7 +482,9 @@ export async function syncDriveScreenshots(silent = false) {
         }
 
         const newFiles = fileRecords.filter(record =>
-            !record.existingPath && record.variants.every(path => !ignored.has(path))
+            !existingDriveIds.has(String(record.file.id))
+            && !record.existingPath
+            && record.variants.every(path => !ignored.has(path))
         );
         console.info('[Drive test] file decision:', {
             totalFiles: files.length,
