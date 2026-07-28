@@ -1554,6 +1554,12 @@ body {
     padding: 20px;
 }
 
+.stats-charts-row > .stats-chart-panel-third {
+    flex: 1 1 calc((100% - 24px) / 3);
+    min-width: 210px;
+    padding: 16px;
+}
+
 .stats-chart-panel {
     flex: 1;
     min-width: 250px;
