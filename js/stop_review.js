@@ -453,6 +453,10 @@ function renderMistakeCatalog() {
     list.innerHTML = sorted.length ? sorted.map((item, index) => `
         <div role="button" tabindex="0" class="stop-mistake-list-item ${item.id === runtime.selectedMistakeId ? 'active' : ''} ${item.archived ? 'archived' : ''}" data-mistake-select="${item.id}">
             <span>${escapeHtml(item.title)}</span><small>${runtime.links.filter(link => link.mistake_id === item.id).length}</small>
+            ${isOwner() && !item.archived ? `<span class="stop-mistake-order">
+                <button type="button" data-mistake-move="-1" data-mistake-id="${item.id}" aria-label="Перемістити вище">↑</button>
+                <button type="button" data-mistake-move="1" data-mistake-id="${item.id}" aria-label="Перемістити нижче">↓</button>
+            </span>` : ''}
         </div>`).join('') : '<div class="stop-mistake-empty">Каталог порожній. Створіть першу помилку.</div>';
     const selected = runtime.mistakes.find(item => item.id === runtime.selectedMistakeId);
     if (!selected) {
@@ -461,18 +465,27 @@ function renderMistakeCatalog() {
         const linkedIds = runtime.links.filter(link => link.mistake_id === selected.id).map(link => link.review_id);
         const linked = runtime.reviews.filter(review => linkedIds.includes(review.id));
         detail.innerHTML = `
-            <input class="stop-mistake-title-input" value="${escapeHtml(selected.title)}" aria-label="Назва помилки" readonly>
+            <input class="stop-mistake-title-input" value="${escapeHtml(selected.title)}" aria-label="Назва помилки" ${isOwner() ? '' : 'readonly'}>
             <textarea class="stop-mistake-description" rows="5" placeholder="Опишіть детальніше, як розпізнати цю помилку та що робити інакше.">${escapeHtml(selected.description)}</textarea>
-            <div class="stop-mistake-detail-actions"><button type="button" class="btn-primary btn-auto" data-mistake-save>Зберегти опис</button></div>
+            <div class="stop-mistake-detail-actions">
+                <button type="button" class="btn-primary btn-auto" data-mistake-save>Зберегти</button>
+                ${isOwner() ? `<button type="button" class="btn-secondary btn-auto" data-mistake-archive>${selected.archived ? 'Відновити' : 'Видалити зі списку'}</button>` : ''}
+            </div>
             <h4>Прив’язані стопи · ${linked.length}</h4>
             <div class="stop-mistake-linked">${linked.length ? linked.map(review => `<button type="button" data-open-review="${review.id}"><span class="stop-mistake-thumb" data-mistake-thumb="${review.id}"></span><strong>${escapeHtml(review.symbol)}</strong><span>${review.trade_date}</span><small>${STATUS_LABELS[reviewStatus(review)] || reviewStatus(review)}</small></button>`).join('') : '<p>До цієї помилки ще нічого не прив’язано.</p>'}</div>`;
         detail.querySelector('[data-mistake-save]')?.addEventListener('click', () => saveMistake(selected, detail));
+        detail.querySelector('[data-mistake-archive]')?.addEventListener('click', () => toggleArchive(selected));
         detail.querySelectorAll('[data-open-review]').forEach(button => button.addEventListener('click', () => openLinkedReview(button.dataset.openReview)));
         void hydrateMistakeThumbnails(detail, linked);
     }
     list.querySelectorAll('[data-mistake-select]').forEach(button => button.addEventListener('click', event => {
+        if (event.target.closest('[data-mistake-move]')) return;
         runtime.selectedMistakeId = button.dataset.mistakeSelect;
         renderMistakeCatalog();
+    }));
+    list.querySelectorAll('[data-mistake-move]').forEach(button => button.addEventListener('click', event => {
+        event.stopPropagation();
+        void moveMistake(button.dataset.mistakeId, Number(button.dataset.mistakeMove));
     }));
     requestAnimationFrame(() => {
         list.querySelector(`[data-mistake-select="${CSS.escape(runtime.selectedMistakeId)}"]`)?.scrollIntoView({ block: 'nearest' });
@@ -498,6 +511,9 @@ async function addMistake() {
     if (!isOwner()) return showToast('Каталог може змінювати лише власник профілю.');
     const title = window.prompt('Назва нової помилки:')?.trim();
     if (!title) return;
+    if ((state.appData.errorTypes || []).some(item => item.localeCompare(title, 'uk', { sensitivity: 'accent' }) === 0)) {
+        return showToast('Помилка з такою назвою вже існує.');
+    }
     const maxOrder = runtime.mistakes.reduce((max, item) => Math.max(max, item.sort_order || 0), -1);
     const { data, error } = await supabase.from('stop_mistakes').insert({ user_id: currentUserId(), title, sort_order: maxOrder + 1 }).select().single();
     if (error) return showToast(error.message);
@@ -532,9 +548,19 @@ async function quickEditMistake(id) {
 }
 
 async function saveMistake(mistake, detail) {
+    const title = detail.querySelector('.stop-mistake-title-input')?.value.trim() || '';
     const description = detail.querySelector('.stop-mistake-description')?.value.trim() || '';
-    const { error } = await supabase.from('stop_mistakes').update({ description, updated_at: new Date().toISOString() }).eq('id', mistake.id);
+    if (!title) return showToast('Назва помилки не може бути порожньою.');
+    if ((state.appData.errorTypes || []).some(item => item !== mistake.title && item.localeCompare(title, 'uk', { sensitivity: 'accent' }) === 0)) {
+        return showToast('Помилка з такою назвою вже існує.');
+    }
+    const { error } = await supabase.from('stop_mistakes').update({
+        title,
+        description,
+        updated_at: new Date().toISOString(),
+    }).eq('id', mistake.id);
     if (error) return showToast(error.message);
+    if (title !== mistake.title) await syncMistakeTitleToJournal(mistake.title, title);
     await loadRemoteData();
     renderMistakeCatalog();
     showToast('Помилку збережено.');
@@ -558,7 +584,8 @@ async function toggleArchive(mistake) {
 }
 
 async function moveMistake(id, direction) {
-    const sorted = [...runtime.mistakes].sort((a, b) => a.sort_order - b.sort_order);
+    const canonicalTitles = state.appData.errorTypes || [];
+    const sorted = canonicalMistakes();
     const index = sorted.findIndex(item => item.id === id);
     const other = sorted[index + direction];
     if (index < 0 || !other) return;
@@ -568,6 +595,14 @@ async function moveMistake(id, direction) {
         supabase.from('stop_mistakes').update({ sort_order: current.sort_order }).eq('id', other.id),
     ]);
     if (first || second) return showToast((first || second).message);
+    const currentTitleIndex = canonicalTitles.indexOf(current.title);
+    const otherTitleIndex = canonicalTitles.indexOf(other.title);
+    if (currentTitleIndex >= 0 && otherTitleIndex >= 0) {
+        [canonicalTitles[currentTitleIndex], canonicalTitles[otherTitleIndex]] =
+            [canonicalTitles[otherTitleIndex], canonicalTitles[currentTitleIndex]];
+        await saveToLocal();
+        window.renderErrorsList?.();
+    }
     await loadRemoteData();
     renderMistakeCatalog();
 }
@@ -630,6 +665,7 @@ function bindUI() {
     const root = document.getElementById('view-stop-errors');
     if (!root) return;
     runtime.ready = true;
+    root.querySelector('[data-mistake-add]')?.addEventListener('click', () => void addMistake());
     const defaults = monthBounds();
     document.getElementById('stop-review-from').value = defaults.from;
     document.getElementById('stop-review-to').value = defaults.to;

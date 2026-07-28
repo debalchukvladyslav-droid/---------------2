@@ -492,6 +492,14 @@ body.stop-review-open {
     font-size: .72rem;
 }
 
+.stop-mistake-head-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
 .stop-stage2-head button {
     display: grid;
     place-items: center;

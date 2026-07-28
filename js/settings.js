@@ -238,13 +238,13 @@ export function renderErrorsList() {
     if (window.selectDate) window.selectDate(state.selectedDateStr, true);
 }
 
-export function addNewErrorType() { 
+export async function addNewErrorType() {
     const input = document.getElementById('new-error-input'); const val = input.value.trim(); 
     if (val && !state.appData.errorTypes.includes(val)) { 
         state.appData.errorTypes.push(val); 
         input.value = ''; 
         renderErrorsList(); 
-        saveToLocal();
+        await saveToLocal();
         window.dispatchEvent(new CustomEvent('journal:error-type-changed', { detail: { action: 'add', title: val } }));
     } 
 }
@@ -270,10 +270,10 @@ export async function renameErrorType(index) {
 }
 
 export function deleteErrorType(index) { 
-    showConfirm(`Видалити "${state.appData.errorTypes[index]}"?`).then(ok => { if (!ok) return;
+    showConfirm(`Видалити "${state.appData.errorTypes[index]}"?`).then(async ok => { if (!ok) return;
         const oldTitle = state.appData.errorTypes[index];
         state.appData.errorTypes.splice(index, 1); 
-        saveToLocal(); 
+        await saveToLocal();
         renderErrorsList();
         window.dispatchEvent(new CustomEvent('journal:error-type-changed', {
             detail: { action: 'archive', oldTitle },
