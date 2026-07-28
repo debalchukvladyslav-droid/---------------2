@@ -249,7 +249,15 @@
     .stats-main-panel { overflow: visible !important; }
     .stats-charts-row { flex-direction: column !important; gap: 14px !important; }
     .stats-chart-panel-wide, .stats-chart-panel { min-width: 0 !important; flex: 1 1 auto !important; }
-    .stats-bar-dropdown { position: static; margin-top: 8px; min-width: 0; }
+    .stats-bar-dropdown {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        width: min(360px, calc(100vw - 28px));
+        min-width: 0;
+        max-height: min(70dvh, 560px);
+        margin-top: 0;
+    }
     .stats-filters-bar { gap: 6px; }
 
     /* AI вкладка - висота авто */

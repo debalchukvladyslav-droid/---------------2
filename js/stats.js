@@ -602,7 +602,6 @@ export async function selectStatsSource(type, key) {
     state.activeTradeTypeFilter = null;
     renderStatsSourceSelector();
     updateStatsPeriodTriggerLabel();
-    if (window.closeStatsDropdown) window.closeStatsDropdown('source');
     if (window.refreshStatsView) await window.refreshStatsView();
 }
 
@@ -1102,6 +1101,12 @@ function mergeJournals(journals) {
 
 export async function refreshStatsView() {
     if (window.renderStatsSourceSelector) window.renderStatsSourceSelector();
+    const dropdownToRestore = state.activeStatsDropdown;
+    const dropdownPanel = dropdownToRestore
+        ? document.getElementById(_DROPDOWN_IDS[dropdownToRestore]?.[0])
+        : null;
+    const dropdownScrollEl = dropdownPanel?.querySelector('.dropdown-scroll-lg, .dropdown-scroll-md');
+    const dropdownScrollTop = dropdownScrollEl?.scrollTop || 0;
     let requestId = ++state.statsLoadRequestId;
     const currentUserId = getCurrentViewedUserId() || await resolveViewedUserId(state.CURRENT_VIEWED_USER);
 
@@ -1124,9 +1129,6 @@ export async function refreshStatsView() {
     }
     if (overlay) overlay.style.display = 'flex';
     const loadingText = document.getElementById('stats-loading-text');
-
-    let treeContainer = document.getElementById('stats-tree-container');
-    if (treeContainer) treeContainer.innerHTML = '';
 
     let journal = {};
     const sel = state.statsSourceSelection;
@@ -1314,6 +1316,12 @@ export async function refreshStatsView() {
     if (loadingText) loadingText.textContent = 'Завантаження графіків...';
     await ensureChartJs();
     renderStatsTab();
+    if (dropdownToRestore && state.activeStatsDropdown === dropdownToRestore) {
+        setStatsDropdownState(dropdownToRestore, true);
+        const restoredPanel = document.getElementById(_DROPDOWN_IDS[dropdownToRestore]?.[0]);
+        const restoredScrollEl = restoredPanel?.querySelector('.dropdown-scroll-lg, .dropdown-scroll-md');
+        if (restoredScrollEl) restoredScrollEl.scrollTop = dropdownScrollTop;
+    }
     if (overlay) overlay.style.display = 'none';
 }
 

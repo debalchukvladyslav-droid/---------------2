@@ -135,6 +135,10 @@
 /* === FILTERS BAR === */
 .stats-filters-bar { display: flex; gap: 7px; flex-shrink: 0; flex-wrap: wrap; align-items: center; }
 .stats-bar-item { position: relative; }
+.stats-pro-toolbar:has(.stats-bar-dropdown.open) {
+    position: relative;
+    z-index: 1100;
+}
 .stats-bar-trigger {
     display: flex; align-items: center; gap: 7px; padding: 7px 12px;
     border-radius: var(--radius-md); border: 1px solid var(--border);
@@ -148,7 +152,7 @@
 .stats-bar-trigger.open .stats-dropdown-caret { transform: rotate(180deg); }
 .stats-bar-label { font-size: 0.68rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; }
 .stats-bar-value { font-size: 0.82rem; font-weight: 600; color: var(--text-main); }
-.stats-bar-dropdown { position: absolute; top: calc(100% + 5px); left: 0; min-width: 210px; z-index: 50; padding: 12px; border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--bg-panel); box-shadow: var(--shadow-md); display: none; overflow: hidden; }
+.stats-bar-dropdown { position: absolute; top: calc(100% + 5px); left: 0; min-width: 210px; z-index: 1150; padding: 12px; border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--bg-panel); box-shadow: var(--shadow-lg); display: none; overflow: hidden; }
 .stats-bar-dropdown.open { display: block; }
 .stats-dropdown-caret { transition: transform 0.2s ease; color: var(--accent); font-size: 0.7rem; }
 
