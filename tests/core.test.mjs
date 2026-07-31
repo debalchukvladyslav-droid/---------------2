@@ -543,12 +543,17 @@ test('entry price buckets use raw Sheet rows even when no Trades import exists',
                 { symbol: 'OVER', net: -12, sheet: { entryPrice: 20.01, sheetNet: -12, profitRisk: '-1,2R' } },
             ],
         },
+        'sheet-cumulative': {
+            '2026-02-01': [
+                { symbol: 'OLD', sheet: { sheetRow: 12, entryPrice: 2, sheetNet: 15, profitRisk: '1R' } },
+            ],
+        },
     });
 
     assert.deepEqual(rows.map((row) => row.label), ['Центовка', '$1–3', '$3–5', '$5–10', '$10–20', '>$20']);
-    assert.deepEqual(rows.map((row) => row.pnl), [10, -5, 0, 20, 7, -12]);
-    assert.deepEqual(rows.map((row) => row.kf), [1, -0.5, 0, 2, 0.7, -1.2]);
-    assert.deepEqual(rows.map((row) => row.trades), [1, 1, 0, 1, 1, 1]);
+    assert.deepEqual(rows.map((row) => row.pnl), [10, 10, 0, 20, 7, -12]);
+    assert.deepEqual(rows.map((row) => row.kf), [1, 0.5, 0, 2, 0.7, -1.2]);
+    assert.deepEqual(rows.map((row) => row.trades), [1, 2, 0, 1, 1, 1]);
 });
 
 test('hourly KФ buckets use matched Sheet profitRisk instead of trade net', () => {
@@ -585,6 +590,20 @@ test('hourly KФ counts each Sheet row once when broker trades contain duplicate
     assert.equal(hourNine.trades, 1);
 });
 
+test('hourly results aggregate main and cumulative Sheet sources', () => {
+    const entries = [{ dateStr: '2026-04-01', data: { trades: [
+        { opened: '2026-04-01 09:31:00' },
+        { opened: '2026-04-01 08:15:00' },
+    ] } }];
+    const sheetRows = {
+        main: { '2026-04-01': [{ sheet: { sheetRow: 5, matchedTradeIndex: 0, sheetNet: 20, profitRisk: '1R' } }] },
+        cumulative: { '2026-04-01': [{ sheet: { sheetRow: 5, matchedTradeIndex: 1, sheetNet: -5, profitRisk: '-0.25R' } }] },
+    };
+    const rows = buildHourlyKfBuckets(entries, null, { sheetRows });
+    assert.deepEqual(rows.find((row) => row.hour === 8), { hour: 8, pnl: -5, kf: -0.25, trades: 1, pnlRows: 1, kfRows: 1, label: '08' });
+    assert.deepEqual(rows.find((row) => row.hour === 9), { hour: 9, pnl: 20, kf: 1, trades: 1, pnlRows: 1, kfRows: 1, label: '09' });
+});
+
 test('exception criteria use only complete Sheet rows and combine both exception columns', () => {
     const sheetRows = { active: { '2026-04-01': [
         { sheet: { sheetNet: -20, profitRisk: '-1R', exception: 'Late entry', exceptions: ['Late entry'] } },
@@ -592,6 +611,8 @@ test('exception criteria use only complete Sheet rows and combine both exception
         { sheet: { sheetNet: 99, profitRisk: '2R' } },
         { sheet: { sheetNet: 30, exception: 'No KФ' } },
         { sheet: { profitRisk: '-5R', exception: 'No PnL' } },
+    ] }, archive: { '2025-12-01': [
+        { sheet: { sheetRow: 3, sheetNet: 5, profitRisk: '0,25R', exception: 'Late entry' } },
     ] } };
 
     const rows = buildExceptionKfRows([], null, { sheetRows });
@@ -599,12 +620,12 @@ test('exception criteria use only complete Sheet rows and combine both exception
     assert.deepEqual(rows.map((row) => row.criterion), ['-', 'Chase', 'Late entry']);
     assert.deepEqual(rows.find((row) => row.criterion === 'Late entry'), {
         criterion: 'Late entry',
-        pnl: -20,
-        kf: -1,
-        trades: 1,
-        pnlRows: 1,
-        kfRows: 1,
-        avgKf: -1,
+        pnl: -15,
+        kf: -0.75,
+        trades: 2,
+        pnlRows: 2,
+        kfRows: 2,
+        avgKf: -0.38,
     });
     assert.deepEqual(rows.find((row) => row.criterion === 'Chase'), {
         criterion: 'Chase',

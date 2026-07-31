@@ -1,6 +1,5 @@
 import { classifyTradeTypeGroup } from './data_utils.js';
 import { isPureGoogleSheetTrade } from './trade_filters.js';
-import { pickSheetRowsSource } from './datagrid_rows.js';
 
 export function parseSheetProfitRisk(value) {
     if (value == null) return null;
@@ -40,6 +39,34 @@ function parseSheetNumber(value) {
     return Number.isFinite(number) ? number : null;
 }
 
+function sheetRowSources(sheetRows = {}, preferredSpreadsheetId = '') {
+    const store = sheetRows && typeof sheetRows === 'object' ? sheetRows : {};
+    const ids = Object.keys(store).filter((id) => store[id] && typeof store[id] === 'object');
+    if (preferredSpreadsheetId && ids.includes(preferredSpreadsheetId)) {
+        ids.splice(ids.indexOf(preferredSpreadsheetId), 1);
+        ids.unshift(preferredSpreadsheetId);
+    }
+    return ids.map((spreadsheetId) => ({ spreadsheetId, byDay: store[spreadsheetId] }));
+}
+
+function visitSheetRows(sheetRows, options, visitor) {
+    const seen = new Set();
+    sheetRowSources(sheetRows, options.preferredSpreadsheetId || '').forEach(({ spreadsheetId, byDay }) => {
+        Object.entries(byDay).forEach(([dateStr, rows]) => {
+            if (!Array.isArray(rows)) return;
+            rows.forEach((row, index) => {
+                const sheet = row?.sheet && typeof row.sheet === 'object' ? row.sheet : {};
+                const rowNumber = sheet.sheetRow ?? index;
+                const key = `${spreadsheetId}:${dateStr}:${rowNumber}`;
+                if (seen.has(key)) return;
+                seen.add(key);
+                visitor(row, sheet, dateStr, spreadsheetId);
+            });
+        });
+    });
+    return seen.size;
+}
+
 export function buildSummaryByDateWeekdayPnl(entries = [], tradeTypeFilter = null) {
     const totals = [0, 0, 0, 0, 0];
     if (tradeTypeFilter) return totals;
@@ -54,16 +81,12 @@ export function buildSummaryByDateWeekdayPnl(entries = [], tradeTypeFilter = nul
 
 /** Агрегує сирі збережені рядки Google Sheets, навіть якщо вони не зіставлені з Trades. */
 export function buildSheetEntryPriceBuckets(sheetRows = {}, options = {}) {
-    const source = pickSheetRowsSource(sheetRows, options.preferredSpreadsheetId || '');
-    const rowsByDay = source?.byDay || {};
     const dateMatches = typeof options.dateMatches === 'function' ? options.dateMatches : () => true;
     const buckets = ENTRY_PRICE_BUCKETS.map((bucket) => ({ ...bucket, pnl: 0, kf: 0, trades: 0, pnlRows: 0, kfRows: 0 }));
 
-    Object.entries(rowsByDay).forEach(([dateStr, rows]) => {
-        if (!dateMatches(dateStr) || !Array.isArray(rows)) return;
-        rows.forEach((row) => {
+    const rawRowCount = visitSheetRows(sheetRows, options, (row, sheet, dateStr) => {
+            if (!dateMatches(dateStr)) return;
             if (options.tradeTypeFilter && classifyTradeTypeGroup(row) !== options.tradeTypeFilter) return;
-            const sheet = row?.sheet && typeof row.sheet === 'object' ? row.sheet : {};
             const entryPrice = parseSheetNumber(sheet.entryPrice ?? row?.entry);
             if (entryPrice == null) return;
             const bucket = buckets.find((candidate) => candidate.accepts(entryPrice));
@@ -73,10 +96,9 @@ export function buildSheetEntryPriceBuckets(sheetRows = {}, options = {}) {
             bucket.trades += 1;
             if (pnl != null) { bucket.pnl += pnl; bucket.pnlRows += 1; }
             if (kf != null) { bucket.kf += kf; bucket.kfRows += 1; }
-        });
     });
 
-    if (!source && Array.isArray(options.entries)) {
+    if (!rawRowCount && Array.isArray(options.entries)) {
         const seen = new Set();
         iterMatchedSheetTrades(options.entries, options.tradeTypeFilter || null, (trade, sheet, kf, entry) => {
             const entryPrice = parseSheetNumber(sheet.entryPrice ?? trade?.entry);
@@ -118,17 +140,13 @@ function iterMatchedSheetTrades(entries = [], tradeTypeFilter = null, visitor = 
 
 export function buildHourlyKfBuckets(entries = [], tradeTypeFilter = null, options = {}) {
     const buckets = new Map([4, 5, 6, 7, 8, 9].map(hour => [hour, { hour, pnl: 0, kf: 0, trades: 0, pnlRows: 0, kfRows: 0 }]));
-    const source = pickSheetRowsSource(options.sheetRows || {}, options.preferredSpreadsheetId || '');
     const entriesByDate = new Map(entries.map((entry) => [entry?.dateStr, entry]));
     let usedRawSheetRows = false;
 
-    if (source?.byDay) {
-        Object.entries(source.byDay).forEach(([dateStr, rows]) => {
-            if (!entriesByDate.has(dateStr) || !Array.isArray(rows)) return;
+    visitSheetRows(options.sheetRows || {}, options, (row, sheet, dateStr) => {
+            if (!entriesByDate.has(dateStr)) return;
             const entry = entriesByDate.get(dateStr);
             const trades = Array.isArray(entry?.data?.trades) ? entry.data.trades : [];
-            rows.forEach((row) => {
-                const sheet = row?.sheet && typeof row.sheet === 'object' ? row.sheet : {};
                 if (tradeTypeFilter && classifyTradeTypeGroup(row) !== tradeTypeFilter) return;
                 const matchIndex = Number(sheet.matchedTradeIndex);
                 if (!Number.isInteger(matchIndex) || matchIndex < 0 || matchIndex >= trades.length) return;
@@ -145,9 +163,7 @@ export function buildHourlyKfBuckets(entries = [], tradeTypeFilter = null, optio
                 if (pnl != null) { bucket.pnl += pnl; bucket.pnlRows += 1; }
                 bucket.trades += 1;
                 usedRawSheetRows = true;
-            });
-        });
-    }
+    });
 
     if (!usedRawSheetRows) {
         const seen = new Set();
@@ -191,14 +207,10 @@ function criterionValues(sheet = {}) {
 
 export function buildExceptionKfRows(entries = [], tradeTypeFilter = null, options = {}) {
     const buckets = new Map();
-    const source = pickSheetRowsSource(options.sheetRows || {}, options.preferredSpreadsheetId || '');
     const dateMatches = typeof options.dateMatches === 'function' ? options.dateMatches : () => true;
 
-    if (source?.byDay) {
-        Object.entries(source.byDay).forEach(([dateStr, rows]) => {
-            if (!dateMatches(dateStr) || !Array.isArray(rows)) return;
-            rows.forEach((row) => {
-                const sheet = row?.sheet && typeof row.sheet === 'object' ? row.sheet : {};
+    visitSheetRows(options.sheetRows || {}, options, (row, sheet, dateStr) => {
+                if (!dateMatches(dateStr)) return;
                 if (tradeTypeFilter && classifyTradeTypeGroup(row) !== tradeTypeFilter) return;
                 const kf = parseSheetProfitRisk(sheet.profitRisk);
                 const pnl = parseSheetNumber(sheet.sheetNet ?? row?.net);
@@ -215,9 +227,7 @@ export function buildExceptionKfRows(entries = [], tradeTypeFilter = null, optio
                     bucket.kfRows += 1;
                     bucket.trades += 1;
                 });
-            });
-        });
-    }
+    });
 
     return [...buckets.values()]
         .map((row) => ({

@@ -2204,7 +2204,7 @@ function renderEntryPriceSheetChart(theme) {
         return;
     }
 
-    const rows = buildSheetEntryPriceBuckets(state.appData?.sheetRows || {}, {
+    const rows = buildSheetEntryPriceBuckets(getStatsSheetRows(), {
         tradeTypeFilter: state.activeTradeTypeFilter || null,
         dateMatches: (dateStr) => sheetDateMatchesStatsFilters(dateStr, state.activeFilters || []),
     });
@@ -2225,6 +2225,13 @@ function renderEntryPriceSheetChart(theme) {
             },
         },
     );
+}
+
+function getStatsSheetRows() {
+    return {
+        ...(state.appData?.cumulativeSheetRows || {}),
+        ...(state.appData?.sheetRows || {}),
+    };
 }
 
 function renderExceptionCriteriaKfRows(rows = [], containerId = 'stats-exception-criteria-list') {
@@ -2810,7 +2817,7 @@ function renderStatsComparePanel(validEntries) {
 
     const baseEntries = filterEntriesByStatsFilters(validEntries, state.activeFilters);
     const compareEntries = filterEntriesByStatsFilters(compareValidEntries, state.statsCompareFilters || []);
-    const loadedSheetRows = state.appData?.sheetRows || {};
+    const loadedSheetRows = getStatsSheetRows();
     const compareUsesLoadedProfile = state.statsCompareSourceSelection?.key === state.CURRENT_VIEWED_USER;
     const base = buildComparePaneSummary(baseEntries, state.currentStatsContext.settings || state.appData.settings || {}, state.activeTradeTypeFilter, state.activeFilters || [], loadedSheetRows);
     const compare = buildComparePaneSummary(compareEntries, state.statsCompareContext.settings || {}, state.statsCompareTradeTypeFilter, state.statsCompareFilters || [], compareUsesLoadedProfile ? loadedSheetRows : {});
@@ -3370,7 +3377,7 @@ export function renderStatsTab() {
     });
 
     const hourlyBuckets = buildHourlyKfBuckets(filteredEntries, ttFilter, {
-        sheetRows: state.appData?.sheetRows || {},
+        sheetRows: getStatsSheetRows(),
     });
     renderStatsBarChart(
         'hourlyChart',
@@ -3386,7 +3393,7 @@ export function renderStatsTab() {
     
     renderEntryPriceSheetChart(statsChartTheme);
     renderExceptionCriteriaKfRows(buildExceptionKfRows(filteredEntries, ttFilter, {
-        sheetRows: state.appData?.sheetRows || {},
+        sheetRows: getStatsSheetRows(),
         dateMatches: dateStr => filteredEntries.some(entry => entry.dateStr === dateStr),
     }));
 
