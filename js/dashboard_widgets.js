@@ -8,6 +8,12 @@ import { escapeHtml } from './utils.js';
 
 const VERSION = 2;
 const CATEGORIES = { overview: 'Огляд', analytics: 'Аналітика', routine: 'Сесія', tools: 'Інструменти' };
+const MICRO_WIDGETS = new Set(['month-pnl', 'month-winrate', 'month-trades', 'month-pf', 'today', 'daily-kf', 'week-compare', 'streak', 'current-hour', 'last-session', 'sync-status', 'missing-data']);
+const COMPLEX_WIDGETS = new Set(['equity', 'ai-mentor', 'recent-trades', 'market-mood', 'checklist', 'criteria-best', 'criteria-warning', 'quick-actions']);
+const COMPLEX_LIMITS = {
+    equity: [5, 3], 'ai-mentor': [4, 3], 'recent-trades': [4, 3], 'market-mood': [3, 2],
+    checklist: [3, 2], 'criteria-best': [3, 2], 'criteria-warning': [3, 2], 'quick-actions': [3, 2],
+};
 const WIDGETS = [
     ['month-pnl', 'P&L за місяць', 'overview', 2, 1], ['month-winrate', 'Вінрейт', 'overview', 2, 1],
     ['month-trades', 'Угоди за місяць', 'overview', 2, 1], ['month-pf', 'Profit Factor', 'overview', 2, 1],
@@ -21,7 +27,7 @@ const WIDGETS = [
     ['sync-status', 'Синхронізація', 'tools', 4, 2], ['missing-data', 'Незаповнені дані', 'tools', 4, 2],
     ['earnings', 'Майбутні звіти тикерів', 'tools', 4, 2], ['quick-actions', 'Швидкі дії', 'tools', 4, 2],
     ['news', 'Стрічка новин', 'tools', 12, 1],
-].map(([id, title, category, w, h]) => ({ id, title, category, w, h, minW: id.startsWith('month-') ? 2 : Math.min(w, 3), maxW: 12, minH: ['news', 'month-pnl', 'month-winrate', 'month-trades', 'month-pf', 'market-mood'].includes(id) ? 1 : 2, maxH: 6 }));
+].map(([id, title, category, w, h]) => ({ id, title, category, w, h, minW: COMPLEX_LIMITS[id]?.[0] || (MICRO_WIDGETS.has(id) ? 2 : Math.min(w, 3)), maxW: 12, minH: COMPLEX_LIMITS[id]?.[1] || (MICRO_WIDGETS.has(id) || id === 'news' ? 1 : 2), maxH: 6 }));
 
 const DEFAULT_IDS = ['news', 'month-pnl', 'month-winrate', 'month-trades', 'month-pf', 'market-mood', 'today', 'equity', 'ai-mentor', 'recent-trades', 'quick-actions'];
 let editing = false;
@@ -30,6 +36,7 @@ let saveTimer = 0;
 let layout = [];
 let drag = null;
 const sourceNodes = new Map();
+let densityObserver = null;
 
 const byId = (id) => document.getElementById(id);
 const ownProfile = () => state.CURRENT_VIEWED_USER === state.USER_DOC_NAME;
@@ -148,6 +155,8 @@ function controls(item) {
 function makeWidget(item) {
     const article = document.createElement('article'); article.className = 'dashboard-widget'; article.dataset.widgetId = item.id;
     article.dataset.mobileSize = item.w <= 3 ? 'small' : item.w >= 12 ? 'full' : 'medium';
+    article.dataset.widgetH = String(item.h);
+    article.classList.toggle('is-micro-widget', MICRO_WIDGETS.has(item.id));
     article.style.setProperty('--widget-w', item.w); article.style.setProperty('--widget-h', item.h);
     article.appendChild(controls(item));
     const content = document.createElement('div'); content.className = 'dashboard-widget-content';
@@ -162,7 +171,21 @@ function renderGrid() {
     sourceNodes.forEach((node) => { if (node.isConnected && node.closest('.dashboard-widget')) parking?.appendChild(node); });
     const fragment = document.createDocumentFragment(); layout.forEach((item) => fragment.appendChild(makeWidget(item)));
     grid.replaceChildren(fragment); grid.classList.toggle('is-editing', editing);
+    observeWidgetDensity();
     renderCatalog(); window.setTimeout(() => window.dispatchEvent(new Event('resize')), 20);
+}
+
+function observeWidgetDensity() {
+    if (typeof ResizeObserver === 'undefined') return;
+    densityObserver?.disconnect();
+    densityObserver = new ResizeObserver((entries) => entries.forEach(({ target, contentRect }) => {
+        const complex = COMPLEX_WIDGETS.has(target.dataset.widgetId);
+        const density = contentRect.height <= 82 || (!complex && contentRect.width <= 190)
+            ? 'micro'
+            : contentRect.height <= 170 || contentRect.width <= 320 ? 'compact' : 'normal';
+        target.dataset.density = density;
+    }));
+    document.querySelectorAll('#dashboard-widget-grid .dashboard-widget').forEach((node) => densityObserver.observe(node));
 }
 
 function renderCatalog(query = '') {
@@ -190,17 +213,38 @@ function setEditing(value) {
     if (byId('dashboard-reset-layout')) byId('dashboard-reset-layout').hidden = !editing;
 }
 
-function moveItem(fromId, toId) {
+function moveItemLive(fromId, toId) {
     const from = layout.findIndex((item) => item.id === fromId); const to = layout.findIndex((item) => item.id === toId);
-    if (from < 0 || to < 0 || from === to) return; const [item] = layout.splice(from, 1); layout.splice(to, 0, item); persist(); renderGrid();
+    if (from < 0 || to < 0 || from === to) return;
+    const grid = byId('dashboard-widget-grid');
+    const moving = grid?.querySelector(`[data-widget-id="${fromId}"]`);
+    const target = grid?.querySelector(`[data-widget-id="${toId}"]`);
+    if (!grid || !moving || !target) return;
+    const positions = new Map([...grid.children].map((node) => [node, node.getBoundingClientRect()]));
+    const [item] = layout.splice(from, 1); layout.splice(to, 0, item);
+    if (from < to) target.after(moving); else target.before(moving);
+    [...grid.children].forEach((node) => {
+        if (node === moving) return;
+        const before = positions.get(node); const after = node.getBoundingClientRect();
+        const dx = before.left - after.left; const dy = before.top - after.top;
+        if (dx || dy) node.animate([{ transform: `translate(${dx}px,${dy}px)` }, { transform: 'translate(0,0)' }], { duration: 210, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    });
 }
 
 function changeSize(id, direction) {
     const item = layout.find((entry) => entry.id === id); const meta = def(id); if (!item || !meta) return;
     if (window.matchMedia('(max-width: 700px)').matches) {
         const presets = [3, 6, 12]; const current = presets.reduce((best, value) => Math.abs(value - item.w) < Math.abs(best - item.w) ? value : best, 6); const index = presets.indexOf(current);
-        item.w = presets[clamp(index + (direction === 'up' ? 1 : -1), 0, presets.length - 1)];
-    } else { item.w = clamp(item.w + (direction === 'up' ? 1 : -1), meta.minW, meta.maxW); }
+        if (direction === 'down' && index === 0) item.h = meta.minH;
+        else if (direction === 'up' && item.h < meta.h) item.h++;
+        else item.w = presets[clamp(index + (direction === 'up' ? 1 : -1), 0, presets.length - 1)];
+    } else if (direction === 'down') {
+        if (item.w > meta.minW) item.w--;
+        else if (item.h > meta.minH) item.h--;
+    } else {
+        if (item.h < meta.h) item.h++;
+        else item.w = clamp(item.w + 1, meta.minW, meta.maxW);
+    }
     persist(); renderGrid();
 }
 
@@ -234,15 +278,34 @@ function bindEvents() {
     });
     byId('dashboard-widget-grid')?.addEventListener('pointerdown', (event) => {
         if (!editing) return; const article = event.target.closest('.dashboard-widget'); if (!article) return;
-        if (event.target.closest('.dashboard-widget-drag')) { drag = { id: article.dataset.widgetId, pointerId: event.pointerId }; article.classList.add('is-dragging'); event.target.setPointerCapture?.(event.pointerId); event.preventDefault(); }
+        if (event.target.closest('.dashboard-widget-drag')) {
+            const rect = article.getBoundingClientRect(); const ghost = article.cloneNode(true);
+            ghost.querySelectorAll('[id]').forEach((node) => node.removeAttribute('id'));
+            ghost.className = 'dashboard-widget-drag-ghost';
+            ghost.style.width = `${rect.width}px`; ghost.style.height = `${rect.height}px`; ghost.style.left = `${rect.left}px`; ghost.style.top = `${rect.top}px`;
+            document.body.appendChild(ghost);
+            drag = { id: article.dataset.widgetId, pointerId: event.pointerId, article, ghost, startX: event.clientX, startY: event.clientY, lastX: event.clientX, lastY: event.clientY };
+            article.classList.add('is-dragging'); byId('dashboard-widget-grid')?.classList.add('is-dragging-active');
+            event.target.setPointerCapture?.(event.pointerId); event.preventDefault();
+        }
         if (event.target.closest('.dashboard-resize-handle')) { const item = layout.find((entry) => entry.id === article.dataset.widgetId); drag = { id: item.id, pointerId: event.pointerId, resize: true, startX: event.clientX, startY: event.clientY, w: item.w, h: item.h }; event.target.setPointerCapture?.(event.pointerId); event.preventDefault(); }
     });
     document.addEventListener('pointermove', (event) => {
         if (!drag || drag.pointerId !== event.pointerId) return;
-        if (drag.resize) { const item = layout.find((entry) => entry.id === drag.id); const meta = def(drag.id); item.w = clamp(drag.w + Math.round((event.clientX - drag.startX) / 70), meta.minW, meta.maxW); item.h = clamp(drag.h + Math.round((event.clientY - drag.startY) / 72), meta.minH, meta.maxH); const article = document.querySelector(`[data-widget-id="${drag.id}"]`); article?.style.setProperty('--widget-w', item.w); article?.style.setProperty('--widget-h', item.h); return; }
-        const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.('.dashboard-widget'); if (target && target.dataset.widgetId !== drag.id) moveItem(drag.id, target.dataset.widgetId);
+        if (drag.resize) { const item = layout.find((entry) => entry.id === drag.id); const meta = def(drag.id); item.w = clamp(drag.w + Math.round((event.clientX - drag.startX) / 70), meta.minW, meta.maxW); item.h = clamp(drag.h + Math.round((event.clientY - drag.startY) / 64), meta.minH, meta.maxH); const article = document.querySelector(`[data-widget-id="${drag.id}"]`); article?.style.setProperty('--widget-w', item.w); article?.style.setProperty('--widget-h', item.h); if (article) article.dataset.widgetH = String(item.h); return; }
+        drag.lastX = event.clientX; drag.lastY = event.clientY;
+        if (!drag.frame) drag.frame = requestAnimationFrame(() => { if (drag?.ghost) drag.ghost.style.transform = `translate3d(${drag.lastX - drag.startX}px,${drag.lastY - drag.startY}px,0) scale(1.02)`; if (drag) drag.frame = 0; });
+        const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.('.dashboard-widget'); if (target && target.dataset.widgetId !== drag.id) moveItemLive(drag.id, target.dataset.widgetId);
     });
-    document.addEventListener('pointerup', (event) => { if (!drag || drag.pointerId !== event.pointerId) return; document.querySelector(`[data-widget-id="${drag.id}"]`)?.classList.remove('is-dragging'); if (drag.resize) { persist(); renderGrid(); } drag = null; });
+    document.addEventListener('pointerup', (event) => {
+        if (!drag || drag.pointerId !== event.pointerId) return;
+        if (drag.frame) cancelAnimationFrame(drag.frame);
+        drag.ghost?.remove();
+        document.querySelector(`[data-widget-id="${drag.id}"]`)?.classList.remove('is-dragging');
+        byId('dashboard-widget-grid')?.classList.remove('is-dragging-active');
+        if (drag.resize) renderGrid();
+        persist(); drag = null;
+    });
 }
 
 export function refreshDashboardWidgets() { if (!initialized) return; renderGrid(); }
