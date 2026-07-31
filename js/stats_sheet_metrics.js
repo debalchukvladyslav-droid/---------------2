@@ -213,22 +213,15 @@ export function buildExceptionKfRows(entries = [], tradeTypeFilter = null, optio
                 if (!dateMatches(dateStr)) return;
                 if (tradeTypeFilter && classifyTradeTypeGroup(row) !== tradeTypeFilter) return;
                 const kf = parseSheetProfitRisk(sheet.profitRisk);
-                const pnl = parseSheetNumber(sheet.sheetNet ?? row?.net);
                 const criteria = criterionValues(sheet);
-                // Match the workbook's BR+ formulas: criterion can be in either
-                // exception column, while PnL and R are accumulated independently.
-                if (!criteria.length || (kf == null && pnl == null)) return;
+                // Isolated BR-style structure: criterion and R come from this
+                // same raw Sheet row. Journal, Trades and PnL are not involved.
+                if (!criteria.length || kf == null) return;
                 criteria.forEach((criterion) => {
                     if (!buckets.has(criterion)) buckets.set(criterion, { criterion, pnl: 0, kf: 0, trades: 0, pnlRows: 0, kfRows: 0 });
                     const bucket = buckets.get(criterion);
-                    if (pnl != null) {
-                        bucket.pnl += pnl;
-                        bucket.pnlRows += 1;
-                    }
-                    if (kf != null) {
-                        bucket.kf += kf;
-                        bucket.kfRows += 1;
-                    }
+                    bucket.kf += kf;
+                    bucket.kfRows += 1;
                     bucket.trades += 1;
                 });
     });

@@ -2252,7 +2252,7 @@ function renderExceptionCriteriaKfRows(rows = [], containerId = 'stats-exception
             <div class="stats-exception-row">
                 <div class="stats-exception-row-main">
                     <span class="stats-exception-name">${escapeHtml(row.criterion)}</span>
-                    <strong class="${tone}">${escapeHtml(fmtKf(kf))} · ${escapeHtml(fmtMoney(Number(row.pnl) || 0))}</strong>
+                    <strong class="${tone}">${escapeHtml(fmtKf(kf))}</strong>
                 </div>
                 <div class="stats-exception-meta">${row.trades} угод з Excel · середній ${escapeHtml(fmtKf(avg))}</div>
                 <div class="stats-exception-bar" aria-hidden="true">
@@ -2381,10 +2381,9 @@ function buildComparePaneSummary(entries, settings = {}, tradeTypeFilter = null,
         tradeTypeFilter,
         dateMatches: (dateStr) => entries.some((entry) => entry.dateStr === dateStr),
     });
-    const dateSet = new Set(entries.map(entry => entry.dateStr));
     const exceptionKfRows = buildExceptionKfRows(entries, tradeTypeFilter, {
         sheetRows,
-        dateMatches: dateStr => dateSet.has(dateStr),
+        dateMatches: dateStr => sheetDateMatchesStatsFilters(dateStr, filters),
     });
     return {
         totalPnl,
@@ -3394,7 +3393,7 @@ export function renderStatsTab() {
     renderEntryPriceSheetChart(statsChartTheme);
     renderExceptionCriteriaKfRows(buildExceptionKfRows(filteredEntries, ttFilter, {
         sheetRows: getStatsSheetRows(),
-        dateMatches: dateStr => filteredEntries.some(entry => entry.dateStr === dateStr),
+        dateMatches: dateStr => sheetDateMatchesStatsFilters(dateStr, state.activeFilters || []),
     }));
 
     const ctxPie = document.getElementById('winLossChart').getContext('2d');
