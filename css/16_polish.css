@@ -4527,6 +4527,152 @@ body:is([data-theme="nebula"],[data-theme="lagoon"],[data-theme="ember"],[data-t
     -webkit-backdrop-filter: blur(12px);
 }
 
+/* ================================================================
+   Global UI cohesion layer
+   Keeps controls from feature-specific styles visually compatible.
+   ================================================================ */
+:root {
+    --ui-control-height: 40px;
+    --ui-control-radius: 9px;
+    --ui-surface-radius: 14px;
+    --ui-control-pad-x: 12px;
+    --ui-control-border: color-mix(in srgb, var(--border) 88%, var(--text-muted) 12%);
+}
+
+input[type="text"], input[type="number"], input[type="email"],
+input[type="password"], input[type="date"], input[type="month"],
+input[type="time"], input[type="search"], select {
+    min-height: var(--ui-control-height);
+    padding: 8px var(--ui-control-pad-x);
+    border: 1px solid var(--ui-control-border);
+    border-radius: var(--ui-control-radius);
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    font: 500 .84rem var(--font-main);
+    line-height: 1.25;
+}
+
+textarea {
+    min-height: 84px;
+    padding: 10px var(--ui-control-pad-x);
+    border: 1px solid var(--ui-control-border);
+    border-radius: var(--ui-control-radius);
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    font: 500 .84rem/1.5 var(--font-main);
+}
+
+input[type="date"], input[type="month"], input[type="time"],
+.month-select, .year-select, .trade-date-select {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="month"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: .68;
+    filter: var(--calendar-icon-filter, none);
+}
+
+input[type="checkbox"], input[type="radio"], input[type="range"] {
+    accent-color: var(--accent);
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):focus,
+textarea:focus, select:focus,
+.date-display:focus-visible {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+    outline: none;
+}
+
+.btn-primary, .btn-secondary, .btn-ai,
+.date-nav-btn, .header-menu-btn,
+.calendar-session-review-btn, .rr-toggle-btn {
+    min-height: var(--ui-control-height);
+    border-radius: var(--ui-control-radius);
+    padding: 8px 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    font-family: var(--font-main);
+    font-size: .82rem;
+    font-weight: 700;
+    line-height: 1.15;
+}
+
+.btn-primary, .btn-secondary, .btn-ai {
+    margin-top: 0;
+}
+
+.btn-primary:focus-visible, .btn-secondary:focus-visible, .btn-ai:focus-visible,
+.date-nav-btn:focus-visible, .header-menu-btn:focus-visible,
+.icon-btn:focus-visible, .icon-button-plain:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.icon-btn, .icon-button-plain, .notif-close-btn,
+.dashboard-ai-refresh-icon {
+    min-width: 34px;
+    min-height: 34px;
+    padding: 7px;
+    border-radius: var(--ui-control-radius);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.date-display {
+    min-height: var(--ui-control-height);
+    padding: 8px 12px;
+    border: 1px solid var(--ui-control-border);
+    border-radius: var(--ui-control-radius);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+.main-tabs, .tabs, .stop-review-stage-tabs,
+.dashboard-mentor-tabs {
+    border-radius: calc(var(--ui-control-radius) + 2px);
+}
+
+.main-tab-btn, .tab-btn,
+.stop-review-stage-tabs button,
+.dashboard-mentor-tabs button {
+    min-height: 36px;
+    border-radius: calc(var(--ui-control-radius) - 2px);
+    font-weight: 700;
+}
+
+.panel, .recent-trades-panel, .risk-calc-panel,
+.week-heatmap-panel, .stats-source-panel,
+.session-review-screens, .stop-review-card {
+    border-radius: var(--ui-surface-radius);
+}
+
+.form-group > label,
+.session-field-label,
+.theme-section-label,
+.stop-review-toolbar label {
+    margin-bottom: 6px;
+    color: var(--text-muted);
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .055em;
+}
+
+@media (max-width: 600px) {
+    :root { --ui-control-height: 42px; }
+    .btn-primary, .btn-secondary, .btn-ai { padding-inline: 12px; }
+    input, select, textarea { font-size: 16px; }
+}
+
 @media (max-width: 600px) {
     .theme-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .theme-card { min-width: 0; padding: 8px; }
