@@ -5,6 +5,7 @@ import { normalizeAppData, normalizeDayEntry, getDefaultAppData, normalizeTradeT
 import { loadPlaybook } from './playbook.js';
 import { clearStatsCache } from './stats.js';
 import { ensureSupabaseStorageUser, uploadToSupabaseStorage, deleteFromSupabaseStorage, getSupabaseStorageUrl } from './supabase_storage.js';
+import { loadScreenshotRegistry, mergeScreenshotRegistry } from './screenshot_registry.js';
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 import { createCompressedBackup } from './backups.js';
 
@@ -736,6 +737,17 @@ export async function initializeApp() {
         // Critical dashboard data: keep heavy trade views lazy, but make the
         // home curve/recent trades complete immediately after login.
         await loadTradeDays(nick, viewedUserId);
+
+        // Restore only after journal days are present, so screenshots that are
+        // already assigned to a day are not also shown as unassigned.
+        const registryUserId = viewedUserId || state.myUserId;
+        if (isViewingOwnProfile && registryUserId) {
+            try {
+                mergeScreenshotRegistry(state.appData, await loadScreenshotRegistry(registryUserId));
+            } catch (registryError) {
+                console.warn('[Storage] screenshot registry unavailable; apply database/06_screenshot_registry.sql', registryError);
+            }
+        }
 
         if (state.selectedDateStr) {
             const selMk = monthKey(state.selectedDateStr);

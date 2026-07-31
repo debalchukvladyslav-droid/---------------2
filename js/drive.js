@@ -8,6 +8,7 @@ import { buildScreenshotPath, buildScreenshotPathVariants } from './storage_path
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 import { ensureGoogleApi, ensureGoogleIdentity } from './vendor_loader.js';
 import { supabase } from './supabase.js';
+import { loadScreenshotRegistry, mergeScreenshotRegistry, registerDriveScreenshot } from './screenshot_registry.js';
 
 const appConfig = window.TRADING_JOURNAL_CONFIG || {};
 const CLIENT_ID = String(appConfig.googleDriveClientId || appConfig.googleSheetsClientId || '').trim();
@@ -375,6 +376,14 @@ export async function syncDriveScreenshots(silent = false) {
         state.myUserId = storageUser.id;
         console.info('[Drive test] Supabase auth user:', { id: storageUser.id, email: storageUser.email || '' });
 
+        // Supabase is authoritative: consult its manifest before Drive so an
+        // account switch cannot make an already copied file look new.
+        try {
+            mergeScreenshotRegistry(state.appData, await loadScreenshotRegistry(storageUser.id));
+        } catch (registryError) {
+            console.warn('[Drive] screenshot registry unavailable; apply database/06_screenshot_registry.sql', registryError);
+        }
+
         let files;
         let driveFilesViaService = false;
         if (_driveFilesCache && Date.now() - _driveFilesCache.ts < DRIVE_FILES_CACHE_TTL) {
@@ -481,6 +490,17 @@ export async function syncDriveScreenshots(silent = false) {
             if (upsertDriveScreenMeta(record.existingPath, record.file)) metaUpdatedCount++;
         }
 
+        // Backfill files copied by older versions, where the path existed only in
+        // profile settings. Once registered, they survive lost/stale settings too.
+        const registryBackfills = fileRecords.filter(record => record.existingPath && !ignored.has(record.existingPath));
+        if (registryBackfills.length) {
+            const results = await Promise.allSettled(registryBackfills.map(record =>
+                registerDriveScreenshot(storageUser.id, record.existingPath, record.file, record.file.mimeType || '')
+            ));
+            const rejected = results.filter(result => result.status === 'rejected');
+            if (rejected.length) console.warn('[Drive] screenshot registry backfill failures:', rejected.length);
+        }
+
         const newFiles = fileRecords.filter(record =>
             !existingDriveIds.has(String(record.file.id))
             && !record.existingPath
@@ -525,6 +545,7 @@ export async function syncDriveScreenshots(silent = false) {
                     bucket: 'screenshots',
                     contentType: blob.type || file.mimeType || 'application/octet-stream',
                 });
+                await registerDriveScreenshot(storageUser.id, storagePath, file, blob.type || file.mimeType || '');
                 console.info('[Drive test] uploaded to Supabase:', {
                     name: file.name,
                     storagePath,
