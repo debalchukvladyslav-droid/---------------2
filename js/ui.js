@@ -329,6 +329,8 @@ export function applyTheme(forceSync = false) {
                 if (document.getElementById('ct-accent')) document.getElementById('ct-accent').value = ct.accent || '#3b82f6';
                 if (document.getElementById('ct-profit')) document.getElementById('ct-profit').value = ct.profit || '#10b981';
                 if (document.getElementById('ct-loss')) document.getElementById('ct-loss').value = ct.loss || '#ef4444';
+                if (document.getElementById('ct-gradient-enabled')) document.getElementById('ct-gradient-enabled').checked = !!ct.gradient;
+                if (document.getElementById('ct-gradient-color')) document.getElementById('ct-gradient-color').value = ct.gradientColor || '#7c3aed';
             }
         }
         isThemeUIInitialized = true;
@@ -369,6 +371,12 @@ export function applyTheme(forceSync = false) {
         const accent   = document.getElementById('ct-accent')?.value    || '#3b82f6';
         const profit   = document.getElementById('ct-profit')?.value    || '#10b981';
         const loss     = document.getElementById('ct-loss')?.value      || '#ef4444';
+        const gradientEnabled = !!document.getElementById('ct-gradient-enabled')?.checked;
+        const gradientColor = document.getElementById('ct-gradient-color')?.value || '#7c3aed';
+
+        document.body.dataset.customGradient = gradientEnabled ? 'true' : 'false';
+        root.style.setProperty('--custom-gradient-color', gradientColor);
+        document.body.style.setProperty('--custom-gradient-color', gradientColor);
 
         const isLight  = getBrightness(bgMain) > 128;
         const textMuted    = adjustColor(textMain, isLight ? 60 : -60);
@@ -407,6 +415,9 @@ export function applyTheme(forceSync = false) {
         document.documentElement.style.setProperty('--tabs-bg', sidebarAccent);
         document.body.style.setProperty('--tabs-bg', sidebarAccent);
     } else {
+        delete document.body.dataset.customGradient;
+        root.style.removeProperty('--custom-gradient-color');
+        document.body.style.removeProperty('--custom-gradient-color');
         applyThemeVarsEverywhere(THEME_PRESETS[theme] || THEME_PRESETS.dark);
         document.documentElement.style.removeProperty('--tabs-bg');
         document.body.style.removeProperty('--tabs-bg');
@@ -457,7 +468,9 @@ export function saveThemeSettings() {
             textMain: document.getElementById('ct-text-main').value, 
             accent: document.getElementById('ct-accent').value,
             profit: document.getElementById('ct-profit').value, 
-            loss: document.getElementById('ct-loss').value
+            loss: document.getElementById('ct-loss').value,
+            gradient: !!document.getElementById('ct-gradient-enabled')?.checked,
+            gradientColor: document.getElementById('ct-gradient-color')?.value || '#7c3aed'
         };
     }
     

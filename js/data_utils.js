@@ -10,7 +10,8 @@ export function getDefaultSettings() {
         font: "inter",
         customTheme: {
             bgMain: '#0f172a', bgPanel: '#1e293b', textMain: '#f8fafc', 
-            accent: '#3b82f6', profit: '#10b981', loss: '#ef4444'
+            accent: '#3b82f6', profit: '#10b981', loss: '#ef4444',
+            gradient: false, gradientColor: '#7c3aed'
         },
         checklist: [],
         sliders: [],

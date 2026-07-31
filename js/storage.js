@@ -780,7 +780,7 @@ export async function initializeApp() {
 
         if (window.initSelectors) window.initSelectors();
         state.statsSourceSelection = { type: 'current', key: state.CURRENT_VIEWED_USER };
-        if (window.applyTheme) window.applyTheme();
+        if (window.applyTheme) window.applyTheme(true);
         if (window.updateAutoFlags) await window.updateAutoFlags();
         if (window.renderErrorsList) window.renderErrorsList();
         if (window.renderSettingsChecklist) window.renderSettingsChecklist();

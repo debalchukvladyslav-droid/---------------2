@@ -344,7 +344,7 @@ function updateRangeOutput(input) {
 }
 
 function isThemeControl(target) {
-    return target?.matches?.('input[name="theme"], input[name="font"], input[type="color"][id^="ct-"]');
+    return target?.matches?.('input[name="theme"], input[name="font"], input[type="color"][id^="ct-"], #ct-gradient-enabled');
 }
 
 function handleImportInput(event) {
