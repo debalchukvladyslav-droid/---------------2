@@ -215,16 +215,20 @@ export function buildExceptionKfRows(entries = [], tradeTypeFilter = null, optio
                 const kf = parseSheetProfitRisk(sheet.profitRisk);
                 const pnl = parseSheetNumber(sheet.sheetNet ?? row?.net);
                 const criteria = criterionValues(sheet);
-                // Criteria statistics are strictly trade-level Sheet data: both
-                // recorded PnL and profit in R must belong to the same row.
-                if (!criteria.length || kf == null || pnl == null) return;
+                // Match the workbook's BR+ formulas: criterion can be in either
+                // exception column, while PnL and R are accumulated independently.
+                if (!criteria.length || (kf == null && pnl == null)) return;
                 criteria.forEach((criterion) => {
                     if (!buckets.has(criterion)) buckets.set(criterion, { criterion, pnl: 0, kf: 0, trades: 0, pnlRows: 0, kfRows: 0 });
                     const bucket = buckets.get(criterion);
-                    bucket.pnl += pnl;
-                    bucket.pnlRows += 1;
-                    bucket.kf += kf;
-                    bucket.kfRows += 1;
+                    if (pnl != null) {
+                        bucket.pnl += pnl;
+                        bucket.pnlRows += 1;
+                    }
+                    if (kf != null) {
+                        bucket.kf += kf;
+                        bucket.kfRows += 1;
+                    }
                     bucket.trades += 1;
                 });
     });
@@ -234,7 +238,7 @@ export function buildExceptionKfRows(entries = [], tradeTypeFilter = null, optio
             ...row,
             pnl: parseFloat(row.pnl.toFixed(2)),
             kf: parseFloat(row.kf.toFixed(2)),
-            avgKf: row.trades ? parseFloat((row.kf / row.trades).toFixed(2)) : 0,
+            avgKf: row.kfRows ? parseFloat((row.kf / row.kfRows).toFixed(2)) : 0,
         }))
         .sort((a, b) => b.kf - a.kf || b.trades - a.trades || a.criterion.localeCompare(b.criterion, 'uk'));
 }

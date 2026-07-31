@@ -604,7 +604,7 @@ test('hourly results aggregate main and cumulative Sheet sources', () => {
     assert.deepEqual(rows.find((row) => row.hour === 9), { hour: 9, pnl: 20, kf: 1, trades: 1, pnlRows: 1, kfRows: 1, label: '09' });
 });
 
-test('exception criteria use only complete Sheet rows and combine both exception columns', () => {
+test('exception criteria independently sum Sheet PnL and KФ like BR formulas', () => {
     const sheetRows = { active: { '2026-04-01': [
         { sheet: { sheetNet: -20, profitRisk: '-1R', exception: 'Late entry', exceptions: ['Late entry'] } },
         { sheet: { sheetNet: 10, profitRisk: '0,5R', exception: '-', exceptions: ['Chase'] } },
@@ -617,7 +617,7 @@ test('exception criteria use only complete Sheet rows and combine both exception
 
     const rows = buildExceptionKfRows([], null, { sheetRows });
 
-    assert.deepEqual(rows.map((row) => row.criterion), ['-', 'Chase', 'Late entry']);
+    assert.deepEqual(rows.map((row) => row.criterion), ['-', 'Chase', 'No KФ', 'Late entry', 'No PnL']);
     assert.deepEqual(rows.find((row) => row.criterion === 'Late entry'), {
         criterion: 'Late entry',
         pnl: -15,
@@ -638,6 +638,12 @@ test('exception criteria use only complete Sheet rows and combine both exception
     });
     assert.deepEqual(rows.find((row) => row.criterion === '-'), {
         criterion: '-', pnl: 10, kf: 0.5, trades: 1, pnlRows: 1, kfRows: 1, avgKf: 0.5,
+    });
+    assert.deepEqual(rows.find((row) => row.criterion === 'No KФ'), {
+        criterion: 'No KФ', pnl: 30, kf: 0, trades: 1, pnlRows: 1, kfRows: 0, avgKf: 0,
+    });
+    assert.deepEqual(rows.find((row) => row.criterion === 'No PnL'), {
+        criterion: 'No PnL', pnl: 0, kf: -5, trades: 1, pnlRows: 0, kfRows: 1, avgKf: -5,
     });
     assert.deepEqual(buildExceptionKfRows([{ data: { trades: [{ sheet: {
         sheetNet: 500, profitRisk: '5R', exception: 'Trades fallback',
