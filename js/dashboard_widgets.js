@@ -6,7 +6,8 @@ import { supabase } from './supabase.js';
 import { buildExceptionKfRows, buildHourlyKfBuckets, combineStatsSheetRows } from './stats_sheet_metrics.js';
 import { escapeHtml } from './utils.js';
 
-const VERSION = 2;
+const VERSION = 3;
+const GRID_COLUMNS = 24;
 const CATEGORIES = { overview: 'Огляд', analytics: 'Аналітика', routine: 'Сесія', tools: 'Інструменти' };
 const MICRO_WIDGETS = new Set(['month-pnl', 'month-winrate', 'month-trades', 'month-pf', 'today', 'daily-kf', 'week-compare', 'streak', 'current-hour', 'last-session', 'sync-status', 'missing-data']);
 const COMPLEX_WIDGETS = new Set(['equity', 'ai-mentor', 'recent-trades', 'market-mood', 'checklist', 'criteria-best', 'criteria-warning', 'quick-actions']);
@@ -27,9 +28,9 @@ const WIDGETS = [
     ['sync-status', 'Синхронізація', 'tools', 4, 2], ['missing-data', 'Незаповнені дані', 'tools', 4, 2],
     ['earnings', 'Майбутні звіти тикерів', 'tools', 4, 2], ['quick-actions', 'Швидкі дії', 'tools', 4, 2],
     ['news', 'Стрічка новин', 'tools', 12, 1],
-].map(([id, title, category, w, h]) => ({ id, title, category, w, h, minW: COMPLEX_LIMITS[id]?.[0] || (MICRO_WIDGETS.has(id) ? 2 : Math.min(w, 3)), maxW: 12, minH: COMPLEX_LIMITS[id]?.[1] || (MICRO_WIDGETS.has(id) || id === 'news' ? 1 : 2), maxH: 6 }));
+].map(([id, title, category, w, h]) => ({ id, title, category, w: w * 2, h, minW: COMPLEX_LIMITS[id]?.[0] ? COMPLEX_LIMITS[id][0] * 2 : (MICRO_WIDGETS.has(id) ? 3 : Math.min(w * 2, 6)), maxW: GRID_COLUMNS, minH: COMPLEX_LIMITS[id]?.[1] || (MICRO_WIDGETS.has(id) || id === 'news' ? 1 : 2), maxH: 6 }));
 
-const DEFAULT_IDS = ['news', 'month-pnl', 'month-winrate', 'month-trades', 'month-pf', 'market-mood', 'today', 'equity', 'ai-mentor', 'recent-trades', 'quick-actions'];
+const DEFAULT_IDS = ['news', 'month-pnl', 'month-winrate', 'month-trades', 'month-pf', 'market-mood', 'equity', 'recent-trades'];
 let editing = false;
 let initialized = false;
 let saveTimer = 0;
@@ -154,7 +155,7 @@ function controls(item) {
 
 function makeWidget(item) {
     const article = document.createElement('article'); article.className = 'dashboard-widget'; article.dataset.widgetId = item.id;
-    article.dataset.mobileSize = item.w <= 3 ? 'small' : item.w >= 12 ? 'full' : 'medium';
+    article.dataset.mobileSize = item.w <= 6 ? 'small' : item.w >= GRID_COLUMNS ? 'full' : 'medium';
     article.dataset.widgetH = String(item.h);
     article.classList.toggle('is-micro-widget', MICRO_WIDGETS.has(item.id));
     article.style.setProperty('--widget-w', item.w); article.style.setProperty('--widget-h', item.h);
@@ -234,7 +235,7 @@ function moveItemLive(fromId, toId) {
 function changeSize(id, direction) {
     const item = layout.find((entry) => entry.id === id); const meta = def(id); if (!item || !meta) return;
     if (window.matchMedia('(max-width: 700px)').matches) {
-        const presets = [3, 6, 12]; const current = presets.reduce((best, value) => Math.abs(value - item.w) < Math.abs(best - item.w) ? value : best, 6); const index = presets.indexOf(current);
+        const presets = [6, 12, GRID_COLUMNS]; const current = presets.reduce((best, value) => Math.abs(value - item.w) < Math.abs(best - item.w) ? value : best, 12); const index = presets.indexOf(current);
         if (direction === 'down' && index === 0) item.h = meta.minH;
         else if (direction === 'up' && item.h < meta.h) item.h++;
         else item.w = presets[clamp(index + (direction === 'up' ? 1 : -1), 0, presets.length - 1)];
@@ -242,8 +243,8 @@ function changeSize(id, direction) {
         if (item.w > meta.minW) item.w--;
         else if (item.h > meta.minH) item.h--;
     } else {
-        if (item.h < meta.h) item.h++;
-        else item.w = clamp(item.w + 1, meta.minW, meta.maxW);
+        if (item.h < meta.h) growHeightAndShrinkNeighbour(item, 1);
+        else growWidthAndShrinkNeighbour(item, 1);
     }
     persist(); renderGrid();
 }
@@ -252,15 +253,48 @@ function compactLastRowFor(newWidget) {
     let row = [];
     let used = 0;
     layout.forEach((item) => {
-        if (used + item.w > 12) { row = []; used = 0; }
+        if (used + item.w > GRID_COLUMNS) { row = []; used = 0; }
         row.push(item); used += item.w;
-        if (used === 12) { row = []; used = 0; }
+        if (used === GRID_COLUMNS) { row = []; used = 0; }
     });
-    while (used + newWidget.w > 12) {
+    while (used + newWidget.w > GRID_COLUMNS) {
         const candidate = [...row].sort((a, b) => (b.w - def(b.id).minW) - (a.w - def(a.id).minW))[0];
         if (!candidate || candidate.w <= def(candidate.id).minW) break;
         candidate.w--;
         used--;
+    }
+}
+
+function rowContaining(item) {
+    const rows = []; let row = []; let used = 0;
+    for (const current of layout) {
+        if (used + current.w > GRID_COLUMNS) { rows.push(row); row = []; used = 0; }
+        row.push(current); used += current.w;
+        if (used === GRID_COLUMNS) { rows.push(row); row = []; used = 0; }
+    }
+    if (row.length) rows.push(row);
+    return rows.find((items) => items.includes(item)) || [item];
+}
+
+function growWidthAndShrinkNeighbour(item, amount = 1) {
+    let remaining = Math.min(amount, def(item.id).maxW - item.w);
+    while (remaining > 0) {
+        const neighbour = rowContaining(item)
+            .filter((entry) => entry !== item && entry.w > def(entry.id).minW)
+            .sort((a, b) => (b.w - def(b.id).minW) - (a.w - def(a.id).minW))[0];
+        if (!neighbour) break;
+        neighbour.w--; item.w++; remaining--;
+    }
+}
+
+function growHeightAndShrinkNeighbour(item, amount = 1) {
+    let remaining = Math.min(amount, def(item.id).maxH - item.h);
+    while (remaining > 0) {
+        const neighbour = rowContaining(item)
+            .filter((entry) => entry !== item && entry.h > def(entry.id).minH)
+            .sort((a, b) => (b.h - def(b.id).minH) - (a.h - def(a.id).minH))[0];
+        if (!neighbour) break;
+        neighbour.h--; item.h++; remaining--;
     }
 }
 
@@ -292,7 +326,7 @@ function bindEvents() {
     });
     document.addEventListener('pointermove', (event) => {
         if (!drag || drag.pointerId !== event.pointerId) return;
-        if (drag.resize) { const item = layout.find((entry) => entry.id === drag.id); const meta = def(drag.id); item.w = clamp(drag.w + Math.round((event.clientX - drag.startX) / 70), meta.minW, meta.maxW); item.h = clamp(drag.h + Math.round((event.clientY - drag.startY) / 64), meta.minH, meta.maxH); const article = document.querySelector(`[data-widget-id="${drag.id}"]`); article?.style.setProperty('--widget-w', item.w); article?.style.setProperty('--widget-h', item.h); if (article) article.dataset.widgetH = String(item.h); return; }
+        if (drag.resize) { const item = layout.find((entry) => entry.id === drag.id); const meta = def(drag.id); const desiredW = clamp(drag.w + Math.round((event.clientX - drag.startX) / 36), meta.minW, meta.maxW); const desiredH = clamp(drag.h + Math.round((event.clientY - drag.startY) / 58), meta.minH, meta.maxH); if (desiredW < item.w) item.w = desiredW; else if (desiredW > item.w) growWidthAndShrinkNeighbour(item, desiredW - item.w); if (desiredH < item.h) item.h = desiredH; else if (desiredH > item.h) growHeightAndShrinkNeighbour(item, desiredH - item.h); document.querySelectorAll('#dashboard-widget-grid .dashboard-widget').forEach((node) => { const entry = layout.find((value) => value.id === node.dataset.widgetId); if (entry) { node.style.setProperty('--widget-w', entry.w); node.style.setProperty('--widget-h', entry.h); node.dataset.widgetH = String(entry.h); } }); return; }
         drag.lastX = event.clientX; drag.lastY = event.clientY;
         if (!drag.frame) drag.frame = requestAnimationFrame(() => { if (drag?.ghost) drag.ghost.style.transform = `translate3d(${drag.lastX - drag.startX}px,${drag.lastY - drag.startY}px,0) scale(1.02)`; if (drag) drag.frame = 0; });
         const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.('.dashboard-widget'); if (target && target.dataset.widgetId !== drag.id) moveItemLive(drag.id, target.dataset.widgetId);

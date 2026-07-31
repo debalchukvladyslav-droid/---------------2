@@ -474,6 +474,7 @@ function bindDeclarativeActions() {
         if (handleImportInput(event)) return;
         if (isThemeControl(target)) {
             window.applyTheme?.();
+            window.saveThemeSettings?.({ quiet: true });
             return;
         }
         if (target?.matches?.('[data-action="date-select"]')) {

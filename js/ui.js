@@ -1,6 +1,6 @@
 // === js/ui.js ===
 import { state } from './state.js';
-import { saveToLocal } from './storage.js';
+import { saveToLocal, saveSettings } from './storage.js';
 import { showToast, showConfirm } from './utils.js';
 import { disposeDashMiniEquityChart, refreshDashMiniEquityChartTheme } from './dash_mini_chart.js';
 import { disposeStatsView } from './stats.js';
@@ -10,6 +10,7 @@ import { disposeTradesDatagrid } from './trades_datagrid.js';
 
 let isThemeUIInitialized = false;
 let selectedDashGreetingIndex = null;
+let themeSaveTimer = 0;
 
 const DASH_GREETINGS = [
     { render: (name) => `Вітаю, ${name}` },
@@ -455,11 +456,12 @@ export function applyTheme(forceSync = false) {
     }, 50); 
 }
 
-export function saveThemeSettings() {
+export function saveThemeSettings(options = {}) {
     if (!state.appData.settings) state.appData.settings = {};
     
     state.appData.settings.theme = getThemeFromUI();
     state.appData.settings.font = getFontFromUI();
+    state.appData.settings.themeUpdatedAt = new Date().toISOString();
 
     if (state.appData.settings.theme === 'custom') {
         state.appData.settings.customTheme = {
@@ -474,7 +476,22 @@ export function saveThemeSettings() {
         };
     }
     
-    applyTheme(); 
+    applyTheme();
+    clearTimeout(themeSaveTimer);
+    const commit = () => saveSettings().then(() => {
+        try {
+            localStorage.setItem(`theme:${state.myUserId || 'local'}`, JSON.stringify({
+                theme: state.appData.settings.theme,
+                font: state.appData.settings.font,
+                customTheme: state.appData.settings.customTheme || null,
+                updatedAt: state.appData.settings.themeUpdatedAt,
+            }));
+        } catch {}
+        if (!options.quiet) showToast('Стиль збережено!');
+    });
+    if (options.quiet) themeSaveTimer = window.setTimeout(commit, 280);
+    else void commit();
+    return;
     saveToLocal().then(() => showToast("Стиль збережено!"));
 }
 

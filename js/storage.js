@@ -389,6 +389,17 @@ export async function loadSettings() {
                 delete incoming.weeklyComments;
             }
             state.appData.settings = { ...state.appData.settings, ...incoming };
+            try {
+                const cachedTheme = JSON.parse(localStorage.getItem(`theme:${user.id}`) || 'null');
+                const cachedAt = Date.parse(cachedTheme?.updatedAt || 0);
+                const remoteAt = Date.parse(state.appData.settings.themeUpdatedAt || 0);
+                if (cachedTheme?.theme && cachedAt > remoteAt) {
+                    state.appData.settings.theme = cachedTheme.theme;
+                    state.appData.settings.font = cachedTheme.font || state.appData.settings.font;
+                    state.appData.settings.customTheme = cachedTheme.customTheme || state.appData.settings.customTheme;
+                    state.appData.settings.themeUpdatedAt = cachedTheme.updatedAt;
+                }
+            } catch {}
             console.log('✅ Settings завантажено з Supabase');
         }
     } catch (e) {
