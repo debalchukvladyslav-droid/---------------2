@@ -209,14 +209,17 @@ export function buildHourlyKfBuckets(entries = [], tradeTypeFilter = null, optio
 }
 
 function criterionValues(sheet = {}) {
-    const values = [];
-    if (Array.isArray(sheet.exceptions)) values.push(...sheet.exceptions);
-    else if (sheet.exceptions != null) values.push(sheet.exceptions);
-    if (sheet.exception != null) values.push(sheet.exception);
-    return [...new Set(values
+    const rawValues = [];
+    if (Array.isArray(sheet.exceptions)) rawValues.push(...sheet.exceptions);
+    else if (sheet.exceptions != null) rawValues.push(sheet.exceptions);
+    if (sheet.exception != null) rawValues.push(sheet.exception);
+    const values = [...new Set(rawValues
         .flatMap((value) => String(value || '').split(/[;,]/))
         .map((value) => value.trim())
         .filter(Boolean))];
+    const combinable = values.filter((value) => value !== '-');
+    if (combinable.length > 1) values.push(combinable.join('; '));
+    return [...new Set(values)];
 }
 
 export function buildExceptionKfRows(entries = [], tradeTypeFilter = null, options = {}) {

@@ -620,6 +620,7 @@ test('exception criteria use only criterion and KФ from the same isolated Sheet
     const sheetRows = { active: { '2026-04-01': [
         { sheet: { sheetNet: -20, profitRisk: '-1R', exception: 'Late entry', exceptions: ['Late entry'] } },
         { sheet: { sheetNet: 10, profitRisk: '0,5R', exception: '-', exceptions: ['Chase'] } },
+        { sheet: { profitRisk: '2R', exception: 'Shs float <4M; 700K+' } },
         { sheet: { sheetNet: 99, profitRisk: '2R' } },
         { sheet: { sheetNet: 30, exception: 'No KФ' } },
         { sheet: { profitRisk: '-5R', exception: 'No PnL' } },
@@ -629,7 +630,14 @@ test('exception criteria use only criterion and KФ from the same isolated Sheet
 
     const rows = buildExceptionKfRows([], null, { sheetRows });
 
-    assert.deepEqual(rows.map((row) => row.criterion), ['-', 'Chase', 'Late entry', 'No PnL']);
+    assert.deepEqual(new Set(rows.map((row) => row.criterion)), new Set([
+        '-', 'Chase', 'Late entry', 'No PnL', 'Shs float <4M', '700K+', 'Shs float <4M; 700K+',
+    ]));
+    for (const criterion of ['Shs float <4M', '700K+', 'Shs float <4M; 700K+']) {
+        assert.deepEqual(rows.find((row) => row.criterion === criterion), {
+            criterion, pnl: 0, kf: 2, trades: 1, pnlRows: 0, kfRows: 1, avgKf: 2,
+        });
+    }
     assert.deepEqual(rows.find((row) => row.criterion === 'Late entry'), {
         criterion: 'Late entry',
         pnl: 0,
