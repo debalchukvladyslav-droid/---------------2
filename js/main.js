@@ -54,6 +54,7 @@ import { getTrustedServerNow, isEndOfSessionReviewTime } from './session_schedul
 import { renderDashboardAI, refreshDashboardAI, toggleDashboardAIHistory, rotateDashboardAI, openDashboardMentor, closeDashboardMentor, sendDashboardMentorMessage, switchDashboardMentorTab } from './dashboard_ai.js';
 import { analyzeLossPatterns, renderLossPatternAnalysis } from './loss_pattern_analysis.js';
 import { closeCumulativeWeekly, openCumulativeWeekly, saveCumulativeDayloss, toggleCumulativeDayloss } from './cumulative_weekly_ui.js';
+import { initDashboardWidgets, refreshDashboardWidgets } from './dashboard_widgets.js';
 
 let appShellPromise = null;
 let appShellEventsReady = false;
@@ -127,6 +128,8 @@ window.sendDashboardMentorMessage = sendDashboardMentorMessage;
 window.switchDashboardMentorTab = switchDashboardMentorTab;
 window.analyzeLossPatterns = analyzeLossPatterns;
 window.renderLossPatternAnalysis = renderLossPatternAnalysis;
+window.initDashboardWidgets = initDashboardWidgets;
+window.refreshDashboardWidgets = refreshDashboardWidgets;
 
 let manualSyncInProgress = false;
 let manualSyncIntervalId = null;
@@ -1289,6 +1292,7 @@ async function bootApp(user) {
         await loadTeams();
         await loadMentorStatusForAccount();
         await initializeApp();
+        await initDashboardWidgets();
 
         if (canAccessMentorReviewQueue()) {
             document.querySelectorAll('.mentor-review-nav-item').forEach((el) => {

@@ -20,7 +20,8 @@ export function getDefaultSettings() {
         defaultDayloss: -100,
         monthlyDayloss: {},
         cumulativeMonthlyDayloss: {},
-        fondexxMonthlyAdjustments: {}
+        fondexxMonthlyAdjustments: {},
+        dashboardLayout: null
     };
 }
 

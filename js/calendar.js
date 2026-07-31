@@ -273,6 +273,7 @@ export function updateDashboardWidgets(year, month) {
             });
         }
     }
+    window.refreshDashboardWidgets?.();
 }
 
 export function shiftDate(offset) {

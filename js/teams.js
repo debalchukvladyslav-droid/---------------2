@@ -643,6 +643,7 @@ export async function switchUser(nick) {
         state._availableMonthKeys = new Set();
         if (window.renderView) window.renderView();
         await initializeApp();
+        await window.initDashboardWidgets?.();
         if (window.refreshStatsView) await window.refreshStatsView();
         if (window.renderJournalScore) await window.renderJournalScore();
     } catch (e) {

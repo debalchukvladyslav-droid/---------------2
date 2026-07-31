@@ -37,7 +37,8 @@ export const state = {
             ocrRect: {top: 0, left: 0, width: 250, height: 80}, 
             defaultDayloss: -100,
             monthlyDayloss: {},
-            glassEnabled: true
+            glassEnabled: true,
+            dashboardLayout: null
         }, 
         tickers: {},
         unassignedImages: [],
