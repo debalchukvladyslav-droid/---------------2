@@ -6,22 +6,22 @@ import { supabase } from './supabase.js';
 import { buildExceptionKfRows, buildHourlyKfBuckets, combineStatsSheetRows } from './stats_sheet_metrics.js';
 import { escapeHtml } from './utils.js';
 
-const VERSION = 1;
+const VERSION = 2;
 const CATEGORIES = { overview: 'Огляд', analytics: 'Аналітика', routine: 'Сесія', tools: 'Інструменти' };
 const WIDGETS = [
-    ['month-pnl', 'P&L за місяць', 'overview', 3, 2], ['month-winrate', 'Вінрейт', 'overview', 3, 2],
-    ['month-trades', 'Угоди за місяць', 'overview', 3, 2], ['month-pf', 'Profit Factor', 'overview', 3, 2],
-    ['today', 'Стан сьогодні', 'overview', 4, 3], ['daily-kf', 'КФ сьогодні', 'overview', 3, 2],
-    ['equity', 'Крива P&L', 'analytics', 7, 4], ['week-compare', 'Тиждень проти тижня', 'analytics', 4, 3],
-    ['streak', 'Поточна серія', 'analytics', 3, 2], ['criteria-best', 'Найкращий і найгірший критерій', 'analytics', 4, 3],
-    ['criteria-warning', 'Ризикові критерії', 'analytics', 4, 3], ['current-hour', 'Поточна година входу', 'analytics', 4, 3],
-    ['last-session', 'Остання сесія', 'routine', 5, 3], ['checklist', 'Передсесійний чекліст', 'routine', 4, 3],
-    ['daily-focus', 'Фокус дня', 'routine', 4, 3], ['ai-mentor', 'AI-наставник', 'routine', 5, 4],
-    ['recent-trades', 'Останні угоди', 'analytics', 5, 4], ['market-mood', 'Настрій ринку', 'overview', 3, 3],
-    ['sync-status', 'Синхронізація', 'tools', 4, 3], ['missing-data', 'Незаповнені дані', 'tools', 4, 3],
-    ['earnings', 'Майбутні звіти тикерів', 'tools', 4, 3], ['quick-actions', 'Швидкі дії', 'tools', 5, 3],
+    ['month-pnl', 'P&L за місяць', 'overview', 2, 1], ['month-winrate', 'Вінрейт', 'overview', 2, 1],
+    ['month-trades', 'Угоди за місяць', 'overview', 2, 1], ['month-pf', 'Profit Factor', 'overview', 2, 1],
+    ['today', 'Стан сьогодні', 'overview', 4, 2], ['daily-kf', 'КФ сьогодні', 'overview', 3, 2],
+    ['equity', 'Крива P&L', 'analytics', 8, 4], ['week-compare', 'Тиждень проти тижня', 'analytics', 4, 2],
+    ['streak', 'Поточна серія', 'analytics', 3, 2], ['criteria-best', 'Найкращий і найгірший критерій', 'analytics', 4, 2],
+    ['criteria-warning', 'Ризикові критерії', 'analytics', 4, 2], ['current-hour', 'Поточна година входу', 'analytics', 4, 2],
+    ['last-session', 'Остання сесія', 'routine', 5, 2], ['checklist', 'Передсесійний чекліст', 'routine', 4, 2],
+    ['daily-focus', 'Фокус дня', 'routine', 4, 2], ['ai-mentor', 'AI-наставник', 'routine', 4, 4],
+    ['recent-trades', 'Останні угоди', 'analytics', 4, 4], ['market-mood', 'Настрій ринку', 'overview', 4, 2],
+    ['sync-status', 'Синхронізація', 'tools', 4, 2], ['missing-data', 'Незаповнені дані', 'tools', 4, 2],
+    ['earnings', 'Майбутні звіти тикерів', 'tools', 4, 2], ['quick-actions', 'Швидкі дії', 'tools', 4, 2],
     ['news', 'Стрічка новин', 'tools', 12, 1],
-].map(([id, title, category, w, h]) => ({ id, title, category, w, h, minW: Math.min(w, 3), maxW: 12, minH: id === 'news' ? 1 : 2, maxH: 6 }));
+].map(([id, title, category, w, h]) => ({ id, title, category, w, h, minW: id.startsWith('month-') ? 2 : Math.min(w, 3), maxW: 12, minH: ['news', 'month-pnl', 'month-winrate', 'month-trades', 'month-pf', 'market-mood'].includes(id) ? 1 : 2, maxH: 6 }));
 
 const DEFAULT_IDS = ['news', 'month-pnl', 'month-winrate', 'month-trades', 'month-pf', 'market-mood', 'today', 'equity', 'ai-mentor', 'recent-trades', 'quick-actions'];
 let editing = false;
@@ -204,12 +204,28 @@ function changeSize(id, direction) {
     persist(); renderGrid();
 }
 
+function compactLastRowFor(newWidget) {
+    let row = [];
+    let used = 0;
+    layout.forEach((item) => {
+        if (used + item.w > 12) { row = []; used = 0; }
+        row.push(item); used += item.w;
+        if (used === 12) { row = []; used = 0; }
+    });
+    while (used + newWidget.w > 12) {
+        const candidate = [...row].sort((a, b) => (b.w - def(b.id).minW) - (a.w - def(a.id).minW))[0];
+        if (!candidate || candidate.w <= def(candidate.id).minW) break;
+        candidate.w--;
+        used--;
+    }
+}
+
 function bindEvents() {
     byId('dashboard-edit-toggle')?.addEventListener('click', () => setEditing(!editing));
     byId('dashboard-catalog-close')?.addEventListener('click', () => setEditing(false));
     byId('dashboard-reset-layout')?.addEventListener('click', () => { layout = defaultLayout(); persist(); renderGrid(); });
     byId('dashboard-widget-search')?.addEventListener('input', (event) => renderCatalog(event.target.value));
-    byId('dashboard-widget-list')?.addEventListener('click', (event) => { const button = event.target.closest('[data-add-widget]'); if (!button || button.disabled) return; const meta = def(button.dataset.addWidget); layout.push({ id: meta.id, type: meta.id, order: layout.length, w: meta.w, h: meta.h, x: 0, y: layout.length, config: {} }); persist(); renderGrid(); });
+    byId('dashboard-widget-list')?.addEventListener('click', (event) => { const button = event.target.closest('[data-add-widget]'); if (!button || button.disabled) return; const meta = def(button.dataset.addWidget); compactLastRowFor(meta); layout.push({ id: meta.id, type: meta.id, order: layout.length, w: meta.w, h: meta.h, x: 0, y: layout.length, config: {} }); persist(); renderGrid(); });
     byId('dashboard-widget-grid')?.addEventListener('click', (event) => {
         const article = event.target.closest('.dashboard-widget'); if (!article) return;
         if (event.target.closest('[data-remove]')) { layout = layout.filter((item) => item.id !== article.dataset.widgetId); persist(); renderGrid(); return; }
