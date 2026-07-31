@@ -1,6 +1,24 @@
 export const SHEET_MODE_MAIN = 'main';
 export const SHEET_MODE_CUMULATIVE = 'cumulative';
 
+function monthKey(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+export function getCumulativeArchiveSchedule(meta = {}, now = new Date()) {
+    const date = now instanceof Date && !Number.isNaN(now.getTime()) ? now : new Date();
+    const currentMonth = monthKey(date);
+    const synced = String(meta?.month || '') === currentMonth;
+    const day = date.getDate();
+    return {
+        currentMonth,
+        synced,
+        inRecommendedWindow: day >= 1 && day <= 5,
+        overdue: !synced && day > 5,
+        day,
+    };
+}
+
 export function normalizeSheetImportMode(value) {
     return value === SHEET_MODE_CUMULATIVE ? SHEET_MODE_CUMULATIVE : SHEET_MODE_MAIN;
 }

@@ -18,6 +18,7 @@ import {
 import { mergeGoogleSheetTradesIntoJournal as mergeSheetTradesIntoJournal } from './sheet_journal_merge.js';
 import {
     duplicateSheetMappingConfig,
+    getCumulativeArchiveSchedule,
     normalizeSheetImportMode,
     SHEET_MODE_CUMULATIVE,
     SHEET_MODE_MAIN,
@@ -267,8 +268,28 @@ function syncSheetModeUi() {
     const duplicateBtn = el('sheet-duplicate-mapping-btn');
     if (duplicateBtn) duplicateBtn.hidden = !isCumulativeMode(mode);
 
+    const cumulativeMode = isCumulativeMode(mode);
+    const archiveMeta = state.appData?.settings?.cumulativeArchiveSync || {};
+    const archiveSchedule = getCumulativeArchiveSchedule(archiveMeta);
     const syncBtn = el('sheet-save-sync-btn');
-    if (syncBtn) syncBtn.textContent = isCumulativeMode(mode) ? 'Імпортувати накопичувальну' : BTN_DEFAULT;
+    if (syncBtn) {
+        syncBtn.textContent = cumulativeMode
+            ? (archiveSchedule.synced ? 'Повторити імпорт архіву' : 'Перенести місячний архів')
+            : BTN_DEFAULT;
+    }
+    const archiveStatus = el('sheet-cumulative-archive-status');
+    if (archiveStatus) {
+        archiveStatus.hidden = !cumulativeMode;
+        archiveStatus.classList.toggle('is-due', cumulativeMode && !archiveSchedule.synced);
+        if (cumulativeMode) {
+            const syncedAt = archiveMeta?.syncedAt ? new Date(archiveMeta.syncedAt).toLocaleString('uk-UA') : '';
+            archiveStatus.textContent = archiveSchedule.synced
+                ? `Архів за цей місяць перенесено${syncedAt ? `: ${syncedAt}` : ''}. Автосинхронізацію вимкнено.`
+                : archiveSchedule.inRecommendedWindow
+                    ? 'Час перенести архів за минулий місяць. Рекомендоване вікно: 1–5 число.'
+                    : 'Архів цього місяця ще не переносився. Зробіть імпорт вручну; далі він залишатиметься незмінним.';
+        }
+    }
 
     const nameEl = el('sheet-selected-file-name');
     if (nameEl) nameEl.textContent = getModeStoredItem('spreadsheetTitle', mode) || getModeStoredItem('spreadsheetId', mode) || '—';
@@ -1372,9 +1393,23 @@ async function executeSyncWithCfg(cfg, options = {}) {
             markTouched: (dateStr) => markJournalDayDirty(dateStr),
             warnInvalidDate: (dateStr) => console.warn('[Google Sheets] Пропущено невалідну дату (не пишемо в журнал):', dateStr),
         });
+        if (cumulative) {
+            const archiveSchedule = getCumulativeArchiveSchedule();
+            state.appData.settings = state.appData.settings && typeof state.appData.settings === 'object'
+                ? state.appData.settings
+                : {};
+            state.appData.settings.cumulativeArchiveSync = {
+                month: archiveSchedule.currentMonth,
+                syncedAt: new Date().toISOString(),
+                spreadsheetId,
+                sheetTitle: cfg.sheetTitle || getSelectedSheetTitle(mode) || '',
+                rows: mergeResult.importedSheetRows,
+            };
+        }
         await deleteJournalDatesFromSupabase(mergeResult.deletedDates);
         await saveJournalData();
         await saveSettings();
+        syncSheetModeUi();
         renderSheetRowsPanel();
         try {
             clearStatsCache(state.USER_DOC_NAME);

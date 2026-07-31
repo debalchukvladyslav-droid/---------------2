@@ -37,7 +37,7 @@ const { enrichTradeWithSheet, findSheetMatchIndex, parseSheetGridToTrades } = aw
 const { summarizeJournalPnl } = await import('../js/stats_math.js');
 const { getEffectiveDayPnl, isPureGoogleSheetTrade, visibleTradeRows } = await import('../js/trade_filters.js');
 const { normalizeBrokerTradeType } = await import('../js/trade_import_utils.js');
-const { duplicateSheetMappingConfig } = await import('../js/sheet_import_modes.js');
+const { duplicateSheetMappingConfig, getCumulativeArchiveSchedule } = await import('../js/sheet_import_modes.js');
 const { detectExactSheetAutoMapping, migrateLegacyClassificationMapping, normalizeExactSheetHeader } = await import('../js/sheet_auto_mapping.js');
 const { buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets, buildSummaryByDateWeekdayPnl, combineStatsSheetRows, parseSheetProfitRisk } = await import('../js/stats_sheet_metrics.js');
 const { parseDecimalInput } = await import('../js/utils.js');
@@ -976,6 +976,17 @@ test('duplicating sheet mapping copies columns and anchors but not source file',
     assert.deepEqual(duplicated.smartColumns, { date: 'A', symbol: 'B', tradeType: 'C' });
     assert.deepEqual(duplicated.smartAnchors, { date: 'A8', symbol: 'B8' });
     assert.equal(duplicated.dataStartRow, 8);
+});
+
+test('cumulative archive schedule is due only once per month with a 1-5 day window', () => {
+    assert.deepEqual(getCumulativeArchiveSchedule({}, new Date(2026, 7, 3)), {
+        currentMonth: '2026-08', synced: false, inRecommendedWindow: true, overdue: false, day: 3,
+    });
+    assert.equal(getCumulativeArchiveSchedule({ month: '2026-08' }, new Date(2026, 7, 5)).synced, true);
+    const late = getCumulativeArchiveSchedule({ month: '2026-07' }, new Date(2026, 7, 6));
+    assert.equal(late.synced, false);
+    assert.equal(late.inRecommendedWindow, false);
+    assert.equal(late.overdue, true);
 });
 
 test('exact sheet automapping matches specified headers and starts at first ticker row', () => {
