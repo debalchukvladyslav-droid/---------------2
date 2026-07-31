@@ -13,5 +13,8 @@
   },
   "devDependencies": {
     "supabase": "^2.109.1"
+  },
+  "dependencies": {
+    "gridstack": "^13.1.2"
   }
 }

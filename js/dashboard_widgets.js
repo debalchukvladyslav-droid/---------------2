@@ -6,7 +6,7 @@ import { supabase } from './supabase.js';
 import { buildExceptionKfRows, buildHourlyKfBuckets, combineStatsSheetRows } from './stats_sheet_metrics.js';
 import { escapeHtml } from './utils.js';
 
-const VERSION = 3;
+const VERSION = 4;
 const GRID_COLUMNS = 24;
 const CATEGORIES = { overview: 'Огляд', analytics: 'Аналітика', routine: 'Сесія', tools: 'Інструменти' };
 const MICRO_WIDGETS = new Set(['month-pnl', 'month-winrate', 'month-trades', 'month-pf', 'today', 'daily-kf', 'week-compare', 'streak', 'current-hour', 'last-session', 'sync-status', 'missing-data']);
@@ -38,6 +38,8 @@ let layout = [];
 let drag = null;
 const sourceNodes = new Map();
 let densityObserver = null;
+let gridStack = null;
+let responsiveTimer = 0;
 
 const byId = (id) => document.getElementById(id);
 const ownProfile = () => state.CURRENT_VIEWED_USER === state.USER_DOC_NAME;
@@ -48,7 +50,15 @@ const kfText = (value) => `${Number(value) >= 0 ? '+' : ''}${(Number(value) || 0
 const dateKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
 function defaultLayout() {
-    return DEFAULT_IDS.map((id, index) => ({ id, type: id, order: index, w: def(id).w, h: def(id).h, x: 0, y: index, config: {} }));
+    let x = 0; let y = 0; let rowHeight = 1;
+    return DEFAULT_IDS.map((id, index) => {
+        const meta = def(id);
+        if (x + meta.w > GRID_COLUMNS) { x = 0; y += rowHeight; rowHeight = 1; }
+        const item = { id, type: id, order: index, w: meta.w, h: meta.h, x, y, config: {} };
+        x += meta.w; rowHeight = Math.max(rowHeight, meta.h);
+        if (x === GRID_COLUMNS) { x = 0; y += rowHeight; rowHeight = 1; }
+        return item;
+    });
 }
 
 function normalizeLayout(raw) {
@@ -61,7 +71,7 @@ function normalizeLayout(raw) {
         return true;
     }).map((item, order) => {
         const meta = def(item.type || item.id);
-        return { id: meta.id, type: meta.id, order, w: clamp(Number(item.w) || meta.w, meta.minW, meta.maxW), h: clamp(Number(item.h) || meta.h, meta.minH, meta.maxH), x: 0, y: order, config: item.config || {} };
+        return { id: meta.id, type: meta.id, order, w: clamp(Number(item.w) || meta.w, meta.minW, meta.maxW), h: clamp(Number(item.h) || meta.h, meta.minH, meta.maxH), x: Math.max(0, Number(item.x) || 0), y: Math.max(0, Number(item.y) || 0), config: item.config || {} };
     });
 }
 
@@ -69,7 +79,10 @@ function persist() {
     if (!ownProfile()) return;
     clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => {
-        layout = layout.map((item, order) => ({ ...item, order, x: 0, y: order }));
+        if (gridStack) {
+            const saved = gridStack.save(false, false, undefined, GRID_COLUMNS) || [];
+            layout = saved.map((item, order) => ({ id: item.id, type: item.id, order, x: item.x || 0, y: item.y || 0, w: item.w || def(item.id)?.w || 1, h: item.h || def(item.id)?.h || 1, minW: def(item.id)?.minW, minH: def(item.id)?.minH, maxW: def(item.id)?.maxW, maxH: def(item.id)?.maxH, config: layout.find((old) => old.id === item.id)?.config || {} }));
+        }
         state.appData.settings.dashboardLayout = { version: VERSION, updatedAt: new Date().toISOString(), widgets: layout };
         void saveSettings();
     }, 450);
@@ -149,18 +162,20 @@ function sourceFor(id) { return sourceNodes.get(id) || document.querySelector(`[
 
 function controls(item) {
     const bar = document.createElement('div'); bar.className = 'dashboard-widget-controls';
-    bar.innerHTML = `<button type="button" class="dashboard-widget-drag" aria-label="Перетягнути ${def(item.id).title}">⠿</button><div class="dashboard-size-controls"><button type="button" data-size="down" aria-label="Зменшити">−</button><button type="button" data-size="up" aria-label="Збільшити">＋</button></div><button type="button" data-remove aria-label="Прибрати ${def(item.id).title}">×</button><span class="dashboard-resize-handle" aria-hidden="true"></span>`;
+    bar.innerHTML = `<button type="button" class="dashboard-widget-drag" aria-label="Перетягнути ${def(item.id).title}">⠿</button><div class="dashboard-size-controls"><button type="button" data-size="down" aria-label="Зменшити">−</button><button type="button" data-size="up" aria-label="Збільшити">＋</button></div><button type="button" data-remove aria-label="Прибрати ${def(item.id).title}">×</button>`;
     return bar;
 }
 
 function makeWidget(item) {
-    const article = document.createElement('article'); article.className = 'dashboard-widget'; article.dataset.widgetId = item.id;
+    const article = document.createElement('article'); article.className = 'grid-stack-item dashboard-widget'; article.dataset.widgetId = item.id;
+    article.setAttribute('gs-id', item.id); article.setAttribute('gs-x', item.x); article.setAttribute('gs-y', item.y); article.setAttribute('gs-w', item.w); article.setAttribute('gs-h', item.h);
+    article.setAttribute('gs-min-w', def(item.id).minW); article.setAttribute('gs-min-h', def(item.id).minH); article.setAttribute('gs-max-w', def(item.id).maxW); article.setAttribute('gs-max-h', def(item.id).maxH);
     article.dataset.mobileSize = item.w <= 6 ? 'small' : item.w >= GRID_COLUMNS ? 'full' : 'medium';
     article.dataset.widgetH = String(item.h);
     article.classList.toggle('is-micro-widget', MICRO_WIDGETS.has(item.id));
     article.style.setProperty('--widget-w', item.w); article.style.setProperty('--widget-h', item.h);
     article.appendChild(controls(item));
-    const content = document.createElement('div'); content.className = 'dashboard-widget-content';
+    const content = document.createElement('div'); content.className = 'grid-stack-item-content dashboard-widget-content';
     const source = sourceFor(item.id);
     if (source) { source.hidden = false; content.appendChild(source); } else renderGenerated(item.id, content);
     article.appendChild(content); return article;
@@ -169,11 +184,30 @@ function makeWidget(item) {
 function renderGrid() {
     const grid = byId('dashboard-widget-grid'); if (!grid) return;
     const parking = byId('dashboard-widget-sources');
+    gridStack?.destroy(false); gridStack = null;
     sourceNodes.forEach((node) => { if (node.isConnected && node.closest('.dashboard-widget')) parking?.appendChild(node); });
     const fragment = document.createDocumentFragment(); layout.forEach((item) => fragment.appendChild(makeWidget(item)));
-    grid.replaceChildren(fragment); grid.classList.toggle('is-editing', editing);
+    grid.replaceChildren(fragment); grid.classList.add('grid-stack'); grid.classList.toggle('is-editing', editing);
+    if (!window.GridStack) throw new Error('GridStack is not loaded');
+    gridStack = window.GridStack.init({ column: GRID_COLUMNS, cellHeight: 58, margin: 7, animate: true, float: true, handle: '.dashboard-widget-drag', disableDrag: !editing, disableResize: !editing, alwaysShowResizeHandle: false }, grid);
+    gridStack.on('change added removed', () => { syncLayoutFromGrid(); renderCatalog(byId('dashboard-widget-search')?.value || ''); persist(); window.setTimeout(() => window.dispatchEvent(new Event('resize')), 40); });
     observeWidgetDensity();
+    applyResponsiveGrid();
     renderCatalog(); window.setTimeout(() => window.dispatchEvent(new Event('resize')), 20);
+}
+
+function applyResponsiveGrid() {
+    if (!gridStack) return;
+    const mobile = window.innerWidth <= 700;
+    const columns = mobile ? 12 : GRID_COLUMNS;
+    if (gridStack.getColumn() !== columns) gridStack.column(columns, 'moveScale');
+    gridStack.cellHeight(mobile ? 54 : 58);
+}
+
+function syncLayoutFromGrid() {
+    if (!gridStack) return;
+    const saved = gridStack.save(false, false, undefined, GRID_COLUMNS) || [];
+    layout = saved.map((item, order) => ({ id: item.id, type: item.id, order, x: item.x || 0, y: item.y || 0, w: item.w || 1, h: item.h || 1, minW: def(item.id)?.minW, minH: def(item.id)?.minH, maxW: def(item.id)?.maxW, maxH: def(item.id)?.maxH, config: layout.find((old) => old.id === item.id)?.config || {} }));
 }
 
 function observeWidgetDensity() {
@@ -212,6 +246,9 @@ function setEditing(value) {
     const catalog = byId('dashboard-widget-catalog'); if (catalog) { catalog.setAttribute('aria-hidden', String(!editing)); }
     const toggle = byId('dashboard-edit-toggle'); if (toggle) { toggle.textContent = editing ? 'Готово' : 'Редагувати'; toggle.setAttribute('aria-pressed', String(editing)); }
     if (byId('dashboard-reset-layout')) byId('dashboard-reset-layout').hidden = !editing;
+    gridStack?.enableMove(editing);
+    gridStack?.enableResize(editing);
+    if (!editing) persist();
 }
 
 function moveItemLive(fromId, toId) {
@@ -233,7 +270,8 @@ function moveItemLive(fromId, toId) {
 }
 
 function changeSize(id, direction) {
-    const item = layout.find((entry) => entry.id === id); const meta = def(id); if (!item || !meta) return;
+    syncLayoutFromGrid();
+    const item = layout.find((entry) => entry.id === id); const meta = def(id); const element = document.querySelector(`[data-widget-id="${id}"]`); if (!item || !meta || !element || !gridStack) return;
     if (window.matchMedia('(max-width: 700px)').matches) {
         const presets = [6, 12, GRID_COLUMNS]; const current = presets.reduce((best, value) => Math.abs(value - item.w) < Math.abs(best - item.w) ? value : best, 12); const index = presets.indexOf(current);
         if (direction === 'down' && index === 0) item.h = meta.minH;
@@ -246,7 +284,8 @@ function changeSize(id, direction) {
         if (item.h < meta.h) growHeightAndShrinkNeighbour(item, 1);
         else growWidthAndShrinkNeighbour(item, 1);
     }
-    persist(); renderGrid();
+    gridStack.update(element, { w: item.w, h: item.h });
+    persist();
 }
 
 function compactLastRowFor(newWidget) {
@@ -299,6 +338,26 @@ function growHeightAndShrinkNeighbour(item, amount = 1) {
 }
 
 function bindEvents() {
+    window.addEventListener('resize', () => { clearTimeout(responsiveTimer); responsiveTimer = window.setTimeout(applyResponsiveGrid, 120); });
+    byId('dashboard-edit-toggle')?.addEventListener('click', () => setEditing(!editing));
+    byId('dashboard-catalog-close')?.addEventListener('click', () => setEditing(false));
+    byId('dashboard-reset-layout')?.addEventListener('click', () => { layout = defaultLayout(); renderGrid(); setEditing(true); persist(); });
+    byId('dashboard-widget-search')?.addEventListener('input', (event) => renderCatalog(event.target.value));
+    byId('dashboard-widget-list')?.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-add-widget]'); if (!button || button.disabled || !gridStack) return;
+        const meta = def(button.dataset.addWidget); const item = { id: meta.id, type: meta.id, order: layout.length, w: meta.w, h: meta.h, x: 0, y: 0, config: {} };
+        const article = makeWidget(item);
+        byId('dashboard-widget-grid')?.appendChild(article);
+        gridStack.makeWidget(article, { id: meta.id, w: meta.w, h: meta.h, minW: meta.minW, minH: meta.minH, maxW: meta.maxW, maxH: meta.maxH, autoPosition: true });
+        observeWidgetDensity(); syncLayoutFromGrid(); renderCatalog(); persist();
+    });
+    byId('dashboard-widget-grid')?.addEventListener('click', (event) => {
+        const article = event.target.closest('.dashboard-widget'); if (!article) return;
+        if (event.target.closest('[data-remove]')) { const source = sourceFor(article.dataset.widgetId); if (source) byId('dashboard-widget-sources')?.appendChild(source); gridStack?.removeWidget(article, true); syncLayoutFromGrid(); renderCatalog(); persist(); return; }
+        const size = event.target.closest('[data-size]'); if (size) changeSize(article.dataset.widgetId, size.dataset.size);
+        if (event.target.closest('[data-dashboard-action="sync"]')) window.syncDriveScreenshots?.(false);
+    });
+    return;
     byId('dashboard-edit-toggle')?.addEventListener('click', () => setEditing(!editing));
     byId('dashboard-catalog-close')?.addEventListener('click', () => setEditing(false));
     byId('dashboard-reset-layout')?.addEventListener('click', () => { layout = defaultLayout(); persist(); renderGrid(); });
@@ -342,7 +401,15 @@ function bindEvents() {
     });
 }
 
-export function refreshDashboardWidgets() { if (!initialized) return; renderGrid(); }
+export function refreshDashboardWidgets() {
+    if (!initialized) return;
+    layout.forEach((item) => {
+        if (sourceNodes.has(item.id)) return;
+        const host = document.querySelector(`[data-widget-id="${item.id}"] .dashboard-widget-content`);
+        if (host) renderGenerated(item.id, host);
+    });
+    window.setTimeout(() => window.dispatchEvent(new Event('resize')), 20);
+}
 
 export async function initDashboardWidgets() {
     if (!byId('dashboard-widget-grid')) return;
@@ -357,5 +424,5 @@ export async function initDashboardWidgets() {
     layout = normalizeLayout(storedLayout);
     if (!initialized) { bindEvents(); initialized = true; }
     const toggle = byId('dashboard-edit-toggle'); if (toggle) toggle.hidden = !ownProfile();
-    setEditing(false); renderGrid();
+    editing = false; renderGrid(); setEditing(false);
 }
