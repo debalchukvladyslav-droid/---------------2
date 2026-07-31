@@ -27,7 +27,7 @@ const {
     isMentorViewingOtherJournalState,
     isViewingOtherProfileState,
 } = await import('../js/access_control.js');
-const { buildAutoTradeTypesData, isNotTakenTrade, normalizeAppData, normalizeDayEntry } = await import('../js/data_utils.js');
+const { buildAutoTradeTypesData, deriveDayKfFromTrades, isNotTakenTrade, normalizeAppData, normalizeDayEntry } = await import('../js/data_utils.js');
 const { ecnFeeColumnIndex, parsePPROReportDate, parsePPROTotalReportRows, parseSheetDateCellToIso, parseSheetDateCellsToIsoSequence } = await import('../js/parser_utils.js');
 const { sanitizeHTML, safeExternalUrl, sanitizeRichHTML } = await import('../js/sanitize.js');
 const { mergeGoogleSheetTradesIntoJournal } = await import('../js/sheet_journal_merge.js');
@@ -39,7 +39,7 @@ const { getEffectiveDayPnl, isPureGoogleSheetTrade, visibleTradeRows } = await i
 const { normalizeBrokerTradeType } = await import('../js/trade_import_utils.js');
 const { duplicateSheetMappingConfig } = await import('../js/sheet_import_modes.js');
 const { detectExactSheetAutoMapping, migrateLegacyClassificationMapping, normalizeExactSheetHeader } = await import('../js/sheet_auto_mapping.js');
-const { buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets, parseSheetProfitRisk } = await import('../js/stats_sheet_metrics.js');
+const { buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets, buildSummaryByDateWeekdayPnl, parseSheetProfitRisk } = await import('../js/stats_sheet_metrics.js');
 const { parseDecimalInput } = await import('../js/utils.js');
 const { getZonedClockParts, isEndOfSessionReviewTime } = await import('../js/session_schedule.js');
 const { buildServiceBotSnapshot, hashServiceBotApiKey, hasServiceBotPermission, parseServiceBotRange } = await import('../lib/service_bots.js');
@@ -399,6 +399,24 @@ test('auto trade type metrics group imported trades by default categories', () =
     });
 });
 
+test('daily KФ is derived from explicit trade R values without double-counting sheet rows', () => {
+    const trades = [
+        { id: 'a', sheet: { source: 'google', sheetRow: 7, profitRisk: '1.5R' } },
+        { id: 'duplicate', sheet: { source: 'google', sheetRow: 7, profitRisk: '1.5R' } },
+        { id: 'b', profitRisk: '-0,4R' },
+        { id: 'skip', type: 'do not take', profitRisk: '9R' },
+        { id: 'unknown', net: 500 },
+    ];
+    assert.equal(deriveDayKfFromTrades(trades), 1.1);
+    assert.equal(normalizeDayEntry({ kf: null, trades }).kf, 1.1);
+});
+
+test('stored daily KФ wins and missing trade R stays unknown', () => {
+    assert.equal(normalizeDayEntry({ kf: 2.25, trades: [{ profitRisk: '1R' }] }).kf, 2.25);
+    assert.equal(deriveDayKfFromTrades([{ net: 100 }]), null);
+    assert.equal(normalizeDayEntry({ kf: null, trades: [{ net: 100 }] }).kf, null);
+});
+
 test('not-taken sheet trade types are detected but excluded from auto trade PnL buckets', () => {
     assert.equal(isNotTakenTrade({ sheet: { tradeType: 'не брав візуально' } }), true);
     assert.equal(isNotTakenTrade({ type: 'do not take' }), true);
@@ -505,6 +523,15 @@ test('sheet profit risk parser accepts dot, comma, and R suffix values', () => {
     assert.equal(parseSheetProfitRisk('no pnl'), null);
 });
 
+test('weekday PnL uses only Fondexx Summary by date rows', () => {
+    const rows = [
+        { dateStr: '2026-07-27', dateObj: new Date(2026, 6, 27), pnl: 100, data: { fondexxSource: 'summary-by-date' } },
+        { dateStr: '2026-07-28', dateObj: new Date(2026, 6, 28), pnl: -25, data: { fondexxSource: 'summary-by-date' } },
+        { dateStr: '2026-07-29', dateObj: new Date(2026, 6, 29), pnl: 999, data: { fondexxSource: 'trades-report' } },
+    ];
+    assert.deepEqual(buildSummaryByDateWeekdayPnl(rows), [100, -25, 0, 0, 0]);
+});
+
 test('entry price buckets use raw Sheet rows even when no Trades import exists', () => {
     const rows = buildSheetEntryPriceBuckets({
         'sheet-main': {
@@ -529,8 +556,8 @@ test('hourly KФ buckets use matched Sheet profitRisk instead of trade net', () 
         dateStr: '2026-04-01',
         data: {
             trades: [
-                { symbol: 'AAPL', opened: '2026-04-01 09:31:00', net: 100, sheet: { source: 'google', matchedBy: 'date+ticker+pnl', profitRisk: '1.5R' } },
-                { symbol: 'TSLA', opened: '2026-04-01 09:45:00', net: -999, sheet: { source: 'google', matchedBy: 'date+ticker+pnl', profitRisk: '-0,5R' } },
+                { symbol: 'AAPL', opened: '2026-04-01 09:31:00', net: 100, sheet: { source: 'google', matchedBy: 'date+ticker+pnl', sheetNet: 30, profitRisk: '1.5R' } },
+                { symbol: 'TSLA', opened: '2026-04-01 09:45:00', net: -999, sheet: { source: 'google', matchedBy: 'date+ticker+pnl', sheetNet: -10, profitRisk: '-0,5R' } },
                 { symbol: 'NVDA', opened: '2026-04-01 09:50:00', net: 50, sheet: { source: 'google', profitRisk: '5R' } },
                 { symbol: 'AMD', opened: '2026-04-01 08:10:00', net: 60, sheet: { source: 'google', matchedBy: 'date+ticker+pnl' } },
             ],
@@ -540,7 +567,7 @@ test('hourly KФ buckets use matched Sheet profitRisk instead of trade net', () 
     const buckets = buildHourlyKfBuckets(entries);
     const hourNine = buckets.find((row) => row.hour === 9);
 
-    assert.equal(hourNine.pnl, 1);
+    assert.equal(hourNine.pnl, 20);
     assert.equal(hourNine.kf, 1);
     assert.equal(hourNine.trades, 2);
 });
@@ -577,14 +604,20 @@ test('exception criteria KФ rows group matched Sheet exceptions and skip incomp
     assert.deepEqual(rows.map((row) => row.criterion), ['Chase', 'Late entry']);
     assert.deepEqual(rows.find((row) => row.criterion === 'Late entry'), {
         criterion: 'Late entry',
+        pnl: 0,
         kf: -0.5,
         trades: 2,
+        pnlRows: 0,
+        kfRows: 2,
         avgKf: -0.25,
     });
     assert.deepEqual(rows.find((row) => row.criterion === 'Chase'), {
         criterion: 'Chase',
+        pnl: 0,
         kf: 0.5,
         trades: 1,
+        pnlRows: 0,
+        kfRows: 1,
         avgKf: 0.5,
     });
 });

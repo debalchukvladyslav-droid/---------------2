@@ -40,6 +40,18 @@ function parseSheetNumber(value) {
     return Number.isFinite(number) ? number : null;
 }
 
+export function buildSummaryByDateWeekdayPnl(entries = [], tradeTypeFilter = null) {
+    const totals = [0, 0, 0, 0, 0];
+    if (tradeTypeFilter) return totals;
+    entries.forEach((entry) => {
+        if (entry?.data?.fondexxSource !== 'summary-by-date') return;
+        const day = entry?.dateObj instanceof Date ? entry.dateObj.getDay() : new Date(`${entry?.dateStr}T12:00:00`).getDay();
+        const pnl = Number(entry?.pnl);
+        if (day >= 1 && day <= 5 && Number.isFinite(pnl)) totals[day - 1] += pnl;
+    });
+    return totals.map(value => Number(value.toFixed(2)));
+}
+
 /** Агрегує сирі збережені рядки Google Sheets, навіть якщо вони не зіставлені з Trades. */
 export function buildSheetEntryPriceBuckets(sheetRows = {}, options = {}) {
     const source = pickSheetRowsSource(sheetRows, options.preferredSpreadsheetId || '');
@@ -50,6 +62,7 @@ export function buildSheetEntryPriceBuckets(sheetRows = {}, options = {}) {
     Object.entries(rowsByDay).forEach(([dateStr, rows]) => {
         if (!dateMatches(dateStr) || !Array.isArray(rows)) return;
         rows.forEach((row) => {
+            if (options.tradeTypeFilter && classifyTradeTypeGroup(row) !== options.tradeTypeFilter) return;
             const sheet = row?.sheet && typeof row.sheet === 'object' ? row.sheet : {};
             const entryPrice = parseSheetNumber(sheet.entryPrice ?? row?.entry);
             if (entryPrice == null) return;
@@ -74,7 +87,7 @@ export function buildSheetEntryPriceBuckets(sheetRows = {}, options = {}) {
                 : `${entry?.dateStr || ''}:${trade?.symbol || ''}:${trade?.opened || ''}:${kf}`;
             if (seen.has(rowKey)) return;
             seen.add(rowKey);
-            const pnl = parseSheetNumber(sheet.sheetNet ?? trade?.net);
+            const pnl = parseSheetNumber(sheet.sheetNet);
             bucket.trades += 1;
             if (pnl != null) { bucket.pnl += pnl; bucket.pnlRows += 1; }
             bucket.kf += kf;
@@ -104,7 +117,7 @@ function iterMatchedSheetTrades(entries = [], tradeTypeFilter = null, visitor = 
 }
 
 export function buildHourlyKfBuckets(entries = [], tradeTypeFilter = null, options = {}) {
-    const buckets = new Map([4, 5, 6, 7, 8, 9].map(hour => [hour, { hour, kf: 0, trades: 0 }]));
+    const buckets = new Map([4, 5, 6, 7, 8, 9].map(hour => [hour, { hour, pnl: 0, kf: 0, trades: 0, pnlRows: 0, kfRows: 0 }]));
     const source = pickSheetRowsSource(options.sheetRows || {}, options.preferredSpreadsheetId || '');
     const entriesByDate = new Map(entries.map((entry) => [entry?.dateStr, entry]));
     let usedRawSheetRows = false;
@@ -116,6 +129,7 @@ export function buildHourlyKfBuckets(entries = [], tradeTypeFilter = null, optio
             const trades = Array.isArray(entry?.data?.trades) ? entry.data.trades : [];
             rows.forEach((row) => {
                 const sheet = row?.sheet && typeof row.sheet === 'object' ? row.sheet : {};
+                if (tradeTypeFilter && classifyTradeTypeGroup(row) !== tradeTypeFilter) return;
                 const matchIndex = Number(sheet.matchedTradeIndex);
                 if (!Number.isInteger(matchIndex) || matchIndex < 0 || matchIndex >= trades.length) return;
                 const matchedTrade = trades[matchIndex];
@@ -123,9 +137,12 @@ export function buildHourlyKfBuckets(entries = [], tradeTypeFilter = null, optio
                 if (tradeTypeFilter && classifyTradeTypeGroup(matchedTrade) !== tradeTypeFilter) return;
                 const kf = parseSheetProfitRisk(sheet.profitRisk);
                 const hour = parseTradeOpenHour(matchedTrade.opened);
-                if (kf == null || !buckets.has(hour)) return;
+                if (!buckets.has(hour)) return;
+                const pnl = parseSheetNumber(sheet.sheetNet ?? row?.net);
+                if (kf == null && pnl == null) return;
                 const bucket = buckets.get(hour);
-                bucket.kf += kf;
+                if (kf != null) { bucket.kf += kf; bucket.kfRows += 1; }
+                if (pnl != null) { bucket.pnl += pnl; bucket.pnlRows += 1; }
                 bucket.trades += 1;
                 usedRawSheetRows = true;
             });
@@ -143,7 +160,10 @@ export function buildHourlyKfBuckets(entries = [], tradeTypeFilter = null, optio
             if (seen.has(rowKey)) return;
             seen.add(rowKey);
             const bucket = buckets.get(hour);
+            const pnl = parseSheetNumber(sheet.sheetNet);
             bucket.kf += kf;
+            bucket.kfRows += 1;
+            if (pnl != null) { bucket.pnl += pnl; bucket.pnlRows += 1; }
             bucket.trades += 1;
         });
     }
@@ -153,7 +173,8 @@ export function buildHourlyKfBuckets(entries = [], tradeTypeFilter = null, optio
         .map(hour => ({
             ...buckets.get(hour),
             label: String(hour).padStart(2, '0'),
-            pnl: parseFloat(buckets.get(hour).kf.toFixed(2)),
+            pnl: parseFloat(buckets.get(hour).pnl.toFixed(2)),
+            kf: parseFloat(buckets.get(hour).kf.toFixed(2)),
         }));
 }
 
@@ -168,14 +189,42 @@ function criterionValues(sheet = {}) {
         .filter(Boolean))];
 }
 
-export function buildExceptionKfRows(entries = [], tradeTypeFilter = null) {
+export function buildExceptionKfRows(entries = [], tradeTypeFilter = null, options = {}) {
     const buckets = new Map();
+    const source = pickSheetRowsSource(options.sheetRows || {}, options.preferredSpreadsheetId || '');
+    const dateMatches = typeof options.dateMatches === 'function' ? options.dateMatches : () => true;
+    let usedRawRows = false;
 
-    iterMatchedSheetTrades(entries, tradeTypeFilter, (_trade, sheet, kf) => {
+    if (source?.byDay) {
+        Object.entries(source.byDay).forEach(([dateStr, rows]) => {
+            if (!dateMatches(dateStr) || !Array.isArray(rows)) return;
+            rows.forEach((row) => {
+                const sheet = row?.sheet && typeof row.sheet === 'object' ? row.sheet : {};
+                if (tradeTypeFilter && classifyTradeTypeGroup(row) !== tradeTypeFilter) return;
+                const kf = parseSheetProfitRisk(sheet.profitRisk);
+                const pnl = parseSheetNumber(sheet.sheetNet ?? row?.net);
+                const criteria = criterionValues(sheet);
+                if (!criteria.length || (kf == null && pnl == null)) return;
+                criteria.forEach((criterion) => {
+                    if (!buckets.has(criterion)) buckets.set(criterion, { criterion, pnl: 0, kf: 0, trades: 0, pnlRows: 0, kfRows: 0 });
+                    const bucket = buckets.get(criterion);
+                    if (pnl != null) { bucket.pnl += pnl; bucket.pnlRows += 1; }
+                    if (kf != null) { bucket.kf += kf; bucket.kfRows += 1; }
+                    bucket.trades += 1;
+                });
+                usedRawRows = true;
+            });
+        });
+    }
+
+    if (!usedRawRows) iterMatchedSheetTrades(entries, tradeTypeFilter, (trade, sheet, kf) => {
         criterionValues(sheet).forEach((criterion) => {
-            if (!buckets.has(criterion)) buckets.set(criterion, { criterion, kf: 0, trades: 0 });
+            if (!buckets.has(criterion)) buckets.set(criterion, { criterion, pnl: 0, kf: 0, trades: 0, pnlRows: 0, kfRows: 0 });
             const bucket = buckets.get(criterion);
+            const pnl = parseSheetNumber(sheet.sheetNet ?? trade?.net);
+            if (pnl != null) { bucket.pnl += pnl; bucket.pnlRows += 1; }
             bucket.kf += kf;
+            bucket.kfRows += 1;
             bucket.trades += 1;
         });
     });
@@ -183,6 +232,7 @@ export function buildExceptionKfRows(entries = [], tradeTypeFilter = null) {
     return [...buckets.values()]
         .map((row) => ({
             ...row,
+            pnl: parseFloat(row.pnl.toFixed(2)),
             kf: parseFloat(row.kf.toFixed(2)),
             avgKf: row.trades ? parseFloat((row.kf / row.trades).toFixed(2)) : 0,
         }))

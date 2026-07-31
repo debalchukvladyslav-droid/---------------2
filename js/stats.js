@@ -7,7 +7,7 @@ import { escapeHtml, parseDecimalInput } from './utils.js';
 import { ensureChartJs } from './vendor_loader.js';
 import { buildTradeTypeInsightRows } from './trade_type_analysis.js';
 import { getEffectiveDayPnl } from './trade_filters.js';
-import { buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets } from './stats_sheet_metrics.js';
+import { buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets, buildSummaryByDateWeekdayPnl } from './stats_sheet_metrics.js';
 import { renderBestExitAnalysis } from './best_exit_analysis.js';
 
 // ─── STATS CACHE ───────────────────────────────────────────────────────────────────────────────
@@ -2098,13 +2098,12 @@ function renderStatsBarChart(canvasId, stateKey, labels, values, theme, options 
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
     canvas.$statsGlowColor = theme.profit;
-    const isHourlyKfChart = canvasId === 'hourlyChart' || canvasId === 'compare-hourlyChart';
     const valueFormatter = typeof options.valueFormatter === 'function'
         ? options.valueFormatter
-        : (isHourlyKfChart ? fmtKf : fmtMoney);
+        : fmtMoney;
     const tickFormatter = typeof options.tickFormatter === 'function'
         ? options.tickFormatter
-        : (isHourlyKfChart ? fmtKfAbs : fmtMoneyAbs);
+        : fmtMoneyAbs;
     if (state[stateKey]) state[stateKey].destroy();
     state[stateKey] = new Chart(canvas.getContext('2d'), {
         type: 'bar',
@@ -2206,6 +2205,7 @@ function renderEntryPriceSheetChart(theme) {
     }
 
     const rows = buildSheetEntryPriceBuckets(state.appData?.sheetRows || {}, {
+        tradeTypeFilter: state.activeTradeTypeFilter || null,
         dateMatches: (dateStr) => sheetDateMatchesStatsFilters(dateStr, state.activeFilters || []),
     });
     renderStatsBarChart(
@@ -2245,9 +2245,9 @@ function renderExceptionCriteriaKfRows(rows = [], containerId = 'stats-exception
             <div class="stats-exception-row">
                 <div class="stats-exception-row-main">
                     <span class="stats-exception-name">${escapeHtml(row.criterion)}</span>
-                    <strong class="${tone}">${escapeHtml(fmtKf(kf))}</strong>
+                    <strong class="${tone}">${escapeHtml(fmtKf(kf))} · ${escapeHtml(fmtMoney(Number(row.pnl) || 0))}</strong>
                 </div>
-                <div class="stats-exception-meta">${row.trades} угод · середній ${escapeHtml(fmtKf(avg))}</div>
+                <div class="stats-exception-meta">${row.trades} угод з Excel · середній ${escapeHtml(fmtKf(avg))}</div>
                 <div class="stats-exception-bar" aria-hidden="true">
                     <i class="${tone}" style="width:${width}%"></i>
                 </div>
@@ -2328,7 +2328,7 @@ function buildComparePaneSummary(entries, settings = {}, tradeTypeFilter = null,
     let grossProfit = 0, grossLoss = 0;
     let bestDay = 0, worstDay = 0;
     let totalComm = 0, totalLocates = 0;
-    let dayTotals = [0, 0, 0, 0, 0];
+    let dayTotals = buildSummaryByDateWeekdayPnl(entries, tradeTypeFilter);
     let periodCumData = [];
     let periodLabels = [];
     let periodSum = 0;
@@ -2343,8 +2343,6 @@ function buildComparePaneSummary(entries, settings = {}, tradeTypeFilter = null,
         periodSum += pnl;
         periodCumData.push(parseFloat(periodSum.toFixed(2)));
         periodLabels.push(`${entry.dateObj.getDate()} ${monthsNamesShort[entry.dateObj.getMonth()]}`);
-        const day = entry.dateObj.getDay();
-        if (day >= 1 && day <= 5) dayTotals[day - 1] += pnl;
         if (pnl > bestDay) bestDay = pnl;
         if (pnl < worstDay) worstDay = pnl;
         const dayClass = classifyStatsPnlDay(pnl, settings, entry.dateStr, entry.breakevenBand);
@@ -2376,7 +2374,11 @@ function buildComparePaneSummary(entries, settings = {}, tradeTypeFilter = null,
         tradeTypeFilter,
         dateMatches: (dateStr) => entries.some((entry) => entry.dateStr === dateStr),
     });
-    const exceptionKfRows = buildExceptionKfRows(entries, tradeTypeFilter);
+    const dateSet = new Set(entries.map(entry => entry.dateStr));
+    const exceptionKfRows = buildExceptionKfRows(entries, tradeTypeFilter, {
+        sheetRows,
+        dateMatches: dateStr => dateSet.has(dateStr),
+    });
     return {
         totalPnl,
         winrate: totalDays ? (winDays / totalDays) * 100 : 0,
@@ -2623,7 +2625,10 @@ function renderCompareCharts(entries, summary, theme, advancedEquityMode = false
         summary.hourlyBuckets.map(row => row.label),
         summary.hourlyBuckets.map(row => row.pnl),
         theme,
-        { tooltipSuffix: index => `, ${summary.hourlyBuckets[index]?.trades || 0} угод` },
+        { tooltipLabel: index => {
+            const row = summary.hourlyBuckets[index] || {};
+            return [` PnL Excel: ${fmtMoney(row.pnl || 0)}`, ` КФ Excel: ${fmtKf(row.kf || 0)}`, ` Угод: ${row.trades || 0}`];
+        } },
     );
 
     renderEntryPriceRowsChart(
@@ -3066,7 +3071,7 @@ export function renderStatsTab() {
     let winDays = 0, lossDays = 0, beDays = 0;
     let grossProfit = 0, grossLoss = 0;
     let bestDay = 0, worstDay = 0;
-    let dayTotals = [0, 0, 0, 0, 0]; 
+    let dayTotals = buildSummaryByDateWeekdayPnl(filteredEntries, ttFilter);
     let totalComm = 0, totalLocates = 0;
     
     let periodLabels = []; let periodCumData = []; let periodSum = 0;
@@ -3084,7 +3089,6 @@ export function renderStatsTab() {
         
         periodSum += pnl; periodCumData.push(parseFloat(periodSum.toFixed(2)));
         if (isBroadView) { periodLabels.push(`${e.dateObj.getDate()} ${monthsNamesShort[e.dateObj.getMonth()]}`); } else { periodLabels.push(e.dateObj.getDate().toString()); }
-        let day = e.dateObj.getDay(); if (day >= 1 && day <= 5) { dayTotals[day-1] += pnl; }
         if (pnl > bestDay) bestDay = pnl;
         if (pnl < worstDay) worstDay = pnl;
         const dayClass = classifyStatsPnlDay(pnl, state.currentStatsContext.settings || {}, e.dateStr, e.breakevenBand);
@@ -3374,11 +3378,17 @@ export function renderStatsTab() {
         hourlyBuckets.map(row => row.label),
         hourlyBuckets.map(row => row.pnl),
         statsChartTheme,
-        { tooltipSuffix: index => `, ${hourlyBuckets[index]?.trades || 0} угод` },
+        { tooltipLabel: index => {
+            const row = hourlyBuckets[index] || {};
+            return [` PnL Excel: ${fmtMoney(row.pnl || 0)}`, ` КФ Excel: ${fmtKf(row.kf || 0)}`, ` Угод: ${row.trades || 0}`];
+        } },
     );
     
     renderEntryPriceSheetChart(statsChartTheme);
-    renderExceptionCriteriaKfRows(buildExceptionKfRows(filteredEntries, ttFilter));
+    renderExceptionCriteriaKfRows(buildExceptionKfRows(filteredEntries, ttFilter, {
+        sheetRows: state.appData?.sheetRows || {},
+        dateMatches: dateStr => filteredEntries.some(entry => entry.dateStr === dateStr),
+    }));
 
     const ctxPie = document.getElementById('winLossChart').getContext('2d');
     ctxPie.canvas.$statsGlowColor = cssGreen;

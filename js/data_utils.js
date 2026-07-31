@@ -133,6 +133,30 @@ function roundMetric(value) {
     return Number.parseFloat((Number(value) || 0).toFixed(2));
 }
 
+// Sum only explicit per-trade R multiples. PnL is never used to guess KФ.
+export function deriveDayKfFromTrades(trades = []) {
+    if (!Array.isArray(trades)) return null;
+    const seen = new Set();
+    let total = 0;
+    let count = 0;
+    trades.forEach((trade, index) => {
+        if (!trade || isNotTakenTrade(trade)) return;
+        const sheet = trade.sheet && typeof trade.sheet === 'object' ? trade.sheet : {};
+        const value = parseTradeKf(sheet.profitRisk ?? trade.profitRisk ?? trade.kf);
+        if (value === null) return;
+        const rowId = sheet.sheetRow ?? sheet.rowNumber ?? sheet.row;
+        const sourceId = (sheet.spreadsheetId ?? sheet.sourceFileId ?? sheet.source) || '';
+        const key = rowId !== null && rowId !== undefined && rowId !== ''
+            ? `sheet:${sourceId}:${rowId}`
+            : `trade:${trade.id ?? `${trade.symbol || ''}:${trade.opened || ''}:${index}`}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        total += value;
+        count++;
+    });
+    return count ? roundMetric(total) : null;
+}
+
 export function buildAutoTradeTypesData(trades = []) {
     const totals = Object.fromEntries(DEFAULT_TRADE_TYPES.map((type) => [type, { pnl: 0, kf: 0, count: 0, kfCount: 0 }]));
     let hasAny = false;
@@ -193,6 +217,11 @@ export function normalizeDayEntry(entry) {
     const safeEntry = entry && typeof entry === 'object' ? entry : {};
     const screenshots = safeEntry.screenshots && typeof safeEntry.screenshots === 'object' ? safeEntry.screenshots : {};
 
+    const storedKf = sanitizeNumberOrNull(safeEntry.kf);
+    const derivedKf = storedKf === null
+        ? deriveDayKfFromTrades(Array.isArray(safeEntry.trades) ? safeEntry.trades : [])
+        : null;
+
     return applyAutoTradeTypesData({
         ...defaults,
         ...safeEntry,
@@ -200,7 +229,7 @@ export function normalizeDayEntry(entry) {
         gross_pnl: sanitizeNumberOrNull(safeEntry.gross_pnl),
         commissions: sanitizeNumberOrNull(safeEntry.commissions),
         locates: sanitizeNumberOrNull(safeEntry.locates),
-        kf: sanitizeNumberOrNull(safeEntry.kf),
+        kf: storedKf ?? derivedKf,
         notes: typeof safeEntry.notes === 'string' ? safeEntry.notes : '',
         nextSessionImprovement: typeof safeEntry.nextSessionImprovement === 'string' ? safeEntry.nextSessionImprovement : '',
         sessionReviewDone: safeEntry.sessionReviewDone === true,
