@@ -4673,6 +4673,73 @@ textarea:focus, select:focus,
     input, select, textarea { font-size: 16px; }
 }
 
+/* Real gradient themes. These variables paint every major surface instead of
+   showing the gradient only in the theme thumbnail. */
+body[data-theme="obsidian"] {
+    --theme-canvas-gradient: radial-gradient(circle at 84% 8%, rgba(37,99,235,.28), transparent 34%), linear-gradient(145deg, #05070b 0%, #0d1525 52%, #080b12 100%);
+    --theme-sidebar-gradient: linear-gradient(180deg, #080b11 0%, #101827 58%, #080a0f 100%);
+    --theme-panel-gradient: linear-gradient(145deg, rgba(22,29,42,.96), rgba(11,15,22,.94));
+}
+body[data-theme="aurora"] {
+    --theme-canvas-gradient: radial-gradient(circle at 78% 7%, rgba(124,58,237,.38), transparent 32%), radial-gradient(circle at 8% 88%, rgba(6,182,212,.22), transparent 38%), linear-gradient(145deg, #070817 0%, #171535 54%, #071827 100%);
+    --theme-sidebar-gradient: linear-gradient(180deg, #0a091b 0%, #18153a 52%, #071624 100%);
+    --theme-panel-gradient: linear-gradient(145deg, rgba(28,25,61,.95), rgba(10,24,38,.93));
+}
+body[data-theme="nebula"] {
+    --theme-canvas-gradient: radial-gradient(circle at 82% 8%, rgba(147,51,234,.48), transparent 32%), radial-gradient(circle at 12% 88%, rgba(37,99,235,.3), transparent 38%), linear-gradient(145deg, #080616 0%, #271047 52%, #07162c 100%);
+    --theme-sidebar-gradient: linear-gradient(180deg, #0b071b 0%, #25113d 55%, #0a1226 100%);
+    --theme-panel-gradient: linear-gradient(145deg, rgba(37,25,66,.96), rgba(14,20,43,.93));
+}
+body[data-theme="lagoon"] {
+    --theme-canvas-gradient: radial-gradient(circle at 16% 9%, rgba(13,148,136,.42), transparent 34%), radial-gradient(circle at 88% 84%, rgba(14,116,144,.34), transparent 38%), linear-gradient(145deg, #021519 0%, #07505a 52%, #061c31 100%);
+    --theme-sidebar-gradient: linear-gradient(180deg, #03171a 0%, #0a3d43 56%, #071d29 100%);
+    --theme-panel-gradient: linear-gradient(145deg, rgba(12,53,59,.96), rgba(7,29,42,.93));
+}
+body[data-theme="ember"] {
+    --theme-canvas-gradient: radial-gradient(circle at 84% 8%, rgba(225,29,72,.4), transparent 33%), radial-gradient(circle at 9% 90%, rgba(234,88,12,.3), transparent 38%), linear-gradient(145deg, #180a08 0%, #552014 54%, #321025 100%);
+    --theme-sidebar-gradient: linear-gradient(180deg, #180a08 0%, #421a12 55%, #290d1e 100%);
+    --theme-panel-gradient: linear-gradient(145deg, rgba(66,29,22,.96), rgba(39,15,28,.93));
+}
+body[data-theme="frost"] {
+    --theme-canvas-gradient: radial-gradient(circle at 82% 8%, rgba(139,92,246,.27), transparent 33%), radial-gradient(circle at 11% 86%, rgba(14,165,233,.23), transparent 38%), linear-gradient(145deg, #f2f9ff 0%, #cfe7ff 52%, #ece6ff 100%);
+    --theme-sidebar-gradient: linear-gradient(180deg, #edf6ff 0%, #d8e8ff 55%, #ebe7ff 100%);
+    --theme-panel-gradient: linear-gradient(145deg, rgba(255,255,255,.92), rgba(236,242,255,.88));
+}
+
+body:is([data-theme="obsidian"],[data-theme="aurora"],[data-theme="nebula"],[data-theme="lagoon"],[data-theme="ember"],[data-theme="frost"]),
+body:is([data-theme="obsidian"],[data-theme="aurora"],[data-theme="nebula"],[data-theme="lagoon"],[data-theme="ember"],[data-theme="frost"]) .main-content {
+    background-color: var(--bg-main) !important;
+    background-image: var(--theme-canvas-gradient) !important;
+    background-size: cover !important;
+    background-attachment: fixed !important;
+}
+
+body:is([data-theme="obsidian"],[data-theme="aurora"],[data-theme="nebula"],[data-theme="lagoon"],[data-theme="ember"],[data-theme="frost"]) .view-content,
+body:is([data-theme="obsidian"],[data-theme="aurora"],[data-theme="nebula"],[data-theme="lagoon"],[data-theme="ember"],[data-theme="frost"]) .app-main {
+    background: transparent !important;
+}
+
+body:is([data-theme="obsidian"],[data-theme="aurora"],[data-theme="nebula"],[data-theme="lagoon"],[data-theme="ember"],[data-theme="frost"]) .app-sidebar,
+body:is([data-theme="obsidian"],[data-theme="aurora"],[data-theme="nebula"],[data-theme="lagoon"],[data-theme="ember"],[data-theme="frost"]) #form-sidebar {
+    background-color: var(--sidebar-bg) !important;
+    background-image: var(--theme-sidebar-gradient) !important;
+}
+
+body:is([data-theme="obsidian"],[data-theme="aurora"],[data-theme="nebula"],[data-theme="lagoon"],[data-theme="ember"],[data-theme="frost"]) .app-header {
+    background: linear-gradient(90deg, color-mix(in srgb, var(--bg-panel) 88%, transparent), color-mix(in srgb, var(--accent) 13%, transparent)) !important;
+}
+
+body:is([data-theme="obsidian"],[data-theme="aurora"],[data-theme="nebula"],[data-theme="lagoon"],[data-theme="ember"],[data-theme="frost"]) .panel,
+body:is([data-theme="obsidian"],[data-theme="aurora"],[data-theme="nebula"],[data-theme="lagoon"],[data-theme="ember"],[data-theme="frost"]) .recent-trades-panel,
+body:is([data-theme="obsidian"],[data-theme="aurora"],[data-theme="nebula"],[data-theme="lagoon"],[data-theme="ember"],[data-theme="frost"]) .risk-calc-panel,
+body:is([data-theme="obsidian"],[data-theme="aurora"],[data-theme="nebula"],[data-theme="lagoon"],[data-theme="ember"],[data-theme="frost"]) .week-heatmap-panel {
+    background-color: var(--bg-panel) !important;
+    background-image: var(--theme-panel-gradient) !important;
+    border-color: color-mix(in srgb, var(--border) 68%, var(--accent) 32%) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
 @media (max-width: 600px) {
     .theme-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .theme-card { min-width: 0; padding: 8px; }
