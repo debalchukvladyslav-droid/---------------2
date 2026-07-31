@@ -585,41 +585,42 @@ test('hourly KФ counts each Sheet row once when broker trades contain duplicate
     assert.equal(hourNine.trades, 1);
 });
 
-test('exception criteria KФ rows group matched Sheet exceptions and skip incomplete rows', () => {
-    const entries = [{
-        dateStr: '2026-04-01',
-        data: {
-            trades: [
-                { symbol: 'AAPL', opened: '2026-04-01 09:31:00', sheet: { source: 'google', matchedBy: 'date+ticker+pnl', profitRisk: '-1R', exception: 'Late entry' } },
-                { symbol: 'TSLA', opened: '2026-04-01 09:45:00', sheet: { source: 'google', matchedBy: 'date+ticker+pnl', profitRisk: '0,5R', exceptions: ['Late entry', 'Chase'] } },
-                { symbol: 'NVDA', opened: '2026-04-01 09:50:00', sheet: { source: 'google', matchedBy: 'date+ticker+pnl', profitRisk: '2R' } },
-                { symbol: 'AMD', opened: '2026-04-01 08:10:00', sheet: { source: 'google', matchedBy: 'date+ticker+pnl', exception: 'No KФ' } },
-                { symbol: 'META', opened: '2026-04-01 08:12:00', sheet: { source: 'google', profitRisk: '-5R', exception: 'Sheet only' } },
-            ],
-        },
-    }];
+test('exception criteria use only complete Sheet rows and combine both exception columns', () => {
+    const sheetRows = { active: { '2026-04-01': [
+        { sheet: { sheetNet: -20, profitRisk: '-1R', exception: 'Late entry', exceptions: ['Late entry'] } },
+        { sheet: { sheetNet: 10, profitRisk: '0,5R', exception: '-', exceptions: ['Chase'] } },
+        { sheet: { sheetNet: 99, profitRisk: '2R' } },
+        { sheet: { sheetNet: 30, exception: 'No KФ' } },
+        { sheet: { profitRisk: '-5R', exception: 'No PnL' } },
+    ] } };
 
-    const rows = buildExceptionKfRows(entries);
+    const rows = buildExceptionKfRows([], null, { sheetRows });
 
-    assert.deepEqual(rows.map((row) => row.criterion), ['Chase', 'Late entry']);
+    assert.deepEqual(rows.map((row) => row.criterion), ['-', 'Chase', 'Late entry']);
     assert.deepEqual(rows.find((row) => row.criterion === 'Late entry'), {
         criterion: 'Late entry',
-        pnl: 0,
-        kf: -0.5,
-        trades: 2,
-        pnlRows: 0,
-        kfRows: 2,
-        avgKf: -0.25,
+        pnl: -20,
+        kf: -1,
+        trades: 1,
+        pnlRows: 1,
+        kfRows: 1,
+        avgKf: -1,
     });
     assert.deepEqual(rows.find((row) => row.criterion === 'Chase'), {
         criterion: 'Chase',
-        pnl: 0,
+        pnl: 10,
         kf: 0.5,
         trades: 1,
-        pnlRows: 0,
+        pnlRows: 1,
         kfRows: 1,
         avgKf: 0.5,
     });
+    assert.deepEqual(rows.find((row) => row.criterion === '-'), {
+        criterion: '-', pnl: 10, kf: 0.5, trades: 1, pnlRows: 1, kfRows: 1, avgKf: 0.5,
+    });
+    assert.deepEqual(buildExceptionKfRows([{ data: { trades: [{ sheet: {
+        sheetNet: 500, profitRisk: '5R', exception: 'Trades fallback',
+    } }] } }]), []);
 });
 
 test('google sheet rows enrich existing Trades instead of becoming sheet-only trades', () => {
