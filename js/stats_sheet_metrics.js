@@ -39,6 +39,20 @@ function parseSheetNumber(value) {
     return Number.isFinite(number) ? number : null;
 }
 
+export function combineStatsSheetRows(mainRows = {}, cumulativeRows = {}) {
+    const combined = {};
+    const addStore = (store, kind) => {
+        if (!store || typeof store !== 'object') return;
+        Object.entries(store).forEach(([sourceId, byDay]) => {
+            if (!byDay || typeof byDay !== 'object') return;
+            combined[`${kind}:${sourceId}`] = byDay;
+        });
+    };
+    addStore(mainRows, 'main');
+    addStore(cumulativeRows, 'cumulative');
+    return combined;
+}
+
 function sheetRowSources(sheetRows = {}, preferredSpreadsheetId = '') {
     const store = sheetRows && typeof sheetRows === 'object' ? sheetRows : {};
     const ids = Object.keys(store).filter((id) => store[id] && typeof store[id] === 'object');

@@ -7,7 +7,7 @@ import { escapeHtml, parseDecimalInput } from './utils.js';
 import { ensureChartJs } from './vendor_loader.js';
 import { buildTradeTypeInsightRows } from './trade_type_analysis.js';
 import { getEffectiveDayPnl } from './trade_filters.js';
-import { buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets, buildSummaryByDateWeekdayPnl } from './stats_sheet_metrics.js';
+import { buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets, buildSummaryByDateWeekdayPnl, combineStatsSheetRows } from './stats_sheet_metrics.js';
 import { renderBestExitAnalysis } from './best_exit_analysis.js';
 
 // ─── STATS CACHE ───────────────────────────────────────────────────────────────────────────────
@@ -2228,10 +2228,10 @@ function renderEntryPriceSheetChart(theme) {
 }
 
 function getStatsSheetRows() {
-    return {
-        ...(state.appData?.cumulativeSheetRows || {}),
-        ...(state.appData?.sheetRows || {}),
-    };
+    return combineStatsSheetRows(
+        state.appData?.sheetRows || {},
+        state.appData?.cumulativeSheetRows || {},
+    );
 }
 
 function renderExceptionCriteriaKfRows(rows = [], containerId = 'stats-exception-criteria-list') {

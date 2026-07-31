@@ -39,7 +39,7 @@ const { getEffectiveDayPnl, isPureGoogleSheetTrade, visibleTradeRows } = await i
 const { normalizeBrokerTradeType } = await import('../js/trade_import_utils.js');
 const { duplicateSheetMappingConfig } = await import('../js/sheet_import_modes.js');
 const { detectExactSheetAutoMapping, migrateLegacyClassificationMapping, normalizeExactSheetHeader } = await import('../js/sheet_auto_mapping.js');
-const { buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets, buildSummaryByDateWeekdayPnl, parseSheetProfitRisk } = await import('../js/stats_sheet_metrics.js');
+const { buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets, buildSummaryByDateWeekdayPnl, combineStatsSheetRows, parseSheetProfitRisk } = await import('../js/stats_sheet_metrics.js');
 const { parseDecimalInput } = await import('../js/utils.js');
 const { getZonedClockParts, isEndOfSessionReviewTime } = await import('../js/session_schedule.js');
 const { buildServiceBotSnapshot, hashServiceBotApiKey, hasServiceBotPermission, parseServiceBotRange } = await import('../lib/service_bots.js');
@@ -602,6 +602,18 @@ test('hourly results aggregate main and cumulative Sheet sources', () => {
     const rows = buildHourlyKfBuckets(entries, null, { sheetRows });
     assert.deepEqual(rows.find((row) => row.hour === 8), { hour: 8, pnl: -5, kf: -0.25, trades: 1, pnlRows: 1, kfRows: 1, label: '08' });
     assert.deepEqual(rows.find((row) => row.hour === 9), { hour: 9, pnl: 20, kf: 1, trades: 1, pnlRows: 1, kfRows: 1, label: '09' });
+});
+
+test('main and cumulative rows remain separate when they use the same spreadsheet id', () => {
+    const main = { shared: { '2026-07-01': [{ sheet: { sheetRow: 6, profitRisk: '1R', exception: 'Main' } }] } };
+    const cumulative = { shared: { '2025-01-01': [{ sheet: { sheetRow: 6, profitRisk: '2R', exception: 'Archive' } }] } };
+    const combined = combineStatsSheetRows(main, cumulative);
+    assert.deepEqual(Object.keys(combined), ['main:shared', 'cumulative:shared']);
+    const rows = buildExceptionKfRows([], null, { sheetRows: combined });
+    assert.deepEqual(rows.map(({ criterion, kf }) => ({ criterion, kf })), [
+        { criterion: 'Archive', kf: 2 },
+        { criterion: 'Main', kf: 1 },
+    ]);
 });
 
 test('exception criteria use only criterion and KФ from the same isolated Sheet row', () => {
