@@ -4437,6 +4437,10 @@ body.is-offline [data-needs-network="true"] {
     background: linear-gradient(135deg, #f5f1e9 48%, #fffdf8 48%);
     border-color: #d9d1c4;
 }
+.theme-preview-nebula { color: #a78bfa; background: radial-gradient(circle at 78% 12%, #7c3aed, transparent 38%), linear-gradient(140deg, #090718 20%, #241447 62%, #101b3c); }
+.theme-preview-lagoon { color: #2dd4bf; background: radial-gradient(circle at 18% 20%, #0f766e, transparent 38%), linear-gradient(140deg, #03171b, #064e5b 55%, #082f49); }
+.theme-preview-ember { color: #fb7185; background: radial-gradient(circle at 78% 18%, #be123c, transparent 38%), linear-gradient(140deg, #1a0c0a, #5c2118 54%, #3b1022); }
+.theme-preview-frost { color: #6366f1; background: radial-gradient(circle at 78% 14%, #c4b5fd, transparent 40%), linear-gradient(140deg, #edf6ff, #dbeafe 52%, #ede9fe); border-color: #cbd5e1; }
 .theme-card-name {
     color: var(--text-main);
     font-size: .78rem;
@@ -4501,6 +4505,26 @@ body[data-theme="obsidian"] .panel,
 body[data-theme="aurora"] .panel,
 body[data-theme="graphite"] .panel {
     border-color: color-mix(in srgb, var(--border) 78%, var(--accent) 22%);
+}
+
+/* Full-page gradients: palettes remain solid for readable controls while the
+   app canvas gets depth and color. */
+body[data-theme="nebula"], body[data-theme="nebula"] .main-content {
+    background: radial-gradient(circle at 82% 8%, rgba(124,58,237,.34), transparent 34%), radial-gradient(circle at 12% 88%, rgba(37,99,235,.22), transparent 36%), linear-gradient(145deg, #090718 0%, #18102f 52%, #081426 100%);
+}
+body[data-theme="lagoon"], body[data-theme="lagoon"] .main-content {
+    background: radial-gradient(circle at 16% 10%, rgba(13,148,136,.28), transparent 34%), radial-gradient(circle at 88% 82%, rgba(14,116,144,.24), transparent 38%), linear-gradient(145deg, #03171b 0%, #07333b 54%, #071c2d 100%);
+}
+body[data-theme="ember"], body[data-theme="ember"] .main-content {
+    background: radial-gradient(circle at 85% 8%, rgba(225,29,72,.27), transparent 34%), radial-gradient(circle at 10% 90%, rgba(234,88,12,.2), transparent 36%), linear-gradient(145deg, #1a0c0a 0%, #3b1712 55%, #2b0d20 100%);
+}
+body[data-theme="frost"], body[data-theme="frost"] .main-content {
+    background: radial-gradient(circle at 82% 8%, rgba(139,92,246,.17), transparent 34%), radial-gradient(circle at 12% 86%, rgba(14,165,233,.16), transparent 38%), linear-gradient(145deg, #eef7ff 0%, #dcecff 52%, #eeeaff 100%);
+}
+body:is([data-theme="nebula"],[data-theme="lagoon"],[data-theme="ember"],[data-theme="frost"]) .panel {
+    background: color-mix(in srgb, var(--bg-panel) 91%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
 }
 
 @media (max-width: 600px) {
