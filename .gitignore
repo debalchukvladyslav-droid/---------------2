@@ -1,6 +1,12 @@
 sync_config.json
 sync_history.json
 config.js
+.env
+.env.*
+!.env.test.example
+test-results/
+playwright-report/
+tests/.auth/
 supabase/.secrets.env
 _dev-server.*.log
 

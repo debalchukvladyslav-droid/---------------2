@@ -6,6 +6,7 @@
     "validate": "npm run check && npm run audit",
     "check:partials": "node scripts/check-partials.mjs",
     "test": "node --test tests/*.test.mjs",
+    "test:seed": "node scripts/seed-test-environment.mjs",
     "dev": "node dev-server.mjs",
     "dev:5500": "node dev-server.mjs --port 5500",
     "start": "node dev-server.mjs"
