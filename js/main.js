@@ -629,6 +629,8 @@ function openSessionReview() {
     document.getElementById('session-review-date').textContent = `📅 ${today}`;
     document.getElementById('session-review-notes').value = day.notes || '';
     document.getElementById('session-review-improvement').value = day.nextSessionImprovement || '';
+    document.getElementById('session-review-pnl').value = day.pnl ?? '';
+    document.getElementById('session-review-kf').value = day.kf ?? '';
     sessionReviewIncludesYesterday = false;
     sessionReviewScreens = collectSessionReviewScreens(today, false);
     sessionReviewScreenIndex = 0;
@@ -669,6 +671,26 @@ window.openSessionReviewManual = function() {
     openSessionReview();
 };
 
+window.syncSessionReviewScreens = async function() {
+    const button = document.getElementById('session-review-sync-btn');
+    if (button?.disabled) return;
+    const originalText = button?.textContent || '↻ Синхронізувати';
+    if (button) { button.disabled = true; button.textContent = '↻ Синхронізація…'; }
+    try {
+        await syncDriveScreenshots(true);
+        const today = getTodayEST();
+        sessionReviewScreens = collectSessionReviewScreens(today, sessionReviewIncludesYesterday);
+        sessionReviewScreenIndex = 0;
+        sessionReviewReviewed = new Set();
+        await renderSessionReviewScreen();
+        showToast('Скріншоти синхронізовано');
+    } catch (error) {
+        showToast(`Не вдалося синхронізувати скріншоти: ${error?.message || error}`);
+    } finally {
+        if (button) { button.disabled = false; button.textContent = originalText; }
+    }
+};
+
 window.saveSessionReview = async function() {
     const today = getTodayEST();
     if (sessionReviewScreens.length && sessionReviewReviewed.size < sessionReviewScreens.length) {
@@ -679,6 +701,8 @@ window.saveSessionReview = async function() {
         return;
     }
     const day = state.appData.journal?.[today] || getDefaultDayEntry();
+    day.pnl = parseDecimalInput(document.getElementById('session-review-pnl')?.value);
+    day.kf = parseDecimalInput(document.getElementById('session-review-kf')?.value);
     day.notes = document.getElementById('session-review-notes')?.value || '';
     day.nextSessionImprovement = document.getElementById('session-review-improvement')?.value || '';
     day.sessionReviewDone = true;

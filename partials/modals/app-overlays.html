@@ -64,10 +64,14 @@
         <header class="session-review-head"><div><div class="session-modal-kicker">Після сесії</div><h2 id="session-review-title">Закрий торговий день</h2><div id="session-review-date" class="session-modal-date"></div></div></header>
         <div class="session-review-grid">
             <section class="session-review-notes">
+                <div class="session-review-result-row">
+                    <label class="session-review-result-field"><span>Net PnL ($)</span><input id="session-review-pnl" type="text" inputmode="decimal" placeholder="0.00"></label>
+                    <label class="session-review-result-field"><span>КФ за день</span><input id="session-review-kf" type="text" inputmode="decimal" placeholder="0.00"></label>
+                </div>
                 <label class="session-field"><span class="session-field-label">Думка дня</span><textarea id="session-review-notes" rows="6" placeholder="Що сьогодні спрацювало, де поспішив, що відчував?"></textarea></label>
                 <label class="session-field session-review-improvement"><span class="session-field-label">Що покращити наступної торгівлі</span><textarea id="session-review-improvement" rows="4" placeholder="Одна конкретна дія для дисципліни наступного разу…"></textarea></label>
             </section>
-            <section class="session-review-screens"><div class="session-review-screens-head"><div><strong id="session-review-screens-title">Скріншоти за сьогодні</strong><small>Переглянь кожен перед завершенням</small></div><div class="session-review-screen-tools"><button type="button" id="session-review-yesterday-btn" class="btn-secondary" data-action="session-review-yesterday">Посортувати вчорашні</button><span id="session-review-screen-progress">0 / 0</span></div></div>
+            <section class="session-review-screens"><div class="session-review-screens-head"><div><strong id="session-review-screens-title">Скріншоти за сьогодні</strong><small>Переглянь кожен перед завершенням</small></div><div class="session-review-screen-tools"><button type="button" id="session-review-sync-btn" class="session-review-sync-btn" data-action="session-review-sync" title="Синхронізувати скріншоти">↻ Синхронізувати</button><button type="button" id="session-review-yesterday-btn" class="btn-secondary" data-action="session-review-yesterday">Посортувати вчорашні</button><span id="session-review-screen-progress">0 / 0</span></div></div>
                 <div class="session-review-screen-stage" id="session-review-screen-stage"><p>Скріншотів за сьогодні немає</p></div>
                 <div class="session-review-screen-nav"><button type="button" class="btn-secondary" data-action="session-review-screen-prev">←</button><div class="session-review-categories" id="session-review-categories"><button type="button" data-category="good">Добрий</button><button type="button" data-category="normal">Звичайний</button><button type="button" data-category="bad">Поганий</button><button type="button" data-category="error">Помилка</button></div><button type="button" class="btn-secondary" data-action="session-review-screen-next">→</button></div>
             </section>

@@ -281,6 +281,7 @@ function activateAction(action, trigger, event = null) {
         'session-modal-check': () => window.checkSessionModalReadiness?.(),
         'session-modal-save': () => window.saveSessionModal?.(),
         'session-review-save': () => window.saveSessionReview?.(),
+        'session-review-sync': () => window.syncSessionReviewScreens?.(),
         'session-review-open': () => window.openSessionReviewManual?.(),
         'session-review-snooze': () => window.snoozeSessionReview?.(),
         'session-review-screen-prev': () => window.stepSessionReviewScreen?.(-1),

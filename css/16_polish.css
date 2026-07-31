@@ -1054,12 +1054,20 @@ body {
 .session-review-head h2 { margin: 3px 0 0; font-size: 1.35rem; }
 .session-review-grid { display: grid; grid-template-columns: minmax(280px, .85fr) minmax(420px, 1.4fr); gap: 20px; }
 .session-review-notes { display: grid; align-content: start; gap: 14px; }
+.session-review-result-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.session-review-result-field { display: grid; gap: 6px; }
+.session-review-result-field span { color: var(--text-muted); font-size: .74rem; font-weight: 700; }
+.session-review-result-field input { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg-main); color: var(--text-main); font: 700 .9rem var(--font-mono); }
+.session-review-result-field input:focus { outline: none; border-color: var(--accent); }
 .session-review-improvement { padding: 12px; border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .session-review-screens { min-width: 0; padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--bg-main); }
 .session-review-screens-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .session-review-screens-head strong, .session-review-screens-head small { display: block; } .session-review-screens-head small { margin-top: 3px; color: var(--text-muted); font-size: .75rem; }
 .session-review-screen-tools { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 9px; }
 .session-review-screen-tools .btn-secondary { margin: 0; padding: 6px 9px; font-size: .72rem; }
+.session-review-sync-btn { margin: 0; padding: 5px 8px; border: 0; border-radius: 7px; background: transparent; color: var(--text-muted); font-size: .72rem; cursor: pointer; }
+.session-review-sync-btn:hover { background: color-mix(in srgb, var(--accent) 9%, transparent); color: var(--accent); }
+.session-review-sync-btn:disabled { opacity: .55; cursor: wait; }
 .session-review-screen-tools .btn-secondary.active { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .session-review-screen-stage { display: grid; place-items: center; min-height: 340px; overflow: hidden; border-radius: 10px; background: #080b10; color: var(--text-muted); }
 .session-review-screen-stage img { display: block; width: 100%; max-height: 52vh; object-fit: contain; }
