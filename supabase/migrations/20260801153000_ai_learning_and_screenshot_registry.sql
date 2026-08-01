@@ -1,4 +1,32 @@
--- Admin-reviewed multimodal memory for the AI learning centre.
+-- Durable screenshot registry upgrade used by the app and AI learning centre.
+ALTER TABLE public.screenshots
+    ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+    ADD COLUMN IF NOT EXISTS storage_path TEXT,
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'upload',
+    ADD COLUMN IF NOT EXISTS source_file_id TEXT,
+    ADD COLUMN IF NOT EXISTS original_name TEXT,
+    ADD COLUMN IF NOT EXISTS mime_type TEXT,
+    ADD COLUMN IF NOT EXISTS source_created_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS source_modified_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+CREATE UNIQUE INDEX IF NOT EXISTS screenshots_user_storage_path_key
+    ON public.screenshots(user_id, storage_path);
+CREATE UNIQUE INDEX IF NOT EXISTS screenshots_user_source_file_key
+    ON public.screenshots(user_id, source, source_file_id)
+    WHERE source_file_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS screenshots_user_created_idx
+    ON public.screenshots(user_id, created_at DESC);
+
+ALTER TABLE public.screenshots ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS screenshots_owner_or_admin ON public.screenshots;
+CREATE POLICY screenshots_owner_or_admin ON public.screenshots
+FOR ALL TO authenticated
+USING (auth.uid() = user_id OR public.app_is_admin())
+WITH CHECK (auth.uid() = user_id OR public.app_is_admin());
+
+-- Admin-reviewed multimodal AI memory.
 CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
 
 CREATE TABLE IF NOT EXISTS public.ai_learning_runs (
@@ -35,21 +63,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS ai_learning_one_active_version
 INSERT INTO public.ai_learning_versions (prompt_version, memory_version, model_name, active)
 SELECT 'entry-mistake-v1', 0, 'gemini-2.5-flash', TRUE
 WHERE NOT EXISTS (SELECT 1 FROM public.ai_learning_versions WHERE active);
-
-CREATE OR REPLACE FUNCTION public.increment_ai_learning_memory_version()
-RETURNS INTEGER
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
-AS $$
-DECLARE next_version INTEGER;
-BEGIN
-    IF NOT public.app_is_admin() THEN RAISE EXCEPTION 'Admin only'; END IF;
-    UPDATE public.ai_learning_versions
-    SET memory_version = memory_version + 1
-    WHERE active
-    RETURNING memory_version INTO next_version;
-    RETURN COALESCE(next_version, 0);
-END;
-$$;
 
 CREATE TABLE IF NOT EXISTS public.ai_learning_examples (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
