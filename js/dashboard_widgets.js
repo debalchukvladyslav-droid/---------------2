@@ -6,7 +6,7 @@ import { supabase } from './supabase.js';
 import { buildExceptionKfRows, buildHourlyKfBuckets, combineStatsSheetRows } from './stats_sheet_metrics.js';
 import { escapeHtml } from './utils.js';
 
-const VERSION = 4;
+const VERSION = 5;
 const GRID_COLUMNS = 24;
 const CATEGORIES = { overview: 'Огляд', analytics: 'Аналітика', routine: 'Сесія', tools: 'Інструменти' };
 const MICRO_WIDGETS = new Set(['month-pnl', 'month-winrate', 'month-trades', 'month-pf', 'today', 'daily-kf', 'week-compare', 'streak', 'current-hour', 'last-session', 'sync-status', 'missing-data']);
@@ -173,7 +173,10 @@ function makeWidget(item) {
     article.dataset.mobileSize = item.w <= 6 ? 'small' : item.w >= GRID_COLUMNS ? 'full' : 'medium';
     article.dataset.widgetH = String(item.h);
     article.classList.toggle('is-micro-widget', MICRO_WIDGETS.has(item.id));
+    // Apply geometry before GridStack boots so widgets never flash in one pile.
     article.style.setProperty('--widget-w', item.w); article.style.setProperty('--widget-h', item.h);
+    article.style.setProperty('--gs-x', item.x); article.style.setProperty('--gs-y', item.y);
+    article.style.setProperty('--gs-w', item.w); article.style.setProperty('--gs-h', item.h);
     article.appendChild(controls(item));
     const content = document.createElement('div'); content.className = 'grid-stack-item-content dashboard-widget-content';
     const source = sourceFor(item.id);
