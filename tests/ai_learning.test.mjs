@@ -139,6 +139,17 @@ test('unsupported model classifications are downgraded instead of becoming facts
     }));
     assert.equal(supported.ai_pattern_key, 'valid_entry');
     assert.equal(supported.ai_confidence, 0.8);
+    const tablePriceMasqueradingAsVision = parseAiJson(JSON.stringify({
+        patternKey: 'pullback_entry', confidence: 0.85,
+        chartSummary: 'Sharp impulse and recovery',
+        evidence: { visible: ['Price high at 2.37', 'Entry price 1.9858', 'Volume bars present'], inferred: [], missing: [] },
+        movement: { entryLocation: 'mid pullback retest' }, execution: { timing: 'post correction' },
+        processScores: { entryQuality: 80 },
+    }));
+    assert.equal(tablePriceMasqueradingAsVision.ai_pattern_key, 'unclear');
+    assert.equal(tablePriceMasqueradingAsVision.ai_confidence, 0.35);
+    assert.equal(tablePriceMasqueradingAsVision.analysis_features.movement.entryLocation, '');
+    assert.ok(tablePriceMasqueradingAsVision.analysis_features.evidence.missing.includes('visible_entry_marker'));
 });
 
 test('personal patterns use only human-reviewed examples and enforce minimum support', () => {
@@ -262,4 +273,11 @@ test('evaluation output keeps evidence needed to diagnose false classifications'
     assert.match(source, /visualEvidence: result\.analysis\?\.visual_evidence \|\| \[\]/);
     assert.match(source, /analysisFeatures: result\.analysis\?\.analysis_features \|\| null/);
     assert.match(source, /actualModelName: result\.analysis\?\.actual_model_name \|\| null/);
+});
+
+test('human-reviewed memory survives model-version replacement', () => {
+    const migration = readFileSync(new URL('../supabase/migrations/20260802233000_preserve_human_ai_memory.sql', import.meta.url), 'utf8');
+    assert.doesNotMatch(migration, /AND e\.is_current/);
+    assert.match(migration, /review_status IN \('approved', 'corrected'\)/);
+    assert.match(migration, /review_note, ''\) NOT LIKE '\[auto\]%'/);
 });
