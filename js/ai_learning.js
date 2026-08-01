@@ -145,11 +145,14 @@ function renderQuality(data) {
     const patterns = el('ai-learning-patterns');
     if (patterns) {
         patterns.replaceChildren();
+        const patternTotal = (data.patterns || []).reduce((sum, item) => sum + (Number(item.total) || 0), 0);
         (data.patterns || []).slice(0, 8).forEach((item) => {
+            const share = patternTotal ? (Number(item.total) || 0) / patternTotal : 0;
             const row = document.createElement('div'); row.className = 'ai-learning-pattern-row';
             const title = document.createElement('span'); title.textContent = PATTERNS[item.key] || item.key;
-            const meter = document.createElement('i'); meter.style.setProperty('--value', `${Math.max(4, (item.accuracy || 0) * 100)}%`);
+            const meter = document.createElement('i'); meter.style.setProperty('--value', `${Math.max(4, share * 100)}%`);
             const value = document.createElement('b'); value.textContent = `${formatPercent(item.accuracy)} · ${item.total}`;
+            value.textContent = `${formatPercent(share)} · ${item.total}`;
             row.append(title, meter, value); patterns.append(row);
         });
         if (!patterns.childElementCount) patterns.textContent = 'Категорії заповняться після рев’ю.';
@@ -287,6 +290,37 @@ export async function runAILearning() {
     try { const payload = await api('', { method: 'POST', body: JSON.stringify({ action: 'run' }) }); showToast(`Оброблено: ${payload.run?.processed_count || 0}`); loaded = false; busy = false; await renderAILearningCenter(true); }
     catch (error) { setStatus(error.message || String(error), 'error'); showToast(error.message || String(error)); }
     finally { busy = false; if (button) { button.disabled = false; button.textContent = 'Один пакет'; } }
+}
+
+export async function startNewAILearning() {
+    if (busy || state.myRole !== 'admin') return;
+    const button = el('ai-learning-new');
+    busy = true;
+    if (button) { button.disabled = true; button.textContent = 'Новий прогін…'; }
+    setStatus('Створюємо нову версію та повторно аналізуємо всі угоди…');
+    try {
+        let payload = await api('', { method: 'POST', body: JSON.stringify({ action: 'new-training' }) });
+        let processed = Number(payload.run?.processed_count || 0);
+        let batchNumber = 1;
+        console.info(`[AI new training] Пакет ${batchNumber}: оброблено ${processed}`);
+        while (Number(payload.run?.processed_count || 0) > 0) {
+            batchNumber += 1;
+            setStatus(`Нова версія: пакет ${batchNumber}, уже оброблено ${processed} угод…`);
+            payload = await api('', { method: 'POST', body: JSON.stringify({ action: 'run' }) });
+            const batchProcessed = Number(payload.run?.processed_count || 0);
+            processed += batchProcessed;
+            console.info(`[AI new training] Пакет ${batchNumber}: оброблено ${batchProcessed}, разом ${processed}`);
+        }
+        showToast(`Нова версія: повторно оброблено ${processed} угод`);
+        loaded = false;
+        await renderAILearningCenter(true);
+    } catch (error) {
+        setStatus(error.message || String(error), 'error');
+        showToast(error.message || String(error));
+    } finally {
+        busy = false;
+        if (button) { button.disabled = false; button.textContent = 'Нове навчання'; }
+    }
 }
 
 export async function toggleAILearningDay() {

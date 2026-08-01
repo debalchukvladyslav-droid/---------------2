@@ -217,6 +217,7 @@ function activateAction(action, trigger, event = null) {
         'review-request': () => window.submitReviewRequest?.(trigger?.dataset?.reviewType || ''),
         'ai-tab': () => window.switchAITab?.(trigger?.dataset?.aiTab || 'chat'),
         'ai-learning-run': () => window.runAILearning?.(),
+        'ai-learning-new': () => window.startNewAILearning?.(),
         'ai-learning-day': () => window.toggleAILearningDay?.(),
         'ai-learning-review': () => window.reviewAILearningExample?.(trigger),
         'ai-quick-prompt': () => window.applyAIQuickPrompt?.(trigger?.dataset?.aiPrompt || ''),
