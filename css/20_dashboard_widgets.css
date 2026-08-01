@@ -35,3 +35,16 @@
 .grid-stack.dashboard-widget-grid{--gs-columns:24;--gs-column-width:calc(100% / var(--gs-columns))}
 .grid-stack.dashboard-widget-grid>.grid-stack-item.dashboard-widget{left:calc(var(--gs-x,0) * var(--gs-column-width))!important;top:calc(var(--gs-y,0) * var(--gs-cell-height))!important;width:calc(var(--gs-w,1) * var(--gs-column-width))!important;height:calc(var(--gs-h,1) * var(--gs-cell-height))!important}
 @media(max-width:700px){.grid-stack.dashboard-widget-grid{--gs-columns:12}}
+
+/* Edit-mode chrome must not cover the dashboard content. Reserve one compact
+   toolbar row and simplify controls on one-row KPI widgets. */
+.dashboard-builder.is-editing{padding-top:38px}
+.dashboard-builder.is-editing .dashboard-widget-catalog{margin-top:-38px}
+.dashboard-widget-grid.is-editing .dashboard-widget.is-micro-widget[data-widget-h="1"] .dashboard-size-controls{display:none}
+.dashboard-widget-grid.is-editing .dashboard-widget.is-micro-widget[data-widget-h="1"] .dashboard-widget-controls{inset:4px 4px auto}
+.dashboard-widget-grid.is-editing .dashboard-widget.is-micro-widget[data-widget-h="1"] .dashboard-widget-controls button{width:21px;height:21px;border-radius:6px;font-size:.7rem}
+.dashboard-widget-grid.is-editing .dashboard-widget.is-micro-widget[data-widget-h="1"] .dashboard-widget-content{padding-left:29px;padding-right:29px}
+@media(max-width:700px){
+    .dashboard-builder.is-editing{padding-top:0}
+    .dashboard-builder.is-editing .dashboard-widget-catalog{margin-top:0}
+}
