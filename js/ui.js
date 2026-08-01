@@ -680,6 +680,9 @@ function activateMainView(view, tab, previousTab) {
 
 async function runMainTabWork(tab) {
     const tasks = [];
+    if (tab === 'ai') {
+        window.initAILearningCenter?.();
+    }
     if (tab === 'stats' && window.refreshStatsView) {
         // РЎРєРёРґР°С”РјРѕ all-time С„С–Р»СЊС‚СЂ РїСЂРё РїРѕРІРµСЂРЅРµРЅРЅС– РЅР° РІРєР»Р°РґРєСѓ вЂ” С‰РѕР± РЅРµ С‚СЂРёРіРµСЂРёР»Рѕ РІР°Р¶РєРµ Р·Р°РІР°РЅС‚Р°Р¶РµРЅРЅСЏ
         if (state.activeFilters?.some(f => f.type === 'all-time')) {

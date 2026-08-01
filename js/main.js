@@ -53,6 +53,7 @@ import { initOnboarding, startOnboardingTour, resetOnboardingRuntime } from './o
 import { getTrustedServerNow, isEndOfSessionReviewTime } from './session_schedule.js';
 import { renderDashboardAI, refreshDashboardAI, toggleDashboardAIHistory, rotateDashboardAI, openDashboardMentor, closeDashboardMentor, sendDashboardMentorMessage, switchDashboardMentorTab } from './dashboard_ai.js';
 import { analyzeLossPatterns, renderLossPatternAnalysis } from './loss_pattern_analysis.js';
+import { initAILearningCenter, renderAILearningCenter, runAILearning, reviewAILearningExample } from './ai_learning.js';
 import { closeCumulativeWeekly, openCumulativeWeekly, saveCumulativeDayloss, toggleCumulativeDayloss } from './cumulative_weekly_ui.js';
 import { initDashboardWidgets, refreshDashboardWidgets } from './dashboard_widgets.js';
 
@@ -235,6 +236,10 @@ window.switchAITab = switchAITab;
 window.applyAIQuickPrompt = applyAIQuickPrompt;
 window.bookmarkAIChat = bookmarkAIChat;
 window.renderSavedAIChats = renderSavedAIChats;
+window.initAILearningCenter = initAILearningCenter;
+window.renderAILearningCenter = renderAILearningCenter;
+window.runAILearning = runAILearning;
+window.reviewAILearningExample = reviewAILearningExample;
 window.deleteSavedAI = deleteSavedAI;
 window.moveTrader = moveTrader;
 window.deleteTeam = deleteTeam;
@@ -1313,6 +1318,7 @@ async function bootApp(user) {
         if (window.applyAccessRights) window.applyAccessRights();
         syncMainTabFromRoute();
         if (window.loadAIChatHistory) window.loadAIChatHistory();
+        initAILearningCenter();
         if (window.renderDashboardNews) void window.renderDashboardNews();
         void renderDashboardAI();
         if (window.renderMarketSentiment) void window.renderMarketSentiment();

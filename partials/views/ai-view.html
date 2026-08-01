@@ -16,6 +16,7 @@
         <div class="ai-tab-row">
             <button class="btn-primary btn-flex-1" id="btn-ai-chat" data-action="ai-tab" data-ai-tab="chat">💬 Чат з AI</button>
             <button class="btn-secondary btn-flex-1" id="btn-ai-saved" data-action="ai-tab" data-ai-tab="saved">💾 Збережене</button>
+            <button class="btn-secondary btn-flex-1 initially-hidden" id="btn-ai-learning" data-action="ai-tab" data-ai-tab="learning">◈ Навчання AI</button>
         </div>
 
         <div id="ai-chat-section" class="ai-section">
@@ -33,6 +34,42 @@
         <div id="ai-saved-section" class="ai-saved-section initially-hidden">
             <h3 class="ai-saved-title">💾 Збережені аналізи</h3>
             <div id="ai-saved-list" class="ai-saved-list"></div>
+        </div>
+
+        <div id="ai-learning-section" class="ai-learning initially-hidden" aria-live="polite">
+            <div class="ai-learning__hero">
+                <div>
+                    <span class="ai-toolbar-kicker">Підтверджена пам’ять</span>
+                    <h3>Як AI вчиться розпізнавати входи</h3>
+                    <p>Модель не змінює свої ваги. Вона порівнює нові входи лише з прикладами, які підтвердив адміністратор.</p>
+                </div>
+                <button type="button" class="btn-primary" id="ai-learning-run" data-action="ai-learning-run">Проаналізувати нові дані</button>
+            </div>
+            <div id="ai-learning-status" class="ai-learning__status">Завантажуємо центр навчання…</div>
+            <div id="ai-learning-kpis" class="ai-learning__kpis"></div>
+            <div class="ai-learning__grid">
+                <section class="ai-learning-card ai-learning-card--wide">
+                    <div class="ai-learning-card__head"><div><span class="ai-toolbar-kicker">Якість</span><h4>Точність рішень AI</h4></div><span id="ai-learning-agreement" class="ai-learning-card__value">—</span></div>
+                    <div id="ai-learning-quality-chart" class="ai-learning-chart"></div>
+                    <div id="ai-learning-patterns" class="ai-learning-patterns"></div>
+                </section>
+                <section class="ai-learning-card">
+                    <div class="ai-learning-card__head"><div><span class="ai-toolbar-kicker">Версії</span><h4>Поточний контур</h4></div></div>
+                    <div id="ai-learning-version" class="ai-learning-meta"></div>
+                </section>
+                <section class="ai-learning-card">
+                    <div class="ai-learning-card__head"><div><span class="ai-toolbar-kicker">Дані</span><h4>Приклади трейдерів</h4></div></div>
+                    <div id="ai-learning-traders" class="ai-learning-bars"></div>
+                </section>
+                <section class="ai-learning-card ai-learning-card--wide">
+                    <div class="ai-learning-card__head"><div><span class="ai-toolbar-kicker">Ручна перевірка</span><h4>Черга нових входів</h4></div><span id="ai-learning-queue-count" class="ai-learning-card__value">0</span></div>
+                    <div id="ai-learning-queue" class="ai-learning-queue"></div>
+                </section>
+                <section class="ai-learning-card ai-learning-card--wide">
+                    <div class="ai-learning-card__head"><div><span class="ai-toolbar-kicker">Запуски</span><h4>Історія обробки</h4></div></div>
+                    <div id="ai-learning-runs" class="ai-learning-runs"></div>
+                </section>
+            </div>
         </div>
     </div>
 </div>

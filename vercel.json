@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/sync-google-sheets",
       "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/cron/ai-learning",
+      "schedule": "0 21 * * *"
     }
   ],
   "rewrites": [

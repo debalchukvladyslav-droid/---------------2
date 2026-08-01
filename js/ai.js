@@ -480,11 +480,18 @@ export function loadAIChatHistory() {
 }
 
 export function switchAITab(tab) {
+    if (tab === 'learning' && state.myRole !== 'admin') tab = 'chat';
     document.getElementById('ai-chat-section').style.display = tab === 'chat' ? 'flex' : 'none';
     document.getElementById('ai-saved-section').style.display = tab === 'saved' ? 'flex' : 'none';
+    const learningSection = document.getElementById('ai-learning-section');
+    if (learningSection) {
+        learningSection.style.display = tab === 'learning' ? 'flex' : 'none';
+        learningSection.classList.toggle('initially-hidden', tab !== 'learning');
+    }
 
     const chatBtn = document.getElementById('btn-ai-chat');
     const savedBtn = document.getElementById('btn-ai-saved');
+    const learningBtn = document.getElementById('btn-ai-learning');
     if (chatBtn) {
         chatBtn.classList.toggle('btn-primary', tab === 'chat');
         chatBtn.classList.toggle('btn-secondary', tab !== 'chat');
@@ -493,8 +500,13 @@ export function switchAITab(tab) {
         savedBtn.classList.toggle('btn-primary', tab === 'saved');
         savedBtn.classList.toggle('btn-secondary', tab !== 'saved');
     }
+    if (learningBtn) {
+        learningBtn.classList.toggle('btn-primary', tab === 'learning');
+        learningBtn.classList.toggle('btn-secondary', tab !== 'learning');
+    }
     
     if(tab === 'saved') renderSavedAIChats();
+    if(tab === 'learning') window.renderAILearningCenter?.();
 }
 
 export function bookmarkAIChat(userText, aiHtml, btnEl) {
