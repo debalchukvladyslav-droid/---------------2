@@ -150,6 +150,15 @@ test('unsupported model classifications are downgraded instead of becoming facts
     assert.equal(tablePriceMasqueradingAsVision.ai_confidence, 0.35);
     assert.equal(tablePriceMasqueradingAsVision.analysis_features.movement.entryLocation, '');
     assert.ok(tablePriceMasqueradingAsVision.analysis_features.evidence.missing.includes('visible_entry_marker'));
+    const futureLeakage = parseAiJson(JSON.stringify({
+        patternKey: 'valid_entry', confidence: 0.9,
+        chartSummary: 'Entry marker visible at the breakout',
+        explanation: 'Price subsequently moved higher, confirming the direction of the setup.',
+        evidence: { visible: ['entry marker line at 1.98'], inferred: [], missing: [] },
+    }));
+    assert.equal(futureLeakage.ai_pattern_key, 'unclear');
+    assert.equal(futureLeakage.ai_confidence, 0.35);
+    assert.ok(futureLeakage.analysis_features.evidence.missing.includes('outcome_blind_entry_assessment'));
 });
 
 test('personal patterns use only human-reviewed examples and enforce minimum support', () => {
@@ -186,6 +195,8 @@ test('evaluation summary separates coverage, selective accuracy and calibration'
         { expectedPatternKey: 'late_entry', predictedPatternKey: 'unclear', confidence: 0.2, exactMatch: false, evidenceComplete: true, abstained: true },
     ]);
     assert.equal(summary.exactAccuracy, 1 / 3);
+    assert.equal(summary.qualityStatus, 'insufficient_sample');
+    assert.equal(summary.minimumGoldCases, 30);
     assert.equal(summary.selectiveAccuracy, 0.5);
     assert.equal(summary.coverage, 2 / 3);
     assert.ok(summary.brierScore > 0);
