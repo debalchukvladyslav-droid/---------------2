@@ -6,6 +6,7 @@ import { getGeminiKeys, callGemini, callGeminiViaProxy, callGeminiJSON, sleep } 
 import { sanitizeHTML, sanitizeRichHTML } from './sanitize.js';
 import { buildTradeTypeAIContext, buildDayTradeTypeAIContext } from './trade_type_analysis.js';
 import { isNotTakenTrade } from './data_utils.js';
+import { prepareImageInlineData } from './ai/image.js';
 
 export { getGeminiKeys, callGemini, callGeminiViaProxy, callGeminiJSON, sleep };
 
@@ -292,8 +293,7 @@ export async function analyzeChart(encodedPath, cleanId) {
         let response = await fetch(src);
         if (!response.ok) throw new Error(`Не вдалось завантажити зображення (${response.status})`);
         let blob = await response.blob();
-        const mimeType = blob.type && blob.type.startsWith('image/') ? blob.type : 'image/jpeg';
-        let base64data = await new Promise((resolve) => { let reader = new FileReader(); reader.onloadend = () => resolve(reader.result.split(',')[1]); reader.readAsDataURL(blob); });
+        const image = await prepareImageInlineData(blob);
         
         const tradeTypeContext = buildTradeTypeAIContext(state.appData.journal || {}, { tradeTypes: state.appData.tradeTypes, recentDays: 90, limit: 6 });
         const notTakenContext = buildNotTakenAIContext(state.appData.journal || {});
@@ -322,7 +322,7 @@ ${window.getPlaybookContext ? window.getPlaybookContext() : ''}
 
 ЯКЩО В ПЛЕЙБУКУ Є СЕТАПИ З ВІЗУАЛЬНИМ ПАТЕРНОМ (конструктор): порівняй форму руху на цьому графіку з описаними патернами — чи схожа структура? Який сетап найближчий візуально?
 Відповідай українською, лаконічно, по суті.`;
-        const imagePayload = { contents: [{ parts: [ { text: prompt }, { inline_data: { mime_type: mimeType, data: base64data } } ] }] };
+        const imagePayload = { contents: [{ parts: [{ text: prompt }, { inlineData: image }] }] };
 
         const text = await callGeminiViaProxy(imagePayload, 'gemini-2.5-flash');
         let formattedHTML = sanitizeAIHtml(sanitizeHTML(text).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>').replace(/\n/g, '<br>'));

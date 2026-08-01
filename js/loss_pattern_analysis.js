@@ -1,5 +1,6 @@
 import { state } from './state.js';
 import { callGeminiViaProxy } from './ai/client.js';
+import { fetchImageInlineData } from './ai/image.js';
 import { getStorageUrl } from './gallery.js';
 import { saveSettings } from './storage.js';
 import { parseSheetProfitRisk } from './stats_sheet_metrics.js';
@@ -158,6 +159,8 @@ function parseAiJson(text) {
 async function imageInlineData(path) {
     const url = await getStorageUrl(path);
     if (!url) throw new Error('Скрін недоступний у сховищі');
+    return fetchImageInlineData(url);
+    /*
     const response = await fetch(url);
     if (!response.ok) throw new Error(`Скрін не завантажився (${response.status})`);
     const blob = await response.blob();
@@ -169,6 +172,7 @@ async function imageInlineData(path) {
     });
     const comma = dataUrl.indexOf(',');
     return { mime_type: blob.type || 'image/jpeg', data: dataUrl.slice(comma + 1) };
+    */
 }
 
 async function inspectCandidate(candidate) {
@@ -182,7 +186,7 @@ async function inspectCandidate(candidate) {
 Базовий контекст: дата ${candidate.date}, тікер ${candidate.symbol}, результат ${candidate.pnl ?? 'невідомий'} $, ${candidate.kf ?? 'невідомо'} КФ.
 Дані угоди та журналу: ${JSON.stringify(candidate.journalContext || {})}.`;
     const text = await callGeminiViaProxy({
-        contents: [{ parts: [{ text: prompt }, { inline_data: image }] }],
+        contents: [{ parts: [{ text: prompt }, { inlineData: image }] }],
         generationConfig: { temperature: 0.15, responseMimeType: 'application/json' },
     }, 'gemini-2.5-flash');
     return parseAiJson(text);
