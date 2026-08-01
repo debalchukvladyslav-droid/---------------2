@@ -6,7 +6,7 @@ import { supabase } from './supabase.js';
 import { buildExceptionKfRows, buildHourlyKfBuckets, combineStatsSheetRows } from './stats_sheet_metrics.js';
 import { escapeHtml } from './utils.js';
 
-const VERSION = 5;
+const VERSION = 6;
 const GRID_COLUMNS = 24;
 const CATEGORIES = { overview: 'Огляд', analytics: 'Аналітика', routine: 'Сесія', tools: 'Інструменти' };
 const MICRO_WIDGETS = new Set(['month-pnl', 'month-winrate', 'month-trades', 'month-pf', 'today', 'daily-kf', 'week-compare', 'streak', 'current-hour', 'last-session', 'sync-status', 'missing-data']);
@@ -64,15 +64,23 @@ function defaultLayout() {
 function normalizeLayout(raw) {
     const items = raw?.version === VERSION && Array.isArray(raw.widgets) ? raw.widgets : defaultLayout();
     const seen = new Set();
-    return items.filter((item) => {
+    const normalized = items.filter((item) => {
         const meta = def(item?.type || item?.id);
         if (!meta || seen.has(meta.id)) return false;
         seen.add(meta.id);
         return true;
     }).map((item, order) => {
         const meta = def(item.type || item.id);
-        return { id: meta.id, type: meta.id, order, w: clamp(Number(item.w) || meta.w, meta.minW, meta.maxW), h: clamp(Number(item.h) || meta.h, meta.minH, meta.maxH), x: Math.max(0, Number(item.x) || 0), y: Math.max(0, Number(item.y) || 0), config: item.config || {} };
+        const w = clamp(Number(item.w) || meta.w, meta.minW, meta.maxW);
+        return { id: meta.id, type: meta.id, order, w, h: clamp(Number(item.h) || meta.h, meta.minH, meta.maxH), x: clamp(Number(item.x) || 0, 0, GRID_COLUMNS - w), y: clamp(Number(item.y) || 0, 0, 80), config: item.config || {} };
     });
+    // Reject overlapping/corrupt persisted layouts instead of letting the grid
+    // push panels into large empty rows on every subsequent save.
+    const overlaps = normalized.some((item, index) => normalized.slice(index + 1).some((other) => !(
+        item.x + item.w <= other.x || other.x + other.w <= item.x ||
+        item.y + item.h <= other.y || other.y + other.h <= item.y
+    )));
+    return overlaps ? defaultLayout() : normalized;
 }
 
 function persist() {
@@ -192,7 +200,7 @@ function renderGrid() {
     const fragment = document.createDocumentFragment(); layout.forEach((item) => fragment.appendChild(makeWidget(item)));
     grid.replaceChildren(fragment); grid.classList.add('grid-stack'); grid.classList.toggle('is-editing', editing);
     if (!window.GridStack) throw new Error('GridStack is not loaded');
-    gridStack = window.GridStack.init({ column: GRID_COLUMNS, cellHeight: 58, margin: 7, animate: true, float: true, handle: '.dashboard-widget-drag', disableDrag: !editing, disableResize: !editing, alwaysShowResizeHandle: false }, grid);
+    gridStack = window.GridStack.init({ column: GRID_COLUMNS, cellHeight: 58, margin: 7, animate: true, float: false, handle: '.dashboard-widget-drag', disableDrag: !editing, disableResize: !editing, alwaysShowResizeHandle: false }, grid);
     gridStack.on('change added removed', () => { syncLayoutFromGrid(); renderCatalog(byId('dashboard-widget-search')?.value || ''); persist(); window.setTimeout(() => window.dispatchEvent(new Event('resize')), 40); });
     observeWidgetDensity();
     applyResponsiveGrid();
