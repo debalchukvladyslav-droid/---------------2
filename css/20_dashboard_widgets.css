@@ -30,12 +30,6 @@
 
 /* GridStack owns geometry, collision handling and animated transitions. */
 .grid-stack.dashboard-widget-grid{display:block;min-height:58px}.grid-stack>.grid-stack-item.dashboard-widget{position:absolute;grid-column:auto!important;grid-row:auto!important;min-width:0;overflow:visible;transition:opacity .16s ease}.grid-stack>.grid-stack-item>.grid-stack-item-content.dashboard-widget-content{position:absolute;width:auto;height:auto;min-width:0;min-height:0;overflow:hidden}.grid-stack.is-editing>.grid-stack-item{animation:none!important}.grid-stack.is-editing>.grid-stack-item>.grid-stack-item-content{outline:1px dashed color-mix(in srgb,var(--accent) 52%,transparent);outline-offset:-1px}.grid-stack>.grid-stack-placeholder>.placeholder-content{border:1px dashed var(--accent);border-radius:12px;background:color-mix(in srgb,var(--accent) 10%,transparent)}.grid-stack .ui-resizable-handle{z-index:15}.grid-stack:not(.is-editing) .ui-resizable-handle{display:none!important}.grid-stack.is-editing .ui-resizable-handle::after{border-color:var(--accent)!important}.grid-stack-animate,.grid-stack-animate .grid-stack-item{transition:left .22s cubic-bezier(.2,.8,.2,1),top .22s cubic-bezier(.2,.8,.2,1),width .22s cubic-bezier(.2,.8,.2,1),height .22s cubic-bezier(.2,.8,.2,1)}
-/* GridStack v13 geometry guard. Legacy dashboard rules also target the same
-   dimensions, so the persisted grid variables are made authoritative here. */
-.grid-stack.dashboard-widget-grid{--gs-columns:24;--gs-column-width:calc(100% / var(--gs-columns))}
-.grid-stack.dashboard-widget-grid>.grid-stack-item.dashboard-widget{left:calc(var(--gs-x,0) * var(--gs-column-width));top:calc(var(--gs-y,0) * var(--gs-cell-height));width:calc(var(--gs-w,1) * var(--gs-column-width));height:calc(var(--gs-h,1) * var(--gs-cell-height))}
-@media(max-width:700px){.grid-stack.dashboard-widget-grid{--gs-columns:12}}
-
 /* Edit-mode chrome must not cover the dashboard content. Reserve one compact
    toolbar row and simplify controls on one-row KPI widgets. */
 .dashboard-builder.is-editing{padding-top:38px}
@@ -74,3 +68,5 @@
 .grid-stack>.grid-stack-item.dashboard-widget.is-micro-widget[data-widget-h="1"]>.dashboard-widget-content>.stat-card-pro>.stat-card-pro-value{display:block!important;margin:0!important;white-space:nowrap;font-size:.92rem!important;line-height:1!important}
 .grid-stack.is-editing>.grid-stack-item.dashboard-widget.is-micro-widget[data-widget-h="1"]>.dashboard-widget-content>.stat-card-pro{padding-left:28px!important;padding-right:28px!important}
 .dashboard-customize-actions>[hidden]{display:none!important}
+.grid-stack>.grid-stack-item.ui-draggable-dragging{z-index:1000!important;transition:none!important;will-change:left,top}
+.grid-stack>.grid-stack-item.ui-resizable-resizing{transition:none!important;will-change:width,height}
