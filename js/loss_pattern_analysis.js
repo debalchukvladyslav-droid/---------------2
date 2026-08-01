@@ -5,7 +5,7 @@ import { saveSettings } from './storage.js';
 import { parseSheetProfitRisk } from './stats_sheet_metrics.js';
 import { showToast } from './utils.js';
 
-const STORE_VERSION = 1;
+const STORE_VERSION = 2;
 const MAX_PER_RUN = 12;
 const PATTERN_KEYS = new Set([
     'late_entry', 'chase_extension', 'weak_breakout', 'countertrend', 'no_structure',
@@ -35,6 +35,33 @@ function tradeResult(trade = {}) {
     const pnl = numberOrNull(trade.net ?? trade.pnl ?? trade.profit);
     const kf = parseSheetProfitRisk(trade?.sheet?.profitRisk ?? trade.profitRisk ?? trade.kf);
     return { pnl, kf };
+}
+
+function compactText(value, limit = 240) {
+    if (Array.isArray(value)) value = value.filter(Boolean).join('; ');
+    if (value && typeof value === 'object') value = Object.values(value).filter(item => typeof item === 'string' || typeof item === 'number').join('; ');
+    return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, limit);
+}
+
+function buildJournalContext(trade = {}, entry = {}) {
+    const sheet = trade.sheet && typeof trade.sheet === 'object' ? trade.sheet : {};
+    const context = {
+        direction: compactText(trade.direction ?? trade.side ?? trade.position),
+        entryTime: compactText(trade.entryTime ?? trade.time ?? trade.openTime),
+        exitTime: compactText(trade.exitTime ?? trade.closeTime),
+        entryPrice: numberOrNull(trade.entryPrice ?? trade.entry ?? trade.openPrice),
+        exitPrice: numberOrNull(trade.exitPrice ?? trade.exit ?? trade.closePrice),
+        setup: compactText(trade.setup ?? trade.strategy ?? trade.pattern ?? sheet.setup),
+        tradeType: compactText(trade.tradeType ?? trade.type ?? trade.classification ?? sheet.tradeType),
+        criteria: compactText(trade.criteria ?? trade.criterion ?? sheet.criteria ?? sheet.criterion),
+        exceptions: compactText(trade.exceptions ?? trade.exception ?? trade.exclusion ?? sheet.exceptions ?? sheet.exception),
+        exitReason: compactText(trade.exitReason ?? trade.reason ?? sheet.exitReason),
+        tradeComment: compactText(trade.comment ?? trade.notes ?? trade.review ?? sheet.comment),
+        dayNotes: compactText(entry.notes ?? entry.comment ?? entry.sessionComment),
+        mistakes: compactText(entry.mistakes ?? entry.errors ?? entry.errorNotes),
+        nextSession: compactText(entry.nextSessionImprovement ?? entry.improvement),
+    };
+    return Object.fromEntries(Object.entries(context).filter(([, value]) => value !== '' && value != null));
 }
 
 function allDayScreens(entry = {}) {
@@ -71,7 +98,7 @@ function collectCandidates() {
             if (!screens.length && trades.length === 1) screens = dayScreens;
             screens.forEach(({ path, category }) => {
                 const old = byPath.get(path);
-                const candidate = { path, category, date, symbol: symbol || '—', pnl, kf };
+                const candidate = { path, category, date, symbol: symbol || '—', pnl, kf, journalContext: buildJournalContext(trade, entry) };
                 if (!old || (candidate.pnl ?? 0) < (old.pnl ?? 0)) byPath.set(path, candidate);
             });
         });
@@ -122,6 +149,8 @@ function parseAiJson(text) {
         patternKey,
         label: String(value.label || 'Ситуація потребує ручного перегляду').slice(0, 90),
         insight: String(value.insight || '').slice(0, 220),
+        visualEvidence: String(value.visualEvidence || '').slice(0, 180),
+        journalEvidence: String(value.journalEvidence || '').slice(0, 180),
         confidence: Math.max(0, Math.min(1, Number(value.confidence) || 0)),
     };
 }
@@ -144,11 +173,14 @@ async function imageInlineData(path) {
 
 async function inspectCandidate(candidate) {
     const image = await imageInlineData(candidate.path);
-    const prompt = `Ти аналізуєш скрін графіка мінусової угоди проп-трейдера.
-Визнач лише візуальний тип повторюваної проблеми входу. Не вигадуй того, чого не видно.
+    const prompt = `Ти аналізуєш мінусову угоду проп-трейдера одночасно з ДВОХ джерел:
+1) прикріплений скрін графіка — візуальна структура входу;
+2) структуровані дані угоди та журналу нижче — фактичний контекст, критерії, виключення й коментарі.
+Зістав обидва джерела. Не роби висновок лише зі скріншота. Не вигадуй відсутніх фактів. Якщо джерела суперечать одне одному, віддай пріоритет точним полям журналу й зазнач суперечність.
 Обери patternKey тільки з: late_entry, chase_extension, weak_breakout, countertrend, no_structure, early_entry, poor_rr, stop_violation, repeated_entry, unclear.
-Поверни ТІЛЬКИ JSON: {"patternKey":"...","label":"коротка назва українською","insight":"одне коротке практичне спостереження українською","confidence":0.0}.
-Контекст: дата ${candidate.date}, тікер ${candidate.symbol}, результат ${candidate.pnl ?? 'невідомий'} $, ${candidate.kf ?? 'невідомо'} КФ.`;
+Поверни ТІЛЬКИ JSON: {"patternKey":"...","label":"коротка назва українською","insight":"спільний висновок на основі скріну й журналу українською","visualEvidence":"що саме видно на скріні або порожньо","journalEvidence":"які поля журналу підтверджують висновок або порожньо","confidence":0.0}.
+Базовий контекст: дата ${candidate.date}, тікер ${candidate.symbol}, результат ${candidate.pnl ?? 'невідомий'} $, ${candidate.kf ?? 'невідомо'} КФ.
+Дані угоди та журналу: ${JSON.stringify(candidate.journalContext || {})}.`;
     const text = await callGeminiViaProxy({
         contents: [{ parts: [{ text: prompt }, { inline_data: image }] }],
         generationConfig: { temperature: 0.15, responseMimeType: 'application/json' },
