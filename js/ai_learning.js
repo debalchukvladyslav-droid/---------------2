@@ -12,6 +12,10 @@ const PATTERNS = {
 
 let loaded = false;
 let busy = false;
+let trainingCampaign = null;
+let trainingTimer = null;
+let trainingStepRunning = false;
+let trainingRetryMs = 15000;
 
 function el(id) { return document.getElementById(id); }
 function formatPercent(value) { return Number.isFinite(value) ? `${Math.round(value * 100)}%` : '—'; }
@@ -46,6 +50,54 @@ function setStatus(message, tone = '') {
     if (!node) return;
     node.textContent = message;
     node.dataset.tone = tone;
+}
+
+function campaignIsRunning(campaign = trainingCampaign) {
+    return campaign?.status === 'running' && Date.parse(campaign.endsAt || 0) > Date.now();
+}
+
+function syncCampaignUI(campaign = trainingCampaign) {
+    trainingCampaign = campaign || null;
+    const button = el('ai-learning-day');
+    const running = campaignIsRunning();
+    if (button) {
+        button.textContent = running ? 'Зупинити навчання' : 'Навчати 24 години';
+        button.classList.toggle('btn-primary', !running);
+        button.classList.toggle('btn-secondary', running);
+        button.setAttribute('aria-pressed', running ? 'true' : 'false');
+    }
+    if (running) {
+        const leftMs = Math.max(0, Date.parse(campaign.endsAt) - Date.now());
+        const hours = Math.floor(leftMs / 3600000);
+        const minutes = Math.floor((leftMs % 3600000) / 60000);
+        setStatus(`Автономне навчання активне · залишилось ${hours} год ${minutes} хв · оброблено ${campaign.processed || 0} · повтори автоматичні`);
+        scheduleTrainingStep(1000);
+    }
+}
+
+function scheduleTrainingStep(delay = 15000) {
+    if (!campaignIsRunning() || trainingStepRunning) return;
+    clearTimeout(trainingTimer);
+    trainingTimer = window.setTimeout(() => { void runTrainingStep(); }, delay);
+}
+
+async function runTrainingStep() {
+    if (!campaignIsRunning() || trainingStepRunning) return;
+    if (busy) { scheduleTrainingStep(5000); return; }
+    trainingStepRunning = true;
+    try {
+        const payload = await api('', { method: 'POST', body: JSON.stringify({ action: 'run' }) });
+        trainingRetryMs = 15000;
+        syncCampaignUI(payload.campaign);
+        loaded = false;
+        if (Number(payload.run?.processed_count || 0) === 0) await renderAILearningCenter(true);
+    } catch (error) {
+        setStatus(`Навчання тимчасово зупинилося: ${error.message || error}. Повтор через ${Math.round(trainingRetryMs / 1000)} с`, 'error');
+        trainingRetryMs = Math.min(300000, Math.round(trainingRetryMs * 1.8));
+    } finally {
+        trainingStepRunning = false;
+        if (campaignIsRunning()) scheduleTrainingStep(trainingRetryMs);
+    }
 }
 
 function makeKpi(label, value, note = '') {
@@ -186,6 +238,7 @@ export async function renderAILearningCenter(force = false) {
     try {
         const [overview, queue] = await Promise.all([api('?section=overview'), api('?section=queue&status=approved&limit=12')]);
         renderKpis(overview.summary); renderQuality(overview); renderMeta(overview); renderRuns(overview.runs); await renderQueue(queue.examples || []);
+        syncCampaignUI(overview.campaign);
         const count = el('ai-learning-queue-count'); if (count) count.textContent = overview.summary?.approved || 0;
         setStatus(overview.lastRun ? `Останнє оновлення: ${formatDate(overview.lastRun.finished_at || overview.lastRun.started_at, true)}` : 'AI ще не запускав аналіз.');
         loaded = true;
@@ -205,7 +258,31 @@ export async function runAILearning() {
     setStatus('Збираємо нові угоди та аналізуємо їх зі скрінами й журналом…');
     try { const payload = await api('', { method: 'POST', body: JSON.stringify({ action: 'run' }) }); showToast(`Оброблено: ${payload.run?.processed_count || 0}`); loaded = false; busy = false; await renderAILearningCenter(true); }
     catch (error) { setStatus(error.message || String(error), 'error'); showToast(error.message || String(error)); }
-    finally { busy = false; if (button) { button.disabled = false; button.textContent = 'Проаналізувати нові дані'; } }
+    finally { busy = false; if (button) { button.disabled = false; button.textContent = 'Один пакет'; } }
+}
+
+export async function toggleAILearningDay() {
+    if (state.myRole !== 'admin' || trainingStepRunning) return;
+    const button = el('ai-learning-day');
+    if (button) button.disabled = true;
+    try {
+        if (campaignIsRunning()) {
+            clearTimeout(trainingTimer);
+            const payload = await api('', { method: 'POST', body: JSON.stringify({ action: 'stop-day' }) });
+            syncCampaignUI(payload.campaign);
+            setStatus('Автономне навчання зупинено. Уже створена пам’ять збережена.');
+        } else {
+            const payload = await api('', { method: 'POST', body: JSON.stringify({ action: 'start-day' }) });
+            trainingRetryMs = 15000;
+            syncCampaignUI(payload.campaign);
+            showToast('Навчання на 24 години запущено');
+        }
+    } catch (error) {
+        setStatus(error.message || String(error), 'error');
+        showToast(error.message || String(error));
+    } finally {
+        if (button) button.disabled = false;
+    }
 }
 
 export async function reviewAILearningExample(trigger) {

@@ -2543,7 +2543,9 @@ body {
 .ai-learning__hero h3,
 .ai-learning-card h4 { margin: 3px 0 0; color: var(--text-main); }
 .ai-learning__hero p { max-width: 720px; margin: 7px 0 0; color: var(--text-muted); font-size: .84rem; line-height: 1.45; }
-.ai-learning__hero .btn-primary { width: auto; flex: 0 0 auto; margin: 0; }
+.ai-learning__hero-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.ai-learning__hero-actions .btn-primary,
+.ai-learning__hero-actions .btn-secondary { width: auto; flex: 0 0 auto; margin: 0; }
 
 .ai-learning__status {
     min-height: 34px;
@@ -2637,7 +2639,9 @@ body {
 @media (max-width: 700px) {
     .ai-tab-row { overflow-x: auto; }
     .ai-learning__hero { align-items: stretch; flex-direction: column; }
-    .ai-learning__hero .btn-primary { width: 100%; }
+    .ai-learning__hero-actions { display: grid; grid-template-columns: 1fr; }
+    .ai-learning__hero-actions .btn-primary,
+    .ai-learning__hero-actions .btn-secondary { width: 100%; }
     .ai-learning__kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .ai-learning__grid { grid-template-columns: 1fr; }
     .ai-learning-card--wide { grid-column: auto; }
