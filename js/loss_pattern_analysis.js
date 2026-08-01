@@ -6,12 +6,17 @@ import { saveSettings } from './storage.js';
 import { parseSheetProfitRisk } from './stats_sheet_metrics.js';
 import { showToast } from './utils.js';
 
-const STORE_VERSION = 2;
+const STORE_VERSION = 3;
 const MAX_PER_RUN = 12;
 const PATTERN_KEYS = new Set([
     'late_entry', 'chase_extension', 'weak_breakout', 'countertrend', 'no_structure',
-    'early_entry', 'poor_rr', 'stop_violation', 'repeated_entry', 'unclear',
+    'early_entry', 'poor_rr', 'stop_violation', 'repeated_entry', 'valid_entry',
+    'failed_follow_through', 'parabolic_extension', 'breakout_retest', 'pullback_entry',
+    'liquidity_sweep', 'range_entry', 'trend_continuation', 'confirmed_reversal',
+    'volume_mismatch', 'unclear', 'insufficient_data',
 ]);
+
+const STRUCTURE_MEMORY_INSTRUCTION = `First identify visible market structure: range, trend, impulse, pullback, breakout, retest, reversal, continuation, exhaustion or liquidity sweep. Compare it with the supplied earlier analyses and reuse a recurring pattern when evidence matches. Treat no_structure as a last resort and never use it merely because the setup lost money or context is missing. If the screenshot is unreadable or lacks context, use insufficient_data. Every label must cite concrete visual evidence.`;
 
 let analysisRunning = false;
 let renderToken = 0;
@@ -175,17 +180,18 @@ async function imageInlineData(path) {
     */
 }
 
-async function inspectCandidate(candidate) {
+async function inspectCandidate(candidate, memory = []) {
     const image = await imageInlineData(candidate.path);
     const prompt = `Ти аналізуєш мінусову угоду проп-трейдера одночасно з ДВОХ джерел:
 1) прикріплений скрін графіка — візуальна структура входу;
 2) структуровані дані угоди та журналу нижче — фактичний контекст, критерії, виключення й коментарі.
 Зістав обидва джерела. Не роби висновок лише зі скріншота. Не вигадуй відсутніх фактів. Якщо джерела суперечать одне одному, віддай пріоритет точним полям журналу й зазнач суперечність.
-Обери patternKey тільки з: late_entry, chase_extension, weak_breakout, countertrend, no_structure, early_entry, poor_rr, stop_violation, repeated_entry, unclear.
+Обери patternKey тільки з: ${[...PATTERN_KEYS].join(', ')}.
 Поверни ТІЛЬКИ JSON: {"patternKey":"...","label":"коротка назва українською","insight":"спільний висновок на основі скріну й журналу українською","visualEvidence":"що саме видно на скріні або порожньо","journalEvidence":"які поля журналу підтверджують висновок або порожньо","confidence":0.0}.
 Базовий контекст: дата ${candidate.date}, тікер ${candidate.symbol}, результат ${candidate.pnl ?? 'невідомий'} $, ${candidate.kf ?? 'невідомо'} КФ.
 Дані угоди та журналу: ${JSON.stringify(candidate.journalContext || {})}.`;
     const text = await callGeminiViaProxy({
+        systemInstruction: { parts: [{ text: `${STRUCTURE_MEMORY_INSTRUCTION}\nEarlier analyzed patterns: ${JSON.stringify(memory)}` }] },
         contents: [{ parts: [{ text: prompt }, { inlineData: image }] }],
         generationConfig: { temperature: 0.15, responseMimeType: 'application/json' },
     }, 'gemini-2.5-flash');
@@ -305,22 +311,41 @@ export async function analyzeLossPatterns() {
     let completed = 0;
     let failed = 0;
     try {
-        for (const candidate of batch) {
+        console.info(`[AI patterns] Початок аналізу: ${batch.length} скрінів із ${pending.length} нових`);
+        for (const [index, candidate] of batch.entries()) {
+            const progress = `${index + 1}/${batch.length}`;
+            console.info(`[AI patterns] ${progress} Переглядаю`, {
+                ticker: candidate.symbol || '—', date: candidate.date || '—', screenshot: candidate.path,
+            });
             setStatus(`AI переглядає скрін ${completed + failed + 1} із ${batch.length}…`);
             try {
-                const result = await inspectCandidate(candidate);
+                const memory = Object.values(store.items)
+                    .filter(item => item.patternKey && !['no_structure', 'unclear', 'insufficient_data'].includes(item.patternKey))
+                    .slice(-20)
+                    .map(item => ({
+                        patternKey: item.patternKey,
+                        visualEvidence: item.visualEvidence,
+                        insight: item.insight,
+                        symbol: item.symbol,
+                    }));
+                console.info(`[AI patterns] ${progress} Знайдено прикладів у пам'яті: ${memory.length}`);
+                const result = await inspectCandidate(candidate, memory);
                 const key = cacheKey(candidate);
                 store.items[key] = { ...candidate, ...result, cacheKey: key, analyzedAt: new Date().toISOString() };
                 completed += 1;
+                console.info(`[AI patterns] ${progress} Готово`, {
+                    ticker: candidate.symbol || '—', pattern: result.patternKey, confidence: result.confidence,
+                });
                 renderGroups(Object.values(store.items));
                 if (completed % 3 === 0) await saveSettings();
             } catch (error) {
                 failed += 1;
-                console.warn('[Loss pattern analysis]', candidate.path, error);
+                console.warn(`[AI patterns] ${progress} Помилка`, candidate.path, error);
                 if (/ліміт|quota|429/i.test(String(error?.message || error))) break;
             }
         }
         store.updatedAt = new Date().toISOString();
+        console.info(`[AI patterns] Аналіз завершено: успішно ${completed}, помилок ${failed}`);
         await saveSettings();
         if (completed) showToast(`Перевірено скрінів: ${completed}`);
         if (failed && !completed) showToast('Не вдалося проаналізувати скріни. Спробуйте пізніше.');

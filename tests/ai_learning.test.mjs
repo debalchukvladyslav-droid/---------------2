@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildCandidates, PATTERN_KEYS } from '../lib/ai_learning.js';
+import { buildCandidates, embeddingText, isMemoryEligible, PATTERN_KEYS } from '../lib/ai_learning.js';
 
 test('AI learning candidates combine trade, journal outcome and matching screenshot', () => {
     const rows = [{
@@ -45,4 +45,17 @@ test('AI learning links random Drive filenames through profile OCR ticker map', 
     const candidates = buildCandidates(rows, contexts);
     assert.equal(candidates[0].screenshot_path, path);
     assert.equal(candidates[1].screenshot_path, null);
+});
+
+test('AI memory keeps visual structure and rejects generic no-structure guesses', () => {
+    const text = embeddingText({
+        source_snapshot: { ticker: 'TEST', aiFeatures: { movement: { phase: 'retest' }, signals: ['level held'] } },
+        outcome: { pnl: -10 },
+        ai_pattern_key: 'breakout_retest',
+        visual_evidence: 'breakout followed by a retest',
+    });
+    assert.match(text, /retest/);
+    assert.match(text, /level held/);
+    assert.equal(isMemoryEligible({ ai_pattern_key: 'no_structure', ai_confidence: 0.99 }), false);
+    assert.equal(isMemoryEligible({ ai_pattern_key: 'breakout_retest', ai_confidence: 0.7 }), true);
 });
