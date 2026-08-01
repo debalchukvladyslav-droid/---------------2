@@ -32,6 +32,7 @@ const WIDGETS = [
 ].map(([id, title, category, w, h]) => ({ id, title, category, w: w * 2, h, minW: COMPLEX_LIMITS[id]?.[0] ? COMPLEX_LIMITS[id][0] * 2 : (MICRO_WIDGETS.has(id) ? 3 : Math.min(w * 2, 6)), maxW: GRID_COLUMNS, minH: COMPLEX_LIMITS[id]?.[1] || (MICRO_WIDGETS.has(id) || id === 'news' ? 1 : 2), maxH: SINGLE_ROW_WIDGETS.has(id) ? 1 : 6 }));
 
 const DEFAULT_IDS = ['news', 'month-pnl', 'month-winrate', 'month-trades', 'month-pf', 'market-mood', 'equity', 'recent-trades'];
+const CORE_WIDGETS = new Set(DEFAULT_IDS);
 let editing = false;
 let initialized = false;
 let saveTimer = 0;
@@ -222,6 +223,60 @@ function syncLayoutFromGrid() {
     layout = saved.map((item, order) => ({ id: item.id, type: item.id, order, x: item.x || 0, y: item.y || 0, w: item.w || 1, h: item.h || 1, minW: def(item.id)?.minW, minH: def(item.id)?.minH, maxW: def(item.id)?.maxW, maxH: def(item.id)?.maxH, config: layout.find((old) => old.id === item.id)?.config || {} }));
 }
 
+function hasGridSlot(w, h, maxRows) {
+    const nodes = gridStack?.engine?.nodes || [];
+    for (let y = 0; y <= maxRows - h; y++) {
+        for (let x = 0; x <= gridStack.getColumn() - w; x++) {
+            if (!nodes.some((node) => !(x + w <= node.x || node.x + node.w <= x || y + h <= node.y || node.y + node.h <= y))) return true;
+        }
+    }
+    return false;
+}
+
+function freeSpaceForWidget(meta) {
+    if (!gridStack) return [];
+    const columns = gridStack.getColumn();
+    const wantedW = Math.min(meta.w, columns);
+    const rowLimit = Math.max(6, gridStack.getRow());
+    const removed = [];
+    gridStack.batchUpdate();
+    gridStack.compact('compact');
+
+    // Prefer reducing height because it releases a full horizontal strip;
+    // then reduce width in small grid steps down to each widget's safe limit.
+    let guard = 0;
+    while (!hasGridSlot(wantedW, meta.h, rowLimit) && guard++ < 120) {
+        const candidates = [...gridStack.engine.nodes]
+            .map((node) => ({ node, meta: def(node.id) }))
+            .filter(({ node, meta: itemMeta }) => itemMeta && (node.h > itemMeta.minH || node.w > Math.min(itemMeta.minW, columns)))
+            .sort((a, b) => ((b.node.h - b.meta.minH) * b.node.w + (b.node.w - b.meta.minW)) - ((a.node.h - a.meta.minH) * a.node.w + (a.node.w - a.meta.minW)));
+        const target = candidates[0];
+        if (!target) break;
+        if (target.node.h > target.meta.minH) gridStack.update(target.node.el, { h: target.node.h - 1 });
+        else gridStack.update(target.node.el, { w: target.node.w - 1 });
+        gridStack.compact('compact');
+    }
+
+    // If minimum sizes still cannot make a slot, remove the newest optional
+    // panel first. Core dashboard panels are only a last resort.
+    while (!hasGridSlot(wantedW, meta.h, rowLimit) && gridStack.engine.nodes.length) {
+        const target = [...gridStack.engine.nodes].sort((a, b) => {
+            const coreDifference = Number(CORE_WIDGETS.has(a.id)) - Number(CORE_WIDGETS.has(b.id));
+            if (coreDifference) return coreDifference;
+            return (layout.findIndex((item) => item.id === b.id)) - (layout.findIndex((item) => item.id === a.id));
+        })[0];
+        if (!target) break;
+        const source = sourceFor(target.id);
+        if (source) byId('dashboard-widget-sources')?.appendChild(source);
+        removed.push(target.id);
+        gridStack.removeWidget(target.el, true, false);
+        gridStack.compact('compact');
+    }
+    gridStack.batchUpdate(false);
+    syncLayoutFromGrid();
+    return removed;
+}
+
 function observeWidgetDensity() {
     if (typeof ResizeObserver === 'undefined') return;
     densityObserver?.disconnect();
@@ -358,10 +413,12 @@ function bindEvents() {
     byId('dashboard-widget-list')?.addEventListener('click', (event) => {
         const button = event.target.closest('[data-add-widget]'); if (!button || button.disabled || !gridStack) return;
         const meta = def(button.dataset.addWidget); const item = { id: meta.id, type: meta.id, order: layout.length, w: meta.w, h: meta.h, x: 0, y: 0, config: {} };
+        const removed = freeSpaceForWidget(meta);
         const article = makeWidget(item);
         byId('dashboard-widget-grid')?.appendChild(article);
         gridStack.makeWidget(article, { id: meta.id, w: meta.w, h: meta.h, minW: meta.minW, minH: meta.minH, maxW: meta.maxW, maxH: meta.maxH, autoPosition: true });
         observeWidgetDensity(); syncLayoutFromGrid(); renderCatalog(); persist();
+        if (removed.length) window.showToast?.(`Щоб звільнити місце, прибрано: ${removed.map((id) => def(id)?.title || id).join(', ')}`);
     });
     byId('dashboard-widget-grid')?.addEventListener('click', (event) => {
         const article = event.target.closest('.dashboard-widget'); if (!article) return;
