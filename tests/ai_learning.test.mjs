@@ -242,3 +242,8 @@ test('same-version semantic identity prevents hash-collision starvation', () => 
     assert.equal(analyzedCandidateIdentities([prior], 'v2').has(candidateIdentity(candidate)), true);
     assert.equal(analyzedCandidateIdentities([prior], 'v3').has(candidateIdentity(candidate)), false);
 });
+
+test('training deduplication scopes the database query to the active prompt version', () => {
+    const source = readFileSync(new URL('../lib/ai_learning.js', import.meta.url), 'utf8');
+    assert.match(source, /ai_learning_examples\?prompt_version=eq\.\$\{encodeURIComponent\(version\)\}/);
+});

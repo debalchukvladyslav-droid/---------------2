@@ -57,16 +57,24 @@ if (statusOnly) {
     });
     const job = payload.currentJob || payload.current_job || null;
     const summary = payload.summary || {};
+    const lastRun = payload.lastRun || payload.last_run || null;
     console.log(JSON.stringify({
         status: job?.status || null,
         processed: job?.processed_count ?? null,
         failed: job?.failed_count ?? null,
+        noProgress: job?.consecutive_failures ?? null,
         batches: job?.batch_count ?? null,
         remaining: Number.isFinite(Number(summary.candidateTrades)) && job
             ? Math.max(0, Number(summary.candidateTrades) - Number(job.processed_count || 0))
             : null,
         heartbeat: job?.heartbeat_at || null,
         pending: summary.pending ?? null,
+        lastRun: lastRun ? {
+            processed: lastRun.processed_count ?? null,
+            skipped: lastRun.skipped_count ?? null,
+            failed: lastRun.failed_count ?? null,
+            errors: Array.isArray(lastRun.error_summary) ? lastRun.error_summary.slice(0, 1) : [],
+        } : null,
     }));
     process.exit(0);
 }
