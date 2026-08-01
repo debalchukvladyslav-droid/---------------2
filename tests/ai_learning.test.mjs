@@ -256,3 +256,10 @@ test('evaluation sync accepts only genuine human-reviewed gold examples', () => 
     assert.match(source, /if \(!byTrade\.has\(identity\)\) byTrade\.set\(identity, example\)/);
     assert.match(source, /const gold = await syncGoldCases\(user\.id\)/);
 });
+
+test('evaluation output keeps evidence needed to diagnose false classifications', () => {
+    const source = readFileSync(new URL('../lib/ai_learning.js', import.meta.url), 'utf8');
+    assert.match(source, /visualEvidence: result\.analysis\?\.visual_evidence \|\| \[\]/);
+    assert.match(source, /analysisFeatures: result\.analysis\?\.analysis_features \|\| null/);
+    assert.match(source, /actualModelName: result\.analysis\?\.actual_model_name \|\| null/);
+});
