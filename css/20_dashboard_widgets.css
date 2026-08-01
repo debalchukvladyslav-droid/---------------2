@@ -54,3 +54,22 @@
 .dashboard-customize-bar{top:34px}
 .dashboard-customize-bar:has(+ .dashboard-builder.is-editing){top:7px}
 @media(max-width:700px){.dashboard-customize-bar{top:auto}}
+
+/* Native KPI cards were authored as tall column cards. In their one-row
+   widget preset render them as a real horizontal metric instead of merely
+   clipping the tall version. */
+.grid-stack>.grid-stack-item.dashboard-widget.is-micro-widget[data-widget-h="1"]>.dashboard-widget-content>.stat-card-pro{
+    position:absolute!important;
+    inset:0!important;
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) auto!important;
+    align-items:center!important;
+    gap:8px!important;
+    width:auto!important;
+    height:auto!important;
+    padding:6px 10px!important;
+}
+.grid-stack>.grid-stack-item.dashboard-widget.is-micro-widget[data-widget-h="1"]>.dashboard-widget-content>.stat-card-pro>.stat-card-pro-top{display:none!important}
+.grid-stack>.grid-stack-item.dashboard-widget.is-micro-widget[data-widget-h="1"]>.dashboard-widget-content>.stat-card-pro>.stat-card-pro-label{display:block!important;margin:0!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.62rem!important;line-height:1.1!important}
+.grid-stack>.grid-stack-item.dashboard-widget.is-micro-widget[data-widget-h="1"]>.dashboard-widget-content>.stat-card-pro>.stat-card-pro-value{display:block!important;margin:0!important;white-space:nowrap;font-size:.92rem!important;line-height:1!important}
+.grid-stack.is-editing>.grid-stack-item.dashboard-widget.is-micro-widget[data-widget-h="1"]>.dashboard-widget-content>.stat-card-pro{padding-left:28px!important;padding-right:28px!important}
