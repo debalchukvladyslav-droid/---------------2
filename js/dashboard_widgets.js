@@ -11,9 +11,10 @@ const GRID_COLUMNS = 24;
 const CATEGORIES = { overview: 'Огляд', analytics: 'Аналітика', routine: 'Сесія', tools: 'Інструменти' };
 const MICRO_WIDGETS = new Set(['month-pnl', 'month-winrate', 'month-trades', 'month-pf', 'today', 'daily-kf', 'week-compare', 'streak', 'current-hour', 'last-session', 'sync-status', 'missing-data']);
 const WIDGET_MAX_HEIGHTS = { equity: 12, 'recent-trades': 12, 'month-pnl': 4, 'month-winrate': 4, 'month-trades': 4, 'month-pf': 4, news: 1 };
-const COMPLEX_WIDGETS = new Set(['equity', 'ai-mentor', 'recent-trades', 'market-mood', 'checklist', 'criteria-best', 'criteria-warning', 'quick-actions']);
+const COMPLEX_WIDGETS = new Set(['equity', 'equity-mini-1', 'equity-mini-2', 'ai-mentor', 'recent-trades', 'market-mood', 'checklist', 'criteria-best', 'criteria-warning', 'quick-actions']);
 const COMPLEX_LIMITS = {
     equity: [5, 3], 'ai-mentor': [4, 3], 'recent-trades': [4, 3], 'market-mood': [3, 2],
+    'equity-mini-1': [2, 2], 'equity-mini-2': [2, 2],
     checklist: [3, 2], 'criteria-best': [3, 2], 'criteria-warning': [3, 2], 'quick-actions': [3, 2],
 };
 const WIDGETS = [
@@ -21,6 +22,7 @@ const WIDGETS = [
     ['month-trades', 'Угоди за місяць', 'overview', 2, 1], ['month-pf', 'Profit Factor', 'overview', 2, 1],
     ['today', 'Стан сьогодні', 'overview', 4, 2], ['daily-kf', 'КФ сьогодні', 'overview', 3, 2],
     ['equity', 'Крива P&L', 'analytics', 8, 4], ['week-compare', 'Тиждень проти тижня', 'analytics', 4, 2],
+    ['equity-mini-1', 'Міні-крива P&L 1', 'analytics', 3, 2], ['equity-mini-2', 'Міні-крива P&L 2', 'analytics', 3, 2],
     ['streak', 'Поточна серія', 'analytics', 3, 2], ['criteria-best', 'Найкращий і найгірший критерій', 'analytics', 4, 2],
     ['criteria-warning', 'Ризикові критерії', 'analytics', 4, 2], ['current-hour', 'Поточна година входу', 'analytics', 4, 2],
     ['last-session', 'Остання сесія', 'routine', 5, 2], ['checklist', 'Передсесійний чекліст', 'routine', 4, 2],
@@ -42,6 +44,7 @@ const sourceNodes = new Map();
 let densityObserver = null;
 let gridStack = null;
 let responsiveTimer = 0;
+const miniEquityCharts = new Map();
 
 const byId = (id) => document.getElementById(id);
 const ownProfile = () => state.CURRENT_VIEWED_USER === state.USER_DOC_NAME;
@@ -117,12 +120,44 @@ function metricMarkup(title, value, subtitle = '', tone = '') {
     return `<div class="dashboard-generated-head"><span>${escapeHtml(title)}</span></div><div class="dashboard-generated-value ${tone}">${escapeHtml(value)}</div>${subtitle ? `<p>${escapeHtml(subtitle)}</p>` : ''}`;
 }
 
+function renderMiniEquityChart(id) {
+    const canvas = document.querySelector(`[data-mini-equity-chart="${id}"]`);
+    if (!canvas) return;
+    if (typeof Chart === 'undefined') { window.setTimeout(() => renderMiniEquityChart(id), 250); return; }
+    miniEquityCharts.get(id)?.destroy?.();
+    const item = layout.find((entry) => entry.id === id);
+    const daysCount = clamp(Number(item?.config?.days) || (id === 'equity-mini-1' ? 30 : 90), 5, 365);
+    const rows = allDays().filter(([, day]) => Number.isFinite(Number(day?.pnl))).slice(-daysCount);
+    let cumulative = 0;
+    const labels = rows.map(([date]) => `${date.slice(8)}.${date.slice(5, 7)}`);
+    const values = rows.map(([, day]) => Number((cumulative += Number(day.pnl)).toFixed(2)));
+    const css = getComputedStyle(document.documentElement);
+    const profit = css.getPropertyValue('--profit').trim() || '#2dd4bf';
+    const loss = css.getPropertyValue('--loss').trim() || '#fb7185';
+    const accent = css.getPropertyValue('--accent').trim() || '#a78bfa';
+    const ctx = canvas.getContext('2d');
+    const gradient = ctx.createLinearGradient(0, 0, 0, Math.max(canvas.clientHeight, 100));
+    gradient.addColorStop(0, `${accent}55`); gradient.addColorStop(1, `${accent}00`);
+    const chart = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets: [{ data: values, borderColor: values.at(-1) < 0 ? loss : profit, backgroundColor: gradient, fill: true, tension: .38, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4 }] },
+        options: { responsive: true, maintainAspectRatio: false, animation: { duration: 220 }, interaction: { intersect: false, mode: 'index' }, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } },
+    });
+    miniEquityCharts.set(id, chart);
+}
+
 function renderGenerated(id, host) {
     const today = dayStats(dateKey());
     const days = allDays();
     const latest = [...days].reverse().find(([date]) => dayStats(date)?.pnl !== null);
     const latestStats = latest ? dayStats(latest[0]) : null;
-    if (id === 'today') {
+    if (id === 'equity-mini-1' || id === 'equity-mini-2') {
+        const item = layout.find((entry) => entry.id === id);
+        const days = clamp(Number(item?.config?.days) || (id === 'equity-mini-1' ? 30 : 90), 5, 365);
+        host.innerHTML = `<div class="dashboard-mini-equity-duplicate"><select data-mini-equity-days="${id}" aria-label="Період міні-кривої"><option value="7">7 дн.</option><option value="15">15 дн.</option><option value="30">30 дн.</option><option value="60">60 дн.</option><option value="90">90 дн.</option><option value="180">180 дн.</option><option value="365">365 дн.</option></select><canvas data-mini-equity-chart="${id}" aria-label="Крива PnL за ${days} днів"></canvas></div>`;
+        host.querySelector('select').value = String(days);
+        requestAnimationFrame(() => renderMiniEquityChart(id));
+    } else if (id === 'today') {
         const limit = Math.abs(Number(state.appData?.settings?.monthlyDayloss?.[dateKey().slice(0, 7)] ?? state.appData?.settings?.defaultDayloss) || 0);
         host.innerHTML = metricMarkup('Стан сьогодні', today?.pnl == null ? 'Ще немає запису' : money(today.pnl), today ? `${today.trades.length} угод · ${today.kf == null ? 'КФ не записано' : kfText(today.kf)} · ліміт $${limit.toFixed(0)}` : 'Запишіть результат після сесії', today?.pnl < 0 ? 'is-loss' : 'is-profit');
     } else if (id === 'daily-kf') {
@@ -199,6 +234,7 @@ function makeWidget(item) {
 function renderGrid() {
     const grid = byId('dashboard-widget-grid'); if (!grid) return;
     const parking = byId('dashboard-widget-sources');
+    miniEquityCharts.forEach((chart) => chart.destroy?.()); miniEquityCharts.clear();
     gridStack?.destroy(false); gridStack = null;
     sourceNodes.forEach((node) => { if (node.isConnected && node.closest('.dashboard-widget')) parking?.appendChild(node); });
     const fragment = document.createDocumentFragment(); layout.forEach((item) => fragment.appendChild(makeWidget(item)));
@@ -441,6 +477,12 @@ function bindEvents() {
         if (event.target.closest('[data-remove]')) { const source = sourceFor(article.dataset.widgetId); if (source) byId('dashboard-widget-sources')?.appendChild(source); gridStack?.removeWidget(article, true); syncLayoutFromGrid(); renderCatalog(); persist(); return; }
         const size = event.target.closest('[data-size]'); if (size) changeSize(article.dataset.widgetId, size.dataset.size);
         if (event.target.closest('[data-dashboard-action="sync"]')) window.syncDriveScreenshots?.(false);
+    });
+    byId('dashboard-widget-grid')?.addEventListener('change', (event) => {
+        const select = event.target.closest('[data-mini-equity-days]'); if (!select) return;
+        const item = layout.find((entry) => entry.id === select.dataset.miniEquityDays); if (!item) return;
+        item.config = { ...item.config, days: clamp(Number(select.value) || 30, 5, 365) };
+        renderMiniEquityChart(item.id); persist();
     });
     return;
     byId('dashboard-edit-toggle')?.addEventListener('click', () => setEditing(!editing));
