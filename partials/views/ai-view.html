@@ -41,9 +41,12 @@
                 <div>
                     <span class="ai-toolbar-kicker">Підтверджена пам’ять</span>
                     <h3>Як AI вчиться розпізнавати входи</h3>
-                    <p>Модель не змінює свої ваги. Вона порівнює нові входи лише з прикладами, які підтвердив адміністратор.</p>
+                    <p>AI автоматично аналізує входи, шукає повтори й додає впевнені закономірності до пам’яті без ручного підтвердження.</p>
                 </div>
-                <button type="button" class="btn-primary" id="ai-learning-run" data-action="ai-learning-run">Проаналізувати нові дані</button>
+                <div class="ai-learning__hero-actions">
+                    <button type="button" class="btn-secondary" id="ai-learning-run" data-action="ai-learning-run">Один пакет</button>
+                    <button type="button" class="btn-primary" id="ai-learning-day" data-action="ai-learning-day">Навчати 24 години</button>
+                </div>
             </div>
             <div id="ai-learning-status" class="ai-learning__status">Завантажуємо центр навчання…</div>
             <div id="ai-learning-kpis" class="ai-learning__kpis"></div>
@@ -62,7 +65,7 @@
                     <div id="ai-learning-traders" class="ai-learning-bars"></div>
                 </section>
                 <section class="ai-learning-card ai-learning-card--wide">
-                    <div class="ai-learning-card__head"><div><span class="ai-toolbar-kicker">Ручна перевірка</span><h4>Черга нових входів</h4></div><span id="ai-learning-queue-count" class="ai-learning-card__value">0</span></div>
+                    <div class="ai-learning-card__head"><div><span class="ai-toolbar-kicker">Автономне навчання</span><h4>Останні знайдені закономірності</h4></div><span id="ai-learning-queue-count" class="ai-learning-card__value">0</span></div>
                     <div id="ai-learning-queue" class="ai-learning-queue"></div>
                 </section>
                 <section class="ai-learning-card ai-learning-card--wide">

@@ -31,3 +31,18 @@ test('AI learning keeps positive trades and supports non-error labels', () => {
     assert.equal(PATTERN_KEYS.has('valid_entry'), true);
     assert.equal(PATTERN_KEYS.has('insufficient_data'), true);
 });
+
+test('AI learning links random Drive filenames through profile OCR ticker map', () => {
+    const path = 'screenshots/user/random-drive-id_thinkorswim_random.png';
+    const rows = [{
+        id: 2, user_id: 'user', trade_date: '2026-07-29', pnl: 10, kf: 0.2,
+        daily_metrics: {
+            screenshots: { good: [], normal: [path], bad: [], error: [] },
+            trades: [{ symbol: 'NCRA', net: -5 }, { symbol: 'TURB', net: 15 }],
+        },
+    }];
+    const contexts = new Map([['user', { tickers: { [path]: 'NCRA' } }]]);
+    const candidates = buildCandidates(rows, contexts);
+    assert.equal(candidates[0].screenshot_path, path);
+    assert.equal(candidates[1].screenshot_path, null);
+});

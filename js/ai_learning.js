@@ -64,10 +64,10 @@ function renderKpis(summary = {}) {
     host.replaceChildren(
         makeKpi('Знайдено угод', formatNumber(summary.candidateTrades), 'у журналі'),
         makeKpi('Оброблено', formatNumber(summary.processed), 'актуальних версій'),
-        makeKpi('Чекають рев’ю', formatNumber(summary.pending), 'не впливають на AI'),
-        makeKpi('У пам’яті', formatNumber(summary.approved), 'підтверджено адміном'),
+        makeKpi('Автоаналіз', formatNumber(summary.processed), 'без ручного рев’ю'),
+        makeKpi('У пам’яті', formatNumber(summary.approved), 'впевнені закономірності'),
         makeKpi('Покриття скрінами', formatPercent(summary.screenshotCoverage), 'журнал + графік'),
-        makeKpi('Згода з AI', formatPercent(summary.agreement), 'за перевіреними'),
+        makeKpi('Якість пам’яті', formatPercent(summary.agreement), 'ручна перевірка, якщо була'),
     );
 }
 
@@ -155,13 +155,9 @@ async function renderExample(example) {
     evidence.append(visualText, journalText);
     const context = document.createElement('details'); const summary = document.createElement('summary'); summary.textContent = 'Дані журналу';
     const pre = document.createElement('pre'); pre.textContent = JSON.stringify(example.source_snapshot || {}, null, 2); context.append(summary, pre);
-    const note = document.createElement('textarea'); note.className = 'ai-learning-review-note'; note.placeholder = 'Коментар до рішення (необов’язково)'; note.rows = 2;
-    const controls = document.createElement('div'); controls.className = 'ai-learning-example__controls';
-    controls.append(reviewButton('Підтвердити', 'approve', example.id));
-    const select = document.createElement('select'); select.className = 'ai-learning-pattern-select'; select.setAttribute('aria-label', 'Правильна категорія');
-    Object.entries(PATTERNS).forEach(([key, label]) => { const option = document.createElement('option'); option.value = key; option.textContent = label; if (key === example.ai_pattern_key) option.selected = true; select.append(option); });
-    controls.append(select, reviewButton('Виправити', 'correct', example.id), reviewButton('Відхилити', 'reject', example.id));
-    body.append(header, prediction, explanation, evidence, context, note, controls); card.append(visual, body);
+    const autoStatus = document.createElement('div'); autoStatus.className = 'ai-learning-example__auto';
+    autoStatus.textContent = 'Автоматично додано до пам’яті · ручне підтвердження не потрібне';
+    body.append(header, prediction, explanation, evidence, context, autoStatus); card.append(visual, body);
     return card;
 }
 
@@ -188,9 +184,9 @@ export async function renderAILearningCenter(force = false) {
     if (state.myRole !== 'admin' || (loaded && !force) || busy) return;
     busy = true; setStatus('Оновлюємо метрики й чергу…');
     try {
-        const [overview, queue] = await Promise.all([api('?section=overview'), api('?section=queue&status=pending&limit=12')]);
+        const [overview, queue] = await Promise.all([api('?section=overview'), api('?section=queue&status=approved&limit=12')]);
         renderKpis(overview.summary); renderQuality(overview); renderMeta(overview); renderRuns(overview.runs); await renderQueue(queue.examples || []);
-        const count = el('ai-learning-queue-count'); if (count) count.textContent = overview.summary?.pending || 0;
+        const count = el('ai-learning-queue-count'); if (count) count.textContent = overview.summary?.approved || 0;
         setStatus(overview.lastRun ? `Останнє оновлення: ${formatDate(overview.lastRun.finished_at || overview.lastRun.started_at, true)}` : 'AI ще не запускав аналіз.');
         loaded = true;
     } catch (error) { setStatus(error.message || String(error), 'error'); }

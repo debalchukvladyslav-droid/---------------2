@@ -2607,6 +2607,7 @@ body {
 .ai-learning-example__prediction span,
 .ai-learning-example__body p,
 .ai-learning-example__evidence { color: var(--text-muted); font-size: .77rem; }
+.ai-learning-example__auto { padding: 9px 10px; border-radius: 7px; background: color-mix(in srgb, var(--profit) 10%, transparent); color: var(--profit); font-size: .74rem; font-weight: 700; }
 .ai-learning-example__body p { margin: 0; line-height: 1.45; }
 .ai-learning-example__evidence { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .ai-learning-example__evidence span { padding: 9px; border: 1px solid var(--border); border-radius: 7px; }
