@@ -73,3 +73,4 @@
 .grid-stack>.grid-stack-item.dashboard-widget.is-micro-widget[data-widget-h="1"]>.dashboard-widget-content>.stat-card-pro>.stat-card-pro-label{display:block!important;margin:0!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.62rem!important;line-height:1.1!important}
 .grid-stack>.grid-stack-item.dashboard-widget.is-micro-widget[data-widget-h="1"]>.dashboard-widget-content>.stat-card-pro>.stat-card-pro-value{display:block!important;margin:0!important;white-space:nowrap;font-size:.92rem!important;line-height:1!important}
 .grid-stack.is-editing>.grid-stack-item.dashboard-widget.is-micro-widget[data-widget-h="1"]>.dashboard-widget-content>.stat-card-pro{padding-left:28px!important;padding-right:28px!important}
+.dashboard-customize-actions>[hidden]{display:none!important}
