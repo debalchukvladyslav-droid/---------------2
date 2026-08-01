@@ -31,7 +31,8 @@ async function api(path = '', options = {}) {
     const { data } = await supabase.auth.getSession();
     const token = data?.session?.access_token;
     if (!token) throw new Error('Сесію завершено. Увійдіть знову.');
-    const response = await fetch(`/api/admin/ai-learning${path}`, {
+    const suffix = path ? `&${String(path).replace(/^\?/, '')}` : '';
+    const response = await fetch(`/api/admin/service-bots?resource=ai-learning${suffix}`, {
         ...options,
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(options.headers || {}) },
     });
@@ -187,7 +188,7 @@ export async function renderAILearningCenter(force = false) {
     if (state.myRole !== 'admin' || (loaded && !force) || busy) return;
     busy = true; setStatus('Оновлюємо метрики й чергу…');
     try {
-        const [overview, queue] = await Promise.all([api('?resource=overview'), api('?resource=queue&status=pending&limit=12')]);
+        const [overview, queue] = await Promise.all([api('?section=overview'), api('?section=queue&status=pending&limit=12')]);
         renderKpis(overview.summary); renderQuality(overview); renderMeta(overview); renderRuns(overview.runs); await renderQueue(queue.examples || []);
         const count = el('ai-learning-queue-count'); if (count) count.textContent = overview.summary?.pending || 0;
         setStatus(overview.lastRun ? `Останнє оновлення: ${formatDate(overview.lastRun.finished_at || overview.lastRun.started_at, true)}` : 'AI ще не запускав аналіз.');

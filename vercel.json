@@ -10,6 +10,7 @@
     }
   ],
   "rewrites": [
+    { "source": "/api/cron/ai-learning", "destination": "/api/cron/sync-google-sheets?task=ai-learning" },
     { "source": "/config.js", "destination": "/api/client-config.js" },
     { "source": "/api/server-time", "destination": "/api/client-config?mode=server-time" },
     { "source": "/api/admin/registration-requests", "destination": "/api/admin/service-bots?resource=registration-requests" },

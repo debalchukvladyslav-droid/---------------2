@@ -9,6 +9,9 @@ import {
 } from '../../lib/service_bots.js';
 import { supabaseRest } from '../../lib/google_sheet_sync.js';
 import registrationRequestsHandler from '../../lib/registration_requests.js';
+import aiLearningAdminHandler from '../../lib/ai_learning_admin.js';
+
+export const config = { maxDuration: 300 };
 
 function botSelect() {
     return 'id,name,bot_type,user_id,extra_data,enabled,last_used_at,created_at,updated_at';
@@ -111,6 +114,9 @@ async function fetchExternalPproProbe(body = {}) {
 }
 
 export default async function handler(req, res) {
+    if (String(req.query?.resource || '') === 'ai-learning') {
+        return aiLearningAdminHandler(req, res);
+    }
     if (String(req.query?.resource || '') === 'registration-requests') {
         return registrationRequestsHandler(req, res);
     }
