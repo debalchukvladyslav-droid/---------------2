@@ -251,6 +251,8 @@ test('training deduplication scopes the database query to the active prompt vers
 test('evaluation sync accepts only genuine human-reviewed gold examples', () => {
     const source = readFileSync(new URL('../lib/ai_learning_admin.js', import.meta.url), 'utf8');
     assert.match(source, /review_status=in\.\(approved,corrected\).*reviewed_by=not\.is\.null.*reviewed_pattern_key=not\.is\.null/);
-    assert.match(source, /!String\(example\.review_note \|\| ''\)\.startsWith\('\[auto\]'\)/);
+    assert.doesNotMatch(source, /ai_learning_examples\?is_current=eq\.true&review_status=in\.\(approved,corrected\)/);
+    assert.match(source, /String\(example\.review_note \|\| ''\)\.startsWith\('\[auto\]'\)/);
+    assert.match(source, /if \(!byTrade\.has\(identity\)\) byTrade\.set\(identity, example\)/);
     assert.match(source, /const gold = await syncGoldCases\(user\.id\)/);
 });
