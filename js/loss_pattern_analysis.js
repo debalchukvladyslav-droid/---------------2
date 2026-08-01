@@ -288,8 +288,11 @@ export function renderLossPatternAnalysis() {
         : (candidates.length ? `Знайдено ${candidates.length} мінусових скрінів для перевірки.` : 'Для мінусових угод поки немає прив’язаних скрінів.'));
     const button = document.getElementById('stats-loss-patterns-analyze');
     if (button && token === renderToken) {
-        button.disabled = !remaining;
+        button.disabled = !candidates.length;
         button.textContent = remaining ? (items.length ? 'Перевірити нові скріни' : 'Почати аналіз') : 'Усе перевірено';
+    }
+    if (button && token === renderToken && candidates.length) {
+        button.textContent = items.length ? 'Переглянути скріни повторно' : 'Почати аналіз';
     }
 }
 
@@ -297,7 +300,13 @@ export async function analyzeLossPatterns() {
     if (analysisRunning) return;
     if (state.statsCompareMode || state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME || !isOwnAnalyticsSource()) return;
     const store = getStore();
-    const pending = collectCandidates().filter(candidate => !store.items[cacheKey(candidate)]);
+    const pending = collectCandidates().sort((left, right) => {
+        const leftAnalyzed = store.items[cacheKey(left)]?.analyzedAt || '';
+        const rightAnalyzed = store.items[cacheKey(right)]?.analyzedAt || '';
+        if (!leftAnalyzed && rightAnalyzed) return -1;
+        if (leftAnalyzed && !rightAnalyzed) return 1;
+        return leftAnalyzed.localeCompare(rightAnalyzed);
+    });
     if (!pending.length) {
         showToast('Нових мінусових скрінів немає');
         renderLossPatternAnalysis();
@@ -312,6 +321,7 @@ export async function analyzeLossPatterns() {
     let failed = 0;
     try {
         console.info(`[AI patterns] Початок аналізу: ${batch.length} скрінів із ${pending.length} нових`);
+        console.info(`[AI patterns] У черзі є і нові, і вже перевірені скріни; спочатку переглядаються найстаріші результати`);
         for (const [index, candidate] of batch.entries()) {
             const progress = `${index + 1}/${batch.length}`;
             console.info(`[AI patterns] ${progress} Переглядаю`, {
