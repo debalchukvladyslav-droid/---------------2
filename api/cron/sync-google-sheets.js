@@ -1,5 +1,5 @@
 import { runGoogleSheetSync, supabaseRest } from '../../lib/google_sheet_sync.js';
-import { runLearningBatch } from '../../lib/ai_learning.js';
+import { processNextLearningJob, runLearningBatch } from '../../lib/ai_learning.js';
 
 export const config = { maxDuration: 300 };
 
@@ -20,7 +20,8 @@ export default async function handler(req, res) {
 
     try {
         if (String(req.query?.task || '') === 'ai-learning') {
-            const aiLearning = await runLearningBatch({ triggerType: 'cron' });
+            const queued = await processNextLearningJob();
+            const aiLearning = queued.job ? queued : await runLearningBatch({ triggerType: 'cron' });
             return sendJson(res, 200, { ok: true, task: 'ai-learning', aiLearning });
         }
 

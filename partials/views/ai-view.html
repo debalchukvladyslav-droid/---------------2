@@ -41,10 +41,12 @@
                 <div>
                     <span class="ai-toolbar-kicker">Підтверджена пам’ять</span>
                     <h3>Як AI вчиться розпізнавати входи</h3>
-                    <p>AI автоматично аналізує входи, шукає повтори й додає впевнені закономірності до пам’яті без ручного підтвердження.</p>
+                    <p>AI аналізує входи й шукає повтори, але еталонна пам’ять формується лише після ручного підтвердження.</p>
                 </div>
                 <div class="ai-learning__hero-actions">
                     <button type="button" class="btn-secondary" id="ai-learning-new" data-action="ai-learning-new">Нове навчання</button>
+                    <button type="button" class="btn-secondary" id="ai-learning-continue" data-action="ai-learning-continue">Продовжити</button>
+                    <button type="button" class="btn-secondary" id="ai-learning-evaluate" data-action="ai-learning-evaluate">Перевірити якість</button>
                     <button type="button" class="btn-secondary" id="ai-learning-run" data-action="ai-learning-run">Один пакет</button>
                     <button type="button" class="btn-primary" id="ai-learning-day" data-action="ai-learning-day">Навчати 24 години</button>
                 </div>
@@ -60,6 +62,10 @@
                 <section class="ai-learning-card">
                     <div class="ai-learning-card__head"><div><span class="ai-toolbar-kicker">Версії</span><h4>Поточний контур</h4></div></div>
                     <div id="ai-learning-version" class="ai-learning-meta"></div>
+                </section>
+                <section class="ai-learning-card ai-learning-card--wide">
+                    <div class="ai-learning-card__head"><div><span class="ai-toolbar-kicker">Статистика</span><h4>Персональні закономірності</h4></div></div>
+                    <div id="ai-learning-personal-patterns" class="ai-learning-patterns"></div>
                 </section>
                 <section class="ai-learning-card">
                     <div class="ai-learning-card__head"><div><span class="ai-toolbar-kicker">Дані</span><h4>Приклади трейдерів</h4></div></div>

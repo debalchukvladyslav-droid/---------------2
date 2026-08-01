@@ -30,7 +30,7 @@ async function listFolder(req, res, token) {
     console.log('[Drive service] list start', { folderId });
     const response = await driveFetch('files', token, {
         q: `'${folderId}' in parents and mimeType contains 'image/' and trashed = false`,
-        fields: 'files(id,name,mimeType,createdTime,modifiedTime,size)',
+        fields: 'files(id,name,mimeType,createdTime,modifiedTime,size,imageMediaMetadata(width,height))',
         orderBy: 'modifiedTime desc',
         pageSize: '100',
         supportsAllDrives: 'true',

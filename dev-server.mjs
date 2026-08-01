@@ -13,6 +13,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import serviceBotsHandler from './api/admin/service-bots.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
@@ -86,6 +87,17 @@ function readBody(req) {
         req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
         req.on('error', reject);
     });
+}
+
+async function handleVercelRoute(handler, req, res, url) {
+    req.query = Object.fromEntries(url.searchParams.entries());
+    if (['POST', 'PATCH', 'PUT'].includes(req.method)) {
+        const raw = await readBody(req);
+        try { req.body = raw ? JSON.parse(raw) : {}; }
+        catch { return sendJson(res, 400, { ok: false, error: 'Invalid JSON' }); }
+    }
+    res.status = (code) => { res.statusCode = code; return res; };
+    await handler(req, res);
 }
 
 async function verifySupabaseAuth(authHeader) {
@@ -372,6 +384,13 @@ const server = http.createServer((req, res) => {
     if (u.pathname === '/api/server-time') {
         const epochMs = Date.now();
         sendJson(res, 200, { epochMs, iso: new Date(epochMs).toISOString() });
+        return;
+    }
+    if (u.pathname === '/api/admin/service-bots') {
+        handleVercelRoute(serviceBotsHandler, req, res, u).catch((e) => {
+            console.error(e);
+            if (!res.headersSent) sendJson(res, 500, { ok: false, error: e.message || 'Server error' });
+        });
         return;
     }
     serveStatic(req, res);

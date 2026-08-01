@@ -431,7 +431,7 @@ export async function syncDriveScreenshots(silent = false) {
                 console.info('[Drive test] browser OAuth token restored');
                 const listUrl = new URL('https://www.googleapis.com/drive/v3/files');
                 listUrl.searchParams.set('q', `'${folderId}' in parents and mimeType contains 'image/'`);
-                listUrl.searchParams.set('fields', 'files(id,name,mimeType,createdTime,modifiedTime,size)');
+                listUrl.searchParams.set('fields', 'files(id,name,mimeType,createdTime,modifiedTime,size,imageMediaMetadata(width,height))');
                 listUrl.searchParams.set('orderBy', 'modifiedTime desc');
                 listUrl.searchParams.set('pageSize', '100');
                 const resp = await fetch(listUrl.toString(), { headers: { Authorization: `Bearer ${token}` } });

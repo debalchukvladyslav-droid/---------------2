@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildCandidates, embeddingText, isMemoryEligible, PATTERN_KEYS } from '../lib/ai_learning.js';
+import { readFileSync } from 'node:fs';
+import { analyzedCandidateIdentities, assignChronologicalSplits, buildCandidates, buildCandidatesFromExamples, candidateIdentity, derivePersonalPatterns, deriveProcessOutcomeAssessment, embeddingText, evaluateAnalysis, inferScreenshotRole, inspectImageBuffer, isMemoryEligible, matchTradeScreens, outcomeGroup, parseAiJson, resolveOpenRouterVisionModel, selectFreshCandidateBatch, sortCandidatesByOutcome, summarizeEvaluationResults, PATTERN_KEYS } from '../lib/ai_learning.js';
 
 test('AI learning candidates combine trade, journal outcome and matching screenshot', () => {
     const rows = [{
@@ -47,6 +48,35 @@ test('AI learning links random Drive filenames through profile OCR ticker map', 
     assert.equal(candidates[1].screenshot_path, null);
 });
 
+test('AI learning keeps several screenshots with roles and confidence', () => {
+    const metrics = { screenshots: { good: ['u/ABCD-pre-entry.png', 'u/ABCD-entry.png'], normal: ['u/ABCD-post-exit.png'], bad: [], error: [] } };
+    const screens = matchTradeScreens({ symbol: 'ABCD' }, metrics, 2);
+    assert.equal(screens.length, 3);
+    assert.equal(screens[0].matchMethod, 'filename');
+    assert.equal(screens[0].matchConfidence, 0.6);
+    assert.equal(inferScreenshotRole(screens[0].path, 0, screens.length), 'pre_entry');
+    assert.equal(inferScreenshotRole(screens[2].path, 2, screens.length), 'post_exit');
+});
+
+test('ambiguous screenshots are not assigned across several trades without evidence', () => {
+    const metrics = { screenshots: { good: [], normal: ['u/random.png'], bad: [], error: [] } };
+    assert.deepEqual(matchTradeScreens({ symbol: 'ABCD' }, metrics, 2), []);
+    const single = matchTradeScreens({ symbol: 'ABCD' }, metrics, 1);
+    assert.equal(single[0].matchMethod, 'single_trade_day');
+    assert.equal(single[0].matchConfidence, 0.55);
+});
+
+test('persistent screenshot registry overrides filename heuristics and keeps explicit role', () => {
+    const path = 'screenshots/u/random-file.png';
+    const metrics = { screenshots: { good: [path], normal: [], bad: [], error: [] }, trades: [{ symbol: 'ABCD' }] };
+    const contexts = new Map([['u', { registry: { [path]: { ticker: 'ABCD', screenshot_role: 'pre_entry', quality_status: 'ready', pixel_width: 1440, pixel_height: 900 } } }]]);
+    const [candidate] = buildCandidates([{ id: 'd', user_id: 'u', trade_date: '2026-01-01', daily_metrics: metrics }], contexts);
+    assert.equal(candidate.source_snapshot.screenshotMatch.method, 'registry_ticker');
+    assert.equal(candidate.source_snapshot.screenshotSet[0].role, 'pre_entry');
+    assert.equal(candidate.source_snapshot.screenshotSet[0].qualityStatus, 'ready');
+    assert.equal(candidate.source_snapshot.screenshotSet[0].width, 1440);
+});
+
 test('AI memory keeps visual structure and rejects generic no-structure guesses', () => {
     const text = embeddingText({
         source_snapshot: { ticker: 'TEST', aiFeatures: { movement: { phase: 'retest' }, signals: ['level held'] } },
@@ -58,4 +88,157 @@ test('AI memory keeps visual structure and rejects generic no-structure guesses'
     assert.match(text, /level held/);
     assert.equal(isMemoryEligible({ ai_pattern_key: 'no_structure', ai_confidence: 0.99 }), false);
     assert.equal(isMemoryEligible({ ai_pattern_key: 'breakout_retest', ai_confidence: 0.7 }), true);
+});
+
+test('new training rebuilds candidates from already analyzed examples', () => {
+    const candidates = buildCandidatesFromExamples([{
+        user_id: 'user', journal_day_id: 'day', trade_date: '2026-07-30', trade_key: 'user:trade',
+        source_snapshot: { ticker: 'OLD' }, outcome: { pnl: -20 }, screenshot_path: 'screenshots/user/old.png',
+    }], 'entry-memory-v4');
+    assert.equal(candidates.length, 1);
+    assert.equal(candidates[0].source_snapshot.ticker, 'OLD');
+    assert.match(candidates[0].content_hash, /^[a-f0-9]{64}$/);
+});
+
+test('training separates losses and profits before structural analysis', () => {
+    const profit = { trade_key: 'profit', trade_date: '2026-07-31', outcome: { pnl: 25 } };
+    const loss = { trade_key: 'loss', trade_date: '2026-07-30', outcome: { pnl: -10 } };
+    const neutral = { trade_key: 'neutral', trade_date: '2026-07-29', outcome: { pnl: 0 } };
+    assert.equal(outcomeGroup(loss), 'loss');
+    assert.equal(outcomeGroup(profit), 'profit');
+    assert.deepEqual(sortCandidatesByOutcome([neutral, profit, loss]).map(item => item.trade_key), ['loss', 'profit', 'neutral']);
+});
+
+test('trade outcome never substitutes the whole day result for a missing trade result', () => {
+    const [candidate] = buildCandidates([{
+        id: 'day', user_id: 'user', trade_date: '2026-07-30', pnl: 500, kf: 3,
+        daily_metrics: { trades: [{ symbol: 'UNKNOWN' }] },
+    }]);
+    assert.equal(candidate.outcome.pnl, null);
+    assert.equal(candidate.outcome.kf, null);
+    assert.equal(candidate.outcome.dayPnl, 500);
+    assert.equal(outcomeGroup(candidate), 'neutral');
+});
+
+test('evaluation requires both a matching label and explicit evidence', () => {
+    const metrics = evaluateAnalysis('breakout_retest', {
+        ai_pattern_key: 'breakout_retest',
+        analysis_features: { chartSummary: 'Breakout and retest', evidence: { visible: ['level retest'], missing: [] } },
+    });
+    assert.deepEqual(metrics, { exactMatch: true, evidenceComplete: true, abstained: false });
+    assert.equal(evaluateAnalysis('breakout_retest', { ai_pattern_key: 'unclear', analysis_features: {} }).abstained, true);
+});
+
+test('unsupported model classifications are downgraded instead of becoming facts', () => {
+    const unsupported = parseAiJson(JSON.stringify({ patternKey: 'valid_entry', confidence: 0.97, explanation: 'Looks good' }));
+    assert.equal(unsupported.ai_pattern_key, 'unclear');
+    assert.equal(unsupported.ai_confidence, 0.35);
+    const supported = parseAiJson(JSON.stringify({
+        patternKey: 'valid_entry', confidence: 0.8, chartSummary: 'Price retested the visible level before entry',
+        evidence: { visible: ['entry marker is above the retested level'], inferred: [], missing: [] },
+    }));
+    assert.equal(supported.ai_pattern_key, 'valid_entry');
+    assert.equal(supported.ai_confidence, 0.8);
+});
+
+test('personal patterns use only human-reviewed examples and enforce minimum support', () => {
+    const reviewed = Array.from({ length: 10 }, (_, index) => ({
+        review_status: 'approved', reviewed_by: 'admin', reviewed_pattern_key: 'breakout_retest',
+        outcome: { pnl: index < 7 ? 10 : -10 },
+    }));
+    reviewed.push({ review_status: 'pending', reviewed_by: null, ai_pattern_key: 'breakout_retest', outcome: { pnl: 1000 } });
+    reviewed.push(...Array.from({ length: 7 }, () => ({ review_status: 'corrected', reviewed_by: 'admin', reviewed_pattern_key: 'late_entry', outcome: { pnl: -10 } })));
+    const patterns = derivePersonalPatterns(reviewed);
+    assert.equal(patterns.length, 1);
+    assert.equal(patterns[0].patternKey, 'breakout_retest');
+    assert.equal(patterns[0].sampleSize, 10);
+    assert.equal(patterns[0].wins, 7);
+    assert.equal(patterns[0].reliability, 'exploratory');
+});
+
+test('image metadata inspection reads dimensions without decoding the screenshot', () => {
+    const png = Buffer.alloc(24);
+    png.write('PNG', 1, 'ascii');
+    png.writeUInt32BE(1920, 16); png.writeUInt32BE(1080, 20);
+    assert.deepEqual(inspectImageBuffer(png, 'image/png'), { width: 1920, height: 1080 });
+    const gif = Buffer.alloc(10);
+    gif.write('GIF89a', 0, 'ascii');
+    gif.writeUInt16LE(640, 6); gif.writeUInt16LE(480, 8);
+    assert.deepEqual(inspectImageBuffer(gif, 'image/gif'), { width: 640, height: 480 });
+    assert.deepEqual(inspectImageBuffer(Buffer.from('not-image'), 'image/png'), { width: null, height: null });
+});
+
+test('evaluation summary separates coverage, selective accuracy and calibration', () => {
+    const summary = summarizeEvaluationResults([
+        { expectedPatternKey: 'valid_entry', predictedPatternKey: 'valid_entry', confidence: 0.8, exactMatch: true, evidenceComplete: true, abstained: false },
+        { expectedPatternKey: 'late_entry', predictedPatternKey: 'valid_entry', confidence: 0.8, exactMatch: false, evidenceComplete: true, abstained: false },
+        { expectedPatternKey: 'late_entry', predictedPatternKey: 'unclear', confidence: 0.2, exactMatch: false, evidenceComplete: true, abstained: true },
+    ]);
+    assert.equal(summary.exactAccuracy, 1 / 3);
+    assert.equal(summary.selectiveAccuracy, 0.5);
+    assert.equal(summary.coverage, 2 / 3);
+    assert.ok(summary.brierScore > 0);
+    assert.ok(summary.calibrationError > 0);
+    assert.equal(summary.confusionMatrix.late_entry.valid_entry, 1);
+    assert.equal(summary.perPattern.find((item) => item.patternKey === 'late_entry').recall, 0);
+});
+
+test('process quality is separated from trade outcome without leaking into retrieval text', () => {
+    const analysis = { analysis_features: { processScores: { setupValidity: 80, contextFit: 70, entryQuality: 75, riskPlan: 70, executionReadiness: 80 } } };
+    assert.equal(deriveProcessOutcomeAssessment(analysis, { pnl: -25 }).quadrant, 'good_process_bad_outcome');
+    assert.equal(deriveProcessOutcomeAssessment(analysis, { pnl: 25 }).quadrant, 'skill_confirmed');
+    const text = embeddingText({
+        source_snapshot: { ticker: 'TEST', aiFeatures: { movement: { phase: 'retest' }, processOutcome: { quadrant: 'skill_confirmed', result: 'profit' } } },
+        outcome: { pnl: 25 },
+    });
+    assert.match(text, /retest/);
+    assert.doesNotMatch(text, /skill_confirmed|profit|"pnl"/);
+});
+
+test('evaluation holdout keeps the newest reviewed trades for testing', () => {
+    const cases = Array.from({ length: 10 }, (_, index) => ({ id: String(index), trade_date: `2026-01-${String(index + 1).padStart(2, '0')}` }));
+    const assigned = assignChronologicalSplits(cases);
+    assert.deepEqual(assigned.slice(0, 7).map((item) => item.dataset_split), Array(7).fill('train'));
+    assert.equal(assigned[7].dataset_split, 'validation');
+    assert.deepEqual(assigned.slice(8).map((item) => item.dataset_split), ['test', 'test']);
+    assert.deepEqual(assignChronologicalSplits(cases.slice(0, 4)).map((item) => item.dataset_split), Array(4).fill('test'));
+});
+
+test('learning cards expose the full human review workflow', () => {
+    const source = readFileSync(new URL('../js/ai_learning.js', import.meta.url), 'utf8');
+    assert.match(source, /ai-learning-pattern-select/);
+    assert.match(source, /reviewButton\('Підтвердити прогноз', 'approve'/);
+    assert.match(source, /reviewButton\('Зберегти виправлення', 'correct'/);
+    assert.match(source, /reviewButton\('Відхилити', 'reject'/);
+    assert.match(source, /if \(example\.review_status === 'pending'\) body\.append\(reviewNote, reviewControls\)/);
+});
+
+test('generic free routing resolves to chart-capable vision models', () => {
+    assert.equal(resolveOpenRouterVisionModel('openrouter/free', 0), 'google/gemma-4-26b-a4b-it:free');
+    assert.equal(resolveOpenRouterVisionModel('openrouter/free', 1), 'nvidia/nemotron-nano-12b-v2-vl:free');
+    assert.equal(resolveOpenRouterVisionModel('custom/vision:free', 0), 'custom/vision:free');
+});
+
+test('semantic trade identity deduplicates legacy AI keys against journal trades', () => {
+    const current = { user_id: 'u', journal_day_id: 'd', trade_date: '2026-01-01', trade_key: 'new-key', source_snapshot: { ticker: 'ABCD', entryTime: '10:05', direction: 'long', tradeIndex: 2 } };
+    const legacy = { ...current, trade_key: 'old-key', source_snapshot: { ticker: 'abcd', entryTime: '10:05', direction: 'LONG', tradeIndex: 2 } };
+    assert.equal(candidateIdentity(current), candidateIdentity(legacy));
+    assert.notEqual(candidateIdentity(current), candidateIdentity({ ...legacy, source_snapshot: { ...legacy.source_snapshot, tradeIndex: 3 } }));
+});
+
+test('training advances past a candidate that made no progress', () => {
+    const candidates = [{ id: 'blocked' }, { id: 'next' }, { id: 'third' }];
+    assert.deepEqual(selectFreshCandidateBatch(candidates, 1, 0), [{ id: 'blocked' }]);
+    assert.deepEqual(selectFreshCandidateBatch(candidates, 1, 1), [{ id: 'next' }]);
+    assert.deepEqual(selectFreshCandidateBatch(candidates, 1, 100), [{ id: 'next' }]);
+});
+
+test('same-version semantic identity prevents hash-collision starvation', () => {
+    const prior = {
+        prompt_version: 'v2', user_id: 'u', journal_day_id: 'd', trade_date: '2026-01-01',
+        trade_key: 'legacy-key', source_snapshot: { ticker: 'ABCD', entryTime: '10:05', direction: 'long', tradeIndex: 2 },
+    };
+    const candidate = { ...prior, trade_key: 'new-key', prompt_version: undefined };
+    assert.equal(analyzedCandidateIdentities([prior], 'v2').has(candidateIdentity(candidate)), true);
+    assert.equal(analyzedCandidateIdentities([prior], 'v3').has(candidateIdentity(candidate)), false);
 });

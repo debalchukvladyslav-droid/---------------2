@@ -1,6 +1,15 @@
 import { supabase } from './supabase.js';
 
-const COLUMNS = 'storage_path,source,source_file_id,original_name,mime_type,source_created_at,source_modified_at,created_at,updated_at';
+const COLUMNS = 'storage_path,source,source_file_id,original_name,mime_type,source_created_at,source_modified_at,created_at,updated_at,ticker,trade_key,screenshot_role,captured_at,pixel_width,pixel_height,byte_size,quality_status,quality_details';
+
+export function inferRegistryRole(name = '') {
+    const value = String(name).toLowerCase();
+    if (/pre[-_ ]?entry|before|plan|premarket|pre-market/.test(value)) return 'pre_entry';
+    if (/post[-_ ]?exit|after|result|close|closed/.test(value)) return 'post_exit';
+    if (/exit|cover/.test(value)) return 'exit';
+    if (/entry|open/.test(value)) return 'entry';
+    return 'unknown';
+}
 
 export async function loadScreenshotRegistry(userId) {
     if (!userId) return [];
@@ -21,6 +30,14 @@ export async function registerDriveScreenshot(userId, storagePath, file, mimeTyp
         mime_type: String(mimeType || file.mimeType || ''),
         source_created_at: file.createdTime || null,
         source_modified_at: file.modifiedTime || null,
+        screenshot_role: inferRegistryRole(file.name),
+        captured_at: file.createdTime || file.modifiedTime || null,
+        pixel_width: Number(file.imageMediaMetadata?.width) || null,
+        pixel_height: Number(file.imageMediaMetadata?.height) || null,
+        byte_size: Number(file.size) || null,
+        quality_status: Number(file.imageMediaMetadata?.width) && Number(file.imageMediaMetadata?.height)
+            ? (Number(file.imageMediaMetadata.width) >= 320 && Number(file.imageMediaMetadata.height) >= 180 ? 'ready' : 'image_too_small')
+            : 'unchecked',
         updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id,storage_path' });
     if (error) throw error;
@@ -53,6 +70,10 @@ export function mergeScreenshotRegistry(appData, rows = []) {
                 createdAt: row.source_created_at || row.created_at || new Date().toISOString(),
                 driveCreatedTime: row.source_created_at || null,
                 driveModifiedTime: row.source_modified_at || null,
+                ticker: row.ticker || '', tradeKey: row.trade_key || '',
+                screenshotRole: row.screenshot_role || 'unknown', capturedAt: row.captured_at || null,
+                width: row.pixel_width || null, height: row.pixel_height || null,
+                byteSize: row.byte_size || null, qualityStatus: row.quality_status || 'unchecked',
             };
         }
     }

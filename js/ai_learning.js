@@ -157,14 +157,31 @@ function renderQuality(data) {
         });
         if (!patterns.childElementCount) patterns.textContent = 'Категорії заповняться після рев’ю.';
     }
+    const personal = el('ai-learning-personal-patterns');
+    if (personal) {
+        personal.replaceChildren();
+        (data.personalPatterns || []).slice(0, 12).forEach((item) => {
+            const row = document.createElement('div'); row.className = 'ai-learning-pattern-row';
+            const title = document.createElement('span');
+            title.textContent = PATTERNS[item.pattern_key] || item.pattern_key;
+            const meter = document.createElement('i');
+            meter.style.setProperty('--value', `${Math.max(4, Math.min(100, Number(item.win_rate || 0) * 100))}%`);
+            const value = document.createElement('b');
+            const lift = item.lift == null ? '—' : `${Number(item.lift) >= 0 ? '+' : ''}${Math.round(Number(item.lift) * 100)} п.п.`;
+            value.textContent = `${formatPercent(item.win_rate)} · n=${item.outcome_sample_size} · ${lift} · ${item.reliability}`;
+            row.append(title, meter, value); personal.append(row);
+        });
+        if (!personal.childElementCount) personal.textContent = 'Потрібно щонайменше 8 ручно перевірених прикладів однієї структури.';
+    }
 }
 
 function renderMeta(data) {
     const host = el('ai-learning-version');
     if (host) {
         const version = data.version || {};
+        const job = data.currentJob || {};
         host.replaceChildren();
-        [['Базова модель', version.model_name || 'gemini-2.5-flash'], ['Промпт', version.prompt_version || 'entry-mistake-v1'], ['Пам’ять', `v${version.memory_version || 0}`], ['Останній запуск', formatDate(data.lastRun?.started_at, true)], ['Наступний запуск', formatDate(data.nextRunAt, true)], ['Останні помилки', formatNumber(data.lastRun?.failed_count)]].forEach(([key, value]) => {
+        [['Базова модель', version.model_name || 'gemini-2.5-flash'], ['Промпт', version.prompt_version || 'entry-mistake-v1'], ['Пам’ять', `v${version.memory_version || 0}`], ['Job', job.id ? `${job.status} · ${job.prompt_version}` : 'немає'], ['Прогрес job', job.id ? `${formatNumber(job.processed_count)} оброблено · ${formatNumber(job.failed_count)} помилок · ${formatNumber(job.batch_count)} кроків` : '—'], ['Heartbeat', formatDate(job.heartbeat_at, true)], ['Останній запуск', formatDate(data.lastRun?.started_at, true)], ['Наступний запуск', formatDate(data.nextRunAt, true)], ['Останні помилки', formatNumber(data.lastRun?.failed_count)]].forEach(([key, value]) => {
             const row = document.createElement('div'); const k = document.createElement('span'); const v = document.createElement('strong');
             k.textContent = key; v.textContent = value; row.append(k, v); host.append(row);
         });
@@ -216,7 +233,10 @@ async function renderExample(example) {
     evidence.append(visualText, journalText);
     const featureHost = document.createElement('div'); featureHost.className = 'ai-learning-example__features';
     const features = example.source_snapshot?.aiFeatures || {};
+    const chartSummary = document.createElement('p');
+    chartSummary.textContent = `Короткий опис графіка: ${features.chartSummary || 'ще не сформовано'}`;
     const featureItems = [
+        ['Критерії', example.source_snapshot?.criteria], ['Винятки', example.source_snapshot?.exceptions],
         ['Фаза', features.movement?.phase], ['Рух', features.movement?.direction],
         ['Сила', Number(features.movement?.strength) ? `${Math.round(Number(features.movement.strength) * 100)}%` : ''],
         ['Розтягнення', features.movement?.extension], ['Структура', features.movement?.structure],
@@ -225,6 +245,12 @@ async function renderExample(example) {
         ['R/R', features.execution?.riskReward], ['Стоп', features.execution?.stopQuality],
         ['Рівень', features.context?.levelInteraction], ['Об’єм', features.context?.volumeSignal],
         ['Волатильність', features.context?.volatility],
+        ['Процес/результат', ({
+            skill_confirmed: 'якісний процес + результат',
+            good_process_bad_outcome: 'якісний процес, негативний результат',
+            bad_process_good_outcome: 'слабкий процес, позитивний результат',
+            process_risk_confirmed: 'слабкий процес + негативний результат',
+        })[features.processOutcome?.quadrant]],
     ].filter(([, value]) => value);
     featureItems.forEach(([label, value]) => {
         const chip = document.createElement('span');
@@ -234,13 +260,38 @@ async function renderExample(example) {
     (features.signals || []).slice(0, 6).forEach((signal) => {
         const chip = document.createElement('span'); chip.className = 'is-signal'; chip.textContent = signal; featureHost.append(chip);
     });
+    Object.entries(features.taxonomy || {}).forEach(([group, labels]) => {
+        (Array.isArray(labels) ? labels : []).slice(0, 4).forEach((label) => {
+            const chip = document.createElement('span'); chip.className = 'is-signal';
+            chip.textContent = `${group}: ${label}`; featureHost.append(chip);
+        });
+    });
     const context = document.createElement('details'); const summary = document.createElement('summary'); summary.textContent = 'Дані журналу';
     const pre = document.createElement('pre'); pre.textContent = JSON.stringify(example.source_snapshot || {}, null, 2); context.append(summary, pre);
     const autoStatus = document.createElement('div'); autoStatus.className = 'ai-learning-example__auto';
-    autoStatus.textContent = 'Автоматично додано до пам’яті · ручне підтвердження не потрібне';
-    body.append(header, prediction, explanation, evidence);
+    autoStatus.textContent = example.review_status === 'pending'
+        ? 'Чернетка AI · потрібна ручна перевірка перед додаванням у пам’ять'
+        : 'Перевірено людиною · приклад доступний для пам’яті';
+    const reviewControls = document.createElement('div'); reviewControls.className = 'ai-learning-example__controls';
+    const patternSelect = document.createElement('select'); patternSelect.className = 'ai-learning-pattern-select';
+    patternSelect.setAttribute('aria-label', 'Правильна структура угоди');
+    Object.entries(PATTERNS).forEach(([key, label]) => {
+        const option = document.createElement('option'); option.value = key; option.textContent = label;
+        option.selected = key === example.ai_pattern_key; patternSelect.append(option);
+    });
+    const reviewNote = document.createElement('textarea'); reviewNote.className = 'ai-learning-review-note';
+    reviewNote.rows = 2; reviewNote.maxLength = 1000; reviewNote.placeholder = 'Що AI побачив правильно або пропустив?';
+    reviewControls.append(
+        patternSelect,
+        reviewButton('Підтвердити прогноз', 'approve', example.id),
+        reviewButton('Зберегти виправлення', 'correct', example.id),
+        reviewButton('Відхилити', 'reject', example.id),
+    );
+    body.append(header, prediction, chartSummary, explanation, evidence);
     if (featureHost.childElementCount) body.append(featureHost);
-    body.append(context, autoStatus); card.append(visual, body);
+    body.append(context, autoStatus);
+    if (example.review_status === 'pending') body.append(reviewNote, reviewControls);
+    card.append(visual, body);
     return card;
 }
 
@@ -267,10 +318,10 @@ export async function renderAILearningCenter(force = false) {
     if (state.myRole !== 'admin' || (loaded && !force) || busy) return;
     busy = true; setStatus('Оновлюємо метрики й чергу…');
     try {
-        const [overview, queue] = await Promise.all([api('?section=overview'), api('?section=queue&status=approved&limit=12')]);
+        const [overview, queue] = await Promise.all([api('?section=overview'), api('?section=queue&status=pending&limit=12')]);
         renderKpis(overview.summary); renderQuality(overview); renderMeta(overview); renderRuns(overview.runs); await renderQueue(queue.examples || []);
         syncCampaignUI(overview.campaign);
-        const count = el('ai-learning-queue-count'); if (count) count.textContent = overview.summary?.approved || 0;
+        const count = el('ai-learning-queue-count'); if (count) count.textContent = overview.summary?.pending || 0;
         setStatus(overview.lastRun ? `Останнє оновлення: ${formatDate(overview.lastRun.finished_at || overview.lastRun.started_at, true)}` : 'AI ще не запускав аналіз.');
         loaded = true;
     } catch (error) { setStatus(error.message || String(error), 'error'); }
@@ -302,14 +353,25 @@ export async function startNewAILearning() {
         let payload = await api('', { method: 'POST', body: JSON.stringify({ action: 'new-training' }) });
         let processed = Number(payload.run?.processed_count || 0);
         let batchNumber = 1;
-        console.info(`[AI new training] Пакет ${batchNumber}: оброблено ${processed}`);
-        while (Number(payload.run?.processed_count || 0) > 0) {
+        console.info(`[AI new training] Пакет ${batchNumber}`, payload.run);
+        if (!processed && Number(payload.run?.failed_count || 0) && payload.job?.status === 'failed') {
+            console.error('[AI new training] Перший пакет завершився помилками', payload.run?.errors || []);
+            throw new Error(payload.run?.errors?.[0]?.message || 'Новий прогін не зміг обробити перший пакет');
+        }
+        if (!processed && !Number(payload.run?.scanned_count || 0)) {
+            throw new Error('Не знайдено угод ані в журналі, ані серед попередніх AI-аналізів');
+        }
+        while (payload.job?.status === 'running') {
             batchNumber += 1;
             setStatus(`Нова версія: пакет ${batchNumber}, уже оброблено ${processed} угод…`);
-            payload = await api('', { method: 'POST', body: JSON.stringify({ action: 'run' }) });
+            payload = await api('', { method: 'POST', body: JSON.stringify({ action: 'continue-training' }) });
             const batchProcessed = Number(payload.run?.processed_count || 0);
             processed += batchProcessed;
-            console.info(`[AI new training] Пакет ${batchNumber}: оброблено ${batchProcessed}, разом ${processed}`);
+            console.info(`[AI new training] Пакет ${batchNumber}: оброблено ${batchProcessed}, разом ${processed}`, payload.run);
+            if (!batchProcessed && Number(payload.run?.failed_count || 0) && payload.job?.status === 'failed') {
+                throw new Error(payload.run?.errors?.[0]?.message || `Пакет ${batchNumber} завершився помилкою`);
+            }
+            if (!batchProcessed && payload.job?.status === 'running') await new Promise((resolve) => setTimeout(resolve, 2500));
         }
         showToast(`Нова версія: повторно оброблено ${processed} угод`);
         loaded = false;
@@ -320,6 +382,52 @@ export async function startNewAILearning() {
     } finally {
         busy = false;
         if (button) { button.disabled = false; button.textContent = 'Нове навчання'; }
+    }
+}
+
+export async function continueAILearning() {
+    if (busy || state.myRole !== 'admin') return;
+    const button = el('ai-learning-continue'); busy = true;
+    if (button) { button.disabled = true; button.textContent = 'Обробляємо…'; }
+    setStatus('Продовжуємо останнє навчання з наступної необробленої угоди…');
+    try {
+        const overview = await api('?section=overview');
+        const action = ['failed', 'stopped'].includes(overview.currentJob?.status) ? 'resume-training' : 'continue-training';
+        const payload = await api('', { method: 'POST', body: JSON.stringify({ action }) });
+        const processed = Number(payload.run?.processed_count || 0);
+        const remaining = Number(payload.run?.remaining_count || 0);
+        console.info('[AI training continue]', payload.job, payload.run);
+        showToast(`Крок завершено: ${processed}; залишилось ≈ ${remaining}`);
+        loaded = false; busy = false; await renderAILearningCenter(true);
+    } catch (error) {
+        setStatus(error.message || String(error), 'error'); showToast(error.message || String(error));
+    } finally {
+        busy = false;
+        if (button) { button.disabled = false; button.textContent = 'Продовжити'; }
+    }
+}
+
+export async function evaluateAILearning() {
+    if (busy || state.myRole !== 'admin') return;
+    const button = el('ai-learning-evaluate');
+    busy = true;
+    if (button) { button.disabled = true; button.textContent = 'Перевіряємо…'; }
+    setStatus('Перевіряємо поточну версію на ручному контрольному наборі…');
+    try {
+        const payload = await api('', { method: 'POST', body: JSON.stringify({ action: 'evaluate' }) });
+        const result = payload.evaluation || {};
+        console.info('[AI evaluation]', result);
+        if (!result.total) {
+            setStatus('Контрольний набір порожній. Спочатку перевірте й підтвердьте приклади вручну.');
+            return;
+        }
+        setStatus(`Контрольний набір: ${result.total} · загальна точність ${formatPercent(result.exactAccuracy)} · точність відповідей ${formatPercent(result.selectiveAccuracy)} · покриття ${formatPercent(result.coverage)} · докази ${formatPercent(result.evidenceCoverage)} · калібрування ECE ${formatPercent(result.calibrationError)} · помилки ${result.failed || 0}`);
+    } catch (error) {
+        setStatus(error.message || String(error), 'error');
+        showToast(error.message || String(error));
+    } finally {
+        busy = false;
+        if (button) { button.disabled = false; button.textContent = 'Перевірити якість'; }
     }
 }
 

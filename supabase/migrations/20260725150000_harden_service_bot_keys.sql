@@ -4,7 +4,7 @@ ALTER TABLE public.bots
     ADD COLUMN IF NOT EXISTS api_key_hash TEXT;
 
 UPDATE public.bots
-SET api_key_hash = encode(digest(api_key, 'sha256'), 'hex')
+SET api_key_hash = encode(extensions.digest(convert_to(api_key, 'UTF8'), 'sha256'), 'hex')
 WHERE api_key IS NOT NULL
   AND api_key <> ''
   AND api_key_hash IS NULL;
