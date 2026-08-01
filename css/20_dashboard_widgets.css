@@ -33,7 +33,7 @@
 /* GridStack v13 geometry guard. Legacy dashboard rules also target the same
    dimensions, so the persisted grid variables are made authoritative here. */
 .grid-stack.dashboard-widget-grid{--gs-columns:24;--gs-column-width:calc(100% / var(--gs-columns))}
-.grid-stack.dashboard-widget-grid>.grid-stack-item.dashboard-widget{left:calc(var(--gs-x,0) * var(--gs-column-width))!important;top:calc(var(--gs-y,0) * var(--gs-cell-height))!important;width:calc(var(--gs-w,1) * var(--gs-column-width))!important;height:calc(var(--gs-h,1) * var(--gs-cell-height))!important}
+.grid-stack.dashboard-widget-grid>.grid-stack-item.dashboard-widget{left:calc(var(--gs-x,0) * var(--gs-column-width));top:calc(var(--gs-y,0) * var(--gs-cell-height));width:calc(var(--gs-w,1) * var(--gs-column-width));height:calc(var(--gs-h,1) * var(--gs-cell-height))}
 @media(max-width:700px){.grid-stack.dashboard-widget-grid{--gs-columns:12}}
 
 /* Edit-mode chrome must not cover the dashboard content. Reserve one compact
