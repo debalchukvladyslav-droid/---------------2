@@ -6,7 +6,7 @@ import { supabase } from './supabase.js';
 import { buildExceptionKfRows, buildHourlyKfBuckets, combineStatsSheetRows } from './stats_sheet_metrics.js';
 import { escapeHtml } from './utils.js';
 
-const VERSION = 7;
+const VERSION = 8;
 const GRID_COLUMNS = 24;
 const CATEGORIES = { overview: 'Огляд', analytics: 'Аналітика', routine: 'Сесія', tools: 'Інструменти' };
 const MICRO_WIDGETS = new Set(['month-pnl', 'month-winrate', 'month-trades', 'month-pf', 'today', 'daily-kf', 'week-compare', 'streak', 'current-hour', 'last-session', 'sync-status', 'missing-data']);
@@ -52,15 +52,17 @@ const kfText = (value) => `${Number(value) >= 0 ? '+' : ''}${(Number(value) || 0
 const dateKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
 function defaultLayout() {
-    let x = 0; let y = 0; let rowHeight = 1;
-    return DEFAULT_IDS.map((id, index) => {
-        const meta = def(id);
-        if (x + meta.w > GRID_COLUMNS) { x = 0; y += rowHeight; rowHeight = 1; }
-        const item = { id, type: id, order: index, w: meta.w, h: meta.h, x, y, config: {} };
-        x += meta.w; rowHeight = Math.max(rowHeight, meta.h);
-        if (x === GRID_COLUMNS) { x = 0; y += rowHeight; rowHeight = 1; }
-        return item;
-    });
+    const preset = [
+        ['news', 0, 0, 24, 1],
+        ['month-pnl', 0, 1, 5, 2],
+        ['month-winrate', 5, 1, 4, 2],
+        ['month-trades', 9, 1, 4, 2],
+        ['month-pf', 13, 1, 4, 2],
+        ['market-mood', 17, 1, 7, 2],
+        ['equity', 0, 3, 16, 8],
+        ['recent-trades', 16, 3, 8, 8],
+    ];
+    return preset.map(([id, x, y, w, h], order) => ({ id, type: id, order, x, y, w, h, config: {} }));
 }
 
 function normalizeLayout(raw) {
