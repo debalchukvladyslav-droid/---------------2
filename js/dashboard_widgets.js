@@ -6,7 +6,7 @@ import { supabase } from './supabase.js';
 import { buildExceptionKfRows, buildHourlyKfBuckets, combineStatsSheetRows } from './stats_sheet_metrics.js';
 import { escapeHtml } from './utils.js';
 
-const VERSION = 8;
+const VERSION = 9;
 const GRID_COLUMNS = 24;
 const CATEGORIES = { overview: 'Огляд', analytics: 'Аналітика', routine: 'Сесія', tools: 'Інструменти' };
 const MICRO_WIDGETS = new Set(['month-pnl', 'month-winrate', 'month-trades', 'month-pf', 'today', 'daily-kf', 'week-compare', 'streak', 'current-hour', 'last-session', 'sync-status', 'missing-data']);
@@ -59,8 +59,8 @@ function defaultLayout() {
         ['month-trades', 9, 1, 4, 2],
         ['month-pf', 13, 1, 4, 2],
         ['market-mood', 17, 1, 7, 2],
-        ['equity', 0, 3, 16, 8],
-        ['recent-trades', 16, 3, 8, 8],
+        ['equity', 0, 3, 16, 7],
+        ['recent-trades', 16, 3, 8, 7],
     ];
     return preset.map(([id, x, y, w, h], order) => ({ id, type: id, order, x, y, w, h, config: {} }));
 }
@@ -320,7 +320,14 @@ function setEditing(value) {
     byId('dashboard-builder')?.classList.toggle('is-editing', editing);
     byId('dashboard-widget-grid')?.classList.toggle('is-editing', editing);
     const catalog = byId('dashboard-widget-catalog'); if (catalog) { catalog.setAttribute('aria-hidden', String(!editing)); }
-    const toggle = byId('dashboard-edit-toggle'); if (toggle) { toggle.textContent = editing ? 'Готово' : 'Редагувати'; toggle.setAttribute('aria-pressed', String(editing)); }
+    const toggle = byId('dashboard-edit-toggle');
+    if (toggle) {
+        toggle.classList.toggle('is-icon-only', !editing);
+        toggle.innerHTML = editing ? 'Готово' : '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 20h4l10.7-10.7a2.1 2.1 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg>';
+        toggle.setAttribute('aria-pressed', String(editing));
+        toggle.setAttribute('aria-label', editing ? 'Завершити редагування' : 'Редагувати головну');
+        toggle.title = editing ? 'Готово' : 'Редагувати головну';
+    }
     if (byId('dashboard-reset-layout')) byId('dashboard-reset-layout').hidden = !editing;
     gridStack?.enableMove(editing);
     gridStack?.enableResize(editing);
