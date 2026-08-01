@@ -26,3 +26,4 @@ export const TELEGRAM_LOGIN_RETURN_BASE = String(appConfig.telegramLoginReturnBa
 
 // Single access point for database, auth, and storage.
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+ 
