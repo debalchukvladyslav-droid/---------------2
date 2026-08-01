@@ -238,6 +238,7 @@ test('learning cards expose the full human review workflow', () => {
 test('generic free routing resolves to chart-capable vision models', () => {
     assert.equal(resolveOpenRouterVisionModel('openrouter/free', 0), 'google/gemma-4-26b-a4b-it:free');
     assert.equal(resolveOpenRouterVisionModel('openrouter/free', 1), 'nvidia/nemotron-nano-12b-v2-vl:free');
+    assert.equal(resolveOpenRouterVisionModel('openrouter/free', 2), 'google/gemma-4-31b-it:free');
     assert.equal(resolveOpenRouterVisionModel('custom/vision:free', 0), 'custom/vision:free');
 });
 
