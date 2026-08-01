@@ -5,6 +5,7 @@ const envPath = new URL('.env.e2e.local', root);
 const configPath = new URL('config.js', root);
 const maxSteps = Math.max(1, Math.min(1000, Number(process.argv[2]) || 50));
 const statusOnly = process.argv[2] === 'status';
+const evaluateOnly = process.argv[2] === 'evaluate';
 const endpoint = process.env.AI_TRAINING_ENDPOINT
     || 'https://traderjournal-six.vercel.app/api/admin/service-bots?resource=ai-learning';
 
@@ -76,6 +77,15 @@ if (statusOnly) {
             errors: Array.isArray(lastRun.error_summary) ? lastRun.error_summary.slice(0, 1) : [],
         } : null,
     }));
+    process.exit(0);
+}
+if (evaluateOnly) {
+    const payload = await jsonRequest(endpoint, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'evaluate' }),
+    });
+    console.log(JSON.stringify({ gold: payload.gold || null, evaluation: payload.evaluation || payload }));
     process.exit(0);
 }
 let networkFailures = 0;
