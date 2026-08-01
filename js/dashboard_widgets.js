@@ -10,7 +10,7 @@ const VERSION = 7;
 const GRID_COLUMNS = 24;
 const CATEGORIES = { overview: 'Огляд', analytics: 'Аналітика', routine: 'Сесія', tools: 'Інструменти' };
 const MICRO_WIDGETS = new Set(['month-pnl', 'month-winrate', 'month-trades', 'month-pf', 'today', 'daily-kf', 'week-compare', 'streak', 'current-hour', 'last-session', 'sync-status', 'missing-data']);
-const WIDGET_MAX_HEIGHTS = { equity: 12, 'month-pnl': 4, 'month-winrate': 4, 'month-trades': 4, 'month-pf': 4, news: 1 };
+const WIDGET_MAX_HEIGHTS = { equity: 12, 'recent-trades': 12, 'month-pnl': 4, 'month-winrate': 4, 'month-trades': 4, 'month-pf': 4, news: 1 };
 const COMPLEX_WIDGETS = new Set(['equity', 'ai-mentor', 'recent-trades', 'market-mood', 'checklist', 'criteria-best', 'criteria-warning', 'quick-actions']);
 const COMPLEX_LIMITS = {
     equity: [5, 3], 'ai-mentor': [4, 3], 'recent-trades': [4, 3], 'market-mood': [3, 2],
