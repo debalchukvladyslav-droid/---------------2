@@ -2613,6 +2613,10 @@ body {
 .ai-learning-example__body p { margin: 0; line-height: 1.45; }
 .ai-learning-example__evidence { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .ai-learning-example__evidence span { padding: 9px; border: 1px solid var(--border); border-radius: 7px; }
+.ai-learning-example__features { display: flex; flex-wrap: wrap; gap: 6px; }
+.ai-learning-example__features span { padding: 6px 8px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 8%, var(--bg-main)); color: var(--text-muted); font-size: .68rem; }
+.ai-learning-example__features b { color: var(--text-main); }
+.ai-learning-example__features .is-signal { border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border)); color: var(--accent); }
 .ai-learning-example details { color: var(--text-muted); font-size: .74rem; }
 .ai-learning-example summary { cursor: pointer; }
 .ai-learning-example pre { max-height: 150px; overflow: auto; white-space: pre-wrap; color: var(--text-muted); font-size: .68rem; }

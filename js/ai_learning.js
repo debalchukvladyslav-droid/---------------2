@@ -7,6 +7,10 @@ const PATTERNS = {
     late_entry: 'Пізній вхід', chase_extension: 'Погоня за рухом', weak_breakout: 'Слабкий пробій',
     countertrend: 'Проти тренду', no_structure: 'Без структури', early_entry: 'Ранній вхід',
     poor_rr: 'Слабкий R/R', stop_violation: 'Порушення стопа', repeated_entry: 'Повторний вхід',
+    failed_follow_through: 'Немає продовження', parabolic_extension: 'Параболічне розтягнення',
+    breakout_retest: 'Пробій і ретест', pullback_entry: 'Вхід на відкаті', liquidity_sweep: 'Збір ліквідності',
+    range_entry: 'Вхід у діапазоні', trend_continuation: 'Продовження тренду', confirmed_reversal: 'Підтверджений розворот',
+    volume_mismatch: 'Об’єм не підтверджує',
     valid_entry: 'Правильний вхід', unclear: 'Неоднозначно', insufficient_data: 'Недостатньо даних',
 };
 
@@ -71,11 +75,11 @@ function syncCampaignUI(campaign = trainingCampaign) {
         const hours = Math.floor(leftMs / 3600000);
         const minutes = Math.floor((leftMs % 3600000) / 60000);
         setStatus(`Автономне навчання активне · залишилось ${hours} год ${minutes} хв · оброблено ${campaign.processed || 0} · повтори автоматичні`);
-        scheduleTrainingStep(1000);
+        scheduleTrainingStep(0);
     }
 }
 
-function scheduleTrainingStep(delay = 15000) {
+function scheduleTrainingStep(delay = 0) {
     if (!campaignIsRunning() || trainingStepRunning) return;
     clearTimeout(trainingTimer);
     trainingTimer = window.setTimeout(() => { void runTrainingStep(); }, delay);
@@ -85,6 +89,7 @@ async function runTrainingStep() {
     if (!campaignIsRunning() || trainingStepRunning) return;
     if (busy) { scheduleTrainingStep(5000); return; }
     trainingStepRunning = true;
+    let nextDelay = 0;
     try {
         const payload = await api('', { method: 'POST', body: JSON.stringify({ action: 'run' }) });
         trainingRetryMs = 15000;
@@ -93,10 +98,11 @@ async function runTrainingStep() {
         if (Number(payload.run?.processed_count || 0) === 0) await renderAILearningCenter(true);
     } catch (error) {
         setStatus(`Навчання тимчасово зупинилося: ${error.message || error}. Повтор через ${Math.round(trainingRetryMs / 1000)} с`, 'error');
+        nextDelay = trainingRetryMs;
         trainingRetryMs = Math.min(300000, Math.round(trainingRetryMs * 1.8));
     } finally {
         trainingStepRunning = false;
-        if (campaignIsRunning()) scheduleTrainingStep(trainingRetryMs);
+        if (campaignIsRunning()) scheduleTrainingStep(nextDelay);
     }
 }
 
@@ -205,11 +211,33 @@ async function renderExample(example) {
     const visualText = document.createElement('span'); visualText.textContent = `Скрін: ${example.visual_evidence || 'немає доказу'}`;
     const journalText = document.createElement('span'); journalText.textContent = `Журнал: ${example.journal_evidence || 'немає доказу'}`;
     evidence.append(visualText, journalText);
+    const featureHost = document.createElement('div'); featureHost.className = 'ai-learning-example__features';
+    const features = example.source_snapshot?.aiFeatures || {};
+    const featureItems = [
+        ['Фаза', features.movement?.phase], ['Рух', features.movement?.direction],
+        ['Сила', Number(features.movement?.strength) ? `${Math.round(Number(features.movement.strength) * 100)}%` : ''],
+        ['Розтягнення', features.movement?.extension], ['Структура', features.movement?.structure],
+        ['Місце входу', features.movement?.entryLocation], ['Таймінг', features.execution?.timing],
+        ['Підтвердження', features.execution?.confirmation], ['За трендом', features.execution?.trendAlignment],
+        ['R/R', features.execution?.riskReward], ['Стоп', features.execution?.stopQuality],
+        ['Рівень', features.context?.levelInteraction], ['Об’єм', features.context?.volumeSignal],
+        ['Волатильність', features.context?.volatility],
+    ].filter(([, value]) => value);
+    featureItems.forEach(([label, value]) => {
+        const chip = document.createElement('span');
+        const key = document.createElement('b'); key.textContent = `${label}: `;
+        chip.append(key, document.createTextNode(value)); featureHost.append(chip);
+    });
+    (features.signals || []).slice(0, 6).forEach((signal) => {
+        const chip = document.createElement('span'); chip.className = 'is-signal'; chip.textContent = signal; featureHost.append(chip);
+    });
     const context = document.createElement('details'); const summary = document.createElement('summary'); summary.textContent = 'Дані журналу';
     const pre = document.createElement('pre'); pre.textContent = JSON.stringify(example.source_snapshot || {}, null, 2); context.append(summary, pre);
     const autoStatus = document.createElement('div'); autoStatus.className = 'ai-learning-example__auto';
     autoStatus.textContent = 'Автоматично додано до пам’яті · ручне підтвердження не потрібне';
-    body.append(header, prediction, explanation, evidence, context, autoStatus); card.append(visual, body);
+    body.append(header, prediction, explanation, evidence);
+    if (featureHost.childElementCount) body.append(featureHost);
+    body.append(context, autoStatus); card.append(visual, body);
     return card;
 }
 
