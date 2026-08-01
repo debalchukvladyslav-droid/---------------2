@@ -6,10 +6,11 @@ import { supabase } from './supabase.js';
 import { buildExceptionKfRows, buildHourlyKfBuckets, combineStatsSheetRows } from './stats_sheet_metrics.js';
 import { escapeHtml } from './utils.js';
 
-const VERSION = 6;
+const VERSION = 7;
 const GRID_COLUMNS = 24;
 const CATEGORIES = { overview: 'Огляд', analytics: 'Аналітика', routine: 'Сесія', tools: 'Інструменти' };
 const MICRO_WIDGETS = new Set(['month-pnl', 'month-winrate', 'month-trades', 'month-pf', 'today', 'daily-kf', 'week-compare', 'streak', 'current-hour', 'last-session', 'sync-status', 'missing-data']);
+const SINGLE_ROW_WIDGETS = new Set(['month-pnl', 'month-winrate', 'month-trades', 'month-pf', 'news']);
 const COMPLEX_WIDGETS = new Set(['equity', 'ai-mentor', 'recent-trades', 'market-mood', 'checklist', 'criteria-best', 'criteria-warning', 'quick-actions']);
 const COMPLEX_LIMITS = {
     equity: [5, 3], 'ai-mentor': [4, 3], 'recent-trades': [4, 3], 'market-mood': [3, 2],
@@ -28,7 +29,7 @@ const WIDGETS = [
     ['sync-status', 'Синхронізація', 'tools', 4, 2], ['missing-data', 'Незаповнені дані', 'tools', 4, 2],
     ['earnings', 'Майбутні звіти тикерів', 'tools', 4, 2], ['quick-actions', 'Швидкі дії', 'tools', 4, 2],
     ['news', 'Стрічка новин', 'tools', 12, 1],
-].map(([id, title, category, w, h]) => ({ id, title, category, w: w * 2, h, minW: COMPLEX_LIMITS[id]?.[0] ? COMPLEX_LIMITS[id][0] * 2 : (MICRO_WIDGETS.has(id) ? 3 : Math.min(w * 2, 6)), maxW: GRID_COLUMNS, minH: COMPLEX_LIMITS[id]?.[1] || (MICRO_WIDGETS.has(id) || id === 'news' ? 1 : 2), maxH: 6 }));
+].map(([id, title, category, w, h]) => ({ id, title, category, w: w * 2, h, minW: COMPLEX_LIMITS[id]?.[0] ? COMPLEX_LIMITS[id][0] * 2 : (MICRO_WIDGETS.has(id) ? 3 : Math.min(w * 2, 6)), maxW: GRID_COLUMNS, minH: COMPLEX_LIMITS[id]?.[1] || (MICRO_WIDGETS.has(id) || id === 'news' ? 1 : 2), maxH: SINGLE_ROW_WIDGETS.has(id) ? 1 : 6 }));
 
 const DEFAULT_IDS = ['news', 'month-pnl', 'month-winrate', 'month-trades', 'month-pf', 'market-mood', 'equity', 'recent-trades'];
 let editing = false;

@@ -48,3 +48,9 @@
     .dashboard-builder.is-editing{padding-top:0}
     .dashboard-builder.is-editing .dashboard-widget-catalog{margin-top:0}
 }
+
+/* In view mode the edit action lives in the ticker's intentionally reserved
+   right-hand area instead of straddling the card border. */
+.dashboard-customize-bar{top:34px}
+.dashboard-customize-bar:has(+ .dashboard-builder.is-editing){top:7px}
+@media(max-width:700px){.dashboard-customize-bar{top:auto}}
