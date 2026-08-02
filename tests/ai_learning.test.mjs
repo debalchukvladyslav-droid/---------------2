@@ -135,6 +135,13 @@ test('admin exposes forward-only paper decisions and persists compact evaluation
     assert.match(source, /journalOnly/);
 });
 
+test('durable training automatically evaluates a newly completed model version', () => {
+    const source = readFileSync(new URL('../lib/ai_learning.js', import.meta.url), 'utf8');
+    assert.match(source, /if \(status === 'completed'\)/);
+    assert.match(source, /Automatic post-training evaluation failed/);
+    assert.match(source, /evaluation: compactEvaluation/);
+});
+
 test('new training rebuilds candidates from already analyzed examples', () => {
     const candidates = buildCandidatesFromExamples([{
         user_id: 'user', journal_day_id: 'day', trade_date: '2026-07-30', trade_key: 'user:trade',
