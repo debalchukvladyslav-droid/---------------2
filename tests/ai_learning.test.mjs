@@ -135,6 +135,12 @@ test('unsupported model classifications are downgraded instead of becoming facts
     const unsupported = parseAiJson(JSON.stringify({ patternKey: 'valid_entry', confidence: 0.97, explanation: 'Looks good' }));
     assert.equal(unsupported.ai_pattern_key, 'unclear');
     assert.equal(unsupported.ai_confidence, 0.35);
+    const uncalibratedCertainty = parseAiJson(JSON.stringify({
+        patternKey: 'valid_entry', confidence: 1, chartSummary: 'Visible retest at marked entry',
+        evidence: { visible: ['entry marker at retested level'], inferred: [], missing: [] },
+        taxonomy: { trigger: ['level_retest'] }, execution: { confirmation: 'level_retest' },
+    }));
+    assert.equal(uncalibratedCertainty.ai_confidence, 0.9);
     const supported = parseAiJson(JSON.stringify({
         patternKey: 'valid_entry', confidence: 0.8, chartSummary: 'Price retested the visible level before entry',
         evidence: { visible: ['entry marker is above the retested level'], inferred: [], missing: [] },

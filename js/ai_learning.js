@@ -228,7 +228,7 @@ async function renderExample(example) {
     header.append(title, result);
     const prediction = document.createElement('div'); prediction.className = 'ai-learning-example__prediction';
     const badge = document.createElement('b'); badge.textContent = PATTERNS[example.ai_pattern_key] || example.ai_label || 'Не визначено';
-    const confidence = document.createElement('span'); confidence.textContent = `Впевненість ${formatPercent(Number(example.ai_confidence))}`;
+    const confidence = document.createElement('span'); confidence.textContent = `Самооцінка AI ${formatPercent(Number(example.ai_confidence))}`;
     prediction.append(badge, confidence);
     if (example.review_priority?.reasons?.length) {
         const priority = document.createElement('small');
