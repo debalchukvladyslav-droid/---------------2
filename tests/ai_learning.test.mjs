@@ -136,6 +136,7 @@ test('unsupported model classifications are downgraded instead of becoming facts
     const supported = parseAiJson(JSON.stringify({
         patternKey: 'valid_entry', confidence: 0.8, chartSummary: 'Price retested the visible level before entry',
         evidence: { visible: ['entry marker is above the retested level'], inferred: [], missing: [] },
+        taxonomy: { trigger: ['level_retest'] }, execution: { confirmation: 'visible_retest' },
     }));
     assert.equal(supported.ai_pattern_key, 'valid_entry');
     assert.equal(supported.ai_confidence, 0.8);
@@ -159,6 +160,17 @@ test('unsupported model classifications are downgraded instead of becoming facts
     assert.equal(futureLeakage.ai_pattern_key, 'unclear');
     assert.equal(futureLeakage.ai_confidence, 0.35);
     assert.ok(futureLeakage.analysis_features.evidence.missing.includes('outcome_blind_entry_assessment'));
+    const unsupportedTrigger = parseAiJson(JSON.stringify({
+        patternKey: 'pullback_entry', confidence: 0.85,
+        chartSummary: 'A pullback is visible before the marked entry',
+        evidence: { visible: ['entry marker near 1.98', 'downtrend'], inferred: [], missing: [] },
+        taxonomy: { trigger: ['unclear'], structure: ['pullback'] },
+        execution: { confirmation: 'none_visible' }, processScores: { entryQuality: 70 },
+    }));
+    assert.equal(unsupportedTrigger.ai_pattern_key, 'unclear');
+    assert.equal(unsupportedTrigger.ai_confidence, 0.35);
+    assert.equal(unsupportedTrigger.analysis_features.processScores.entryQuality, null);
+    assert.ok(unsupportedTrigger.analysis_features.evidence.missing.includes('visible_entry_trigger_or_confirmation'));
 });
 
 test('personal patterns use only human-reviewed examples and enforce minimum support', () => {
