@@ -187,6 +187,20 @@ test('unsupported model classifications are downgraded instead of becoming facts
     assert.equal(inferredTrigger.ai_confidence, 0.35);
     assert.equal(inferredTrigger.analysis_features.processScores.entryQuality, null);
     assert.ok(inferredTrigger.analysis_features.evidence.missing.includes('visible_entry_trigger_or_confirmation'));
+    const alignedExecutionArrow = parseAiJson(JSON.stringify({
+        patternKey: 'valid_entry', confidence: 0.82,
+        chartSummary: 'Impulse followed by a controlled retest',
+        evidence: { visible: ['Red arrow at $2.71', 'retested level at 2.70'], inferred: [], missing: [] },
+        taxonomy: { trigger: ['level_retest'] }, execution: { confirmation: 'visible_retest' },
+    }), { entryPrice: 2.7164 });
+    assert.equal(alignedExecutionArrow.ai_pattern_key, 'valid_entry');
+    const unrelatedArrow = parseAiJson(JSON.stringify({
+        patternKey: 'valid_entry', confidence: 0.82,
+        chartSummary: 'A red arrow is visible elsewhere on the chart',
+        evidence: { visible: ['Red arrow at $1.52', 'retested level at 2.70'], inferred: [], missing: [] },
+        taxonomy: { trigger: ['level_retest'] }, execution: { confirmation: 'visible_retest' },
+    }), { entryPrice: 2.7164 });
+    assert.equal(unrelatedArrow.ai_pattern_key, 'unclear');
 });
 
 test('personal patterns use only human-reviewed examples and enforce minimum support', () => {
