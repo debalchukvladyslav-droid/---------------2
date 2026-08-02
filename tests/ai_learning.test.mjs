@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { analyzedCandidateIdentities, assignChronologicalSplits, buildCandidates, buildCandidatesFromExamples, candidateIdentity, derivePersonalPatterns, deriveProcessOutcomeAssessment, embeddingText, evaluateAnalysis, inferScreenshotRole, inspectImageBuffer, isMemoryEligible, matchTradeScreens, outcomeBlindSnapshot, outcomeGroup, parseAiJson, resolveOpenRouterVisionModel, selectFreshCandidateBatch, sortCandidatesByOutcome, summarizeEvaluationResults, PATTERN_KEYS } from '../lib/ai_learning.js';
+import { analyzedCandidateIdentities, assignChronologicalSplits, buildCandidates, buildCandidatesFromExamples, candidateIdentity, derivePersonalPatterns, deriveProcessOutcomeAssessment, embeddingText, evaluateAnalysis, inferScreenshotRole, inspectImageBuffer, isMemoryEligible, matchTradeScreens, outcomeBlindSnapshot, outcomeGroup, parseAiJson, resolveOpenRouterVisionModel, retryAiGeneration, selectFreshCandidateBatch, sortCandidatesByOutcome, summarizeEvaluationResults, PATTERN_KEYS } from '../lib/ai_learning.js';
 import { prioritizeReviewExamples, reviewPriority } from '../lib/ai_review_priority.js';
 
 test('AI learning candidates combine trade, journal outcome and matching screenshot', () => {
@@ -260,6 +260,17 @@ test('evaluation summary separates coverage, selective accuracy and calibration'
     assert.ok(summary.calibrationError > 0);
     assert.equal(summary.confusionMatrix.late_entry.valid_entry, 1);
     assert.equal(summary.perPattern.find((item) => item.patternKey === 'late_entry').recall, 0);
+});
+
+test('evaluation generation retries a transient provider failure', async () => {
+    let calls = 0;
+    const result = await retryAiGeneration(async () => {
+        calls++;
+        if (calls === 1) throw new Error('Provider returned error');
+        return { ai_pattern_key: 'valid_entry' };
+    }, { attempts: 2, delayMs: 0 });
+    assert.equal(calls, 2);
+    assert.equal(result.ai_pattern_key, 'valid_entry');
 });
 
 test('process quality is separated from trade outcome without leaking into retrieval text', () => {
