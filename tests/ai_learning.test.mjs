@@ -202,6 +202,16 @@ test('unsupported model classifications are downgraded instead of becoming facts
     assert.equal(genericNearLevelTrigger.ai_confidence, 0.35);
     assert.equal(genericNearLevelTrigger.analysis_features.processScores.entryQuality, null);
     assert.ok(genericNearLevelTrigger.analysis_features.evidence.missing.includes('visible_entry_trigger_or_confirmation'));
+    const concreteSignalTrigger = parseAiJson(JSON.stringify({
+        patternKey: 'valid_entry', confidence: 0.9,
+        chartSummary: 'A marked entry follows a vertical impulse and visible volume expansion',
+        evidence: { visible: ['Green execution arrow at $2.71', 'significant volume spike'], inferred: [], missing: [] },
+        taxonomy: { trigger: ['price_action'], structure: ['impulse', 'pullback'] },
+        signals: ['impulse_move', 'volume_spike'],
+        execution: { confirmation: 'price_action' }, processScores: { entryQuality: 80 },
+    }), { entryPrice: 2.7164 });
+    assert.equal(concreteSignalTrigger.ai_pattern_key, 'valid_entry');
+    assert.equal(concreteSignalTrigger.ai_confidence, 0.9);
     const alignedExecutionArrow = parseAiJson(JSON.stringify({
         patternKey: 'valid_entry', confidence: 0.82,
         chartSummary: 'Impulse followed by a controlled retest',
