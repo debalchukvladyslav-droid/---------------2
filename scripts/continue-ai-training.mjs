@@ -6,6 +6,7 @@ const configPath = new URL('config.js', root);
 const maxSteps = Math.max(1, Math.min(1000, Number(process.argv[2]) || 50));
 const statusOnly = process.argv[2] === 'status';
 const evaluateOnly = process.argv[2] === 'evaluate';
+const newTraining = process.argv[2] === 'new';
 const endpoint = process.env.AI_TRAINING_ENDPOINT
     || 'https://traderjournal-six.vercel.app/api/admin/service-bots?resource=ai-learning';
 
@@ -88,7 +89,25 @@ if (evaluateOnly) {
     console.log(JSON.stringify({ gold: payload.gold || null, evaluation: payload.evaluation || payload }));
     process.exit(0);
 }
+if (newTraining) {
+    const payload = await jsonRequest(endpoint, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'new-training' }),
+    });
+    console.log(JSON.stringify({
+        job: payload.job ? {
+            id: payload.job.id,
+            status: payload.job.status,
+            promptVersion: payload.job.prompt_version,
+            processed: payload.job.processed_count,
+        } : null,
+        run: payload.run || null,
+    }));
+    process.exit(0);
+}
 let networkFailures = 0;
+let providerFailures = 0;
 for (let step = 1; step <= maxSteps; step++) {
     const startedAt = Date.now();
     try {
@@ -101,6 +120,9 @@ for (let step = 1; step <= maxSteps; step++) {
         const job = payload.job;
         console.log(`[AI training runner] step=${step} status=${job?.status || 'none'} processed=${run.processed_count || 0} failed=${run.failed_count || 0} skipped=${run.skipped_count || 0} remaining=${run.remaining_count ?? 'unknown'} total=${job?.processed_count || 0} elapsed=${Date.now() - startedAt}ms`);
         networkFailures = 0;
+        providerFailures = Number(run.processed_count || 0) === 0 && Number(run.failed_count || 0) > 0
+            ? providerFailures + 1
+            : 0;
         if (!job || ['completed', 'failed', 'stopped'].includes(job.status)) break;
     } catch (error) {
         if (error.status === 401) token = await sessionToken();
@@ -109,5 +131,7 @@ for (let step = 1; step <= maxSteps; step++) {
         if (networkFailures >= 3) break;
         await new Promise((resolve) => setTimeout(resolve, 5000 * networkFailures));
     }
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const cooldown = providerFailures ? Math.min(60000, 20000 * providerFailures) : 1500;
+    if (providerFailures) console.log(`[AI training runner] provider cooldown=${cooldown}ms`);
+    await new Promise((resolve) => setTimeout(resolve, cooldown));
 }
