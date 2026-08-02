@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { analyzedCandidateIdentities, assignChronologicalSplits, buildCandidates, buildCandidatesFromExamples, candidateIdentity, derivePersonalPatterns, deriveProcessOutcomeAssessment, embeddingText, evaluateAnalysis, inferScreenshotRole, inspectImageBuffer, isMemoryEligible, matchTradeScreens, outcomeGroup, parseAiJson, resolveOpenRouterVisionModel, selectFreshCandidateBatch, sortCandidatesByOutcome, summarizeEvaluationResults, PATTERN_KEYS } from '../lib/ai_learning.js';
+import { analyzedCandidateIdentities, assignChronologicalSplits, buildCandidates, buildCandidatesFromExamples, candidateIdentity, derivePersonalPatterns, deriveProcessOutcomeAssessment, embeddingText, evaluateAnalysis, inferScreenshotRole, inspectImageBuffer, isMemoryEligible, matchTradeScreens, outcomeBlindSnapshot, outcomeGroup, parseAiJson, resolveOpenRouterVisionModel, selectFreshCandidateBatch, sortCandidatesByOutcome, summarizeEvaluationResults, PATTERN_KEYS } from '../lib/ai_learning.js';
 
 test('AI learning candidates combine trade, journal outcome and matching screenshot', () => {
     const rows = [{
@@ -215,6 +215,17 @@ test('process quality is separated from trade outcome without leaking into retri
     });
     assert.match(text, /retest/);
     assert.doesNotMatch(text, /skill_confirmed|profit|"pnl"/);
+});
+
+test('blind snapshot removes post-trade and prior-AI leakage but keeps setup criteria', () => {
+    const blind = outcomeBlindSnapshot({
+        ticker: 'TEST', entryPrice: 10, exitPrice: 12, criteria: '700k+', exceptions: '-',
+        setup: 'pullback', tradeType: 'standard', tradeComment: 'missed target',
+        dayNotes: 'profit', mistakes: 'stopped', aiFeatures: { pattern: 'valid_entry' },
+    });
+    assert.deepEqual(blind, {
+        ticker: 'TEST', entryPrice: 10, criteria: '700k+', exceptions: '-', setup: 'pullback', tradeType: 'standard',
+    });
 });
 
 test('evaluation holdout keeps the newest reviewed trades for testing', () => {
