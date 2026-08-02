@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { openRouterCandidates, payloadHasImages } from '../api/gemini.js';
 import { summarizeAIPayload } from '../js/ai/telemetry.js';
 import { outcomeBlindJournalContext, requireVisualPatternEvidence } from '../js/ai/outcome_guard.js';
+import { buildBoundedJournalContext, buildBoundedScreenTagContext } from '../js/ai/journal_context.js';
 
 test('general AI proxy routes screenshots only through explicit vision models', () => {
     const payload = { contents: [{ parts: [
@@ -61,4 +62,24 @@ test('legacy pattern labels require concrete visual evidence', () => {
     });
     assert.equal(guarded.patternKey, 'unclear');
     assert.equal(guarded.confidence, 0.35);
+});
+
+test('AI chat context is bounded and excludes raw day payloads', () => {
+    const journal = Object.fromEntries(Array.from({ length: 140 }, (_, index) => {
+        const date = `2026-${String(Math.floor(index / 28) + 1).padStart(2, '0')}-${String(index % 28 + 1).padStart(2, '0')}`;
+        return [date, { secretBlob: 'do not copy', screenshots: ['huge'], notes: 'n'.repeat(800), trades: [{ symbol: 'ABC', pnl: 5, raw: 'omit' }] }];
+    }));
+    const context = buildBoundedJournalContext(journal);
+    assert.equal(Object.keys(context).length, 120);
+    assert.equal(JSON.stringify(context).includes('secretBlob'), false);
+    assert.equal(JSON.stringify(context).includes('screenshots'), false);
+    assert.equal(JSON.stringify(context).includes('"raw"'), false);
+    assert.equal(Object.values(context)[0].notes.length, 500);
+});
+
+test('AI chat sends only bounded screenshot tag metadata', () => {
+    const tags = Object.fromEntries(Array.from({ length: 130 }, (_, index) => [`folder/screen-${index}.png`, ['tag']]));
+    const context = buildBoundedScreenTagContext(tags);
+    assert.equal(Object.keys(context).length, 100);
+    assert.ok(Object.keys(context).every((key) => !key.includes('/')));
 });

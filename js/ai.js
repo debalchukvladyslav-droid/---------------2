@@ -7,6 +7,7 @@ import { sanitizeHTML, sanitizeRichHTML } from './sanitize.js';
 import { buildTradeTypeAIContext, buildDayTradeTypeAIContext } from './trade_type_analysis.js';
 import { isNotTakenTrade } from './data_utils.js';
 import { prepareImageInlineData } from './ai/image.js';
+import { buildBoundedJournalContext, buildBoundedScreenTagContext } from './ai/journal_context.js';
 
 export { getGeminiKeys, callGemini, callGeminiViaProxy, callGeminiJSON, sleep };
 
@@ -67,25 +68,7 @@ function makeAIChatBubble(userText, aiHtml) {
 }
 
 function buildAIJournalForPrompt(journal = {}) {
-    const output = {};
-    for (const [dateStr, day] of Object.entries(journal || {})) {
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
-        const nextDay = { ...(day || {}) };
-        if (Array.isArray(day?.trades)) {
-            nextDay.trades = day.trades.map((trade) => {
-                const notTaken = isNotTakenTrade(trade);
-                return {
-                    ...trade,
-                    aiExecutionStatus: notTaken ? 'not_taken' : 'executed',
-                    aiExecutionNote: notTaken
-                        ? 'Це сетап/можливість, яку трейдер НЕ БРАВ. Не рахувати як виконану угоду, PnL, winrate або помилку виконання входу.'
-                        : 'Це виконана угода, якщо інші поля не кажуть протилежне.',
-                };
-            });
-        }
-        output[dateStr] = nextDay;
-    }
-    return output;
+    return buildBoundedJournalContext(journal);
 }
 
 function buildNotTakenAIContext(journal = {}) {
@@ -415,14 +398,14 @@ export async function sendDataChatMessage() {
     try {
         const journalForAI = buildAIJournalForPrompt(state.appData.journal || {});
         const journalData = JSON.stringify(journalForAI);
-        const screenTagsData = JSON.stringify(state.appData.screenTags || {});
+        const screenTagsData = JSON.stringify(buildBoundedScreenTagContext(state.appData.screenTags || {}));
         const tradeTypeContext = buildTradeTypeAIContext(state.appData.journal || {}, { tradeTypes: state.appData.tradeTypes, recentDays: 120, limit: 8 });
         const notTakenContext = buildNotTakenAIContext(state.appData.journal || {});
         const playbookContext = window.getPlaybookContext ? window.getPlaybookContext() : '';
         const promptText = `Ось дані журналу: ${journalData}\n\nТеги скріншотів: ${screenTagsData}${tradeTypeContext}${notTakenContext}${playbookContext}\n\nВідповідай коротко українською. Коли питання стосується результату, обов'язково враховуй різні типи входу як різні логіки. Окремо відрізняй виконані угоди від записів "не брав". Запит: ${userText}`;
 
         const aiResponseText = await callGemini(key, {
-            systemInstruction: { parts: [{ text: "Ти професійний трейдинг-ментор. Пиши українською, коротко, конкретно і без фінансових обіцянок. Роби висновки з журналу, ризику, типів входу, тегів скрінів і плейбуку. Якщо даних мало, прямо скажи що саме треба додати." }] },
+            systemInstruction: { parts: [{ text: "Ти професійний трейдинг-ментор. Пиши українською, коротко, конкретно і без фінансових обіцянок. Чітко відділяй факти з журналу від припущень. Для кожної закономірності вказуй розмір вибірки; не називай тенденцією спостереження з менш ніж 10 виконаних угод. Не роби причинного висновку лише з PnL. Роби висновки з журналу, ризику, типів входу, тегів скрінів і плейбуку. Якщо даних мало, прямо скажи що саме треба додати." }] },
             contents: [{ parts: [{ text: promptText }] }]
         });
         const formattedHTML = formatAIResponse(aiResponseText);
