@@ -9,6 +9,8 @@ playwright-report/
 tests/.auth/
 supabase/.secrets.env
 _dev-server.*.log
+dev-server.*.log
+.tmp-ai-cases/
 
 node_modules/
 .vercel

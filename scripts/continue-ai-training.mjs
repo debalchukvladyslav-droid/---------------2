@@ -7,6 +7,7 @@ const maxSteps = Math.max(1, Math.min(1000, Number(process.argv[2]) || 50));
 const statusOnly = process.argv[2] === 'status';
 const evaluateOnly = process.argv[2] === 'evaluate';
 const newTraining = process.argv[2] === 'new';
+const inspectCase = process.argv[2] === 'case' ? process.argv[3] : null;
 const endpoint = process.env.AI_TRAINING_ENDPOINT
     || 'https://traderjournal-six.vercel.app/api/admin/service-bots?resource=ai-learning';
 
@@ -52,6 +53,43 @@ async function sessionToken() {
 }
 
 let token = await sessionToken();
+if (inspectCase) {
+    if (!/^[0-9a-f-]{36}$/i.test(inspectCase)) throw new Error('Expected a valid evaluation case UUID');
+    const headers = { apikey: config.anon, Authorization: `Bearer ${token}` };
+    const rows = await jsonRequest(`${config.url}/rest/v1/ai_evaluation_cases?id=eq.${encodeURIComponent(inspectCase)}&select=id,example_id,trade_date,expected_pattern_key`, {
+        headers, timeout: 30000,
+    });
+    const row = rows?.[0] || null;
+    const examples = row?.example_id ? await jsonRequest(`${config.url}/rest/v1/ai_learning_examples?id=eq.${encodeURIComponent(row.example_id)}&select=screenshot_path,source_snapshot`, {
+        headers, timeout: 30000,
+    }) : [];
+    const example = examples?.[0] || {};
+    let localImage = null;
+    if (example.screenshot_path) {
+        const objectPath = String(example.screenshot_path).replace(/^screenshots\//, '');
+        const response = await fetch(`${config.url}/storage/v1/object/screenshots/${objectPath.split('/').map(encodeURIComponent).join('/')}`, {
+            headers, signal: AbortSignal.timeout(30000),
+        });
+        if (response.ok) {
+            const caseDir = new URL('../.tmp-ai-cases/', import.meta.url);
+            fs.mkdirSync(caseDir, { recursive: true });
+            const extension = response.headers.get('content-type')?.includes('png') ? 'png' : 'jpg';
+            const target = new URL(`${inspectCase}.${extension}`, caseDir);
+            fs.writeFileSync(target, Buffer.from(await response.arrayBuffer()));
+            localImage = decodeURIComponent(target.pathname.replace(/^\/(?:[A-Za-z]:)/, (value) => value.slice(1)));
+        }
+    }
+    console.log(JSON.stringify(row ? {
+        id: row.id,
+        tradeDate: row.trade_date,
+        expectedPatternKey: row.expected_pattern_key,
+        screenshotPath: example.screenshot_path,
+        screenshotSet: example.source_snapshot?.screenshotSet || [],
+        snapshot: example.source_snapshot?.snapshot || example.source_snapshot || null,
+        localImage,
+    } : null));
+    process.exit(0);
+}
 if (statusOnly) {
     const payload = await jsonRequest(endpoint, {
         headers: { Authorization: `Bearer ${token}` },

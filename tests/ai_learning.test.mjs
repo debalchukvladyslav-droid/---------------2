@@ -171,6 +171,21 @@ test('unsupported model classifications are downgraded instead of becoming facts
     assert.equal(unsupportedTrigger.ai_confidence, 0.35);
     assert.equal(unsupportedTrigger.analysis_features.processScores.entryQuality, null);
     assert.ok(unsupportedTrigger.analysis_features.evidence.missing.includes('visible_entry_trigger_or_confirmation'));
+    const inferredTrigger = parseAiJson(JSON.stringify({
+        patternKey: 'pullback_entry', confidence: 0.8,
+        chartSummary: 'A marked entry appears inside a descending channel',
+        evidence: {
+            visible: ['entry marker near 1.98', 'descending channel', 'volume bars'],
+            inferred: ['support zone near 1.98'], missing: [],
+        },
+        taxonomy: { trigger: ['support_retest'], structure: ['descending_channel'] },
+        execution: { confirmation: 'unclear', trendAlignment: 'countertrend' },
+        processScores: { entryQuality: 80 },
+    }));
+    assert.equal(inferredTrigger.ai_pattern_key, 'unclear');
+    assert.equal(inferredTrigger.ai_confidence, 0.35);
+    assert.equal(inferredTrigger.analysis_features.processScores.entryQuality, null);
+    assert.ok(inferredTrigger.analysis_features.evidence.missing.includes('visible_entry_trigger_or_confirmation'));
 });
 
 test('personal patterns use only human-reviewed examples and enforce minimum support', () => {
