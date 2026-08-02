@@ -494,6 +494,8 @@ test('quality UI shows progress toward the minimum human gold set', () => {
     assert.match(adminSource, /goldRemaining:/);
     assert.match(adminSource, /goldPositive/);
     assert.match(adminSource, /goldNegative/);
+    assert.match(adminSource, /activeGoldIds/);
+    assert.match(adminSource, /activeGoldIds\.has\(row\.id\)/);
 });
 
 test('human gold review requires screenshot attestation and meaningful corrections', () => {
