@@ -111,6 +111,14 @@ test('bulk AI training processes two candidates and records selective verificati
     assert.match(source, /reviewed_memory_second_pass/);
 });
 
+test('admin exposes forward-only paper decisions and persists compact evaluation metrics', () => {
+    const source = readFileSync(new URL('../lib/ai_learning_admin.js', import.meta.url), 'utf8');
+    assert.match(source, /body\.action === 'paper-decision'/);
+    assert.match(source, /valid_entry_stop_target_required/);
+    assert.match(source, /source_cutoff_at: now/);
+    assert.match(source, /evaluation: \{ \.\.\.evaluation, results: undefined/);
+});
+
 test('new training rebuilds candidates from already analyzed examples', () => {
     const candidates = buildCandidatesFromExamples([{
         user_id: 'user', journal_day_id: 'day', trade_date: '2026-07-30', trade_key: 'user:trade',

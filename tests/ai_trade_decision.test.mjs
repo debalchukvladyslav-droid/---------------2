@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPaperTradeDecision, canEnableLiveExecution, summarizePaperPerformance } from '../lib/ai_trade_decision.js';
+import { buildPaperTradeDecision, canEnableLiveExecution, summarizePaperPerformance, validatePaperTradePrices } from '../lib/ai_trade_decision.js';
 
 const strongAnalysis = {
     ai_pattern_key: 'breakout_retest',
@@ -23,6 +23,13 @@ test('paper decision permits only evidence-rich reliable reviewed patterns', () 
     assert.equal(decision.action, 'SHORT');
     assert.equal(decision.executable, false);
     assert.equal(decision.risk.maxRiskR, 0.25);
+});
+
+test('paper decision accepts statistically moderate pattern memory and validates price geometry', () => {
+    assert.equal(buildPaperTradeDecision(strongAnalysis, { direction: 'long' }, { sample_size: 18, reliability: 'moderate' }).action, 'LONG');
+    assert.equal(validatePaperTradePrices('LONG', 10, 9.5, 11), true);
+    assert.equal(validatePaperTradePrices('LONG', 10, 10.5, 11), false);
+    assert.equal(validatePaperTradePrices('SHORT', 10, 10.5, 9), true);
 });
 
 test('paper decision abstains when memory or visible trigger is weak', () => {
