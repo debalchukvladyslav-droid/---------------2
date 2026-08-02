@@ -399,6 +399,9 @@ test('evaluation sync accepts only genuine human-reviewed gold examples', () => 
     assert.match(source, /String\(example\.review_note \|\| ''\)\.startsWith\('\[auto\]'\)/);
     assert.match(source, /if \(!byTrade\.has\(identity\)\) byTrade\.set\(identity, example\)/);
     assert.match(source, /const gold = await syncGoldCases\(user\.id\)/);
+    assert.match(source, /staleCases/);
+    assert.match(source, /active: false/);
+    assert.match(source, /deactivated: staleCases\.length/);
 });
 
 test('evaluation output keeps evidence needed to diagnose false classifications', () => {
