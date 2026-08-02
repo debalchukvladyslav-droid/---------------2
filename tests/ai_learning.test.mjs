@@ -419,9 +419,12 @@ test('job progress includes examples written by a concurrent training worker', (
 test('24-hour training advances an active durable job instead of bypassing it', () => {
     const adminSource = readFileSync(new URL('../lib/ai_learning_admin.js', import.meta.url), 'utf8');
     assert.match(adminSource, /if \(body\.action === 'run'\) \{\s*const queued = await processNextLearningJob/s);
-    assert.match(adminSource, /campaign: queued\.run \? await updateCampaignAfterRun\(queued\.run\)/);
+    assert.match(adminSource, /campaign: queued\.run \? await updateCampaignAfterRun\(queued\.run, \{ job: queued\.job \}\)/);
     assert.match(adminSource, /status=in\.\(running,processing\).*activeJobs/s);
-    assert.match(adminSource, /campaign: await currentTrainingCampaign\(\)/);
+    assert.match(adminSource, /campaign: await currentTrainingCampaign\(\{ resumeIdleForJob: true \}\)/);
+    assert.match(adminSource, /resumeIdleForJob: true/);
+    assert.match(adminSource, /durableWorkRemaining/);
+    assert.match(adminSource, /processed: job \? Number\(job\.processed_count \|\| 0\)/);
 });
 
 test('same-version semantic identity prevents hash-collision starvation', () => {
