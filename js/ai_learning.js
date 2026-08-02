@@ -169,7 +169,10 @@ function renderQuality(data) {
             meter.style.setProperty('--value', `${Math.max(4, Math.min(100, Number(item.win_rate || 0) * 100))}%`);
             const value = document.createElement('b');
             const lift = item.lift == null ? '—' : `${Number(item.lift) >= 0 ? '+' : ''}${Math.round(Number(item.lift) * 100)} п.п.`;
-            value.textContent = `${formatPercent(item.win_rate)} · n=${item.outcome_sample_size} · ${lift} · ${item.reliability}`;
+            const interval = Array.isArray(item.statistics?.interval) ? item.statistics.interval : [];
+            const confidenceRange = interval.every(Number.isFinite) ? `ДІ 95% ${formatPercent(interval[0])}–${formatPercent(interval[1])}` : 'ДІ ще недоступний';
+            const reliability = ({ exploratory: 'попередньо', moderate: 'помірна надійність', strong: 'сильний доказ' })[item.reliability] || 'попередньо';
+            value.textContent = `${formatPercent(item.win_rate)} · n=${item.outcome_sample_size} · проти n=${item.statistics?.comparisonSampleSize || 0} · ${lift} · ${confidenceRange} · ${reliability}`;
             row.append(title, meter, value); personal.append(row);
         });
         if (!personal.childElementCount) personal.textContent = 'Потрібно щонайменше 8 ручно перевірених прикладів однієї структури.';

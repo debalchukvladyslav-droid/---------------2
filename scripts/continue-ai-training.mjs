@@ -8,6 +8,7 @@ const statusOnly = process.argv[2] === 'status';
 const evaluateOnly = process.argv[2] === 'evaluate';
 const newTraining = process.argv[2] === 'new';
 const queueOnly = process.argv[2] === 'queue';
+const refreshPatternsOnly = process.argv[2] === 'patterns';
 const visionCase = process.argv[2] === 'vision' ? process.argv[3] : null;
 const visionModel = visionCase ? process.argv[4] : null;
 const inspectCase = process.argv[2] === 'case' ? process.argv[3] : visionCase;
@@ -150,6 +151,16 @@ if (queueOnly) {
         confidence: example.ai_confidence,
         reviewPriority: example.review_priority || null,
     }))));
+    process.exit(0);
+}
+if (refreshPatternsOnly) {
+    const payload = await jsonRequest(endpoint, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'refresh-patterns' }),
+        timeout: 60000,
+    });
+    console.log(JSON.stringify({ count: payload.patterns?.length || 0, patterns: payload.patterns || [] }));
     process.exit(0);
 }
 if (evaluateOnly) {

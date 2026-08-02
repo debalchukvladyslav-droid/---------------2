@@ -242,6 +242,29 @@ test('personal patterns use only human-reviewed examples and enforce minimum sup
     assert.equal(patterns[0].sampleSize, 10);
     assert.equal(patterns[0].wins, 7);
     assert.equal(patterns[0].reliability, 'exploratory');
+    assert.equal(patterns[0].comparisonSampleSize, 7);
+    assert.equal(patterns[0].baselineWinRate, 0);
+});
+
+test('personal pattern reliability requires separation from other reviewed trades', () => {
+    const make = (pattern, wins, total) => Array.from({ length: total }, (_, index) => ({
+        review_status: 'approved', reviewed_by: 'admin', reviewed_pattern_key: pattern,
+        outcome: { pnl: index < wins ? 10 : -10 },
+    }));
+    const separated = derivePersonalPatterns([...make('breakout_retest', 34, 40), ...make('late_entry', 12, 40)]);
+    const strong = separated.find((item) => item.patternKey === 'breakout_retest');
+    assert.equal(strong.reliability, 'strong');
+    assert.equal(strong.baselineWinRate, 0.3);
+    assert.equal(strong.comparisonSampleSize, 40);
+    assert.ok(strong.liftInterval95[0] > 0);
+    const indistinguishable = derivePersonalPatterns([...make('breakout_retest', 22, 40), ...make('late_entry', 20, 40)]);
+    assert.equal(indistinguishable.find((item) => item.patternKey === 'breakout_retest').reliability, 'exploratory');
+});
+
+test('admin can recalculate stored personal patterns after statistical changes', () => {
+    const adminSource = readFileSync(new URL('../lib/ai_learning_admin.js', import.meta.url), 'utf8');
+    assert.match(adminSource, /body\.action === 'refresh-patterns'/);
+    assert.match(adminSource, /await refreshPersonalPatterns\(user\.id\)/);
 });
 
 test('image metadata inspection reads dimensions without decoding the screenshot', () => {
