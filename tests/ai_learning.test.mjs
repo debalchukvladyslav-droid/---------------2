@@ -424,6 +424,8 @@ test('24-hour training advances an active durable job instead of bypassing it', 
     assert.match(adminSource, /campaign: await currentTrainingCampaign\(\{ resumeIdleForJob: true \}\)/);
     assert.match(adminSource, /resumeIdleForJob: true/);
     assert.match(adminSource, /durableWorkRemaining/);
+    assert.match(adminSource, /const resumableIdle = campaign\?\.status === 'idle' && durableWorkRemaining && campaignWindowOpen/);
+    assert.match(adminSource, /campaign\?\.status !== 'running' && !resumableIdle/);
     assert.match(adminSource, /processed: job \? Number\(job\.processed_count \|\| 0\)/);
 });
 
