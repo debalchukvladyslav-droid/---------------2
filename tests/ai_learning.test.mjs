@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { analyzedCandidateIdentities, assignChronologicalSplits, buildCandidates, buildCandidatesFromExamples, candidateIdentity, derivePersonalPatterns, deriveProcessOutcomeAssessment, embeddingText, evaluateAnalysis, inferScreenshotRole, inspectImageBuffer, isMemoryEligible, matchTradeScreens, outcomeBlindSnapshot, outcomeGroup, parseAiJson, resolveOpenRouterVisionModel, retryAiGeneration, selectFreshCandidateBatch, sortCandidatesByOutcome, summarizeEvaluationResults, PATTERN_KEYS } from '../lib/ai_learning.js';
-import { prioritizeReviewExamples, reviewPriority } from '../lib/ai_review_priority.js';
+import { diversifyReviewExamples, prioritizeReviewExamples, reviewPriority } from '../lib/ai_review_priority.js';
 
 test('AI learning candidates combine trade, journal outcome and matching screenshot', () => {
     const rows = [{
@@ -394,6 +394,20 @@ test('manual review queue prioritizes evidence-rich uncertain and audit cases', 
     const ordered = prioritizeReviewExamples([missingImage, confident, uncertain]);
     assert.equal(ordered[0].id, 'uncertain');
     assert.ok(ordered[0].review_priority.reasons.includes('є скріншот'));
+});
+
+test('manual review queue diversifies high-priority examples by ticker and date', () => {
+    const example = (id, ticker, tradeDate, scorePattern = 'unclear') => ({
+        id, trade_date: tradeDate, screenshot_path: `${id}.png`, ai_pattern_key: scorePattern,
+        ai_confidence: 0.35, source_snapshot: { ticker, aiFeatures: { evidence: { missing: ['trigger'] } } },
+        created_at: `2026-01-0${id}T00:00:00Z`,
+    });
+    const queue = diversifyReviewExamples([
+        example('1', 'AAA', '2026-01-01'), example('2', 'AAA', '2026-01-01'),
+        example('3', 'AAA', '2026-01-01'), example('4', 'BBB', '2026-01-02'),
+        example('5', 'CCC', '2026-01-03', 'valid_entry'),
+    ]);
+    assert.deepEqual(queue.slice(0, 3).map((item) => item.source_snapshot.ticker), ['AAA', 'BBB', 'CCC']);
 });
 
 test('quality UI does not overwrite accuracy with category share', () => {
