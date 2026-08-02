@@ -509,6 +509,37 @@ export async function toggleAILearningDay() {
     }
 }
 
+export async function runAIPaperDecision() {
+    if (busy || state.myRole !== 'admin') return;
+    const button = el('ai-paper-run'); const result = el('ai-paper-result');
+    const snapshot = {
+        ticker: el('ai-paper-ticker')?.value?.trim(),
+        direction: el('ai-paper-direction')?.value,
+        entryPrice: Number(el('ai-paper-entry')?.value),
+        stopPrice: Number(el('ai-paper-stop')?.value),
+        targetPrice: Number(el('ai-paper-target')?.value),
+        criteria: el('ai-paper-criteria')?.value?.trim(),
+    };
+    const screenshotPath = el('ai-paper-screenshot')?.value?.trim();
+    if (!snapshot.ticker || !screenshotPath) { showToast('Вкажіть тикер і pre-entry скріншот'); return; }
+    busy = true; if (button) { button.disabled = true; button.textContent = 'AI переглядає…'; }
+    if (result) result.textContent = `Переглядається ${snapshot.ticker}: структура, тригер, пам’ять і ризик…`;
+    console.info('[AI paper] Reviewing pre-entry screenshot', { ticker: snapshot.ticker, screenshotPath });
+    try {
+        const payload = await api('', { method: 'POST', body: JSON.stringify({ action: 'paper-decision', screenshotPath, snapshot }) });
+        const decision = payload.decision || {};
+        if (result) result.textContent = `${decision.action || 'SKIP'} · ${PATTERNS[decision.pattern] || decision.pattern || 'невідомий патерн'} · впевненість ${formatPercent(Number(decision.confidence))} · ${decision.reasons?.length ? decision.reasons.join(', ') : 'усі перевірки пройдено'}`;
+        console.info('[AI paper] Decision', decision);
+        showToast(`Paper-рішення: ${decision.action || 'SKIP'}`);
+        loaded = false; busy = false; await renderAILearningCenter(true);
+    } catch (error) {
+        if (result) result.textContent = error.message || String(error);
+        showToast(error.message || String(error));
+    } finally {
+        busy = false; if (button) { button.disabled = false; button.textContent = 'Перевірити paper-вхід'; }
+    }
+}
+
 export async function reviewAILearningExample(trigger) {
     if (busy || state.myRole !== 'admin') return;
     const card = trigger?.closest?.('[data-example]'); if (!card) return;

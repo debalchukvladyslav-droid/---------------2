@@ -66,6 +66,17 @@
                 <section class="ai-learning-card">
                     <div class="ai-learning-card__head"><div><span class="ai-toolbar-kicker">Paper trading</span><h4>Готовність до автономних рішень</h4></div><span id="ai-paper-status" class="ai-learning-card__value">—</span></div>
                     <div id="ai-paper-metrics" class="ai-learning-meta"></div>
+                    <div class="ai-paper-form">
+                        <input id="ai-paper-ticker" class="data-chat-input" type="text" maxlength="20" placeholder="Тикер, наприклад AAPL">
+                        <select id="ai-paper-direction" class="data-chat-input" aria-label="Напрямок"><option value="long">LONG</option><option value="short">SHORT</option></select>
+                        <input id="ai-paper-screenshot" class="data-chat-input" type="text" placeholder="Шлях pre-entry скріншота у Storage">
+                        <input id="ai-paper-entry" class="data-chat-input" type="number" min="0" step="any" placeholder="Entry">
+                        <input id="ai-paper-stop" class="data-chat-input" type="number" min="0" step="any" placeholder="Stop">
+                        <input id="ai-paper-target" class="data-chat-input" type="number" min="0" step="any" placeholder="Target">
+                        <input id="ai-paper-criteria" class="data-chat-input" type="text" maxlength="300" placeholder="Критерії сетапу">
+                        <button id="ai-paper-run" type="button" class="btn-primary" data-action="ai-paper-run">Перевірити paper-вхід</button>
+                        <div id="ai-paper-result" class="ai-learning__status">Сигнал ще не перевірявся.</div>
+                    </div>
                 </section>
                 <section class="ai-learning-card ai-learning-card--wide">
                     <div class="ai-learning-card__head"><div><span class="ai-toolbar-kicker">Статистика</span><h4>Персональні закономірності</h4></div></div>
