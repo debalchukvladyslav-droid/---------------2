@@ -151,8 +151,8 @@ function renderQuality(data) {
             const row = document.createElement('div'); row.className = 'ai-learning-pattern-row';
             const title = document.createElement('span'); title.textContent = PATTERNS[item.key] || item.key;
             const meter = document.createElement('i'); meter.style.setProperty('--value', `${Math.max(4, share * 100)}%`);
-            const value = document.createElement('b'); value.textContent = `${formatPercent(item.accuracy)} · ${item.total}`;
-            value.textContent = `${formatPercent(share)} · ${item.total}`;
+            const value = document.createElement('b');
+            value.textContent = `точність ${formatPercent(item.accuracy)} · n=${item.total} · частка ${formatPercent(share)}`;
             row.append(title, meter, value); patterns.append(row);
         });
         if (!patterns.childElementCount) patterns.textContent = 'Категорії заповняться після рев’ю.';
@@ -226,6 +226,12 @@ async function renderExample(example) {
     const badge = document.createElement('b'); badge.textContent = PATTERNS[example.ai_pattern_key] || example.ai_label || 'Не визначено';
     const confidence = document.createElement('span'); confidence.textContent = `Впевненість ${formatPercent(Number(example.ai_confidence))}`;
     prediction.append(badge, confidence);
+    if (example.review_priority?.reasons?.length) {
+        const priority = document.createElement('small');
+        priority.className = 'ai-learning-example__priority';
+        priority.textContent = `Пріоритет перевірки: ${example.review_priority.reasons.join(' · ')}`;
+        prediction.append(priority);
+    }
     const explanation = document.createElement('p'); explanation.textContent = example.ai_explanation || 'AI не залишив пояснення.';
     const evidence = document.createElement('div'); evidence.className = 'ai-learning-example__evidence';
     const visualText = document.createElement('span'); visualText.textContent = `Скрін: ${example.visual_evidence || 'немає доказу'}`;

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { analyzedCandidateIdentities, assignChronologicalSplits, buildCandidates, buildCandidatesFromExamples, candidateIdentity, derivePersonalPatterns, deriveProcessOutcomeAssessment, embeddingText, evaluateAnalysis, inferScreenshotRole, inspectImageBuffer, isMemoryEligible, matchTradeScreens, outcomeBlindSnapshot, outcomeGroup, parseAiJson, resolveOpenRouterVisionModel, selectFreshCandidateBatch, sortCandidatesByOutcome, summarizeEvaluationResults, PATTERN_KEYS } from '../lib/ai_learning.js';
+import { prioritizeReviewExamples, reviewPriority } from '../lib/ai_review_priority.js';
 
 test('AI learning candidates combine trade, journal outcome and matching screenshot', () => {
     const rows = [{
@@ -330,4 +331,23 @@ test('human-reviewed memory survives model-version replacement', () => {
     assert.doesNotMatch(migration, /AND e\.is_current/);
     assert.match(migration, /review_status IN \('approved', 'corrected'\)/);
     assert.match(migration, /review_note, ''\) NOT LIKE '\[auto\]%'/);
+});
+
+test('manual review queue prioritizes evidence-rich uncertain and audit cases', () => {
+    const uncertain = {
+        id: 'uncertain', screenshot_path: 'screenshots/u/chart.png', ai_pattern_key: 'unclear', ai_confidence: 0.35,
+        source_snapshot: { criteria: 'retest', aiFeatures: { evidence: { missing: ['confirmation'] } } }, created_at: '2026-01-02',
+    };
+    const missingImage = { id: 'missing', ai_pattern_key: 'insufficient_data', ai_confidence: 0, created_at: '2026-01-01' };
+    const confident = { id: 'confident', screenshot_path: 'screenshots/u/chart2.png', ai_pattern_key: 'breakout_retest', ai_confidence: 0.9, created_at: '2026-01-03' };
+    assert.ok(reviewPriority(uncertain).score > reviewPriority(missingImage).score);
+    const ordered = prioritizeReviewExamples([missingImage, confident, uncertain]);
+    assert.equal(ordered[0].id, 'uncertain');
+    assert.ok(ordered[0].review_priority.reasons.includes('є скріншот'));
+});
+
+test('quality UI does not overwrite accuracy with category share', () => {
+    const source = readFileSync(new URL('../js/ai_learning.js', import.meta.url), 'utf8');
+    assert.match(source, /точність.*item\.accuracy.*частка.*share/s);
+    assert.doesNotMatch(source, /value\.textContent = `\$\{formatPercent\(share\)\} · \$\{item\.total\}`/);
 });
