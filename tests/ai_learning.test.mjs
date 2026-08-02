@@ -133,6 +133,26 @@ test('admin exposes forward-only paper decisions and persists compact evaluation
     assert.match(source, /prompt_version=eq\.\$\{encodeURIComponent\(versions\[0\]\.prompt_version\)\}/);
     assert.match(source, /screenshotBacked/);
     assert.match(source, /journalOnly/);
+    assert.match(source, /market-replay-v5/);
+});
+
+test('market replay decisions survive structured parsing without seeing outcomes', () => {
+    const parsed = parseAiJson(JSON.stringify({
+        patternKey: 'unclear', confidence: 0.55, chartSummary: 'Visible range and a developing retest',
+        evidence: { visible: ['range boundary', 'developing retest'], inferred: [], missing: ['confirmation'] },
+        replay: { decision: 'wait', entryZone: 'near the retested boundary', trigger: 'close back above level', invalidation: 'loss of range low', reason: 'confirmation is incomplete' },
+    }));
+    assert.equal(parsed.analysis_features.replay.decision, 'WAIT');
+    assert.equal(parsed.analysis_features.replay.trigger, 'close back above level');
+});
+
+test('market replay crops future chart area and records outcome only after the decision sequence', () => {
+    const source = readFileSync(new URL('../lib/ai_learning.js', import.meta.url), 'utf8');
+    assert.match(source, /cropRatio: 0\.58/);
+    assert.match(source, /cropRatio: 0\.78/);
+    assert.match(source, /outcomeBlind: true/);
+    assert.match(source, /revealedOutcomeAfterDecision/);
+    assert.match(source, /outcome_blind_market_replay/);
 });
 
 test('durable training automatically evaluates a newly completed model version', () => {
