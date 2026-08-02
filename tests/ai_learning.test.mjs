@@ -467,6 +467,16 @@ test('manual review queue diversifies high-priority examples by ticker and date'
     assert.deepEqual(queue.slice(0, 3).map((item) => item.source_snapshot.ticker), ['AAA', 'BBB', 'CCC']);
 });
 
+test('manual review queue alternates profitable and losing evidence when priorities match', () => {
+    const example = (id, pnl) => ({
+        id, trade_date: '2026-01-01', screenshot_path: `${id}.png`, ai_pattern_key: 'unclear',
+        ai_confidence: 0.35, outcome: { pnl }, source_snapshot: { ticker: 'AAA', aiFeatures: { evidence: { missing: [] } } },
+        created_at: `2026-01-0${id}T00:00:00Z`,
+    });
+    const queue = diversifyReviewExamples([example('1', 10), example('2', 20), example('3', -10), example('4', -20)]);
+    assert.deepEqual(queue.slice(0, 2).map((item) => Math.sign(item.outcome.pnl)), [1, -1]);
+});
+
 test('quality UI does not overwrite accuracy with category share', () => {
     const source = readFileSync(new URL('../js/ai_learning.js', import.meta.url), 'utf8');
     assert.match(source, /точність.*item\.accuracy.*частка.*share/s);
@@ -478,8 +488,12 @@ test('quality UI shows progress toward the minimum human gold set', () => {
     const adminSource = readFileSync(new URL('../lib/ai_learning_admin.js', import.meta.url), 'utf8');
     assert.match(source, /summary\.goldCases/);
     assert.match(source, /summary\.goldRemaining/);
+    assert.match(source, /summary\.goldPositive/);
+    assert.match(source, /summary\.goldNegative/);
     assert.match(adminSource, /minimumGoldCases:\s*30/);
     assert.match(adminSource, /goldRemaining:/);
+    assert.match(adminSource, /goldPositive/);
+    assert.match(adminSource, /goldNegative/);
 });
 
 test('human gold review requires screenshot attestation and meaningful corrections', () => {

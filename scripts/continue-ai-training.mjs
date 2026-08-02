@@ -127,6 +127,15 @@ if (statusOnly) {
             : null,
         heartbeat: job?.heartbeat_at || null,
         pending: summary.pending ?? null,
+        gold: {
+            total: summary.goldCases ?? null,
+            minimum: summary.minimumGoldCases ?? null,
+            remaining: summary.goldRemaining ?? null,
+            profitable: summary.goldPositive ?? null,
+            losing: summary.goldNegative ?? null,
+            unknownOutcome: summary.goldUnknown ?? null,
+            holdout: summary.testCases ?? null,
+        },
         lastRun: lastRun ? {
             processed: lastRun.processed_count ?? null,
             skipped: lastRun.skipped_count ?? null,

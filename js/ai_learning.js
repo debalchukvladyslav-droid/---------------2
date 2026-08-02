@@ -125,6 +125,7 @@ function renderKpis(summary = {}) {
         makeKpi('Автоаналіз', formatNumber(summary.processed), 'без ручного рев’ю'),
         makeKpi('У пам’яті', formatNumber(summary.approved), 'впевнені закономірності'),
         makeKpi('Еталонна вибірка', `${formatNumber(summary.goldCases)}/${formatNumber(summary.minimumGoldCases || 30)}`, summary.goldRemaining > 0 ? `ще ${formatNumber(summary.goldRemaining)} ручних перевірок` : 'мінімум для вимірювання виконано'),
+        makeKpi('Баланс gold', `+${formatNumber(summary.goldPositive)} / −${formatNumber(summary.goldNegative)}`, summary.goldUnknown ? `без результату: ${formatNumber(summary.goldUnknown)}` : 'плюсові та мінусові окремо'),
         makeKpi('Покриття скрінами', formatPercent(summary.screenshotCoverage), 'журнал + графік'),
         makeKpi('Якість пам’яті', formatPercent(summary.agreement), 'ручна перевірка, якщо була'),
     );
