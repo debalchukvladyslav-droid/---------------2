@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { analyzedCandidateIdentities, assignChronologicalSplits, buildCandidates, buildCandidatesFromExamples, candidateIdentity, derivePersonalPatterns, deriveProcessOutcomeAssessment, embeddingText, evaluateAnalysis, inferScreenshotRole, inspectImageBuffer, isMemoryEligible, matchTradeScreens, outcomeBlindSnapshot, outcomeGroup, parseAiJson, resolveOpenRouterVisionModel, retryAiGeneration, selectFreshCandidateBatch, semanticPatternMatch, shouldRunMemoryVerification, sortCandidatesByOutcome, summarizeEvaluationResults, PATTERN_KEYS } from '../lib/ai_learning.js';
+import { analyzedCandidateIdentities, assignChronologicalSplits, buildCandidates, buildCandidatesFromExamples, candidateIdentity, derivePersonalPatterns, deriveProcessOutcomeAssessment, embeddingText, evaluateAnalysis, guardReplayDecision, inferScreenshotRole, inspectImageBuffer, isMemoryEligible, matchTradeScreens, outcomeBlindSnapshot, outcomeGroup, parseAiJson, resolveOpenRouterVisionModel, retryAiGeneration, selectFreshCandidateBatch, semanticPatternMatch, shouldRunMemoryVerification, sortCandidatesByOutcome, summarizeEvaluationResults, PATTERN_KEYS } from '../lib/ai_learning.js';
 import { diversifyReviewExamples, prioritizeReviewExamples, reviewPriority } from '../lib/ai_review_priority.js';
 import { validateHumanReview } from '../lib/ai_learning_admin.js';
 
@@ -144,6 +144,24 @@ test('market replay decisions survive structured parsing without seeing outcomes
     }));
     assert.equal(parsed.analysis_features.replay.decision, 'WAIT');
     assert.equal(parsed.analysis_features.replay.trigger, 'close back above level');
+});
+
+test('market replay guard converts unsupported early entries into WAIT', () => {
+    const guarded = guardReplayDecision({
+        ai_confidence: 0,
+        analysis_features: { evidence: { visible: ['pullback'], missing: ['entry trigger'] }, processScores: { setupValidity: 80, contextFit: 70, entryQuality: null } },
+    }, { decision: 'ENTER', reason: 'possible retest' });
+    assert.equal(guarded.decision, 'WAIT');
+    assert.ok(guarded.guardReasons.includes('confidence_below_70'));
+    assert.ok(guarded.guardReasons.includes('critical_trigger_missing'));
+});
+
+test('market replay guard preserves a fully evidenced entry', () => {
+    const allowed = guardReplayDecision({
+        ai_confidence: 0.82,
+        analysis_features: { evidence: { visible: ['retest held', 'confirmation candle'], missing: [] }, processScores: { setupValidity: 80, contextFit: 75, entryQuality: 78 } },
+    }, { decision: 'ENTER', reason: 'confirmed retest' });
+    assert.equal(allowed.decision, 'ENTER');
 });
 
 test('market replay crops future chart area and records outcome only after the decision sequence', () => {
