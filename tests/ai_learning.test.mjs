@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { analyzedCandidateIdentities, assignChronologicalSplits, buildCandidates, buildCandidatesFromExamples, candidateIdentity, derivePersonalPatterns, deriveProcessOutcomeAssessment, embeddingText, evaluateAnalysis, inferScreenshotRole, inspectImageBuffer, isMemoryEligible, matchTradeScreens, outcomeBlindSnapshot, outcomeGroup, parseAiJson, resolveOpenRouterVisionModel, retryAiGeneration, selectFreshCandidateBatch, sortCandidatesByOutcome, summarizeEvaluationResults, PATTERN_KEYS } from '../lib/ai_learning.js';
+import { analyzedCandidateIdentities, assignChronologicalSplits, buildCandidates, buildCandidatesFromExamples, candidateIdentity, derivePersonalPatterns, deriveProcessOutcomeAssessment, embeddingText, evaluateAnalysis, inferScreenshotRole, inspectImageBuffer, isMemoryEligible, matchTradeScreens, outcomeBlindSnapshot, outcomeGroup, parseAiJson, resolveOpenRouterVisionModel, retryAiGeneration, selectFreshCandidateBatch, semanticPatternMatch, sortCandidatesByOutcome, summarizeEvaluationResults, PATTERN_KEYS } from '../lib/ai_learning.js';
 import { diversifyReviewExamples, prioritizeReviewExamples, reviewPriority } from '../lib/ai_review_priority.js';
 import { validateHumanReview } from '../lib/ai_learning_admin.js';
 
@@ -127,8 +127,21 @@ test('evaluation requires both a matching label and explicit evidence', () => {
         ai_pattern_key: 'breakout_retest',
         analysis_features: { chartSummary: 'Breakout and retest', evidence: { visible: ['level retest'], missing: [] } },
     });
-    assert.deepEqual(metrics, { exactMatch: true, evidenceComplete: true, abstained: false });
+    assert.deepEqual(metrics, { exactMatch: true, compatibleMatch: true, evidenceComplete: true, abstained: false });
     assert.equal(evaluateAnalysis('breakout_retest', { ai_pattern_key: 'unclear', analysis_features: {} }).abstained, true);
+});
+
+test('semantic evaluation credits a supported subtype under a broad human valid-entry label', () => {
+    assert.equal(semanticPatternMatch('valid_entry', 'pullback_entry'), true);
+    assert.equal(semanticPatternMatch('valid_entry', 'breakout_retest'), true);
+    assert.equal(semanticPatternMatch('pullback_entry', 'valid_entry'), false);
+    assert.equal(semanticPatternMatch('no_structure', 'unclear'), false);
+    const metrics = evaluateAnalysis('valid_entry', {
+        ai_pattern_key: 'pullback_entry',
+        analysis_features: { chartSummary: 'Visible pullback', evidence: { visible: ['entry arrow at retest'], missing: [] } },
+    });
+    assert.equal(metrics.exactMatch, false);
+    assert.equal(metrics.compatibleMatch, true);
 });
 
 test('unsupported model classifications are downgraded instead of becoming facts', () => {
