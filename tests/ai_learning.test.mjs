@@ -487,9 +487,18 @@ test('human gold review requires screenshot attestation and meaningful correctio
     const adminSource = readFileSync(new URL('../lib/ai_learning_admin.js', import.meta.url), 'utf8');
     assert.match(uiSource, /evidenceReviewed/);
     assert.match(uiSource, /ai-learning-evidence-reviewed/);
+    assert.throws(() => validateHumanReview({ example: {}, action: 'approve', evidenceReviewed: true }), /screenshot is required/i);
     assert.throws(() => validateHumanReview({ example: { screenshot_path: 'chart.png' }, action: 'approve' }), /screenshot was reviewed/i);
     assert.equal(validateHumanReview({ example: { screenshot_path: 'chart.png' }, action: 'approve', evidenceReviewed: true }), '');
-    assert.throws(() => validateHumanReview({ example: {}, action: 'correct', evidenceReviewed: true, note: 'bad' }), /Explain the correction/);
-    assert.equal(validateHumanReview({ example: {}, action: 'correct', note: '  visible trigger was different  ' }), 'visible trigger was different');
+    assert.throws(() => validateHumanReview({ example: { screenshot_path: 'chart.png' }, action: 'correct', evidenceReviewed: true, note: 'bad' }), /Explain the correction/);
+    assert.equal(validateHumanReview({ example: { screenshot_path: 'chart.png' }, action: 'correct', evidenceReviewed: true, note: '  visible trigger was different  ' }), 'visible trigger was different');
     assert.match(adminSource, /if \(!example\.screenshot_path\) continue/);
+    assert.match(adminSource, /screenshot_path=not\.is\.null/);
+});
+
+test('visual memory and personal patterns exclude journal-only reviews', () => {
+    const learningSource = readFileSync(new URL('../lib/ai_learning.js', import.meta.url), 'utf8');
+    const adminSource = readFileSync(new URL('../lib/ai_learning_admin.js', import.meta.url), 'utf8');
+    assert.match(learningSource, /screenshot_path=not\.is\.null&reviewed_by=not\.is\.null/);
+    assert.match(adminSource, /is_current=eq\.true&screenshot_path=not\.is\.null&reviewed_by=not\.is\.null/);
 });
