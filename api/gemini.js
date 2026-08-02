@@ -2,6 +2,11 @@ const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 const DEFAULT_OPENROUTER_MODEL = 'openrouter/free';
+const FREE_VISION_MODELS = [
+    'google/gemma-4-26b-a4b-it:free',
+    'nvidia/nemotron-nano-12b-v2-vl:free',
+    'google/gemma-4-31b-it:free',
+];
 const MAX_PAYLOAD_BYTES = 8 * 1024 * 1024;
 const DEFAULT_ALLOWED_ORIGINS = new Set([
     'https://traderjournal-six.vercel.app',
@@ -80,40 +85,39 @@ async function handleOpenRouter(req, res, payload) {
     if (!apiKey) return res.status(500).json({ message: 'OPENROUTER_API_KEY not configured on server' });
 
     const referer = getGeminiReferer(req);
-    const model = getOpenRouterModel();
-    const body = {
-        model,
-        messages: geminiPayloadToOpenAIMessages(payload),
-        temperature: 0.35,
-    };
+    const messages = geminiPayloadToOpenAIMessages(payload);
+    const models = openRouterCandidates(payload);
+    let lastError = 'OpenRouter did not return a usable response';
+    for (const model of models) {
+        let openRouterRes;
+        try {
+            openRouterRes = await fetch(OPENROUTER_CHAT_URL, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json',
+                    ...(referer ? { 'HTTP-Referer': referer } : {}),
+                    'X-Title': 'Trading Journal Pro',
+                },
+                body: JSON.stringify({ model, messages, temperature: 0.35 }),
+                signal: AbortSignal.timeout(50000),
+            });
+        } catch (error) {
+            lastError = normalizeGeminiFetchError(error);
+            continue;
+        }
 
-    let openRouterRes;
-    try {
-        openRouterRes = await fetch(OPENROUTER_CHAT_URL, {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-                ...(referer ? { 'HTTP-Referer': referer } : {}),
-                'X-Title': 'Trading Journal Pro',
-            },
-            body: JSON.stringify(body),
-            signal: AbortSignal.timeout(50000),
-        });
-    } catch (e) {
-        return res.status(502).json({ message: normalizeGeminiFetchError(e) });
+        let data;
+        try { data = await openRouterRes.json(); } catch { data = null; }
+        if (!openRouterRes.ok) {
+            lastError = data?.error?.message || `OpenRouter error ${openRouterRes.status}`;
+            continue;
+        }
+        const text = extractOpenRouterText(data);
+        if (text) return res.status(200).json({ text, model: data?.model || model });
+        lastError = `Empty response from ${model}`;
     }
-
-    let data;
-    try { data = await openRouterRes.json(); } catch { return res.status(502).json({ message: 'Invalid JSON from OpenRouter' }); }
-
-    if (!openRouterRes.ok) {
-        return res.status(openRouterRes.status).json({ message: data?.error?.message || `OpenRouter error ${openRouterRes.status}` });
-    }
-
-    const text = extractOpenRouterText(data);
-    if (!text) return res.status(502).json({ message: 'Empty response from OpenRouter' });
-    return res.status(200).json({ text });
+    return res.status(502).json({ message: lastError });
 }
 
 function shouldUseOpenRouter() {
@@ -127,6 +131,22 @@ function getOpenRouterApiKey() {
 
 function getOpenRouterModel() {
     return String(process.env.OPENROUTER_MODEL || process.env.AI_MODEL || DEFAULT_OPENROUTER_MODEL).trim();
+}
+
+export function payloadHasImages(payload) {
+    return (Array.isArray(payload?.contents) ? payload.contents : []).some((content) =>
+        (Array.isArray(content?.parts) ? content.parts : []).some((part) =>
+            Boolean((part?.inline_data || part?.inlineData)?.data),
+        ),
+    );
+}
+
+export function openRouterCandidates(payload, configured = getOpenRouterModel()) {
+    if (!payloadHasImages(payload)) return [configured];
+    if (configured && configured !== DEFAULT_OPENROUTER_MODEL) {
+        return [...new Set([configured, ...FREE_VISION_MODELS])];
+    }
+    return [...FREE_VISION_MODELS];
 }
 
 function geminiPayloadToOpenAIMessages(payload) {

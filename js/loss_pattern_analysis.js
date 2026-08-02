@@ -5,6 +5,7 @@ import { getStorageUrl } from './gallery.js';
 import { saveSettings } from './storage.js';
 import { parseSheetProfitRisk } from './stats_sheet_metrics.js';
 import { showToast } from './utils.js';
+import { outcomeBlindJournalContext, requireVisualPatternEvidence } from './ai/outcome_guard.js';
 
 const STORE_VERSION = 3;
 const MAX_PER_RUN = 12;
@@ -144,14 +145,14 @@ function setStatus(text, tone = '') {
     element.dataset.tone = tone;
 }
 
-function parseAiJson(text) {
+export function parseLossPatternAiJson(text) {
     const clean = String(text || '').replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
     const start = clean.indexOf('{');
     const end = clean.lastIndexOf('}');
     if (start < 0 || end < start) throw new Error('AI не повернув структуру аналізу');
     const value = JSON.parse(clean.slice(start, end + 1));
     const patternKey = PATTERN_KEYS.has(value.patternKey) ? value.patternKey : 'unclear';
-    return {
+    const result = {
         patternKey,
         label: String(value.label || 'Ситуація потребує ручного перегляду').slice(0, 90),
         insight: String(value.insight || '').slice(0, 220),
@@ -159,6 +160,7 @@ function parseAiJson(text) {
         journalEvidence: String(value.journalEvidence || '').slice(0, 180),
         confidence: Math.max(0, Math.min(1, Number(value.confidence) || 0)),
     };
+    return requireVisualPatternEvidence(result);
 }
 
 async function imageInlineData(path) {
@@ -182,20 +184,21 @@ async function imageInlineData(path) {
 
 async function inspectCandidate(candidate, memory = []) {
     const image = await imageInlineData(candidate.path);
-    const prompt = `Ти аналізуєш мінусову угоду проп-трейдера одночасно з ДВОХ джерел:
+    const blindJournalContext = outcomeBlindJournalContext(candidate.journalContext);
+    const prompt = `Ти виконуєш outcome-blind аналіз входу проп-трейдера одночасно з ДВОХ джерел:
 1) прикріплений скрін графіка — візуальна структура входу;
 2) структуровані дані угоди та журналу нижче — фактичний контекст, критерії, виключення й коментарі.
-Зістав обидва джерела. Не роби висновок лише зі скріншота. Не вигадуй відсутніх фактів. Якщо джерела суперечать одне одному, віддай пріоритет точним полям журналу й зазнач суперечність.
+Зістав обидва джерела. Не використовуй PnL, КФ, ціну/причину виходу, денні нотатки, помилки або свічки після входу для оцінки сетапу. Не роби висновок лише зі скріншота. Не вигадуй відсутніх фактів. Якщо джерела суперечать одне одному, віддай пріоритет точним полям журналу й зазнач суперечність.
 Обери patternKey тільки з: ${[...PATTERN_KEYS].join(', ')}.
 Поверни ТІЛЬКИ JSON: {"patternKey":"...","label":"коротка назва українською","insight":"спільний висновок на основі скріну й журналу українською","visualEvidence":"що саме видно на скріні або порожньо","journalEvidence":"які поля журналу підтверджують висновок або порожньо","confidence":0.0}.
-Базовий контекст: дата ${candidate.date}, тікер ${candidate.symbol}, результат ${candidate.pnl ?? 'невідомий'} $, ${candidate.kf ?? 'невідомо'} КФ.
-Дані угоди та журналу: ${JSON.stringify(candidate.journalContext || {})}.`;
+Базовий контекст: дата ${candidate.date}, тікер ${candidate.symbol}. Результат угоди навмисно приховано.
+Дані угоди та журналу до входу: ${JSON.stringify(blindJournalContext)}.`;
     const text = await callGeminiViaProxy({
         systemInstruction: { parts: [{ text: `${STRUCTURE_MEMORY_INSTRUCTION}\nEarlier analyzed patterns: ${JSON.stringify(memory)}` }] },
         contents: [{ parts: [{ text: prompt }, { inlineData: image }] }],
         generationConfig: { temperature: 0.15, responseMimeType: 'application/json' },
     }, 'gemini-2.5-flash');
-    return parseAiJson(text);
+    return parseLossPatternAiJson(text);
 }
 
 function createScreenCard(item) {
@@ -330,7 +333,7 @@ export async function analyzeLossPatterns() {
             setStatus(`AI переглядає скрін ${completed + failed + 1} із ${batch.length}…`);
             try {
                 const memory = Object.values(store.items)
-                    .filter(item => item.patternKey && !['no_structure', 'unclear', 'insufficient_data'].includes(item.patternKey))
+                    .filter(item => item.reviewed === true && item.patternKey && !['no_structure', 'unclear', 'insufficient_data'].includes(item.patternKey))
                     .slice(-20)
                     .map(item => ({
                         patternKey: item.patternKey,

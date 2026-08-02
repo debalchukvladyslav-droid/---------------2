@@ -9,6 +9,11 @@ const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 const DEFAULT_OPENROUTER_MODEL = 'openrouter/free';
+const FREE_VISION_MODELS = [
+    'google/gemma-4-26b-a4b-it:free',
+    'nvidia/nemotron-nano-12b-v2-vl:free',
+    'google/gemma-4-31b-it:free',
+];
 const ALLOWED_MODELS = new Set([DEFAULT_MODEL, 'gemini-2.5-flash-lite', 'gemini-2.5-pro']);
 const MAX_PAYLOAD_BYTES = 8 * 1024 * 1024;
 const DEFAULT_ALLOWED_ORIGINS = new Set([
@@ -157,44 +162,38 @@ async function handleOpenRouter(req: Request, payload: unknown): Promise<Respons
     if (!apiKey) return json({ message: 'OPENROUTER_API_KEY not configured on Edge' }, 500, req);
 
     const referer = getGeminiReferer(req);
-    const body = {
-        model: getOpenRouterModel(),
-        messages: geminiPayloadToOpenAIMessages(payload),
-        temperature: 0.35,
-    };
-
-    let openRouterRes: Response;
-    try {
-        openRouterRes = await fetch(OPENROUTER_CHAT_URL, {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-                ...(referer ? { 'HTTP-Referer': referer } : {}),
-                'X-Title': 'Trading Journal Pro',
-            },
-            body: JSON.stringify(body),
-            signal: AbortSignal.timeout(50000),
-        });
-    } catch (e) {
-        return json({ message: normalizeGeminiFetchError(e) }, 502, req);
+    const messages = geminiPayloadToOpenAIMessages(payload);
+    let lastError = 'OpenRouter did not return a usable response';
+    for (const model of openRouterCandidates(payload)) {
+        let openRouterRes: Response;
+        try {
+            openRouterRes = await fetch(OPENROUTER_CHAT_URL, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json',
+                    ...(referer ? { 'HTTP-Referer': referer } : {}),
+                    'X-Title': 'Trading Journal Pro',
+                },
+                body: JSON.stringify({ model, messages, temperature: 0.35 }),
+                signal: AbortSignal.timeout(50000),
+            });
+        } catch (error) {
+            lastError = normalizeGeminiFetchError(error);
+            continue;
+        }
+        let data: Record<string, unknown> | null;
+        try { data = (await openRouterRes.json()) as Record<string, unknown>; } catch { data = null; }
+        if (!openRouterRes.ok) {
+            const err = data?.error as { message?: string } | undefined;
+            lastError = err?.message || `OpenRouter error ${openRouterRes.status}`;
+            continue;
+        }
+        const text = extractOpenRouterText(data || {});
+        if (text) return json({ text, model: data?.model || model }, 200, req);
+        lastError = `Empty response from ${model}`;
     }
-
-    let data: Record<string, unknown>;
-    try {
-        data = (await openRouterRes.json()) as Record<string, unknown>;
-    } catch {
-        return json({ message: 'Invalid JSON from OpenRouter' }, 502, req);
-    }
-
-    if (!openRouterRes.ok) {
-        const err = data?.error as { message?: string } | undefined;
-        return json({ message: err?.message || `OpenRouter error ${openRouterRes.status}` }, openRouterRes.status, req);
-    }
-
-    const text = extractOpenRouterText(data);
-    if (!text) return json({ message: 'Empty response from OpenRouter' }, 502, req);
-    return json({ text }, 200, req);
+    return json({ message: lastError }, 502, req);
 }
 
 function getGeminiReferer(req: Request): string {
@@ -238,6 +237,25 @@ function getOpenRouterApiKey(): string {
 
 function getOpenRouterModel(): string {
     return String(Deno.env.get('OPENROUTER_MODEL') || Deno.env.get('AI_MODEL') || DEFAULT_OPENROUTER_MODEL).trim();
+}
+
+function payloadHasImages(payload: unknown): boolean {
+    const p = payload as { contents?: Array<{ parts?: Array<Record<string, unknown>> }> };
+    return (Array.isArray(p?.contents) ? p.contents : []).some((content) =>
+        (Array.isArray(content?.parts) ? content.parts : []).some((part) => {
+            const inline = (part?.inline_data || part?.inlineData) as { data?: string } | undefined;
+            return Boolean(inline?.data);
+        }),
+    );
+}
+
+function openRouterCandidates(payload: unknown): string[] {
+    const configured = getOpenRouterModel();
+    if (!payloadHasImages(payload)) return [configured];
+    if (configured && configured !== DEFAULT_OPENROUTER_MODEL) {
+        return [...new Set([configured, ...FREE_VISION_MODELS])];
+    }
+    return [...FREE_VISION_MODELS];
 }
 
 function geminiPayloadToOpenAIMessages(payload: unknown): Array<{ role: string; content: string | unknown[] }> {

@@ -1,4 +1,5 @@
 import { supabase, SUPABASE_URL } from '../supabase.js';
+import { summarizeAIPayload } from './telemetry.js';
 
 /** Основний проксі: Edge Function (секрет GEMINI_API_KEY у Supabase). Резерв: /api/gemini (Vercel). */
 function geminiEdgeUrl() {
@@ -9,7 +10,6 @@ const DEFAULT_MODEL = 'gemini-2.5-flash';
 const REQUEST_TIMEOUT_MS = 55000;
 const UNUSED_LOG_RETENTION_DAYS = 2;
 const MAX_LOG_STRING = 1200;
-const MAX_RESPONSE_PREVIEW = 2000;
 
 export const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -154,7 +154,7 @@ async function createAIRequestLog({ payload, model }) {
                 model,
                 status: 'pending',
                 used: false,
-                request_payload: compactPayload(payload),
+                request_payload: summarizeAIPayload(payload),
             })
             .select('id')
             .single();
@@ -173,7 +173,7 @@ async function finishAIRequestLog(logId, { status, responseText = '', error = nu
     try {
         const patch = {
             status,
-            response_preview: limitString(responseText, MAX_RESPONSE_PREVIEW),
+            response_preview: responseText ? `[response omitted, ${String(responseText).length} chars]` : '',
             error_message: error ? limitString(error.message || String(error), MAX_LOG_STRING) : null,
         };
 
@@ -186,36 +186,7 @@ async function finishAIRequestLog(logId, { status, responseText = '', error = nu
     }
 }
 
-function compactPayload(value, depth = 0) {
-    if (depth > 8) return '[max depth]';
-    if (value == null || typeof value === 'number' || typeof value === 'boolean') return value;
-    if (typeof value === 'string') return compactString(value);
-    if (Array.isArray(value)) return value.map(item => compactPayload(item, depth + 1));
-    if (typeof value !== 'object') return String(value);
-
-    const output = {};
-    for (const [key, item] of Object.entries(value)) {
-        if (key === 'data' && looksLikeBase64(item)) {
-            output[key] = `[base64 omitted, ${String(item).length} chars]`;
-            continue;
-        }
-        output[key] = compactPayload(item, depth + 1);
-    }
-    return output;
-}
-
-function compactString(value) {
-    if (looksLikeBase64(value)) return `[base64 omitted, ${value.length} chars]`;
-    return limitString(value, MAX_LOG_STRING);
-}
-
 function limitString(value, maxLength) {
     const text = String(value ?? '');
     return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
-}
-
-function looksLikeBase64(value) {
-    return typeof value === 'string'
-        && value.length > 400
-        && /^[A-Za-z0-9+/=\s]+$/.test(value);
 }
