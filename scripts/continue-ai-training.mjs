@@ -9,6 +9,7 @@ const evaluateOnly = process.argv[2] === 'evaluate';
 const newTraining = process.argv[2] === 'new';
 const queueOnly = process.argv[2] === 'queue';
 const refreshPatternsOnly = process.argv[2] === 'patterns';
+const campaignStepOnly = process.argv[2] === 'campaign-step';
 const visionCase = process.argv[2] === 'vision' ? process.argv[3] : null;
 const visionModel = visionCase ? process.argv[4] : null;
 const inspectCase = process.argv[2] === 'case' ? process.argv[3] : visionCase;
@@ -169,6 +170,29 @@ if (refreshPatternsOnly) {
         timeout: 60000,
     });
     console.log(JSON.stringify({ count: payload.patterns?.length || 0, patterns: payload.patterns || [] }));
+    process.exit(0);
+}
+if (campaignStepOnly) {
+    const payload = await jsonRequest(endpoint, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'run' }),
+        timeout: 300000,
+    });
+    console.log(JSON.stringify({
+        job: payload.job ? {
+            status: payload.job.status,
+            processed: payload.job.processed_count,
+            remaining: payload.job.remaining_count,
+            noProgress: payload.job.consecutive_failures,
+        } : null,
+        run: payload.run ? {
+            processed: payload.run.processed_count,
+            failed: payload.run.failed_count,
+            remaining: payload.run.remaining_count,
+        } : null,
+        campaign: payload.campaign || null,
+    }));
     process.exit(0);
 }
 if (evaluateOnly) {

@@ -416,6 +416,14 @@ test('job progress includes examples written by a concurrent training worker', (
     assert.match(learningSource, /processed_count: versionProcessed/);
 });
 
+test('24-hour training advances an active durable job instead of bypassing it', () => {
+    const adminSource = readFileSync(new URL('../lib/ai_learning_admin.js', import.meta.url), 'utf8');
+    assert.match(adminSource, /if \(body\.action === 'run'\) \{\s*const queued = await processNextLearningJob/s);
+    assert.match(adminSource, /campaign: queued\.run \? await updateCampaignAfterRun\(queued\.run\)/);
+    assert.match(adminSource, /status=in\.\(running,processing\).*activeJobs/s);
+    assert.match(adminSource, /campaign: await currentTrainingCampaign\(\)/);
+});
+
 test('same-version semantic identity prevents hash-collision starvation', () => {
     const prior = {
         prompt_version: 'v2', user_id: 'u', journal_day_id: 'd', trade_date: '2026-01-01',
