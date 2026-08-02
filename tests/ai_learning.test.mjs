@@ -415,3 +415,12 @@ test('quality UI does not overwrite accuracy with category share', () => {
     assert.match(source, /точність.*item\.accuracy.*частка.*share/s);
     assert.doesNotMatch(source, /value\.textContent = `\$\{formatPercent\(share\)\} · \$\{item\.total\}`/);
 });
+
+test('quality UI shows progress toward the minimum human gold set', () => {
+    const source = readFileSync(new URL('../js/ai_learning.js', import.meta.url), 'utf8');
+    const adminSource = readFileSync(new URL('../lib/ai_learning_admin.js', import.meta.url), 'utf8');
+    assert.match(source, /summary\.goldCases/);
+    assert.match(source, /summary\.goldRemaining/);
+    assert.match(adminSource, /minimumGoldCases:\s*30/);
+    assert.match(adminSource, /goldRemaining:/);
+});

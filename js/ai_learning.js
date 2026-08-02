@@ -124,6 +124,7 @@ function renderKpis(summary = {}) {
         makeKpi('Оброблено', formatNumber(summary.processed), 'актуальних версій'),
         makeKpi('Автоаналіз', formatNumber(summary.processed), 'без ручного рев’ю'),
         makeKpi('У пам’яті', formatNumber(summary.approved), 'впевнені закономірності'),
+        makeKpi('Еталонна вибірка', `${formatNumber(summary.goldCases)}/${formatNumber(summary.minimumGoldCases || 30)}`, summary.goldRemaining > 0 ? `ще ${formatNumber(summary.goldRemaining)} ручних перевірок` : 'мінімум для вимірювання виконано'),
         makeKpi('Покриття скрінами', formatPercent(summary.screenshotCoverage), 'журнал + графік'),
         makeKpi('Якість пам’яті', formatPercent(summary.agreement), 'ручна перевірка, якщо була'),
     );
