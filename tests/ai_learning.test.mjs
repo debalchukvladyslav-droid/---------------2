@@ -118,7 +118,8 @@ test('AI memory keeps visual structure and rejects generic no-structure guesses'
 
 test('bulk AI training processes two candidates and records selective verification', () => {
     const source = readFileSync(new URL('../lib/ai_learning.js', import.meta.url), 'utf8');
-    assert.match(source, /const MAX_BATCH = 2;/);
+    assert.match(source, /const MAX_BATCH = 20;/);
+    assert.match(source, /const MAX_VISION_PER_BATCH = 2;/);
     assert.match(source, /independent_single_pass/);
     assert.match(source, /reviewed_memory_second_pass/);
 });
@@ -439,6 +440,15 @@ test('training advances past a candidate that made no progress', () => {
     assert.deepEqual(selectFreshCandidateBatch(candidates, 1, 0), [{ id: 'blocked' }]);
     assert.deepEqual(selectFreshCandidateBatch(candidates, 1, 1), [{ id: 'next' }]);
     assert.deepEqual(selectFreshCandidateBatch(candidates, 1, 100), [{ id: 'next' }]);
+});
+
+test('large training batches cap expensive vision work but fill with journal-only cases', () => {
+    const vision = Array.from({ length: 5 }, (_, index) => ({ id: `v${index}`, screenshot_path: `s${index}.png` }));
+    const journal = Array.from({ length: 30 }, (_, index) => ({ id: `j${index}`, screenshot_path: null }));
+    const selected = selectFreshCandidateBatch([...vision, ...journal], 20, 0);
+    assert.equal(selected.length, 20);
+    assert.equal(selected.filter((item) => item.screenshot_path).length, 2);
+    assert.equal(selected.filter((item) => !item.screenshot_path).length, 18);
 });
 
 test('training persists the real eligible remaining count instead of estimating from all trades', () => {
