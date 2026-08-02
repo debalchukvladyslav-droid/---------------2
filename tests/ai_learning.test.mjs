@@ -429,6 +429,21 @@ test('24-hour training advances an active durable job instead of bypassing it', 
     assert.match(adminSource, /processed: job \? Number\(job\.processed_count \|\| 0\)/);
 });
 
+test('Supabase cron wakes durable AI jobs without starting endless fallback training', () => {
+    const cronSource = readFileSync(new URL('../api/cron/sync-google-sheets.js', import.meta.url), 'utf8');
+    const migration = readFileSync(new URL('../supabase/migrations/20260802235500_ai_durable_worker_cron.sql', import.meta.url), 'utf8');
+    assert.match(cronSource, /mode.*job-only/);
+    assert.match(cronSource, /queued\.job \? queued : \{ job: null, run: null, status: 'idle' \}/);
+    assert.match(migration, /cron\.schedule\(/);
+    assert.match(migration, /'\*\/2 \* \* \* \*'/);
+    assert.match(migration, /mode=job-only/);
+    assert.match(migration, /ai_worker_wake_tokens/);
+    assert.match(migration, /claim_ai_worker_wake/);
+    assert.match(migration, /wakeToken/);
+    assert.match(cronSource, /rpc\/claim_ai_worker_wake/);
+    assert.match(cronSource, /claimed === true/);
+});
+
 test('same-version semantic identity prevents hash-collision starvation', () => {
     const prior = {
         prompt_version: 'v2', user_id: 'u', journal_day_id: 'd', trade_date: '2026-01-01',

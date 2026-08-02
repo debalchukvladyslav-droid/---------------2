@@ -8,19 +8,47 @@ function sendJson(res, status, body) {
     res.end(JSON.stringify(body));
 }
 
+function requestBody(req) {
+    if (req.body && typeof req.body === 'object') return req.body;
+    if (typeof req.body === 'string') {
+        try { return JSON.parse(req.body); } catch (_) { return {}; }
+    }
+    return {};
+}
+
+async function claimWorkerWake(req) {
+    if (String(req.query?.task || '') !== 'ai-learning' || String(req.query?.mode || '') !== 'job-only') return false;
+    const wakeToken = String(requestBody(req).wakeToken || '').trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(wakeToken)) return false;
+    const claimed = await supabaseRest('rpc/claim_ai_worker_wake', {
+        method: 'POST', body: JSON.stringify({ wake_token: wakeToken }),
+    });
+    return claimed === true;
+}
+
 export default async function handler(req, res) {
     const cronSecret = process.env.CRON_SECRET || '';
     if (!cronSecret) {
         console.error('[Google Sheets cron] CRON_SECRET is not configured');
         return sendJson(res, 503, { ok: false, error: 'Cron authentication is not configured' });
     }
-    if (req.headers.authorization !== `Bearer ${cronSecret}`) {
+    const vercelCronAuthorized = req.headers.authorization === `Bearer ${cronSecret}`;
+    const supabaseWorkerAuthorized = vercelCronAuthorized ? false : await claimWorkerWake(req).catch(() => false);
+    if (!vercelCronAuthorized && !supabaseWorkerAuthorized) {
         return sendJson(res, 401, { ok: false, error: 'Unauthorized' });
     }
 
     try {
         if (String(req.query?.task || '') === 'ai-learning') {
             const queued = await processNextLearningJob();
+            if (String(req.query?.mode || '') === 'job-only') {
+                return sendJson(res, 200, {
+                    ok: true,
+                    task: 'ai-learning',
+                    mode: 'job-only',
+                    aiLearning: queued.job ? queued : { job: null, run: null, status: 'idle' },
+                });
+            }
             const aiLearning = queued.job ? queued : await runLearningBatch({ triggerType: 'cron' });
             return sendJson(res, 200, { ok: true, task: 'ai-learning', aiLearning });
         }
