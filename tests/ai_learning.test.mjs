@@ -408,6 +408,14 @@ test('training persists the real eligible remaining count instead of estimating 
     assert.match(migration, /ADD COLUMN IF NOT EXISTS remaining_count INTEGER/);
 });
 
+test('job progress includes examples written by a concurrent training worker', () => {
+    const learningSource = readFileSync(new URL('../lib/ai_learning.js', import.meta.url), 'utf8');
+    assert.match(learningSource, /prompt_version=eq\.\$\{encodeURIComponent\(job\.prompt_version\)\}&select=id/);
+    assert.match(learningSource, /const versionProcessed = \(versionExamples \|\| \[\]\)\.length/);
+    assert.match(learningSource, /versionProcessed > Number\(job\.processed_count \|\| 0\)/);
+    assert.match(learningSource, /processed_count: versionProcessed/);
+});
+
 test('same-version semantic identity prevents hash-collision starvation', () => {
     const prior = {
         prompt_version: 'v2', user_id: 'u', journal_day_id: 'd', trade_date: '2026-01-01',

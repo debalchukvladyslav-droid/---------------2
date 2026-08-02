@@ -121,6 +121,7 @@ if (statusOnly) {
         processed: job?.processed_count ?? null,
         failed: job?.failed_count ?? null,
         noProgress: job?.consecutive_failures ?? null,
+        lastError: job?.last_error || null,
         batches: job?.batch_count ?? null,
         remaining: job?.remaining_count ?? null,
         heartbeat: job?.heartbeat_at || null,
