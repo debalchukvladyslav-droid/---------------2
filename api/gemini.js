@@ -35,7 +35,7 @@ export default async function handler(req, res) {
     if (!isPayloadSizeAllowed(payload)) return res.status(413).json({ message: 'AI payload is too large' });
 
     if (shouldUseOpenRouter()) {
-        return handleOpenRouter(req, res, payload);
+        return handleOpenRouter(req, res, payload, rawModel);
     }
 
     const GEMINI_API_KEY = getGeminiApiKey();
@@ -80,13 +80,13 @@ export default async function handler(req, res) {
     return res.status(200).json({ text });
 }
 
-async function handleOpenRouter(req, res, payload) {
+async function handleOpenRouter(req, res, payload, requestedModel = '') {
     const apiKey = getOpenRouterApiKey();
     if (!apiKey) return res.status(500).json({ message: 'OPENROUTER_API_KEY not configured on server' });
 
     const referer = getGeminiReferer(req);
     const messages = geminiPayloadToOpenAIMessages(payload);
-    const models = openRouterCandidates(payload);
+    const models = openRouterCandidates(payload, requestedModel || getOpenRouterModel());
     let lastError = 'OpenRouter did not return a usable response';
     for (const model of models) {
         let openRouterRes;
@@ -142,9 +142,10 @@ export function payloadHasImages(payload) {
 }
 
 export function openRouterCandidates(payload, configured = getOpenRouterModel()) {
-    if (!payloadHasImages(payload)) return [configured];
-    if (configured && configured !== DEFAULT_OPENROUTER_MODEL) {
-        return [...new Set([configured, ...FREE_VISION_MODELS])];
+    const routedModel = String(configured || '').includes('/') ? configured : getOpenRouterModel();
+    if (!payloadHasImages(payload)) return [routedModel];
+    if (routedModel && routedModel !== DEFAULT_OPENROUTER_MODEL) {
+        return [...new Set([routedModel, ...FREE_VISION_MODELS])];
     }
     return [...FREE_VISION_MODELS];
 }

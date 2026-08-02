@@ -23,6 +23,12 @@ test('general AI proxy keeps configured text routing for requests without images
     assert.deepEqual(openRouterCandidates(payload, 'openrouter/free'), ['openrouter/free']);
 });
 
+test('vision verification can request a specific free vision model without accepting Gemini ids', () => {
+    const payload = { contents: [{ parts: [{ inlineData: { data: 'a'.repeat(1000) } }] }] };
+    assert.equal(openRouterCandidates(payload, 'nvidia/nemotron-nano-12b-v2-vl:free')[0], 'nvidia/nemotron-nano-12b-v2-vl:free');
+    assert.equal(openRouterCandidates(payload, 'gemini-2.5-flash').includes('gemini-2.5-flash'), false);
+});
+
 test('AI request telemetry never stores journal text or image contents', () => {
     const secretJournalText = 'Private journal note and trading plan';
     const encodedImage = 'A'.repeat(1200);

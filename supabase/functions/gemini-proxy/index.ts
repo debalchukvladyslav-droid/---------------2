@@ -101,7 +101,7 @@ Deno.serve(async (req) => {
     }
 
     if (shouldUseOpenRouter()) {
-        return handleOpenRouter(req, payload);
+        return handleOpenRouter(req, payload, rawModel);
     }
 
     const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
@@ -157,14 +157,14 @@ Deno.serve(async (req) => {
     return json({ text }, 200, req);
 });
 
-async function handleOpenRouter(req: Request, payload: unknown): Promise<Response> {
+async function handleOpenRouter(req: Request, payload: unknown, requestedModel = ''): Promise<Response> {
     const apiKey = getOpenRouterApiKey();
     if (!apiKey) return json({ message: 'OPENROUTER_API_KEY not configured on Edge' }, 500, req);
 
     const referer = getGeminiReferer(req);
     const messages = geminiPayloadToOpenAIMessages(payload);
     let lastError = 'OpenRouter did not return a usable response';
-    for (const model of openRouterCandidates(payload)) {
+    for (const model of openRouterCandidates(payload, requestedModel || getOpenRouterModel())) {
         let openRouterRes: Response;
         try {
             openRouterRes = await fetch(OPENROUTER_CHAT_URL, {
@@ -249,11 +249,11 @@ function payloadHasImages(payload: unknown): boolean {
     );
 }
 
-function openRouterCandidates(payload: unknown): string[] {
-    const configured = getOpenRouterModel();
-    if (!payloadHasImages(payload)) return [configured];
-    if (configured && configured !== DEFAULT_OPENROUTER_MODEL) {
-        return [...new Set([configured, ...FREE_VISION_MODELS])];
+function openRouterCandidates(payload: unknown, configured = getOpenRouterModel()): string[] {
+    const routedModel = String(configured || '').includes('/') ? configured : getOpenRouterModel();
+    if (!payloadHasImages(payload)) return [routedModel];
+    if (routedModel && routedModel !== DEFAULT_OPENROUTER_MODEL) {
+        return [...new Set([routedModel, ...FREE_VISION_MODELS])];
     }
     return [...FREE_VISION_MODELS];
 }

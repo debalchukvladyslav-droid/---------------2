@@ -7,7 +7,8 @@ const maxSteps = Math.max(1, Math.min(1000, Number(process.argv[2]) || 50));
 const statusOnly = process.argv[2] === 'status';
 const evaluateOnly = process.argv[2] === 'evaluate';
 const newTraining = process.argv[2] === 'new';
-const inspectCase = process.argv[2] === 'case' ? process.argv[3] : null;
+const visionCase = process.argv[2] === 'vision' ? process.argv[3] : null;
+const inspectCase = process.argv[2] === 'case' ? process.argv[3] : visionCase;
 const endpoint = process.env.AI_TRAINING_ENDPOINT
     || 'https://traderjournal-six.vercel.app/api/admin/service-bots?resource=ai-learning';
 
@@ -79,6 +80,19 @@ if (inspectCase) {
             localImage = decodeURIComponent(target.pathname.replace(/^\/(?:[A-Za-z]:)/, (value) => value.slice(1)));
         }
     }
+    let vision = null;
+    if (visionCase && localImage) {
+        const bytes = fs.readFileSync(localImage);
+        vision = await jsonRequest(`${config.url}/functions/v1/gemini-proxy`, {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ payload: { contents: [{ parts: [
+                { text: 'Perform a vision smoke test. List the chart panels/timeframes that are directly visible and the color/direction of any visible execution arrows. Do not infer missing facts. Answer briefly.' },
+                { inlineData: { mimeType: 'image/png', data: bytes.toString('base64') } },
+            ] }] } }),
+            timeout: 180000,
+        });
+    }
     console.log(JSON.stringify(row ? {
         id: row.id,
         tradeDate: row.trade_date,
@@ -87,6 +101,7 @@ if (inspectCase) {
         screenshotSet: example.source_snapshot?.screenshotSet || [],
         snapshot: example.source_snapshot?.snapshot || example.source_snapshot || null,
         localImage,
+        vision,
     } : null));
     process.exit(0);
 }
