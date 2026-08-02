@@ -187,6 +187,21 @@ test('unsupported model classifications are downgraded instead of becoming facts
     assert.equal(inferredTrigger.ai_confidence, 0.35);
     assert.equal(inferredTrigger.analysis_features.processScores.entryQuality, null);
     assert.ok(inferredTrigger.analysis_features.evidence.missing.includes('visible_entry_trigger_or_confirmation'));
+    const genericNearLevelTrigger = parseAiJson(JSON.stringify({
+        patternKey: 'pullback_entry', confidence: 0.85,
+        chartSummary: 'A descending channel and consolidation are visible near 2.00',
+        evidence: {
+            visible: ['Green execution arrow at 1.9858', 'descending channel', 'price action near 2.00 level'],
+            inferred: ['pullback within a bearish regime'], missing: [],
+        },
+        taxonomy: { trigger: ['price_action_near_level'], structure: ['descending_channel'] },
+        execution: { confirmation: 'unclear', trendAlignment: 'countertrend' },
+        processScores: { entryQuality: 65 },
+    }), { entryPrice: 1.9858 });
+    assert.equal(genericNearLevelTrigger.ai_pattern_key, 'unclear');
+    assert.equal(genericNearLevelTrigger.ai_confidence, 0.35);
+    assert.equal(genericNearLevelTrigger.analysis_features.processScores.entryQuality, null);
+    assert.ok(genericNearLevelTrigger.analysis_features.evidence.missing.includes('visible_entry_trigger_or_confirmation'));
     const alignedExecutionArrow = parseAiJson(JSON.stringify({
         patternKey: 'valid_entry', confidence: 0.82,
         chartSummary: 'Impulse followed by a controlled retest',
