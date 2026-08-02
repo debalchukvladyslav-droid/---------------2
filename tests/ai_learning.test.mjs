@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { analyzedCandidateIdentities, assignChronologicalSplits, buildCandidates, buildCandidatesFromExamples, candidateIdentity, derivePersonalPatterns, deriveProcessOutcomeAssessment, embeddingText, evaluateAnalysis, inferScreenshotRole, inspectImageBuffer, isMemoryEligible, matchTradeScreens, outcomeBlindSnapshot, outcomeGroup, parseAiJson, resolveOpenRouterVisionModel, retryAiGeneration, selectFreshCandidateBatch, semanticPatternMatch, sortCandidatesByOutcome, summarizeEvaluationResults, PATTERN_KEYS } from '../lib/ai_learning.js';
+import { analyzedCandidateIdentities, assignChronologicalSplits, buildCandidates, buildCandidatesFromExamples, candidateIdentity, derivePersonalPatterns, deriveProcessOutcomeAssessment, embeddingText, evaluateAnalysis, inferScreenshotRole, inspectImageBuffer, isMemoryEligible, matchTradeScreens, outcomeBlindSnapshot, outcomeGroup, parseAiJson, resolveOpenRouterVisionModel, retryAiGeneration, selectFreshCandidateBatch, semanticPatternMatch, shouldRunMemoryVerification, sortCandidatesByOutcome, summarizeEvaluationResults, PATTERN_KEYS } from '../lib/ai_learning.js';
 import { diversifyReviewExamples, prioritizeReviewExamples, reviewPriority } from '../lib/ai_review_priority.js';
 import { validateHumanReview } from '../lib/ai_learning_admin.js';
 
@@ -90,6 +90,25 @@ test('AI memory keeps visual structure and rejects generic no-structure guesses'
     assert.match(text, /level held/);
     assert.equal(isMemoryEligible({ ai_pattern_key: 'no_structure', ai_confidence: 0.99 }), false);
     assert.equal(isMemoryEligible({ ai_pattern_key: 'breakout_retest', ai_confidence: 0.7 }), true);
+    assert.equal(shouldRunMemoryVerification(
+        { ai_pattern_key: 'breakout_retest', ai_confidence: 0.9 },
+        [{ ai_pattern_key: 'breakout_retest' }],
+    ), true);
+    assert.equal(shouldRunMemoryVerification(
+        { ai_pattern_key: 'breakout_retest', ai_confidence: 0.9 },
+        [],
+    ), false);
+    assert.equal(shouldRunMemoryVerification(
+        { ai_pattern_key: 'unclear', ai_confidence: 0.35 },
+        [{ ai_pattern_key: 'breakout_retest' }],
+    ), false);
+});
+
+test('bulk AI training processes two candidates and records selective verification', () => {
+    const source = readFileSync(new URL('../lib/ai_learning.js', import.meta.url), 'utf8');
+    assert.match(source, /const MAX_BATCH = 2;/);
+    assert.match(source, /independent_single_pass/);
+    assert.match(source, /reviewed_memory_second_pass/);
 });
 
 test('new training rebuilds candidates from already analyzed examples', () => {
