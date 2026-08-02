@@ -428,12 +428,21 @@ export async function evaluateAILearning() {
     if (busy || state.myRole !== 'admin') return;
     const button = el('ai-learning-evaluate');
     busy = true;
+    const startedAt = Date.now();
+    let progressTimer = null;
     if (button) { button.disabled = true; button.textContent = 'Перевіряємо…'; }
     setStatus('Перевіряємо поточну версію на ручному контрольному наборі…');
+    console.info('[AI evaluation] Синхронізуємо еталони та завантажуємо holdout-кейси');
     try {
+        progressTimer = setInterval(() => {
+            const elapsedSeconds = Math.round((Date.now() - startedAt) / 1000);
+            const message = `AI переглядає контрольні скріншоти · ${elapsedSeconds} с · виконує незалежні vision-проходи`;
+            setStatus(message);
+            console.info(`[AI evaluation] ${message}`);
+        }, 5000);
         const payload = await api('', { method: 'POST', body: JSON.stringify({ action: 'evaluate' }) });
         const result = payload.evaluation || {};
-        console.info('[AI evaluation]', result);
+        console.info(`[AI evaluation] Завершено за ${Math.round((Date.now() - startedAt) / 1000)} с`, result);
         if (!result.total) {
             setStatus('Контрольний набір порожній. Спочатку перевірте й підтвердьте приклади вручну.');
             return;
@@ -448,6 +457,7 @@ export async function evaluateAILearning() {
         setStatus(error.message || String(error), 'error');
         showToast(error.message || String(error));
     } finally {
+        clearInterval(progressTimer);
         busy = false;
         if (button) { button.disabled = false; button.textContent = 'Перевірити якість'; }
     }

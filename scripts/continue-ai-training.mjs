@@ -164,11 +164,24 @@ if (refreshPatternsOnly) {
     process.exit(0);
 }
 if (evaluateOnly) {
-    const payload = await jsonRequest(endpoint, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'evaluate' }),
-    });
+    const startedAt = Date.now();
+    console.log('[AI evaluation runner] stage=syncing_gold_and_loading_holdout');
+    const progressTimer = setInterval(() => {
+        const elapsedSeconds = Math.round((Date.now() - startedAt) / 1000);
+        console.log(`[AI evaluation runner] stage=waiting_for_blind_vision_passes elapsed=${elapsedSeconds}s`);
+    }, 20000);
+    let payload;
+    try {
+        payload = await jsonRequest(endpoint, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'evaluate' }),
+            timeout: 300000,
+        });
+    } finally {
+        clearInterval(progressTimer);
+    }
+    console.log(`[AI evaluation runner] stage=completed elapsed=${Math.round((Date.now() - startedAt) / 1000)}s`);
     console.log(JSON.stringify({ gold: payload.gold || null, evaluation: payload.evaluation || payload }));
     process.exit(0);
 }
