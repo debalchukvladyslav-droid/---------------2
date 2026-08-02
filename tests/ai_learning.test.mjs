@@ -68,6 +68,18 @@ test('ambiguous screenshots are not assigned across several trades without evide
     assert.equal(single[0].matchConfidence, 0.55);
 });
 
+test('unmatched screenshots still receive a standalone visual audit without invented trade linkage', () => {
+    const path = 'screenshots/u/random.png';
+    const candidates = buildCandidates([{
+        id: 'day', user_id: 'u', trade_date: '2026-01-01',
+        daily_metrics: { screenshots: { good: [path], normal: [], bad: [], error: [] }, trades: [{ symbol: 'AAA' }, { symbol: 'BBB' }] },
+    }]);
+    const audit = candidates.find((item) => item.source_snapshot.screenshotOnly);
+    assert.equal(audit.screenshot_path, path);
+    assert.equal(audit.source_snapshot.screenshotMatch.method, 'unmatched_screenshot_audit');
+    assert.equal(audit.source_snapshot.ticker, '');
+});
+
 test('persistent screenshot registry overrides filename heuristics and keeps explicit role', () => {
     const path = 'screenshots/u/random-file.png';
     const metrics = { screenshots: { good: [path], normal: [], bad: [], error: [] }, trades: [{ symbol: 'ABCD' }] };
@@ -117,6 +129,9 @@ test('admin exposes forward-only paper decisions and persists compact evaluation
     assert.match(source, /valid_entry_stop_target_required/);
     assert.match(source, /source_cutoff_at: now/);
     assert.match(source, /evaluation: \{ \.\.\.evaluation, results: undefined/);
+    assert.match(source, /prompt_version=eq\.\$\{encodeURIComponent\(versions\[0\]\.prompt_version\)\}/);
+    assert.match(source, /screenshotBacked/);
+    assert.match(source, /journalOnly/);
 });
 
 test('new training rebuilds candidates from already analyzed examples', () => {

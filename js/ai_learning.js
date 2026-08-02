@@ -121,8 +121,9 @@ function renderKpis(summary = {}) {
     if (!host) return;
     host.replaceChildren(
         makeKpi('Знайдено угод', formatNumber(summary.candidateTrades), 'у журналі'),
-        makeKpi('Оброблено', formatNumber(summary.processed), 'актуальних версій'),
-        makeKpi('Автоаналіз', formatNumber(summary.processed), 'без ручного рев’ю'),
+        makeKpi('Оброблено', formatNumber(summary.processed), 'активна версія'),
+        makeKpi('Зі скріншотом', formatNumber(summary.screenshotBacked), `структуру визначено: ${formatNumber(summary.visionClassified)}`),
+        makeKpi('Лише журнал', formatNumber(summary.journalOnly), `не змішується зі структурою · недостатньо скріна: ${formatNumber(summary.visionInsufficient)}`),
         makeKpi('У пам’яті', formatNumber(summary.approved), 'впевнені закономірності'),
         makeKpi('Еталонна вибірка', `${formatNumber(summary.goldCases)}/${formatNumber(summary.minimumGoldCases || 30)}`, summary.goldRemaining > 0 ? `ще ${formatNumber(summary.goldRemaining)} ручних перевірок` : 'мінімум для вимірювання виконано'),
         makeKpi('Баланс gold', `+${formatNumber(summary.goldPositive)} / −${formatNumber(summary.goldNegative)}`, summary.goldUnknown ? `без результату: ${formatNumber(summary.goldUnknown)}` : 'плюсові та мінусові окремо'),
