@@ -399,6 +399,15 @@ test('training advances past a candidate that made no progress', () => {
     assert.deepEqual(selectFreshCandidateBatch(candidates, 1, 100), [{ id: 'next' }]);
 });
 
+test('training persists the real eligible remaining count instead of estimating from all trades', () => {
+    const learningSource = readFileSync(new URL('../lib/ai_learning.js', import.meta.url), 'utf8');
+    const runnerSource = readFileSync(new URL('../scripts/continue-ai-training.mjs', import.meta.url), 'utf8');
+    const migration = readFileSync(new URL('../supabase/migrations/20260802234500_ai_job_remaining_count.sql', import.meta.url), 'utf8');
+    assert.match(learningSource, /remaining_count: Number\(run\.remaining_count \|\| 0\)/);
+    assert.match(runnerSource, /job\?\.remaining_count \?\? null/);
+    assert.match(migration, /ADD COLUMN IF NOT EXISTS remaining_count INTEGER/);
+});
+
 test('same-version semantic identity prevents hash-collision starvation', () => {
     const prior = {
         prompt_version: 'v2', user_id: 'u', journal_day_id: 'd', trade_date: '2026-01-01',

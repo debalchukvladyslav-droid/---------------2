@@ -122,9 +122,7 @@ if (statusOnly) {
         failed: job?.failed_count ?? null,
         noProgress: job?.consecutive_failures ?? null,
         batches: job?.batch_count ?? null,
-        remaining: Number.isFinite(Number(summary.candidateTrades)) && job
-            ? Math.max(0, Number(summary.candidateTrades) - Number(job.processed_count || 0))
-            : null,
+        remaining: job?.remaining_count ?? null,
         heartbeat: job?.heartbeat_at || null,
         pending: summary.pending ?? null,
         gold: {
