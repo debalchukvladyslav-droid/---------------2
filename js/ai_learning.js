@@ -213,6 +213,16 @@ function renderMeta(data) {
             k.textContent = key; v.textContent = value; row.append(k, v); paperHost.append(row);
         });
     }
+    const paperScreens = el('ai-paper-screens');
+    if (paperScreens) {
+        paperScreens.replaceChildren();
+        (data.paperScreenshots || []).forEach((item) => {
+            const option = document.createElement('option');
+            option.value = item.path;
+            option.label = `${item.ticker || 'Графік'} · ${formatDate(item.tradeDate)}`;
+            paperScreens.append(option);
+        });
+    }
     const traders = el('ai-learning-traders');
     if (traders) {
         traders.replaceChildren();

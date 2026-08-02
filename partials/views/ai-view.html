@@ -69,7 +69,8 @@
                     <div class="ai-paper-form">
                         <input id="ai-paper-ticker" class="data-chat-input" type="text" maxlength="20" placeholder="Тикер, наприклад AAPL">
                         <select id="ai-paper-direction" class="data-chat-input" aria-label="Напрямок"><option value="long">LONG</option><option value="short">SHORT</option></select>
-                        <input id="ai-paper-screenshot" class="data-chat-input" type="text" placeholder="Шлях pre-entry скріншота у Storage">
+                        <input id="ai-paper-screenshot" class="data-chat-input" type="text" list="ai-paper-screens" placeholder="Оберіть pre-entry скріншот">
+                        <datalist id="ai-paper-screens"></datalist>
                         <input id="ai-paper-entry" class="data-chat-input" type="number" min="0" step="any" placeholder="Entry">
                         <input id="ai-paper-stop" class="data-chat-input" type="number" min="0" step="any" placeholder="Stop">
                         <input id="ai-paper-target" class="data-chat-input" type="number" min="0" step="any" placeholder="Target">
