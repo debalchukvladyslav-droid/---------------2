@@ -7,6 +7,7 @@ const maxSteps = Math.max(1, Math.min(1000, Number(process.argv[2]) || 50));
 const statusOnly = process.argv[2] === 'status';
 const evaluateOnly = process.argv[2] === 'evaluate';
 const newTraining = process.argv[2] === 'new';
+const queueOnly = process.argv[2] === 'queue';
 const visionCase = process.argv[2] === 'vision' ? process.argv[3] : null;
 const visionModel = visionCase ? process.argv[4] : null;
 const inspectCase = process.argv[2] === 'case' ? process.argv[3] : visionCase;
@@ -134,6 +135,23 @@ if (statusOnly) {
     }));
     process.exit(0);
 }
+if (queueOnly) {
+    const payload = await jsonRequest(`${endpoint}&section=queue&status=pending&limit=12`, {
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 30000,
+    });
+    const examples = payload.examples || payload.items || [];
+    console.log(JSON.stringify(examples.map((example) => ({
+        id: example.id,
+        tradeDate: example.trade_date,
+        ticker: example.source_snapshot?.snapshot?.ticker || example.source_snapshot?.ticker || null,
+        hasScreenshot: Boolean(example.screenshot_path),
+        pattern: example.ai_pattern_key,
+        confidence: example.ai_confidence,
+        reviewPriority: example.review_priority || null,
+    }))));
+    process.exit(0);
+}
 if (evaluateOnly) {
     const payload = await jsonRequest(endpoint, {
         method: 'POST',
@@ -165,11 +183,21 @@ let providerFailures = 0;
 for (let step = 1; step <= maxSteps; step++) {
     const startedAt = Date.now();
     try {
-        const payload = await jsonRequest(endpoint, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'continue-training' }),
-        });
+        console.log(`[AI training runner] step=${step} stage=requesting_next_visual_analysis`);
+        const progressTimer = setInterval(() => {
+            const elapsedSeconds = Math.round((Date.now() - startedAt) / 1000);
+            console.log(`[AI training runner] step=${step} stage=waiting_for_vision_model elapsed=${elapsedSeconds}s`);
+        }, 20000);
+        let payload;
+        try {
+            payload = await jsonRequest(endpoint, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'continue-training' }),
+            });
+        } finally {
+            clearInterval(progressTimer);
+        }
         const run = payload.run || {};
         const job = payload.job;
         console.log(`[AI training runner] step=${step} status=${job?.status || 'none'} processed=${run.processed_count || 0} failed=${run.failed_count || 0} skipped=${run.skipped_count || 0} remaining=${run.remaining_count ?? 'unknown'} total=${job?.processed_count || 0} elapsed=${Date.now() - startedAt}ms`);
