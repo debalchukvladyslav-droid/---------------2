@@ -288,6 +288,9 @@ async function renderExample(example) {
     });
     const reviewNote = document.createElement('textarea'); reviewNote.className = 'ai-learning-review-note';
     reviewNote.rows = 2; reviewNote.maxLength = 1000; reviewNote.placeholder = 'Що AI побачив правильно або пропустив?';
+    const evidenceCheckLabel = document.createElement('label'); evidenceCheckLabel.className = 'ai-learning-evidence-check';
+    const evidenceCheck = document.createElement('input'); evidenceCheck.type = 'checkbox'; evidenceCheck.className = 'ai-learning-evidence-reviewed';
+    evidenceCheckLabel.append(evidenceCheck, document.createTextNode(' Я переглянув скріншот і звірив видимі докази'));
     reviewControls.append(
         patternSelect,
         reviewButton('Підтвердити прогноз', 'approve', example.id),
@@ -297,7 +300,11 @@ async function renderExample(example) {
     body.append(header, prediction, chartSummary, explanation, evidence);
     if (featureHost.childElementCount) body.append(featureHost);
     body.append(context, autoStatus);
-    if (example.review_status === 'pending') body.append(reviewNote, reviewControls);
+    if (example.review_status === 'pending') {
+        body.append(reviewNote);
+        if (example.screenshot_path) body.append(evidenceCheckLabel);
+        body.append(reviewControls);
+    }
     card.append(visual, body);
     return card;
 }
@@ -468,9 +475,18 @@ export async function reviewAILearningExample(trigger) {
     const action = trigger.dataset.reviewAction; const id = trigger.dataset.exampleId;
     const patternKey = card.querySelector('.ai-learning-pattern-select')?.value || '';
     const note = card.querySelector('.ai-learning-review-note')?.value || '';
+    const evidenceReviewed = card.querySelector('.ai-learning-evidence-reviewed')?.checked === true;
+    if (action !== 'reject' && card.querySelector('.ai-learning-evidence-reviewed') && !evidenceReviewed) {
+        showToast('Спочатку перегляньте скріншот і підтвердьте видимі докази');
+        return;
+    }
+    if (action === 'correct' && note.trim().length < 5) {
+        showToast('Коротко поясніть виправлення, щоб AI міг навчитися');
+        return;
+    }
     trigger.disabled = true;
     try {
-        await api(`?id=${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ action, patternKey, note }) });
+        await api(`?id=${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ action, patternKey, note, evidenceReviewed }) });
         card.remove(); loaded = false; showToast(action === 'reject' ? 'Приклад відхилено' : 'Пам’ять AI оновлено');
         await renderAILearningCenter(true);
     } catch (error) { trigger.disabled = false; showToast(error.message || String(error)); }

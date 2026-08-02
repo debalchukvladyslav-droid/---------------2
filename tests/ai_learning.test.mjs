@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { analyzedCandidateIdentities, assignChronologicalSplits, buildCandidates, buildCandidatesFromExamples, candidateIdentity, derivePersonalPatterns, deriveProcessOutcomeAssessment, embeddingText, evaluateAnalysis, inferScreenshotRole, inspectImageBuffer, isMemoryEligible, matchTradeScreens, outcomeBlindSnapshot, outcomeGroup, parseAiJson, resolveOpenRouterVisionModel, retryAiGeneration, selectFreshCandidateBatch, sortCandidatesByOutcome, summarizeEvaluationResults, PATTERN_KEYS } from '../lib/ai_learning.js';
 import { diversifyReviewExamples, prioritizeReviewExamples, reviewPriority } from '../lib/ai_review_priority.js';
+import { validateHumanReview } from '../lib/ai_learning_admin.js';
 
 test('AI learning candidates combine trade, journal outcome and matching screenshot', () => {
     const rows = [{
@@ -321,7 +322,9 @@ test('learning cards expose the full human review workflow', () => {
     assert.match(source, /reviewButton\('Підтвердити прогноз', 'approve'/);
     assert.match(source, /reviewButton\('Зберегти виправлення', 'correct'/);
     assert.match(source, /reviewButton\('Відхилити', 'reject'/);
-    assert.match(source, /if \(example\.review_status === 'pending'\) body\.append\(reviewNote, reviewControls\)/);
+    assert.match(source, /if \(example\.review_status === 'pending'\) \{/);
+    assert.match(source, /body\.append\(reviewNote\)/);
+    assert.match(source, /body\.append\(reviewControls\)/);
 });
 
 test('generic free routing resolves to chart-capable vision models', () => {
@@ -423,4 +426,16 @@ test('quality UI shows progress toward the minimum human gold set', () => {
     assert.match(source, /summary\.goldRemaining/);
     assert.match(adminSource, /minimumGoldCases:\s*30/);
     assert.match(adminSource, /goldRemaining:/);
+});
+
+test('human gold review requires screenshot attestation and meaningful corrections', () => {
+    const uiSource = readFileSync(new URL('../js/ai_learning.js', import.meta.url), 'utf8');
+    const adminSource = readFileSync(new URL('../lib/ai_learning_admin.js', import.meta.url), 'utf8');
+    assert.match(uiSource, /evidenceReviewed/);
+    assert.match(uiSource, /ai-learning-evidence-reviewed/);
+    assert.throws(() => validateHumanReview({ example: { screenshot_path: 'chart.png' }, action: 'approve' }), /screenshot was reviewed/i);
+    assert.equal(validateHumanReview({ example: { screenshot_path: 'chart.png' }, action: 'approve', evidenceReviewed: true }), '');
+    assert.throws(() => validateHumanReview({ example: {}, action: 'correct', evidenceReviewed: true, note: 'bad' }), /Explain the correction/);
+    assert.equal(validateHumanReview({ example: {}, action: 'correct', note: '  visible trigger was different  ' }), 'visible trigger was different');
+    assert.match(adminSource, /if \(!example\.screenshot_path\) continue/);
 });
