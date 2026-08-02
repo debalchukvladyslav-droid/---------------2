@@ -26,6 +26,7 @@ test('general AI proxy keeps configured text routing for requests without images
 test('vision verification can request a specific free vision model without accepting Gemini ids', () => {
     const payload = { contents: [{ parts: [{ inlineData: { data: 'a'.repeat(1000) } }] }] };
     assert.equal(openRouterCandidates(payload, 'nvidia/nemotron-nano-12b-v2-vl:free')[0], 'nvidia/nemotron-nano-12b-v2-vl:free');
+    assert.equal(openRouterCandidates(payload, 'nvidia/nemotron-nano-12b-v2-vl:free')[1], 'google/gemma-4-31b-it:free');
     assert.equal(openRouterCandidates(payload, 'gemini-2.5-flash').includes('gemini-2.5-flash'), false);
 });
 

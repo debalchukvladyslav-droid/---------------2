@@ -145,7 +145,10 @@ export function openRouterCandidates(payload, configured = getOpenRouterModel())
     const routedModel = String(configured || '').includes('/') ? configured : getOpenRouterModel();
     if (!payloadHasImages(payload)) return [routedModel];
     if (routedModel && routedModel !== DEFAULT_OPENROUTER_MODEL) {
-        return [...new Set([routedModel, ...FREE_VISION_MODELS])];
+        const fallbacks = routedModel === 'nvidia/nemotron-nano-12b-v2-vl:free'
+            ? ['google/gemma-4-31b-it:free', 'google/gemma-4-26b-a4b-it:free']
+            : FREE_VISION_MODELS;
+        return [...new Set([routedModel, ...fallbacks])];
     }
     return [...FREE_VISION_MODELS];
 }
