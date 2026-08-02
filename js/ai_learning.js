@@ -438,7 +438,12 @@ export async function evaluateAILearning() {
             setStatus('Контрольний набір порожній. Спочатку перевірте й підтвердьте приклади вручну.');
             return;
         }
-        setStatus(`Контрольний набір: ${result.total} · загальна точність ${formatPercent(result.exactAccuracy)} · точність відповідей ${formatPercent(result.selectiveAccuracy)} · покриття ${formatPercent(result.coverage)} · докази ${formatPercent(result.evidenceCoverage)} · калібрування ECE ${formatPercent(result.calibrationError)} · помилки ${result.failed || 0}`);
+        const readiness = result.qualityStatus === 'measured'
+            ? 'якість вимірюється'
+            : result.qualityStatus === 'insufficient_holdout'
+                ? `потрібно ${result.minimumTestCases || 5} holdout-кейсів`
+                : `потрібно ${result.minimumGoldCases || 30} gold-кейсів`;
+        setStatus(`Gold ${result.totalGoldCases || 0}/${result.minimumGoldCases || 30} · holdout ${result.total}/${result.minimumTestCases || 5} · ${readiness} · загальна точність ${formatPercent(result.exactAccuracy)} · точність відповідей ${formatPercent(result.selectiveAccuracy)} · покриття ${formatPercent(result.coverage)} · докази ${formatPercent(result.evidenceCoverage)} · калібрування ECE ${formatPercent(result.calibrationError)} · помилки ${result.failed || 0}`);
     } catch (error) {
         setStatus(error.message || String(error), 'error');
         showToast(error.message || String(error));

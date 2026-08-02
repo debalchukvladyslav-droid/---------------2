@@ -292,14 +292,23 @@ test('evaluation summary separates coverage, selective accuracy and calibration'
         { expectedPatternKey: 'late_entry', predictedPatternKey: 'unclear', confidence: 0.2, exactMatch: false, evidenceComplete: true, abstained: true },
     ]);
     assert.equal(summary.exactAccuracy, 1 / 3);
-    assert.equal(summary.qualityStatus, 'insufficient_sample');
+    assert.equal(summary.qualityStatus, 'insufficient_gold');
     assert.equal(summary.minimumGoldCases, 30);
+    assert.equal(summary.minimumTestCases, 5);
+    assert.equal(summary.totalGoldCases, 3);
     assert.equal(summary.selectiveAccuracy, 0.5);
     assert.equal(summary.coverage, 2 / 3);
     assert.ok(summary.brierScore > 0);
     assert.ok(summary.calibrationError > 0);
     assert.equal(summary.confusionMatrix.late_entry.valid_entry, 1);
     assert.equal(summary.perPattern.find((item) => item.patternKey === 'late_entry').recall, 0);
+});
+
+test('evaluation readiness requires 30 gold cases and 5 independent holdout cases', () => {
+    const result = { expectedPatternKey: 'valid_entry', predictedPatternKey: 'valid_entry', confidence: 0.8, exactMatch: true, evidenceComplete: true, abstained: false };
+    assert.equal(summarizeEvaluationResults(Array(5).fill(result), { totalGoldCases: 30 }).qualityStatus, 'measured');
+    assert.equal(summarizeEvaluationResults(Array(4).fill(result), { totalGoldCases: 30 }).qualityStatus, 'insufficient_holdout');
+    assert.equal(summarizeEvaluationResults(Array(5).fill(result), { totalGoldCases: 29 }).qualityStatus, 'insufficient_gold');
 });
 
 test('evaluation generation retries a transient provider failure', async () => {
