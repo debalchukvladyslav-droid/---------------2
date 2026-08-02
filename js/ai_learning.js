@@ -191,6 +191,27 @@ function renderMeta(data) {
             k.textContent = key; v.textContent = value; row.append(k, v); host.append(row);
         });
     }
+    const paper = data.paperTrading || {};
+    const paperStatus = el('ai-paper-status');
+    if (paperStatus) paperStatus.textContent = paper.liveExecutionReady ? 'ГОТОВО' : (paper.emergencyStop ? 'СТОП' : 'PAPER');
+    const paperHost = el('ai-paper-metrics');
+    if (paperHost) {
+        paperHost.replaceChildren();
+        [
+            ['Paper-угоди', `${formatNumber(paper.paperTrades)}/100`],
+            ['Win rate', formatPercent(paper.winRate)],
+            ['Результат', `${Number(paper.netR || 0).toFixed(2)}R`],
+            ['Max drawdown', `${Number(paper.maxDrawdownR || 0).toFixed(2)}R / 5R`],
+            ['Gold', `${formatNumber(paper.goldCount)}/100`],
+            ['Holdout', `${formatNumber(paper.holdoutCount)}/30`],
+            ['Selective accuracy', formatPercent(paper.selectiveAccuracy)],
+            ['Coverage', formatPercent(paper.coverage)],
+            ['Реальні ордери', paper.liveExecutionReady ? 'дозволені метриками' : 'заблоковані'],
+        ].forEach(([key, value]) => {
+            const row = document.createElement('div'); const k = document.createElement('span'); const v = document.createElement('strong');
+            k.textContent = key; v.textContent = value; row.append(k, v); paperHost.append(row);
+        });
+    }
     const traders = el('ai-learning-traders');
     if (traders) {
         traders.replaceChildren();
