@@ -3,8 +3,10 @@ import { state } from './state.js';
 import { saveToLocal } from './storage.js';
 import { getImgUrl, getStorageUrl } from './gallery.js';
 import { ensureTesseract } from './vendor_loader.js';
+import { isOCRSourceUsable } from './ocr_source_guard.js';
 
 let ocrDrawingReady = false;
+const unavailableOCRSources = new Set();
 
 export function setupOCRDrawing() {
     let container = document.getElementById('ocr-setup-container'); 
@@ -783,20 +785,6 @@ async function performOCR(encodedPath, force = false) {
         return finishOCRLog(trustedTags[0]);
     }
     try {
-        console.log('[OCR] loading Tesseract...');
-        await ensureTesseract();
-        console.log('[OCR] Tesseract ready');
-    } catch (error) {
-        console.warn('[OCR] Tesseract lazy-load failed:', error);
-        return finishOCRLog();
-    }
-    if (!force && existing && existing !== '???' && normalizeTicker(existing) && !TICKER_GARBAGE.has(normalizeTicker(existing))) {
-        console.log('[OCR] skipped after Tesseract load: valid saved ticker is already present:', existing);
-        updateBadgeUI(encodedPath, false);
-        return finishOCRLog();
-    }
-
-    try {
         updateBadgeUI(encodedPath, true);
         const src = await getStorageUrl(safePath);
         console.log('[OCR] image URL resolved:', src ? 'ok' : 'empty');
@@ -813,8 +801,31 @@ async function performOCR(encodedPath, force = false) {
         const iw = imgObj.naturalWidth;
         const ih = imgObj.naturalHeight;
 
-        const zones = buildAutoOCRZones(iw, ih);
         console.log('[OCR] image loaded:', { width: iw, height: ih });
+        if (!isOCRSourceUsable(iw, ih)) {
+            unavailableOCRSources.add(safePath);
+            console.warn('[OCR] skipped: source is a thumbnail or placeholder', { width: iw, height: ih });
+            updateBadgeUI(encodedPath, false);
+            return finishOCRLog();
+        }
+        unavailableOCRSources.delete(safePath);
+
+        try {
+            console.log('[OCR] loading Tesseract...');
+            await ensureTesseract();
+            console.log('[OCR] Tesseract ready');
+        } catch (error) {
+            console.warn('[OCR] Tesseract lazy-load failed:', error);
+            updateBadgeUI(encodedPath, false);
+            return finishOCRLog();
+        }
+        if (!force && existing && existing !== '???' && normalizeTicker(existing) && !TICKER_GARBAGE.has(normalizeTicker(existing))) {
+            console.log('[OCR] skipped after Tesseract load: valid saved ticker is already present:', existing);
+            updateBadgeUI(encodedPath, false);
+            return finishOCRLog();
+        }
+
+        const zones = buildAutoOCRZones(iw, ih);
         console.log('[OCR] zones to scan:', zones.map((z, i) => ({
             index: i + 1,
             label: z.label,
@@ -1028,7 +1039,7 @@ function collectAllScreenshotPaths() {
 export function enqueueBackgroundOCRForAllScreens() {
     let count = 0;
     for (const path of collectAllScreenshotPaths()) {
-        if (!path || hasValidSavedTicker(path)) continue;
+        if (!path || hasValidSavedTicker(path) || unavailableOCRSources.has(path)) continue;
         enqueueOCR(encodeURIComponent(path), { background: true, priority: 'background' });
         count++;
     }
