@@ -9,6 +9,8 @@ import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 import { ensureGoogleApi, ensureGoogleIdentity } from './vendor_loader.js';
 import { supabase } from './supabase.js';
 import { loadScreenshotRegistry, mergeScreenshotRegistry, registerDriveScreenshot } from './screenshot_registry.js';
+import { selectRegistryBackfills } from './screenshot_registry_core.js';
+import { shouldSkipSilentDriveSync } from './drive_sync_core.js';
 
 const appConfig = window.TRADING_JOURNAL_CONFIG || {};
 const CLIENT_ID = String(appConfig.googleDriveClientId || appConfig.googleSheetsClientId || '').trim();
@@ -25,6 +27,7 @@ let _gsiIniting = null;
 let _syncInProgress = false;
 let _driveFilesCache = null;
 let _serviceDriveAvailable = true;
+let _lastSuccessfulSyncAt = 0;
 
 function driveScreenMetaFromFile(file, prev = {}) {
     const createdAt = file.createdTime || file.modifiedTime || prev.createdAt || new Date().toISOString();
@@ -353,6 +356,10 @@ export async function syncDriveScreenshots(silent = false) {
         console.warn('[Drive test] sync skipped: missing folderId');
         return;
     }
+    if (shouldSkipSilentDriveSync({ silent, lastSuccessfulSyncAt: _lastSuccessfulSyncAt })) {
+        console.info('[Drive test] silent sync skipped: recent sync is still fresh');
+        return;
+    }
 
     console.groupCollapsed('[Drive test] sync start');
     console.info('[Drive test] context:', {
@@ -378,8 +385,12 @@ export async function syncDriveScreenshots(silent = false) {
 
         // Supabase is authoritative: consult its manifest before Drive so an
         // account switch cannot make an already copied file look new.
+        let registryRows = [];
+        let registryLoaded = false;
         try {
-            mergeScreenshotRegistry(state.appData, await loadScreenshotRegistry(storageUser.id));
+            registryRows = await loadScreenshotRegistry(storageUser.id);
+            mergeScreenshotRegistry(state.appData, registryRows);
+            registryLoaded = true;
         } catch (registryError) {
             console.warn('[Drive] screenshot registry unavailable; apply database/06_screenshot_registry.sql', registryError);
         }
@@ -492,7 +503,9 @@ export async function syncDriveScreenshots(silent = false) {
 
         // Backfill files copied by older versions, where the path existed only in
         // profile settings. Once registered, they survive lost/stale settings too.
-        const registryBackfills = fileRecords.filter(record => record.existingPath && !ignored.has(record.existingPath));
+        const registryBackfills = registryLoaded
+            ? selectRegistryBackfills(fileRecords, registryRows, ignored)
+            : [];
         if (registryBackfills.length) {
             const results = await Promise.allSettled(registryBackfills.map(record =>
                 registerDriveScreenshot(storageUser.id, record.existingPath, record.file, record.file.mimeType || '')
@@ -615,6 +628,7 @@ export async function syncDriveScreenshots(silent = false) {
             hideGlobalLoader('drive-sync');
         }
 
+        if (!failedCount) _lastSuccessfulSyncAt = Date.now();
         if (!failedCount && statusEl) statusEl.textContent = newCount > 0
             ? `✅ +${newCount} нових`
             : metaUpdatedCount > 0 ? `✅ Дати +${metaUpdatedCount}` : '✅ Актуально';

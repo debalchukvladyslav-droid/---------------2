@@ -11,6 +11,8 @@ let zoomSources = [];
 let zoomIndex = -1;
 let storageRepairPromise = null;
 let storageRepairLastRun = 0;
+const STORAGE_REPAIR_COOLDOWN_MS = 10 * 60 * 1000;
+const storageRepairAttempts = new Map();
 
 function isManagedStoragePath(value = '') {
     const path = String(value || '').replace(/^\/+/, '');
@@ -38,11 +40,18 @@ function isBrokenSupabaseObjectUrl(value = '') {
 
 async function tryRepairMissingStoragePath(path) {
     if (!isManagedStoragePath(path) || typeof window.syncDriveScreenshots !== 'function') return;
-    if (Date.now() - storageRepairLastRun < 30_000) {
+    const now = Date.now();
+    const lastPathAttempt = storageRepairAttempts.get(path) || 0;
+    if (now - lastPathAttempt < STORAGE_REPAIR_COOLDOWN_MS) {
         if (storageRepairPromise) await storageRepairPromise;
         return;
     }
-    storageRepairLastRun = Date.now();
+    storageRepairAttempts.set(path, now);
+    if (now - storageRepairLastRun < 30_000) {
+        if (storageRepairPromise) await storageRepairPromise;
+        return;
+    }
+    storageRepairLastRun = now;
     storageRepairPromise = Promise.resolve(window.syncDriveScreenshots(true))
         .catch(error => console.warn('[Storage] repair sync failed', error?.message || String(error)))
         .finally(() => { storageRepairPromise = null; });
