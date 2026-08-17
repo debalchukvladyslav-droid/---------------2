@@ -57,6 +57,7 @@ import { analyzeLossPatterns, renderLossPatternAnalysis } from './loss_pattern_a
 import { continueAILearning, evaluateAILearning, initAILearningCenter, renderAILearningCenter, runAILearning, runAIPaperDecision, startNewAILearning, toggleAILearningDay, reviewAILearningExample } from './ai_learning.js';
 import { closeCumulativeWeekly, openCumulativeWeekly, saveCumulativeDayloss, toggleCumulativeDayloss } from './cumulative_weekly_ui.js';
 import { initDashboardWidgets, refreshDashboardWidgets } from './dashboard_widgets.js';
+import { initSwarmCapture } from './swarm_capture.js';
 
 let appShellPromise = null;
 let appShellEventsReady = false;
@@ -1467,6 +1468,8 @@ window.appendReviewTag = function (chunk) {
 };
 
 initTradesView();
+initSwarmCapture();
+document.addEventListener('app:shell-ready', initSwarmCapture);
 initNotifications();
 initSheetTableView({ deferGoogleRestore: true });
 window.initSheetTableView = initSheetTableView;

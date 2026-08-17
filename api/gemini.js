@@ -20,6 +20,7 @@ const ALLOWED_MODELS = new Set([
     'gemini-2.5-flash-lite',
     'gemini-2.5-pro',
 ]);
+import { SwarmError, SwarmOrchestrator } from '../lib/swarm_orchestrator.js';
 
 export default async function handler(req, res) {
     setCorsHeaders(req, res);
@@ -31,6 +32,19 @@ export default async function handler(req, res) {
 
     const authResult = await verifySupabaseAuth(req);
     if (!authResult.ok) return res.status(authResult.status).json({ message: authResult.message });
+
+    const swarmAction = req.body?.action || ({ voice: 'swarm-voice', vision: 'swarm-vision', 'text-parse': 'swarm-parse' }[req.body?.modality]);
+    if (String(swarmAction || '').startsWith('swarm-')) {
+        try {
+            const swarmBody = swarmAction === 'swarm-vision' ? await hydratePrivateChart(req, authResult.user) : req.body;
+            const result = await new SwarmOrchestrator().run(swarmAction, swarmBody);
+            return res.status(200).json(result);
+        } catch (error) {
+            const status = error instanceof SwarmError ? error.status : 502;
+            if (error?.retryAfter) res.setHeader('Retry-After', error.retryAfter);
+            return res.status(status).json({ message: error?.message || 'Swarm orchestration failed', code: error?.code || 'SWARM_ERROR' });
+        }
+    }
 
     if (req.body?.action === 'coach-session') return handleCoachSession(req, res, authResult.user);
 
@@ -84,6 +98,19 @@ export default async function handler(req, res) {
     if (!text) return res.status(502).json({ message: 'Empty response from Gemini' });
 
     return res.status(200).json({ text, model, provider: 'gemini' });
+}
+
+async function hydratePrivateChart(req, user) {
+    if (req.body?.imageBase64 || !req.body?.chartImageUrl) return req.body;
+    const objectPath = String(req.body.chartImageUrl || '').replace(/^\/+/, '');
+    if (!objectPath.startsWith(`${user.id}/`) || objectPath.includes('..')) throw new SwarmError('Chart path is outside the user scope', 403, 'CHART_FORBIDDEN');
+    const url = String(process.env.SUPABASE_URL || '').replace(/\/$/, ''); const anon = process.env.SUPABASE_ANON_KEY || '';
+    if (!url || !anon) throw new SwarmError('Storage environment is unavailable', 503, 'STORAGE_UNAVAILABLE');
+    const encoded = objectPath.split('/').map(encodeURIComponent).join('/');
+    const response = await fetch(`${url}/storage/v1/object/authenticated/trade-charts/${encoded}`, { headers: { Authorization: req.headers.authorization, apikey: anon }, signal: AbortSignal.timeout(15000) });
+    if (!response.ok) throw new SwarmError('Unable to read the private chart', response.status === 404 ? 404 : 403, 'CHART_UNAVAILABLE');
+    const bytes = Buffer.from(await response.arrayBuffer()); if (bytes.length > 6 * 1024 * 1024) throw new SwarmError('Chart exceeds 6 MB', 413, 'IMAGE_TOO_LARGE');
+    return { ...req.body, imageBase64: bytes.toString('base64'), mimeType: response.headers.get('content-type') || req.body.mimeType || 'image/png' };
 }
 
 async function handleGroq(res, payload) {
