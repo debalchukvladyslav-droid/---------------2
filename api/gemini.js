@@ -21,6 +21,7 @@ const ALLOWED_MODELS = new Set([
     'gemini-2.5-pro',
 ]);
 import { SwarmError, SwarmOrchestrator } from '../lib/swarm_orchestrator.js';
+import { RagReranker, supabaseVectorSearch } from '../lib/rag_reranker.js';
 
 export default async function handler(req, res) {
     setCorsHeaders(req, res);
@@ -47,6 +48,7 @@ export default async function handler(req, res) {
     }
 
     if (req.body?.action === 'coach-session') return handleCoachSession(req, res, authResult.user);
+    if (req.body?.action === 'rag-context') return handleRagContext(req, res, authResult.user);
 
     const { payload, model: rawModel } = req.body || {};
     if (!payload || typeof payload !== 'object') return res.status(400).json({ message: 'Missing payload' });
@@ -98,6 +100,20 @@ export default async function handler(req, res) {
     if (!text) return res.status(502).json({ message: 'Empty response from Gemini' });
 
     return res.status(200).json({ text, model, provider: 'gemini' });
+}
+
+async function handleRagContext(req, res, user) {
+    const question = String(req.body?.question || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 4000);
+    if (question.length < 3) return res.status(400).json({ message: 'Question is too short' });
+    const url = String(process.env.SUPABASE_URL || '').replace(/\/$/, ''); const anonKey = process.env.SUPABASE_ANON_KEY || ''; const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    if (!url || !anonKey || !serviceKey) return res.status(503).json({ message: 'RAG environment is unavailable' });
+    try {
+        const embeddingResponse = await fetch(`${url}/functions/v1/embed-trade`, { method: 'POST', headers: { apikey: anonKey, Authorization: req.headers.authorization, 'Content-Type': 'application/json' }, body: JSON.stringify({ query_text: question }), signal: AbortSignal.timeout(30000) });
+        const embedded = await embeddingResponse.json().catch(() => ({})); if (!embeddingResponse.ok || embedded.embedding?.length !== 384) throw new Error('Unable to embed the RAG question');
+        const reranker = new RagReranker({ vectorSearch: supabaseVectorSearch({ url, serviceKey }) });
+        const result = await reranker.retrieve({ question, queryEmbedding: embedded.embedding, userId: user.id, candidateCount: 20, topN: 5 });
+        return res.status(200).json({ provider: result.provider, context: result.documents.map(({ id, journal_day_id, trade_text, similarity, rerank_score }) => ({ id, journal_day_id, trade_text, similarity, rerank_score })) });
+    } catch (error) { return res.status(502).json({ message: error?.message || 'RAG retrieval failed' }); }
 }
 
 async function hydratePrivateChart(req, user) {

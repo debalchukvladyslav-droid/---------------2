@@ -1,5 +1,6 @@
 import { runGoogleSheetSync, supabaseRest } from '../../lib/google_sheet_sync.js';
 import { processNextLearningJob, runLearningBatch } from '../../lib/ai_learning.js';
+import { runGrandmasterDailyReviews } from '../../lib/grandmaster_review.js';
 
 export const config = { maxDuration: 300 };
 
@@ -39,6 +40,11 @@ export default async function handler(req, res) {
     }
 
     try {
+        if (String(req.query?.task || '') === 'end-of-day') {
+            const grandmaster = await runGrandmasterDailyReviews({ tradeDate: /^\d{4}-\d{2}-\d{2}$/.test(String(req.query?.date || '')) ? String(req.query.date) : undefined });
+            const queued = await processNextLearningJob().catch(() => ({ job: null, run: null, status: 'idle' }));
+            return sendJson(res, 200, { ok: grandmaster.failed === 0, task: 'end-of-day', grandmaster, aiLearning: queued });
+        }
         if (String(req.query?.task || '') === 'ai-learning') {
             const queued = await processNextLearningJob();
             if (String(req.query?.mode || '') === 'job-only') {

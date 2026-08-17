@@ -69,7 +69,7 @@ async function saveDraft() {
     try {
         busy(true, 'Зберігаю угоду, multimodal metadata й Vector Memory…'); await saveJournalData();
         const { data: auth } = await supabase.auth.getUser(); const { data: journalDay, error: dayError } = await supabase.from('journal_days').select('id').eq('user_id', auth.user.id).eq('trade_date', date).single(); if (dayError) throw dayError;
-        const { data: multimodal, error: multimodalError } = await supabase.from('trade_multimodal_inputs').insert({ user_id: auth.user.id, journal_day_id: journalDay.id, audio_transcript: transcript, chart_image_url: chartPath, vision_analysis: vision ? JSON.stringify(vision) : '', ai_confidence_score: vision ? Math.round((Number(vision.confidence) || 0) * 100) : null }).select('id').single(); if (multimodalError) throw multimodalError;
+        const { data: multimodal, error: multimodalError } = await supabase.from('trade_multimodal_inputs').insert({ user_id: auth.user.id, journal_day_id: journalDay.id, trade_key: `${date}:${ticker}:${day.trades.length - 1}`, audio_transcript: transcript, chart_image_url: chartPath, vision_analysis: vision ? JSON.stringify(vision) : '', ai_confidence_score: vision ? Math.round((Number(vision.confidence) || 0) * 100) : null }).select('id').single(); if (multimodalError) throw multimodalError;
         trade.analysisResult.multimodalInputId = multimodal.id; markJournalDayDirty(date); await saveJournalData();
         summary(`Чернетку ${ticker} збережено за ${date}. Multimodal і Vector Memory синхронізуються.`); showToast('Chart analyzed successfully');
     }
