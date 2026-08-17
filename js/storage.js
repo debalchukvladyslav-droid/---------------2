@@ -9,6 +9,16 @@ import { loadScreenshotRegistry, mergeScreenshotRegistry } from './screenshot_re
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 import { createCompressedBackup } from './backups.js';
 
+async function syncTradeEmbeddings(savedDays) {
+    const ids = [...new Set((savedDays || []).map((row) => row?.id).filter(Boolean))];
+    for (let i = 0; i < ids.length; i += 20) {
+        const { error } = await supabase.functions.invoke('embed-trade', {
+            body: { journal_day_ids: ids.slice(i, i + 20) },
+        });
+        if (error) throw error;
+    }
+}
+
 function monthKey(dateStr) {
     return dateStr.slice(0, 7);
 }
@@ -448,13 +458,22 @@ async function _doSave(opts = {}) {
             return row;
         });
 
+        const savedDays = [];
         for (let i = 0; i < rows.length; i += 200) {
-            const { error } = await supabase
+            const { data, error } = await supabase
                 .from('journal_days')
-                .upsert(rows.slice(i, i + 200), { onConflict: 'user_id,trade_date' });
+                .upsert(rows.slice(i, i + 200), { onConflict: 'user_id,trade_date' })
+                .select('id,trade_date');
 
             if (error) throw error;
+            savedDays.push(...(data || []));
         }
+
+        // Semantic memory is derived after the durable journal write. A temporary
+        // inference failure must never roll back or block the trader's save flow.
+        void syncTradeEmbeddings(savedDays).catch((error) => {
+            console.warn('[trade-memory] embedding sync deferred:', error?.message || error);
+        });
 
         clearStatsCache(state.USER_DOC_NAME);
         entries.forEach(([dateStr]) => _dirtyJournalDates.delete(dateStr));
