@@ -18,6 +18,7 @@ import { initStopReview, refreshStopReview } from './stop_review.js';
 import { renderJournalScore } from './journal_score.js';
 import { getAIAdvice, analyzeChart, analyzeTagPatterns, openSOSModal, closeSOSModal, sendSOSMessage, sendDataChatMessage, renderAIAdviceUI, loadAIChatHistory, switchAITab, bookmarkAIChat, renderSavedAIChats, deleteSavedAI, applyAIQuickPrompt } from './ai.js';
 import { cleanupUnusedAIRequests } from './ai/client.js';
+import { loadLatestCoachInsight, requestSessionCoachAnalysis } from './proactive_coach.js';
 import { setupOCRDrawing, loadLatestImageForOCR, saveVisualOCRSettings, editTicker, forceScan, updateBadgeUI, runOCR, enqueueOCR, enqueueBackgroundOCRForAllScreens, getOCRQueueStatus } from './ocr.js';
 import { importFondexxReport, importPPROReport, importFondexxTrades, importFondexxSummaryByDate } from './parsers.js';
 import { renderPlaybook, addPlaybookSetup, editPlaybookSetup, savePlaybookSetup, deletePlaybookSetup, getPlaybookContext, getPlaybookForSituation, loadPlaybook } from './playbook.js';
@@ -724,6 +725,7 @@ window.saveSessionReview = async function() {
     state.appData.journal[today] = day;
     markJournalDayDirty(today);
     await saveJournalData();
+    void requestSessionCoachAnalysis(today).catch((error) => console.warn('[Proactive coach] session analysis deferred:', error?.message || error));
     document.getElementById('session-review-modal').style.display = 'none';
     if (state.selectedDateStr === today) renderView();
 };
@@ -1326,6 +1328,7 @@ async function bootApp(user) {
         initAILearningCenter();
         if (window.renderDashboardNews) void window.renderDashboardNews();
         void renderDashboardAI();
+        void loadLatestCoachInsight();
         if (window.renderMarketSentiment) void window.renderMarketSentiment();
         void renderJournalScore();
         cleanupUnusedAIRequests();

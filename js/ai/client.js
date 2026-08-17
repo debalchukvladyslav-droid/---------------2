@@ -41,14 +41,17 @@ export async function callGeminiViaProxy(payload, model = DEFAULT_MODEL) {
         const token = await getAccessToken();
         if (token) headers.Authorization = `Bearer ${token}`;
 
-        let res = await fetch(geminiEdgeUrl(), {
+        const hasImage = (payload?.contents || []).some((item) => (item?.parts || []).some((part) => Boolean(part?.inlineData?.data || part?.inline_data?.data)));
+        const primaryUrl = hasImage ? geminiEdgeUrl() : PROXY_FALLBACK;
+        const fallbackUrl = hasImage ? PROXY_FALLBACK : geminiEdgeUrl();
+        let res = await fetch(primaryUrl, {
             method: 'POST',
             headers,
             body: JSON.stringify({ payload, model }),
             signal: controller.signal,
         });
         if (res.status === 404 || res.status === 403 || res.status >= 500) {
-            res = await fetch(PROXY_FALLBACK, {
+            res = await fetch(fallbackUrl, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({ payload, model }),

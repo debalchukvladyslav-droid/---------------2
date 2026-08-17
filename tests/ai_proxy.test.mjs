@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { openRouterCandidates, payloadHasImages } from '../api/gemini.js';
+import { openRouterCandidates, payloadHasImages, selectAIProvider } from '../api/gemini.js';
 import { summarizeAIPayload } from '../js/ai/telemetry.js';
 import { outcomeBlindJournalContext, requireVisualPatternEvidence } from '../js/ai/outcome_guard.js';
 import { buildBoundedJournalContext, buildBoundedScreenTagContext } from '../js/ai/journal_context.js';
@@ -16,6 +16,17 @@ test('general AI proxy routes screenshots only through explicit vision models', 
     assert.equal(models.includes('openrouter/free'), false);
     assert.ok(models.length >= 3);
     assert.ok(models.every((model) => model.endsWith(':free')));
+});
+
+test('free provider router uses Groq for text and Gemini for vision', () => {
+    const env = { GROQ_API_KEY: 'groq', GEMINI_API_KEY: 'gemini' };
+    assert.equal(selectAIProvider({ contents: [{ parts: [{ text: 'summary' }] }] }, env), 'groq');
+    assert.equal(selectAIProvider({ contents: [{ parts: [{ inlineData: { data: 'abc' } }] }] }, env), 'gemini');
+});
+
+test('provider router never sends images to explicitly selected Groq', () => {
+    const payload = { contents: [{ parts: [{ inlineData: { data: 'abc' } }] }] };
+    assert.equal(selectAIProvider(payload, { AI_PROVIDER: 'groq', GROQ_API_KEY: 'groq', OPENROUTER_API_KEY: 'router' }), 'openrouter');
 });
 
 test('general AI proxy keeps configured text routing for requests without images', () => {

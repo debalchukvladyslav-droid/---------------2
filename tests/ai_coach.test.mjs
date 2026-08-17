@@ -1,0 +1,5 @@
+import test from 'node:test'; import assert from 'node:assert/strict';
+import { buildCoachContext, buildCoachPrompt, parseCoachInsight } from '../lib/ai_coach.js';
+test('coach context is bounded and strips unknown metrics', () => { const context = buildCoachContext({ days: Array.from({ length: 40 }, (_, i) => ({ trade_date: `2026-07-${String((i % 28)+1).padStart(2,'0')}`, pnl: i, daily_metrics: { sessionGoal: 'A+', secret: 'drop' } })) }); assert.equal(context.days.length, 30); assert.equal(context.days[0].metrics.secret, undefined); });
+test('coach prompt enforces evidence and premarket short scope', () => { const prompt = buildCoachPrompt(buildCoachContext()); assert.match(prompt, /04:00-09:30 ET/); assert.match(prompt, /n>=10/); assert.match(prompt, /Never invent RVOL/); });
+test('coach insight parser bounds output', () => { const insight = parseCoachInsight(JSON.stringify({ severity:'risk', title:'x', summary:'y', evidence:['a','b','c','d','e'], recommendations:['1'], trading_dna_patch:{ orb_chase: 2 } })); assert.equal(insight.evidence.length,4); assert.equal(insight.trading_dna_patch.orb_chase,2); });
