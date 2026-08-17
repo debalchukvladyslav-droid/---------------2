@@ -29,6 +29,7 @@
     { "source": "/mistakes", "destination": "/index.html" },
     { "source": "/errors", "destination": "/index.html" },
     { "source": "/ai", "destination": "/index.html" },
+    { "source": "/debrief", "destination": "/index.html" },
     { "source": "/mentor-review", "destination": "/index.html" },
     { "source": "/playbook", "destination": "/index.html" },
     { "source": "/learn", "destination": "/index.html" },

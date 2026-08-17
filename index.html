@@ -9,7 +9,7 @@
     <meta name="theme-color" content="#00e5a0">
     <meta name="color-scheme" content="dark light">
     <meta name="referrer" content="strict-origin-when-cross-origin">
-    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=(), payment=(), usb=(), bluetooth=()">
+    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(self), geolocation=(), payment=(), usb=(), bluetooth=()">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' data: https://cdn.jsdelivr.net https://*.supabase.co wss://*.supabase.co https://generativelanguage.googleapis.com https://finnhub.io https://www.googleapis.com https://oauth2.googleapis.com https://sheets.googleapis.com https://drive.googleapis.com https://content.googleapis.com https://content-sheets.googleapis.com https://api.telegram.org https://api.polygon.io https://traderjournal-six.vercel.app; frame-src 'self' https://accounts.google.com https://content.googleapis.com https://content-sheets.googleapis.com https://docs.google.com https://drive.google.com https://www.youtube.com https://www.youtube-nocookie.com https://t.me; worker-src 'self' blob: https://cdn.jsdelivr.net; media-src 'self' blob: data: https:; manifest-src 'self'; upgrade-insecure-requests">
     <title>Trading Journal Pro</title>
     
@@ -38,6 +38,7 @@
     <link rel="stylesheet" href="vendor/gridstack/gridstack.min.css">
     <link rel="stylesheet" href="css/20_dashboard_widgets.css">
     <link rel="stylesheet" href="css/21_swarm.css">
+    <link rel="stylesheet" href="css/22_grandmaster.css">
 
     <link rel="icon" type="image/x-icon" href="favicon.ico">
 </head>
@@ -61,6 +62,7 @@
         <div data-partial="partials/layout/app-header.html"></div>
 
         <div data-partial="partials/views/dashboard-view.html"></div>
+        <div data-partial="partials/views/debrief-view.html"></div>
 
         <div data-partial="partials/views/calendar-view.html"></div>
 

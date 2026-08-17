@@ -3,6 +3,7 @@
 import { state } from './state.js';
 import { collectDatagridRows } from './datagrid_rows.js';
 import { getCurrentStoredSpreadsheetId } from './sheet_table.js';
+import { filterTerminalRows } from './terminal_trade_filters.js';
 
 const DATAGRID_PAGE_SIZE = 250;
 const DATAGRID_COLSPAN = 20;
@@ -42,6 +43,7 @@ let _datagridVisibleCount = DATAGRID_PAGE_SIZE;
 let _datagridDirty = true;
 let _datagridBindingsReady = false;
 let _datagridPeriod = { mode: 'month', from: '', to: '' };
+let _terminalFilters = { query: '', minRvol: '', maxRvol: '', minAtr: '', maxAtr: '', timeFrom: '', timeTo: '' };
 let _datagridPickerYear = null;
 
 function esc(s) {
@@ -268,6 +270,8 @@ function filterRowsByPeriod(rows) {
     });
 }
 
+function readTerminalFilters() { _terminalFilters = { query: document.getElementById('datagrid-filter-query')?.value || '', minRvol: document.getElementById('datagrid-filter-rvol-min')?.value || '', maxRvol: document.getElementById('datagrid-filter-rvol-max')?.value || '', minAtr: document.getElementById('datagrid-filter-atr-min')?.value || '', maxAtr: document.getElementById('datagrid-filter-atr-max')?.value || '', timeFrom: document.getElementById('datagrid-filter-time-from')?.value || '', timeTo: document.getElementById('datagrid-filter-time-to')?.value || '' }; }
+
 function badge(htmlClass, text) {
     const t = text == null || text === '' ? '—' : String(text);
     return `<span class="badge ${htmlClass}">${esc(t)}</span>`;
@@ -420,6 +424,8 @@ function bindDatagridControls() {
             renderTradesDatagrid();
         }
     });
+    document.addEventListener('input', (event) => { if (!event.target?.closest?.('.datagrid-terminal-filters')) return; readTerminalFilters(); _datagridVisibleCount = DATAGRID_PAGE_SIZE; renderTradesDatagrid(); });
+    document.getElementById('datagrid-filter-reset')?.addEventListener('click', () => { document.querySelectorAll('.datagrid-terminal-filters input').forEach((input) => { input.value = ''; }); readTerminalFilters(); renderTradesDatagrid(); });
 
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') closeDatagridMonthPicker();
@@ -447,7 +453,7 @@ export function renderTradesDatagrid() {
     if (!tbody) return;
 
     const allRows = ensureRowsCache();
-    const rows = filterRowsByPeriod(allRows);
+    const rows = filterTerminalRows(filterRowsByPeriod(allRows), _terminalFilters);
     if (rows.length === 0) {
         tbody.innerHTML =
             `<tr><td class="datagrid-empty" colspan="${DATAGRID_COLSPAN}">${esc(getDatagridSourceLabel())}: немає рядків ${esc(getDatagridPeriodLabel())}. Змініть місяць або виберіть ширший діапазон.</td></tr>`;

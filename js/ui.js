@@ -526,6 +526,7 @@ export function toggleMobileSidebar(forceState) {
 }
 
 const TAB_TITLES = {
+    debrief: 'Grandmaster / Trader DNA',
     dash: 'Головна',
     calendar: 'Календар',
     stats: 'Статистика',
@@ -543,6 +544,7 @@ const TAB_TITLES = {
 };
 
 const NAV_TITLES = {
+    debrief: 'Trader DNA',
     dash: 'Огляд',
     calendar: 'Календар',
     stats: 'Аналітика',
@@ -560,6 +562,7 @@ const NAV_TITLES = {
 };
 
 const TAB_ROUTES = {
+    debrief: '/debrief',
     dash: '/',
     calendar: '/calendar',
     stats: '/stats',
@@ -584,6 +587,7 @@ const TAB_DISPOSERS = {
     screens: () => disposeScreensView(),
 };
 const TAB_LOADING_TITLES = {
+    debrief: 'Збираємо Trader DNA',
     dash: 'Готуємо головну',
     calendar: 'Готуємо календар',
     stats: 'Готуємо статистику',
@@ -680,6 +684,7 @@ function activateMainView(view, tab, previousTab) {
 
 async function runMainTabWork(tab) {
     const tasks = [];
+    if (tab === 'debrief' && window.renderGrandmasterDashboard) tasks.push(Promise.resolve(window.renderGrandmasterDashboard()));
     if (tab === 'ai') {
         window.initAILearningCenter?.();
     }
@@ -699,6 +704,7 @@ async function runMainTabWork(tab) {
     if (tab === 'table' && window.initSheetTableView) tasks.push(Promise.resolve(window.initSheetTableView()));
     if (tab === 'datagrid' && window.renderTradesDatagrid) tasks.push(Promise.resolve(window.renderTradesDatagrid()));
     if (tab === 'dash') {
+        if (window.renderTraderDNAGlance) tasks.push(Promise.resolve(window.renderTraderDNAGlance()));
         if (window.renderDashboardNews) tasks.push(Promise.resolve(window.renderDashboardNews()));
         if (window.renderDashboardAI) tasks.push(Promise.resolve(window.renderDashboardAI()));
         if (window.renderMarketSentiment) tasks.push(Promise.resolve(window.renderMarketSentiment()));

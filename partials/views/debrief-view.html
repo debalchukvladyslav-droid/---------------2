@@ -1,0 +1,21 @@
+<div id="view-debrief" class="view-content">
+  <main class="gm-shell" aria-labelledby="gm-title">
+    <header class="gm-hero"><div><span class="gm-kicker">GRANDMASTER / POST-MARKET</span><h2 id="gm-title">Щоденний розбір</h2><p>Рішення, ціна помилок і твоя поведінкова модель — без інформаційного шуму.</p></div><div class="gm-session-state"><span>NY SESSION</span><strong id="gm-latest-date">—</strong><button type="button" id="gm-refresh" class="gm-icon-btn" aria-label="Оновити розбір">↻</button></div></header>
+    <section id="gm-loading" class="gm-loading" role="status" aria-live="polite"><span></span><div><strong>Збираю пам’ять сесій</strong><small>Daily reviews, журнал та feedback</small></div></section>
+    <section id="gm-error" class="gm-empty" hidden><strong>Розбір поки недоступний</strong><p id="gm-error-text"></p><button type="button" data-tab="trades">Відкрити журнал</button></section>
+    <div id="gm-content" hidden>
+      <section class="gm-kpi-grid" aria-label="Ключові показники">
+        <article><span>5 сесій</span><strong id="gm-five-pnl">$0</strong><small>Net P&amp;L</small></article>
+        <article><span>Win rate</span><strong id="gm-five-winrate">0%</strong><svg id="gm-winrate-spark" class="gm-spark" viewBox="0 0 160 42" role="img" aria-label="Тренд win rate"></svg></article>
+        <article class="is-risk"><span>Ціна flagged-помилок</span><strong id="gm-mistake-cost">$0</strong><small>Фактичні збитки, не прогноз</small></article>
+        <article><span>Equity pulse</span><strong id="gm-equity-delta">$0</strong><svg id="gm-equity-spark" class="gm-spark" viewBox="0 0 160 42" role="img" aria-label="Крива результату"></svg></article>
+      </section>
+      <section class="gm-grid">
+        <article class="gm-panel gm-debrief"><header><span>Останній debrief</span><em id="gm-review-status">—</em></header><h3 id="gm-review-title">Сесія</h3><p id="gm-debrief-text"></p><div class="gm-takeaways"><h4>Key takeaways</h4><ul id="gm-takeaways"></ul></div></article>
+        <article class="gm-panel gm-dna"><header><span>TRADER DNA</span><em>7 сесій</em></header><div id="gm-dna-score" class="gm-dna-score"><strong>—</strong><span>discipline index</span></div><div><h4>Поточні ризики</h4><div id="gm-risk-badges" class="gm-badges"></div><h4>Сильні сторони</h4><div id="gm-strength-badges" class="gm-badges"></div></div></article>
+        <article class="gm-panel gm-history"><header><span>Session tape</span><em>останні 5</em></header><div id="gm-review-history"></div></article>
+        <article class="gm-panel gm-rules"><header><span>Наступна сесія</span><em>hard rules</em></header><ol id="gm-next-rules"></ol><button type="button" data-tab="calendar">Відкрити pre-market план →</button></article>
+      </section>
+    </div>
+  </main>
+</div>
