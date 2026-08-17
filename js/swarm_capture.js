@@ -3,6 +3,8 @@ import { state } from './state.js';
 import { getDefaultDayEntry } from './data_utils.js';
 import { markJournalDayDirty, saveJournalData } from './storage.js';
 import { showToast } from './utils.js';
+import { initMarketEnrichment } from './market_enrichment.js';
+import { gradeDiscipline } from './discipline_score.js';
 
 let recorder; let recognition; let browserTranscript = ''; let chunks = []; let vision = null; let transcript = ''; let chartPath = '';
 const $ = (id) => document.getElementById(id);
@@ -64,7 +66,9 @@ function nyDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America
 async function saveDraft() {
     const ticker = $('swarm-ticker')?.value.trim().toUpperCase(); if (!ticker) return summary('Вкажіть ticker перед збереженням.', true);
     const date = /^\d{4}-\d{2}-\d{2}$/.test(state.selectedDateStr || '') ? state.selectedDateStr : nyDate(); const day = state.appData.journal[date] || getDefaultDayEntry(); day.trades = Array.isArray(day.trades) ? day.trades : [];
-    const trade = { symbol: ticker, type: 'SHORT', entry: $('swarm-entry').value, exit: $('swarm-exit').value, stop: $('swarm-stop').value, setup: $('swarm-setup').value.trim(), rvol: $('swarm-rvol').value, atr: $('swarm-atr').value, opened: '', analysisResult: { source: 'ai-swarm', voiceTranscript: transcript, chartImageUrl: chartPath, vision } }; day.trades.push(trade);
+    const draftTrade = { symbol: ticker, type: 'SHORT', entry: $('swarm-entry').value, exit: $('swarm-exit').value, stop: $('swarm-stop').value, setup: $('swarm-setup').value.trim(), gapPct: $('swarm-gap')?.value || '', rvol: $('swarm-rvol').value, floatShares: $('swarm-float')?.value || '', atr: $('swarm-atr').value, opened: $('swarm-time')?.value || '' };
+    const discipline = gradeDiscipline(draftTrade);
+    const trade = { ...draftTrade, disciplineGrade: discipline.grade, disciplineScore: discipline.score, disciplineReasons: discipline.reasons, disciplineVersion: discipline.version, analysisResult: { source: 'ai-swarm', voiceTranscript: transcript, chartImageUrl: chartPath, vision } }; day.trades.push(trade);
     state.appData.journal[date] = day; markJournalDayDirty(date);
     try {
         busy(true, 'Зберігаю угоду, multimodal metadata й Vector Memory…'); await saveJournalData();
@@ -81,4 +85,7 @@ export function initSwarmCapture() {
     $('swarm-mic-btn')?.addEventListener('click', toggleRecording); $('swarm-image-btn')?.addEventListener('click', () => $('swarm-image-input')?.click()); $('swarm-image-input')?.addEventListener('change', (event) => analyzeImage(event.target.files?.[0])); $('swarm-save-btn')?.addEventListener('click', saveDraft);
     const zone = $('swarm-dropzone'); zone?.addEventListener('click', () => $('swarm-image-input')?.click()); zone?.addEventListener('dragover', (event) => { event.preventDefault(); zone.classList.add('is-dragging'); }); zone?.addEventListener('dragleave', () => zone.classList.remove('is-dragging')); zone?.addEventListener('drop', (event) => { event.preventDefault(); zone.classList.remove('is-dragging'); analyzeImage(event.dataTransfer?.files?.[0]); });
     document.addEventListener('paste', (event) => { if (!document.getElementById('view-trades')?.classList.contains('active')) return; const file = [...(event.clipboardData?.files || [])].find((item) => item.type.startsWith('image/')); if (file) analyzeImage(file); });
+    initMarketEnrichment();
+    const updateDiscipline = () => { const node = $('swarm-discipline'); if (!node) return; const result = gradeDiscipline({ type: 'SHORT', opened: $('swarm-time')?.value, entry: $('swarm-entry')?.value, exit: $('swarm-exit')?.value, stop: $('swarm-stop')?.value, setup: $('swarm-setup')?.value, rvol: $('swarm-rvol')?.value, atr: $('swarm-atr')?.value }); node.textContent = `Discipline ${result.grade} · ${result.score}/100${result.reasons.length ? ` · ${result.reasons[0]}` : ' · план підтверджено'}`; node.dataset.grade = result.grade; };
+    ['swarm-time','swarm-entry','swarm-exit','swarm-stop','swarm-setup','swarm-rvol','swarm-atr'].forEach((id) => $(id)?.addEventListener('input', updateDiscipline)); updateDiscipline();
 }

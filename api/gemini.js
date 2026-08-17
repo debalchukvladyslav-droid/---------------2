@@ -22,6 +22,7 @@ const ALLOWED_MODELS = new Set([
 ]);
 import { SwarmError, SwarmOrchestrator } from '../lib/swarm_orchestrator.js';
 import { RagReranker, supabaseVectorSearch } from '../lib/rag_reranker.js';
+import { enrichMarketData } from '../lib/market_enrichment.js';
 
 export default async function handler(req, res) {
     setCorsHeaders(req, res);
@@ -49,6 +50,10 @@ export default async function handler(req, res) {
 
     if (req.body?.action === 'coach-session') return handleCoachSession(req, res, authResult.user);
     if (req.body?.action === 'rag-context') return handleRagContext(req, res, authResult.user);
+    if (req.body?.action === 'market-enrich') {
+        try { return res.status(200).json(await enrichMarketData(req.body?.ticker)); }
+        catch (error) { if (error?.status === 429) res.setHeader('Retry-After', '60'); return res.status(error?.status || 502).json({ message: error?.message || 'Market enrichment failed', code: error?.code || 'MARKET_PROVIDER_ERROR' }); }
+    }
 
     const { payload, model: rawModel } = req.body || {};
     if (!payload || typeof payload !== 'object') return res.status(400).json({ message: 'Missing payload' });

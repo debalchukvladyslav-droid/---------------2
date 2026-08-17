@@ -10,6 +10,7 @@
     }
   ],
   "rewrites": [
+    { "source": "/api/export", "destination": "/api/sheets-service?action=export" },
     { "source": "/api/cron/ai-learning", "destination": "/api/cron/sync-google-sheets?task=ai-learning" },
     { "source": "/api/cron/end-of-day", "destination": "/api/cron/sync-google-sheets?task=end-of-day" },
     { "source": "/config.js", "destination": "/api/client-config.js" },
@@ -30,6 +31,7 @@
     { "source": "/errors", "destination": "/index.html" },
     { "source": "/ai", "destination": "/index.html" },
     { "source": "/debrief", "destination": "/index.html" },
+    { "source": "/team-report", "destination": "/index.html" },
     { "source": "/mentor-review", "destination": "/index.html" },
     { "source": "/playbook", "destination": "/index.html" },
     { "source": "/learn", "destination": "/index.html" },

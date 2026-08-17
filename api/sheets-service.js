@@ -1,4 +1,6 @@
-import { getGoogleAccessToken, verifySupabaseUser } from '../lib/google_sheet_sync.js';
+import { getGoogleAccessToken, supabaseRest, verifySupabaseUser } from '../lib/google_sheet_sync.js';
+import { tradingWorkbookBuffer } from '../lib/trading_export.js';
+import { buildTeamReport } from '../lib/team_report.js';
 
 function sendJson(res, status, body) {
     res.status(status).setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -107,6 +109,18 @@ async function values(req, res, token) {
     return sendJson(res, 200, { ok: true, values: data.values || [], hyperlinks });
 }
 
+async function exportWorkbook(res, user) {
+    const [days, reviews] = await Promise.all([
+        supabaseRest(`journal_days?user_id=eq.${encodeURIComponent(user.id)}&select=trade_date,pnl,daily_metrics&order=trade_date.asc`),
+        supabaseRest(`daily_reviews?user_id=eq.${encodeURIComponent(user.id)}&select=trade_date,status,debrief,strengths,mistakes,next_session_rules,model_name&order=trade_date.asc`),
+    ]);
+    const buffer = await tradingWorkbookBuffer({ days, reviews });
+    const date = new Date().toISOString().slice(0, 10);
+    res.status(200); res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); res.setHeader('Content-Disposition', `attachment; filename="STRUM-trading-journal-${date}.xlsx"`); res.setHeader('Cache-Control', 'private, no-store');
+    return res.end(Buffer.from(buffer));
+}
+async function teamReport(req, res, user) { const limit=Math.min(180,Math.max(7,Number(req.query.days)||30)); const [days,reviews]=await Promise.all([supabaseRest(`journal_days?user_id=eq.${encodeURIComponent(user.id)}&select=trade_date,daily_metrics&order=trade_date.desc&limit=${limit}`),supabaseRest(`daily_reviews?user_id=eq.${encodeURIComponent(user.id)}&select=trade_date,status,debrief,strengths,mistakes,next_session_rules&order=trade_date.desc&limit=${limit}`)]); return sendJson(res,200,{ok:true,report:buildTeamReport(days,reviews,{includePnl:req.query.includePnl==='true'})}); }
+
 export default async function handler(req, res) {
     try {
         if (req.method !== 'GET') {
@@ -116,6 +130,10 @@ export default async function handler(req, res) {
 
         const user = await verifySupabaseUser(req.headers.authorization || '');
         if (!user?.id) return sendJson(res, 401, { ok: false, error: 'Unauthorized' });
+
+        const action = String(req.query.action || 'metadata');
+        if (action === 'export') return exportWorkbook(res, user);
+        if (action === 'team-report') return teamReport(req, res, user);
 
         let token = String(req.headers['x-google-access-token'] || '').trim();
         let authMode = token ? 'user' : 'service-account';
@@ -133,7 +151,6 @@ export default async function handler(req, res) {
                 });
             }
         }
-        const action = String(req.query.action || 'metadata');
         console.log('[Sheets service] authorization', { action, authMode });
         if (action === 'metadata') return metadata(req, res, token);
         if (action === 'values') return values(req, res, token);

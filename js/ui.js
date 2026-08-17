@@ -526,6 +526,7 @@ export function toggleMobileSidebar(forceState) {
 }
 
 const TAB_TITLES = {
+    'team-report': 'TeamLead Report',
     debrief: 'Grandmaster / Trader DNA',
     dash: 'Головна',
     calendar: 'Календар',
@@ -544,6 +545,7 @@ const TAB_TITLES = {
 };
 
 const NAV_TITLES = {
+    'team-report': 'TeamLead Report',
     debrief: 'Trader DNA',
     dash: 'Огляд',
     calendar: 'Календар',
@@ -562,6 +564,7 @@ const NAV_TITLES = {
 };
 
 const TAB_ROUTES = {
+    'team-report': '/team-report',
     debrief: '/debrief',
     dash: '/',
     calendar: '/calendar',
@@ -587,6 +590,7 @@ const TAB_DISPOSERS = {
     screens: () => disposeScreensView(),
 };
 const TAB_LOADING_TITLES = {
+    'team-report': 'Готуємо TeamLead report',
     debrief: 'Збираємо Trader DNA',
     dash: 'Готуємо головну',
     calendar: 'Готуємо календар',
@@ -685,6 +689,7 @@ function activateMainView(view, tab, previousTab) {
 async function runMainTabWork(tab) {
     const tasks = [];
     if (tab === 'debrief' && window.renderGrandmasterDashboard) tasks.push(Promise.resolve(window.renderGrandmasterDashboard()));
+    if (tab === 'team-report' && window.renderTeamReport) tasks.push(Promise.resolve(window.renderTeamReport()));
     if (tab === 'ai') {
         window.initAILearningCenter?.();
     }
@@ -775,6 +780,7 @@ export function refreshCurrentMainTitle() {
 }
 
 const ROUTE_TABS = {
+    '/team-report': 'team-report',
     '/': 'dash',
     '/dashboard': 'dash',
     '/calendar': 'calendar',

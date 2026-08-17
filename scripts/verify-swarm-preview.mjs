@@ -47,7 +47,9 @@ function vercelCurl(extraHeaders = [], requestPayload = payload) {
 const unauthorized = vercelCurl();
 const authorized = vercelCurl([`Authorization: Bearer ${sessionResult.body.access_token}`]);
 const rag = vercelCurl([`Authorization: Bearer ${sessionResult.body.access_token}`], JSON.stringify({ action: 'rag-context', question: 'Why did I fail the pump breakdown?' }));
+const market = vercelCurl([`Authorization: Bearer ${sessionResult.body.access_token}`], JSON.stringify({ action: 'market-enrich', ticker: 'AAPL' }));
 if (unauthorized?.error?.code !== 'AUTH_REQUIRED' && unauthorized?.message !== 'Missing auth token') throw new Error(`Expected auth rejection without JWT, received ${JSON.stringify(unauthorized)}`);
 if (!authorized?.draft?.ticker && !authorized?.result?.ticker && !authorized?.ticker) throw new Error(`Swarm parser response did not contain a ticker: ${JSON.stringify(authorized)}`);
 if (!Array.isArray(rag.context)) throw new Error(`RAG endpoint did not return bounded context: ${JSON.stringify(rag)}`);
-console.log(JSON.stringify({ ok: true, anonymous_status: 401, authenticated_status: 200, provider: authorized.agents?.[0] || authorized.provider || authorized.result?.provider || 'unknown', rag_provider: rag.provider, rag_context_count: rag.context.length }));
+if (!market.ticker && market.code !== 'MARKET_DATA_UNAVAILABLE') throw new Error(`Market endpoint contract failed: ${JSON.stringify(market)}`);
+console.log(JSON.stringify({ ok: true, anonymous_status: 401, authenticated_status: 200, provider: authorized.agents?.[0] || authorized.provider || authorized.result?.provider || 'unknown', rag_provider: rag.provider, rag_context_count: rag.context.length, market_status: market.ticker ? 'ready' : market.code }));
