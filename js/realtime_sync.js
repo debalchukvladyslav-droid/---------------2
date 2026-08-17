@@ -1,6 +1,88 @@
-import { supabase } from './supabase.js'; import { state } from './state.js'; import { loadTradeDays } from './storage.js'; import { createRealtimeEventGate, classifyRealtimeEvent } from './realtime_sync_core.js';
-let channel=null,timer=null;const accept=createRealtimeEventGate();
-async function refresh(kind){if(kind==='journal'){await loadTradeDays(state.CURRENT_VIEWED_USER,state.myUserId,{force:true}).catch(()=>{});window.renderTradesDatagrid?.();window.renderTraderDNAGlance?.();window.renderDashboardAI?.();}else{window.renderGrandmasterDashboard?.();window.renderTeamReport?.();window.loadLatestCoachInsight?.();}document.dispatchEvent(new CustomEvent('strum:realtime-synced',{detail:{kind}}));}
-function receive(payload,userId){if(!accept(payload))return;const kind=classifyRealtimeEvent(payload,userId);if(kind==='ignore')return;clearTimeout(timer);timer=setTimeout(()=>refresh(kind),80);}
-async function subscribe(userId){if(channel)await supabase.removeChannel(channel);if(!userId)return;const filter=`user_id=eq.${userId}`;channel=supabase.channel(`strum-user-${userId}`).on('postgres_changes',{event:'*',schema:'public',table:'journal_days',filter},payload=>receive({...payload,table:'journal_days'},userId)).on('postgres_changes',{event:'*',schema:'public',table:'daily_reviews',filter},payload=>receive({...payload,table:'daily_reviews'},userId)).on('postgres_changes',{event:'*',schema:'public',table:'ai_coach_insights',filter},payload=>receive({...payload,table:'ai_coach_insights'},userId)).subscribe(status=>document.documentElement.dataset.realtime=status==='SUBSCRIBED'?'online':'connecting');}
-export function initRealtimeSync(){supabase.auth.onAuthStateChange((_event,session)=>subscribe(session?.user?.id));supabase.auth.getSession().then(({data})=>subscribe(data.session?.user?.id));window.addEventListener('beforeunload',()=>{if(channel)supabase.removeChannel(channel);},{once:true});}
+import { supabase } from './supabase.js';
+import { state } from './state.js';
+import { loadTradeDays } from './storage.js';
+import { createRealtimeEventGate, classifyRealtimeEvent } from './realtime_sync_core.js';
+
+let channel = null;
+let activeUserId = null;
+let timer = null;
+let initialized = false;
+let subscriptionTask = Promise.resolve();
+const accept = createRealtimeEventGate();
+
+async function refresh(kind) {
+    if (kind === 'journal') {
+        await loadTradeDays(state.CURRENT_VIEWED_USER, state.myUserId, { force: true }).catch(() => {});
+        window.renderTradesDatagrid?.();
+        window.renderTraderDNAGlance?.();
+        window.renderDashboardAI?.();
+    } else {
+        window.renderGrandmasterDashboard?.();
+        window.renderTeamReport?.();
+        window.loadLatestCoachInsight?.();
+    }
+    document.dispatchEvent(new CustomEvent('strum:realtime-synced', { detail: { kind } }));
+}
+
+function receive(payload, userId) {
+    if (!accept(payload)) return;
+    const kind = classifyRealtimeEvent(payload, userId);
+    if (kind === 'ignore') return;
+    clearTimeout(timer);
+    timer = setTimeout(() => refresh(kind), 80);
+}
+
+async function replaceSubscription(userId) {
+    if (channel && activeUserId === userId) return;
+
+    if (channel) {
+        const previousChannel = channel;
+        channel = null;
+        activeUserId = null;
+        await supabase.removeChannel(previousChannel);
+    }
+
+    if (!userId) {
+        document.documentElement.dataset.realtime = 'offline';
+        return;
+    }
+
+    const filter = `user_id=eq.${userId}`;
+    const nextChannel = supabase
+        .channel(`strum-user-${userId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'journal_days', filter },
+            payload => receive({ ...payload, table: 'journal_days' }, userId))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_reviews', filter },
+            payload => receive({ ...payload, table: 'daily_reviews' }, userId))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'ai_coach_insights', filter },
+            payload => receive({ ...payload, table: 'ai_coach_insights' }, userId));
+
+    // Supabase requires all postgres_changes callbacks before subscribe().
+    channel = nextChannel;
+    activeUserId = userId;
+    nextChannel.subscribe(status => {
+        if (channel !== nextChannel) return;
+        document.documentElement.dataset.realtime = status === 'SUBSCRIBED' ? 'online' : 'connecting';
+    });
+}
+
+function subscribe(userId) {
+    subscriptionTask = subscriptionTask
+        .then(() => replaceSubscription(userId || null))
+        .catch(error => {
+            document.documentElement.dataset.realtime = 'offline';
+            console.error('STRUM Realtime subscription failed:', error);
+        });
+    return subscriptionTask;
+}
+
+export function initRealtimeSync() {
+    if (initialized) return;
+    initialized = true;
+
+    supabase.auth.onAuthStateChange((_event, session) => subscribe(session?.user?.id));
+    supabase.auth.getSession().then(({ data }) => subscribe(data.session?.user?.id));
+    window.addEventListener('beforeunload', () => {
+        if (channel) supabase.removeChannel(channel);
+    }, { once: true });
+}
