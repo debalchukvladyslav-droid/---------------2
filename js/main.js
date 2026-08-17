@@ -62,6 +62,8 @@ import { initTerminalShortcuts } from './terminal_shortcuts.js';
 import { initSwarmCapture } from './swarm_capture.js';
 import { initExcelExport } from './excel_export.js';
 import { initTeamReport, renderTeamReport } from './team_report.js';
+import { initPwa, initTradeCardGestures } from './pwa.js';
+import { initRealtimeSync } from './realtime_sync.js';
 
 let appShellPromise = null;
 let appShellEventsReady = false;
@@ -1483,6 +1485,8 @@ initExcelExport();
 document.addEventListener('app:shell-ready', initExcelExport);
 initTeamReport(); window.renderTeamReport=renderTeamReport;
 document.addEventListener('app:shell-ready', initTeamReport);
+initPwa(); initTradeCardGestures();
+initRealtimeSync();
 initNotifications();
 initSheetTableView({ deferGoogleRestore: true });
 window.initSheetTableView = initSheetTableView;
