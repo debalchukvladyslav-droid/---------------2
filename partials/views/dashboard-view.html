@@ -7,6 +7,12 @@
                     <button type="button" class="btn-secondary is-icon-only" id="dashboard-edit-toggle" aria-pressed="false" aria-label="Редагувати головну" title="Редагувати головну"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 20h4l10.7-10.7a2.1 2.1 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg></button>
                 </div>
             </header>
+            <section class="premarket-command" id="premarket-command" aria-label="Pre-market командний центр">
+                <div class="premarket-command__session"><div class="premarket-command__eyebrow"><span class="premarket-command__pulse" aria-hidden="true"></span><span id="premarket-phase">Нью-Йорк</span></div><strong class="premarket-command__clock" id="premarket-clock">--:-- ET</strong><span class="premarket-command__countdown" id="premarket-countdown">Визначаю фазу сесії…</span></div>
+                <div class="premarket-command__readiness" id="premarket-readiness"><div class="premarket-command__ring" id="premarket-readiness-ring"><strong id="premarket-readiness-score">0</strong><span>%</span></div><div><span class="premarket-command__label">Готовність</span><strong id="premarket-readiness-label">Перевіряю план</strong><small id="premarket-readiness-hint"></small></div></div>
+                <div class="premarket-command__focus"><span class="premarket-command__label">Фокус сесії</span><strong id="premarket-focus">Визнач одну умову для входу</strong><span id="premarket-setups">Сетапи ще не вибрані</span></div>
+                <div class="premarket-command__risk"><span class="premarket-command__label">Hard stop дня</span><strong id="premarket-risk-limit">—</strong><button type="button" data-tab="calendar">Відкрити план →</button></div>
+            </section>
             <div class="dashboard-builder" id="dashboard-builder">
                 <aside class="dashboard-widget-catalog" id="dashboard-widget-catalog" aria-label="Каталог панелей" aria-hidden="true">
                     <div class="dashboard-catalog-head"><div><span>Панелі</span><strong>Додайте на головну</strong></div><button type="button" id="dashboard-catalog-close" aria-label="Закрити каталог">×</button></div>

@@ -131,10 +131,13 @@ function normalizeServerBackupError(error) {
 }
 
 async function getServerBackupUserId() {
-    if (state.myUserId) return state.myUserId;
     const { data, error } = await supabase.auth.getUser();
     if (error) throw error;
-    return data?.user?.id || '';
+    const authenticatedUserId = data?.user?.id || '';
+    if (authenticatedUserId && state.myUserId !== authenticatedUserId) {
+        state.myUserId = authenticatedUserId;
+    }
+    return authenticatedUserId;
 }
 
 function rowToBackupEntry(row) {

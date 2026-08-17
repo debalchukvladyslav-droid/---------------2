@@ -5,6 +5,7 @@ import { deriveDayKfFromTrades } from './data_utils.js';
 import { supabase } from './supabase.js';
 import { buildExceptionKfRows, buildHourlyKfBuckets, combineStatsSheetRows } from './stats_sheet_metrics.js';
 import { escapeHtml } from './utils.js';
+import { buildReadiness, deriveSessionPhase, getNewYorkParts } from './premarket_command_center_core.js';
 
 const VERSION = 10;
 const GRID_COLUMNS = 12;
@@ -44,6 +45,7 @@ const sourceNodes = new Map();
 let densityObserver = null;
 let gridStack = null;
 let responsiveTimer = 0;
+let commandCenterTimer = 0;
 const miniEquityCharts = new Map();
 
 const byId = (id) => document.getElementById(id);
@@ -53,6 +55,26 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const money = (value) => `${Number(value) >= 0 ? '+' : '−'}$${Math.abs(Number(value) || 0).toFixed(2)}`;
 const kfText = (value) => `${Number(value) >= 0 ? '+' : ''}${(Number(value) || 0).toFixed(2)} КФ`;
 const dateKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+function renderPremarketCommandCenter() {
+    const root = byId('premarket-command');
+    if (!root) return;
+    const ny = getNewYorkParts();
+    const phase = deriveSessionPhase(ny);
+    const readiness = buildReadiness(state.appData?.journal?.[ny.dateKey] || {});
+    const limit = Math.abs(Number(state.appData?.settings?.monthlyDayloss?.[ny.dateKey.slice(0, 7)] ?? state.appData?.settings?.defaultDayloss) || 0);
+    root.dataset.phase = phase.tone; root.dataset.readiness = readiness.tone;
+    byId('premarket-phase').textContent = phase.label;
+    byId('premarket-clock').textContent = `${String(ny.hour).padStart(2, '0')}:${String(ny.minute).padStart(2, '0')} ET`;
+    byId('premarket-countdown').textContent = phase.countdown;
+    byId('premarket-readiness-score').textContent = String(readiness.score);
+    byId('premarket-readiness-label').textContent = readiness.label;
+    byId('premarket-readiness-hint').textContent = readiness.hint;
+    byId('premarket-readiness-ring')?.style.setProperty('--readiness', `${readiness.score * 3.6}deg`);
+    byId('premarket-focus').textContent = readiness.goal || readiness.plan || 'Визнач одну умову для входу';
+    byId('premarket-setups').textContent = readiness.setups.length ? readiness.setups.slice(0, 3).join(' · ') : 'Сетапи ще не вибрані';
+    byId('premarket-risk-limit').textContent = limit ? `−$${limit.toFixed(0)}` : 'Не задано';
+}
 
 function defaultLayout() {
     const preset = [
@@ -528,6 +550,7 @@ function bindEvents() {
 
 export function refreshDashboardWidgets() {
     if (!initialized) return;
+    renderPremarketCommandCenter();
     layout.forEach((item) => {
         if (sourceNodes.has(item.id)) return;
         const host = document.querySelector(`[data-widget-id="${item.id}"] .dashboard-widget-content`);
@@ -550,4 +573,7 @@ export async function initDashboardWidgets() {
     if (!initialized) { bindEvents(); initialized = true; }
     const toggle = byId('dashboard-edit-toggle'); if (toggle) toggle.hidden = !ownProfile();
     editing = false; renderGrid(); setEditing(false);
+    renderPremarketCommandCenter();
+    window.clearInterval(commandCenterTimer);
+    commandCenterTimer = window.setInterval(renderPremarketCommandCenter, 30_000);
 }
