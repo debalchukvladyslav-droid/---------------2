@@ -6,8 +6,8 @@ import { supabase } from './supabase.js';
 import { buildExceptionKfRows, buildHourlyKfBuckets, combineStatsSheetRows } from './stats_sheet_metrics.js';
 import { escapeHtml } from './utils.js';
 
-const VERSION = 9;
-const GRID_COLUMNS = 24;
+const VERSION = 10;
+const GRID_COLUMNS = 12;
 const CATEGORIES = { overview: 'Огляд', analytics: 'Аналітика', routine: 'Сесія', tools: 'Інструменти' };
 const MICRO_WIDGETS = new Set(['month-pnl', 'month-winrate', 'month-trades', 'month-pf', 'today', 'daily-kf', 'week-compare', 'streak', 'current-hour', 'last-session', 'sync-status', 'missing-data']);
 const WIDGET_MAX_HEIGHTS = { equity: 12, 'recent-trades': 12, 'month-pnl': 4, 'month-winrate': 4, 'month-trades': 4, 'month-pf': 4, news: 1 };
@@ -31,7 +31,7 @@ const WIDGETS = [
     ['sync-status', 'Синхронізація', 'tools', 4, 2], ['missing-data', 'Незаповнені дані', 'tools', 4, 2],
     ['earnings', 'Майбутні звіти тикерів', 'tools', 4, 2], ['quick-actions', 'Швидкі дії', 'tools', 4, 2],
     ['news', 'Стрічка новин', 'tools', 12, 1],
-].map(([id, title, category, w, h]) => ({ id, title, category, w: w * 2, h, minW: COMPLEX_LIMITS[id]?.[0] ? COMPLEX_LIMITS[id][0] * 2 : (MICRO_WIDGETS.has(id) ? 3 : Math.min(w * 2, 6)), maxW: GRID_COLUMNS, minH: COMPLEX_LIMITS[id]?.[1] || (MICRO_WIDGETS.has(id) || id === 'news' ? 1 : 2), maxH: WIDGET_MAX_HEIGHTS[id] || 6 }));
+].map(([id, title, category, w, h]) => ({ id, title, category, w, h, minW: COMPLEX_LIMITS[id]?.[0] || (MICRO_WIDGETS.has(id) ? 2 : Math.min(w, 3)), maxW: GRID_COLUMNS, minH: COMPLEX_LIMITS[id]?.[1] || (MICRO_WIDGETS.has(id) || id === 'news' ? 1 : 2), maxH: WIDGET_MAX_HEIGHTS[id] || 6 }));
 
 const DEFAULT_IDS = ['news', 'month-pnl', 'month-winrate', 'month-trades', 'month-pf', 'market-mood', 'equity', 'recent-trades'];
 const CORE_WIDGETS = new Set(DEFAULT_IDS);
@@ -56,14 +56,14 @@ const dateKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getM
 
 function defaultLayout() {
     const preset = [
-        ['news', 0, 0, 24, 1],
-        ['month-pnl', 0, 1, 5, 2],
-        ['month-winrate', 5, 1, 4, 2],
-        ['month-trades', 9, 1, 4, 2],
-        ['month-pf', 13, 1, 4, 2],
-        ['market-mood', 17, 1, 7, 2],
-        ['equity', 0, 3, 16, 7],
-        ['recent-trades', 16, 3, 8, 7],
+        ['news', 0, 0, 12, 1],
+        ['month-pnl', 0, 1, 3, 2],
+        ['month-winrate', 3, 1, 3, 2],
+        ['month-trades', 6, 1, 3, 2],
+        ['month-pf', 9, 1, 3, 2],
+        ['market-mood', 0, 3, 4, 4],
+        ['equity', 4, 3, 8, 7],
+        ['recent-trades', 0, 7, 4, 7],
     ];
     return preset.map(([id, x, y, w, h], order) => ({ id, type: id, order, x, y, w, h, config: {} }));
 }
@@ -240,7 +240,7 @@ function renderGrid() {
     const fragment = document.createDocumentFragment(); layout.forEach((item) => fragment.appendChild(makeWidget(item)));
     grid.replaceChildren(fragment); grid.classList.add('grid-stack'); grid.classList.toggle('is-editing', editing);
     if (!window.GridStack) throw new Error('GridStack is not loaded');
-    gridStack = window.GridStack.init({ column: GRID_COLUMNS, cellHeight: 58, margin: 7, animate: true, float: false, handle: '.dashboard-widget-drag', disableDrag: !editing, disableResize: !editing, alwaysShowResizeHandle: false }, grid);
+    gridStack = window.GridStack.init({ column: GRID_COLUMNS, cellHeight: 64, margin: 8, animate: true, float: false, handle: '.dashboard-widget-drag', disableDrag: !editing, disableResize: !editing, alwaysShowResizeHandle: false }, grid);
     gridStack.on('change added removed', () => { syncLayoutFromGrid(); renderCatalog(byId('dashboard-widget-search')?.value || ''); persist(); window.setTimeout(() => window.dispatchEvent(new Event('resize')), 40); });
     observeWidgetDensity();
     applyResponsiveGrid();
@@ -252,7 +252,7 @@ function applyResponsiveGrid() {
     const mobile = window.innerWidth <= 700;
     const columns = mobile ? 12 : GRID_COLUMNS;
     if (gridStack.getColumn() !== columns) gridStack.column(columns, 'moveScale');
-    gridStack.cellHeight(mobile ? 54 : 58);
+    gridStack.cellHeight(mobile ? 58 : 64);
 }
 
 function syncLayoutFromGrid() {
@@ -465,12 +465,10 @@ function bindEvents() {
     byId('dashboard-widget-list')?.addEventListener('click', (event) => {
         const button = event.target.closest('[data-add-widget]'); if (!button || button.disabled || !gridStack) return;
         const meta = def(button.dataset.addWidget); const item = { id: meta.id, type: meta.id, order: layout.length, w: meta.w, h: meta.h, x: 0, y: 0, config: {} };
-        const removed = freeSpaceForWidget(meta);
         const article = makeWidget(item);
         byId('dashboard-widget-grid')?.appendChild(article);
         gridStack.makeWidget(article, { id: meta.id, w: meta.w, h: meta.h, minW: meta.minW, minH: meta.minH, maxW: meta.maxW, maxH: meta.maxH, autoPosition: true });
         observeWidgetDensity(); syncLayoutFromGrid(); renderCatalog(); persist();
-        if (removed.length) window.showToast?.(`Щоб звільнити місце, прибрано: ${removed.map((id) => def(id)?.title || id).join(', ')}`);
     });
     byId('dashboard-widget-grid')?.addEventListener('click', (event) => {
         const article = event.target.closest('.dashboard-widget'); if (!article) return;
