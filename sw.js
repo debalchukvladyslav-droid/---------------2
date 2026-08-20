@@ -1,1 +1,44 @@
-const CACHE='strum-shell-v6';const SHELL=['/','/index.html','/manifest.webmanifest','/icons/strum-icon.svg','/css/1_tokens.css','/css/2_base.css','/css/10_mobile.css','/css/24_phase6.css'];self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting())));self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));self.addEventListener('fetch',event=>{const request=event.request;const url=new URL(request.url);if(request.method!=='GET'||url.origin!==location.origin||url.pathname.startsWith('/api/'))return;if(request.mode==='navigate'){event.respondWith(fetch(request).then(response=>{const copy=response.clone();caches.open(CACHE).then(cache=>cache.put('/index.html',copy));return response;}).catch(()=>caches.match('/index.html')));return;}event.respondWith(caches.match(request).then(cached=>cached||fetch(request).then(response=>{if(response.ok&&['style','script','image','manifest'].includes(request.destination)){const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(request,copy));}return response;})));});
+const CACHE = 'strum-shell-v7';
+const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icons/strum-icon.svg', '/css/1_tokens.css', '/css/2_base.css', '/css/10_mobile.css', '/css/24_phase6.css'];
+
+self.addEventListener('install', (event) => {
+    event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener('activate', (event) => {
+    event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)))).then(() => self.clients.claim()));
+});
+
+self.addEventListener('fetch', (event) => {
+    const request = event.request;
+    const url = new URL(request.url);
+    if (request.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/')) return;
+
+    if (request.mode === 'navigate') {
+        event.respondWith(fetch(request).then((response) => {
+            const copy = response.clone();
+            caches.open(CACHE).then((cache) => cache.put('/index.html', copy));
+            return response;
+        }).catch(() => caches.match('/index.html')));
+        return;
+    }
+
+    if (request.destination === 'script' || request.destination === 'style') {
+        event.respondWith(fetch(request).then((response) => {
+            if (response.ok) {
+                const copy = response.clone();
+                caches.open(CACHE).then((cache) => cache.put(request, copy));
+            }
+            return response;
+        }).catch(() => caches.match(request)));
+        return;
+    }
+
+    event.respondWith(caches.match(request).then((cached) => cached || fetch(request).then((response) => {
+        if (response.ok && ['image', 'manifest'].includes(request.destination)) {
+            const copy = response.clone();
+            caches.open(CACHE).then((cache) => cache.put(request, copy));
+        }
+        return response;
+    })));
+});

@@ -56,7 +56,6 @@ import { renderDashboardAI, refreshDashboardAI, toggleDashboardAIHistory, rotate
 import { analyzeLossPatterns, renderLossPatternAnalysis } from './loss_pattern_analysis.js';
 import { continueAILearning, evaluateAILearning, initAILearningCenter, renderAILearningCenter, runAILearning, runAIPaperDecision, startNewAILearning, toggleAILearningDay, reviewAILearningExample } from './ai_learning.js';
 import { closeCumulativeWeekly, openCumulativeWeekly, saveCumulativeDayloss, toggleCumulativeDayloss } from './cumulative_weekly_ui.js';
-import { initDashboardWidgets, refreshDashboardWidgets } from './dashboard_widgets.js';
 import { initGrandmasterDashboard, renderGrandmasterDashboard, renderTraderDNAGlance } from './grandmaster_dashboard.js';
 import { initTerminalShortcuts } from './terminal_shortcuts.js';
 import { initSwarmCapture } from './swarm_capture.js';
@@ -137,10 +136,8 @@ window.sendDashboardMentorMessage = sendDashboardMentorMessage;
 window.switchDashboardMentorTab = switchDashboardMentorTab;
 window.analyzeLossPatterns = analyzeLossPatterns;
 window.renderLossPatternAnalysis = renderLossPatternAnalysis;
-window.initDashboardWidgets = initDashboardWidgets;
 window.renderGrandmasterDashboard = renderGrandmasterDashboard;
 window.renderTraderDNAGlance = renderTraderDNAGlance;
-window.refreshDashboardWidgets = refreshDashboardWidgets;
 
 let manualSyncInProgress = false;
 let manualSyncIntervalId = null;
@@ -1316,7 +1313,6 @@ async function bootApp(user) {
         await loadTeams();
         await loadMentorStatusForAccount();
         await initializeApp();
-        await initDashboardWidgets();
         initGrandmasterDashboard();
         initTerminalShortcuts();
 

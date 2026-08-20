@@ -1,35 +1,7 @@
 ﻿        <div id="view-dash" class="view-content active">
 
-            <header class="dashboard-customize-bar">
-                <div><p class="dashboard-customize-kicker">Моя головна</p><h2>Огляд торгівлі</h2></div>
-                <div class="dashboard-customize-actions">
-                    <button type="button" class="btn-secondary" id="dashboard-reset-layout" hidden>Скинути</button>
-                    <button type="button" class="btn-secondary is-icon-only" id="dashboard-edit-toggle" aria-pressed="false" aria-label="Редагувати головну" title="Редагувати головну"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 20h4l10.7-10.7a2.1 2.1 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg></button>
-                </div>
-            </header>
-            <section class="premarket-command" id="premarket-command" aria-label="Pre-market командний центр">
-                <div class="premarket-command__session"><div class="premarket-command__eyebrow"><span class="premarket-command__pulse" aria-hidden="true"></span><span id="premarket-phase">Нью-Йорк</span></div><strong class="premarket-command__clock" id="premarket-clock">--:-- ET</strong><span class="premarket-command__countdown" id="premarket-countdown">Визначаю фазу сесії…</span></div>
-                <div class="premarket-command__readiness" id="premarket-readiness"><div class="premarket-command__ring" id="premarket-readiness-ring"><strong id="premarket-readiness-score">0</strong><span>%</span></div><div><span class="premarket-command__label">Готовність</span><strong id="premarket-readiness-label">Перевіряю план</strong><small id="premarket-readiness-hint"></small></div></div>
-                <div class="premarket-command__focus"><span class="premarket-command__label">Фокус сесії</span><strong id="premarket-focus">Визнач одну умову для входу</strong><span id="premarket-setups">Сетапи ще не вибрані</span></div>
-                <div class="premarket-command__risk"><span class="premarket-command__label">Hard stop дня</span><strong id="premarket-risk-limit">—</strong><button type="button" data-tab="calendar">Відкрити план →</button></div>
-            </section>
-            <section class="proactive-coach-card" id="proactive-coach-card" hidden aria-live="polite">
-                <div class="proactive-coach-card__mark" aria-hidden="true">AI</div>
-                <div class="proactive-coach-card__body"><div class="proactive-coach-card__meta"><span>Proactive coach</span><time id="proactive-coach-date"></time></div><h3 id="proactive-coach-title">Розбір сесії</h3><p id="proactive-coach-summary"></p><ul id="proactive-coach-actions"></ul></div>
-                <div class="proactive-coach-card__controls"><div class="proactive-coach-feedback" aria-label="Оцінити пораду"><button type="button" data-coach-rating="1" title="Корисно">👍</button><button type="button" data-coach-rating="-1" title="Неточно">👎</button></div><button type="button" data-tab="ai">Відкрити AI →</button></div>
-            </section>
-            <div class="dashboard-builder" id="dashboard-builder">
-                <aside class="dashboard-widget-catalog" id="dashboard-widget-catalog" aria-label="Каталог панелей" aria-hidden="true">
-                    <div class="dashboard-catalog-head"><div><span>Панелі</span><strong>Додайте на головну</strong></div><button type="button" id="dashboard-catalog-close" aria-label="Закрити каталог">×</button></div>
-                    <label class="dashboard-catalog-search"><span aria-hidden="true">⌕</span><input id="dashboard-widget-search" type="search" placeholder="Знайти панель" autocomplete="off"></label>
-                    <div id="dashboard-widget-list" class="dashboard-widget-list"></div>
-                </aside>
-                <main class="dashboard-widget-grid" id="dashboard-widget-grid" aria-label="Панелі головної"></main>
-            </div>
-            <div id="dashboard-widget-sources" class="dashboard-widget-sources">
-
             <!-- NEWS TICKER -->
-            <div class="news-ticker-bar" data-dashboard-widget="news">
+            <div class="news-ticker-bar">
                 <button type="button" class="news-ticker-label" data-action="live-news-open" title="Показати новини зі стрічки">Live</button>
                 <div class="news-ticker-scroll">
                     <span class="news-ticker-text" id="news-ticker-text">
@@ -43,7 +15,7 @@
 
             <!-- TOP STATS CARDS -->
             <div class="stats-grid-pro" id="stats-cards-pro">
-                <div class="stat-card-pro" data-dashboard-widget="month-pnl">
+                <div class="stat-card-pro">
                     <div class="stat-card-pro-top">
                         <div class="stat-card-pro-icon">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
@@ -53,37 +25,37 @@
                     <p class="stat-card-pro-label">P&amp;L за місяць</p>
                     <p class="stat-card-pro-value" id="pro-total-pnl">$0.00</p>
                 </div>
-                <div class="stat-card-pro" data-dashboard-widget="month-winrate">
+                <div class="stat-card-pro">
                     <div class="stat-card-pro-top">
                         <div class="stat-card-pro-icon">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                         </div>
                         <span class="stat-card-pro-badge neutral" id="badge-winrate"></span>
                     </div>
-                    <p class="stat-card-pro-label">Вінрейт</p>
+                    <p class="stat-card-pro-label">Вінрейт (місяць)</p>
                     <p class="stat-card-pro-value" id="pro-winrate">0%</p>
                 </div>
-                <div class="stat-card-pro" data-dashboard-widget="month-trades">
+                <div class="stat-card-pro">
                     <div class="stat-card-pro-top">
                         <div class="stat-card-pro-icon">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
                         </div>
                         <span class="stat-card-pro-badge neutral" id="badge-trades"></span>
                     </div>
-                    <p class="stat-card-pro-label">Угоди</p>
+                    <p class="stat-card-pro-label">Угод у місяці</p>
                     <p class="stat-card-pro-value" id="pro-total-trades">0</p>
                 </div>
-                <div class="stat-card-pro" data-dashboard-widget="month-pf">
+                <div class="stat-card-pro">
                     <div class="stat-card-pro-top">
                         <div class="stat-card-pro-icon">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
                         </div>
                         <span class="stat-card-pro-badge neutral" id="badge-pf"></span>
                     </div>
-                    <p class="stat-card-pro-label">Profit Factor</p>
+                    <p class="stat-card-pro-label">Profit Factor (місяць)</p>
                     <p class="stat-card-pro-value" id="pro-pf">0.00</p>
                 </div>
-                <div class="stat-card-pro market-sentiment-card is-loading" data-dashboard-widget="market-mood" id="market-sentiment-card" role="button" tabindex="0" data-action="market-sentiment-open" aria-label="Open CNN Fear and Greed index">
+                <div class="stat-card-pro market-sentiment-card is-loading" id="market-sentiment-card" role="button" tabindex="0" data-action="market-sentiment-open" aria-label="Open CNN Fear and Greed index">
                     <div class="market-sentiment-kicker">
                         <span class="market-sentiment-dot" aria-hidden="true"></span>
                         <span>MARKET MOOD</span>
@@ -126,7 +98,7 @@
 
                 <!-- COL 1: міні-крива кумулятивного PnL за останні 15 записаних днів -->
                 <div class="dash-col dash-col-main">
-                    <div class="panel dash-mini-equity-panel" data-dashboard-widget="equity">
+                    <div class="panel dash-mini-equity-panel">
                         <div class="dash-mini-equity-head">
                             <h3 class="dash-mini-equity-title">Останні 15 днів</h3>
                             <button type="button" class="btn-secondary dash-open-calendar-tab-btn rr-exempt-access" data-tab="calendar" title="Повний календар">Календар</button>
@@ -146,7 +118,7 @@
 
                 <!-- COL 2: Recent trades -->
                 <div class="dash-col dash-col-recent">
-                <section class="dashboard-ai-brief" data-dashboard-widget="ai-mentor" id="dashboard-ai-brief" aria-labelledby="dashboard-ai-title" hidden>
+                <section class="dashboard-ai-brief" id="dashboard-ai-brief" aria-labelledby="dashboard-ai-title" hidden>
                     <div class="dashboard-ai-brief__head">
                         <div><div class="dashboard-ai-brief__kicker">Трейдинг-наставник</div><h3 id="dashboard-ai-title" class="dashboard-ai-brief__title">Що бачу зараз</h3></div>
                         <div class="dashboard-ai-brief__actions"><span class="dashboard-ai-status is-neutral" id="dashboard-ai-status">Аналізую</span><button type="button" class="dashboard-ai-refresh-icon" id="dashboard-ai-refresh" data-action="dashboard-ai-refresh" title="Оновити AI-аналіз" aria-label="Оновити AI-аналіз">↻</button></div>
@@ -169,7 +141,7 @@
                         <section class="dashboard-mentor-pane" id="dashboard-mentor-pane-theses"><div class="dashboard-mentor-theses" id="dashboard-mentor-theses"></div></section>
                     </div>
                 </div>
-                <div class="recent-trades-panel recent-trades-flex" data-dashboard-widget="recent-trades" id="recent-trades-panel">
+                <div class="recent-trades-panel recent-trades-flex" id="recent-trades-panel">
                         <div class="recent-trades-header">
                             <h3>Останні угоди</h3>
                             <button class="recent-trades-link" data-tab="trades">Всі →</button>
@@ -178,6 +150,6 @@
                     </div>
                 </div>
             </div><!-- /dash-3col -->
-            </div><!-- /dashboard-widget-sources -->
 
         </div><!-- /view-dash -->
+
