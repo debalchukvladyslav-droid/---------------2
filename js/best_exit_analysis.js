@@ -1,5 +1,5 @@
 import { supabase, SUPABASE_URL } from './supabase.js';
-import { attachBestExitResult, bestExitWindowNY, buildExitTimeCaptureSeries, collectTimedShortTrades, summarizeBestExits } from './best_exit_core.js';
+import { attachBestExitResult, bestExitWindowNY, buildLowTimeFrequencySeries, collectTimedShortTrades, summarizeBestExits } from './best_exit_core.js';
 import { readPolygonResult, writePolygonResults } from './polygon_result_cache.js';
 
 const resultCache = new Map();
@@ -7,6 +7,7 @@ let renderRequest = 0;
 const AUTO_ANALYZE_LIMIT = 40;
 const BATCH_SIZE = 5;
 let bestExitRowsExpanded = false;
+let lowChartFromTen = false;
 let silentRefreshTimer = null;
 const REFRESH_AFTER_PROGRESS_MS = 3000;
 const REFRESH_WHEN_WAITING_MS = 65000;
@@ -36,24 +37,28 @@ function bestWindowSummary(rows = []) {
 }
 
 function exitTimeChart(rows = []) {
-    const series = buildExitTimeCaptureSeries(rows);
-    const heading = `<div><strong>Час виходу → забрано руху</strong><span>Середній % у 10-хвилинному інтервалі, NY</span></div>`;
-    if (!series.length) return `<section class="best-exit-time-chart"><div class="best-exit-time-chart__head">${heading}</div><div class="stats-empty-note">У завантажених угодах немає часу закриття.</div></section>`;
+    const series = buildLowTimeFrequencySeries(rows, { minMinute: lowChartFromTen ? 600 : 570 });
+    const heading = `<div><strong>Коли акції найчастіше роблять low</strong><span>Частка low у кожному 10-хвилинному інтервалі, NY</span></div>`;
+    const filter = `<label class="best-exit-time-filter"><input type="checkbox" data-low-chart-from-ten ${lowChartFromTen ? 'checked' : ''}><span>З 10:00</span></label>`;
+    if (!series.length) return `<section class="best-exit-time-chart"><div class="best-exit-time-chart__head">${heading}${filter}</div><div class="stats-empty-note">Для цього діапазону ще немає часу low від Polygon.</div></section>`;
     const width = 680;
     const height = 190;
     const pad = { left: 42, right: 16, top: 18, bottom: 32 };
-    const x = (minute) => pad.left + ((minute - 570) / 140) * (width - pad.left - pad.right);
-    const y = (pct) => pad.top + (1 - Math.max(0, Math.min(100, pct)) / 100) * (height - pad.top - pad.bottom);
-    const points = series.map((item) => `${x(item.minute).toFixed(1)},${y(item.capturePct).toFixed(1)}`).join(' ');
-    const best = series.reduce((winner, item) => item.capturePct > winner.capturePct ? item : winner, series[0]);
-    const xTicks = [570, 600, 630, 660, 690, 710];
+    const chartStart = lowChartFromTen ? 600 : 570;
+    const x = (minute) => pad.left + ((minute - chartStart) / (710 - chartStart)) * (width - pad.left - pad.right);
+    const maxPercent = Math.max(10, ...series.map((item) => item.percent));
+    const chartMax = Math.ceil(maxPercent / 5) * 5;
+    const y = (pct) => pad.top + (1 - Math.max(0, Math.min(chartMax, pct)) / chartMax) * (height - pad.top - pad.bottom);
+    const points = series.map((item) => `${x(item.minute).toFixed(1)},${y(item.percent).toFixed(1)}`).join(' ');
+    const best = series.reduce((winner, item) => item.percent > winner.percent ? item : winner, series[0]);
+    const xTicks = lowChartFromTen ? [600, 630, 660, 690, 710] : [570, 600, 630, 660, 690, 710];
     return `<section class="best-exit-time-chart">
-        <div class="best-exit-time-chart__head">${heading}<div class="best-exit-time-chart__best"><span>Найкращий час</span><strong>${best.label} · ${best.capturePct.toFixed(0)}%</strong><small>${best.count} угод</small></div></div>
-        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Відсоток забраного руху залежно від часу виходу">
-            ${[0, 25, 50, 75, 100].map((pct) => `<line x1="${pad.left}" y1="${y(pct)}" x2="${width - pad.right}" y2="${y(pct)}" class="best-exit-chart-grid"/><text x="${pad.left - 8}" y="${y(pct) + 4}" text-anchor="end">${pct}%</text>`).join('')}
+        <div class="best-exit-time-chart__head">${heading}${filter}<div class="best-exit-time-chart__best"><span>Найчастіший low</span><strong>${best.label} · ${best.percent.toFixed(1)}%</strong><small>${best.count} із ${best.total} угод</small></div></div>
+        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Частота low акцій залежно від часу">
+            ${[0, .25, .5, .75, 1].map((ratio) => { const pct = chartMax * ratio; return `<line x1="${pad.left}" y1="${y(pct)}" x2="${width - pad.right}" y2="${y(pct)}" class="best-exit-chart-grid"/><text x="${pad.left - 8}" y="${y(pct) + 4}" text-anchor="end">${pct.toFixed(0)}%</text>`; }).join('')}
             ${xTicks.map((minute) => `<text x="${x(minute)}" y="${height - 8}" text-anchor="middle">${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}</text>`).join('')}
             <polyline points="${points}" class="best-exit-chart-line"/>
-            ${series.map((item) => `<circle cx="${x(item.minute)}" cy="${y(item.capturePct)}" r="4"><title>${item.label} NY: ${item.capturePct.toFixed(1)}% · ${item.count} угод</title></circle>`).join('')}
+            ${series.map((item) => `<circle cx="${x(item.minute)}" cy="${y(item.percent)}" r="4"><title>${item.label} NY: ${item.percent.toFixed(1)}% · ${item.count} із ${item.total} угод</title></circle>`).join('')}
         </svg>
     </section>`;
 }
@@ -153,6 +158,10 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
         try { identity = JSON.parse(button.dataset.bestExitIdentity || 'null'); } catch (_) { identity = null; }
         void window.openTradesAtDayIndex?.(date, tradeIndex, identity);
     }));
+    container.querySelector('[data-low-chart-from-ten]')?.addEventListener('change', (event) => {
+        lowChartFromTen = !!event.currentTarget.checked;
+        renderSummary(container, summary, unavailable, false);
+    });
     const tableWrap = container.querySelector('.best-exit-table-wrap');
     if (tableWrap && bestExitRowsExpanded) tableWrap.scrollTop = previousScrollTop;
     container.querySelector('.best-exit-expand')?.addEventListener('click', () => {

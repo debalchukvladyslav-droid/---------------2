@@ -4778,6 +4778,9 @@ body.is-offline [data-needs-network="true"] {
 .best-exit-time-chart__head strong { color: var(--text-main); font-size: .88rem; }
 .best-exit-time-chart__head span,
 .best-exit-time-chart__head small { color: var(--text-muted); font-size: .72rem; }
+.best-exit-time-filter { display: inline-flex; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 9px; background: color-mix(in srgb, var(--bg-panel) 72%, transparent); cursor: pointer; white-space: nowrap; }
+.best-exit-time-filter input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); }
+.best-exit-time-filter span { color: var(--text-main); font-weight: 700; }
 .best-exit-time-chart__best { display: grid; grid-template-columns: auto auto; column-gap: 8px; align-items: baseline; text-align: right; }
 .best-exit-time-chart__best span { grid-column: 1 / -1; }
 .best-exit-time-chart svg { display: block; width: 100%; min-width: 520px; height: 190px; overflow: visible; }

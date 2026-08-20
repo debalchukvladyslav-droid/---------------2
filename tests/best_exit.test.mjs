@@ -4,6 +4,7 @@ import {
     attachBestExitResult,
     bestExitWindowNY,
     buildExitTimeCaptureSeries,
+    buildLowTimeFrequencySeries,
     collectTimedShortTrades,
     isExcludedStopTakeExit,
     isTimeExitTrade,
@@ -90,6 +91,31 @@ test('groups captured movement by ten-minute actual exit windows', () => {
         { minute: 600, label: '10:00', capturePct: 60, count: 2 },
         { minute: 610, label: '10:10', capturePct: 90, count: 1 },
     ]);
+});
+
+test('builds low-time percentages from Polygon lows independently of actual exits', () => {
+    const series = buildLowTimeFrequencySeries([
+        { lowTime: '2026-07-10T14:42:00.000Z', exitMinute: 580 },
+        { lowTime: '2026-07-11T14:47:00.000Z', exitMinute: 700 },
+        { lowTime: '2026-07-12T15:05:00.000Z', exitMinute: null },
+        { lowTime: '' },
+    ]);
+    assert.equal(series.length, 2);
+    assert.deepEqual({ ...series[0], percent: undefined }, { minute: 640, label: '10:40', percent: undefined, count: 2, total: 3 });
+    assert.deepEqual({ ...series[1], percent: undefined }, { minute: 660, label: '11:00', percent: undefined, count: 1, total: 3 });
+    assert.ok(Math.abs(series[0].percent - 200 / 3) < 1e-10);
+    assert.ok(Math.abs(series[1].percent - 100 / 3) < 1e-10);
+});
+
+test('low-time frequency can ignore every low before 10:00 NY', () => {
+    const rows = [
+        { lowTime: '2026-07-10T13:45:00.000Z' },
+        { lowTime: '2026-07-10T14:05:00.000Z' },
+        { lowTime: '2026-07-10T14:07:00.000Z' },
+    ];
+    const series = buildLowTimeFrequencySeries(rows, { minMinute: 600 });
+    assert.equal(series.length, 1);
+    assert.deepEqual({ ...series[0], percent: Math.round(series[0].percent) }, { minute: 600, label: '10:00', percent: 100, count: 2, total: 2 });
 });
 
 test('keeps waiting when Polygon has not returned a market row yet', () => {

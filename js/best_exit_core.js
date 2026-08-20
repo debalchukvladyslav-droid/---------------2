@@ -114,6 +114,28 @@ export function buildExitTimeCaptureSeries(rows = []) {
         }));
 }
 
+export function buildLowTimeFrequencySeries(rows = [], { minMinute = 570 } = {}) {
+    const buckets = new Map();
+    let total = 0;
+    rows.forEach((row) => {
+        const minute = marketMinuteNY(row?.lowTime);
+        if (minute == null || minute < Math.max(570, Number(minMinute) || 570) || minute >= 720) return;
+        const bucketMinute = Math.floor(minute / 10) * 10;
+        buckets.set(bucketMinute, (buckets.get(bucketMinute) || 0) + 1);
+        total += 1;
+    });
+    if (!total) return [];
+    return [...buckets.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([minute, count]) => ({
+            minute,
+            label: `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`,
+            percent: count / total * 100,
+            count,
+            total,
+        }));
+}
+
 export function attachBestExitResult(trade, market = {}) {
     if (!trade || !market || typeof market !== 'object') return null;
     const low = Number(market.low);
