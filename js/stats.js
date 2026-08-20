@@ -2179,8 +2179,26 @@ function sheetDateMatchesStatsFilters(dateStr, filters = []) {
     });
 }
 
-function renderExceptionCriteriaChart(rows = [], canvasId = 'exceptionCriteriaChart', stateKey = 'exceptionCriteriaChartInstance', theme) {
-    const visibleRows = rows.slice(0, 18);
+function renderExceptionCriteriaChart(rows = [], canvasId = 'exceptionCriteriaChart', stateKey = 'exceptionCriteriaChartInstance', theme, toggleId = 'exceptionCriteriaToggle') {
+    const sortedRows = [...rows].sort((a, b) => (Number(b.kf) || 0) - (Number(a.kf) || 0));
+    const expandedKey = `${stateKey}Expanded`;
+    const isExpanded = !!state[expandedKey];
+    const compactRows = sortedRows.length <= 6
+        ? sortedRows
+        : [...sortedRows.slice(0, 3), ...sortedRows.slice(-3)];
+    const visibleRows = isExpanded ? sortedRows : compactRows;
+    const toggle = document.getElementById(toggleId);
+    if (toggle) {
+        toggle.hidden = sortedRows.length <= 6;
+        toggle.setAttribute('aria-expanded', String(isExpanded));
+        toggle.innerHTML = isExpanded
+            ? '<span aria-hidden="true">⌃</span> Згорнути'
+            : `<span aria-hidden="true">⌄</span> Показати всі (${sortedRows.length})`;
+        toggle.onclick = () => {
+            state[expandedKey] = !state[expandedKey];
+            renderExceptionCriteriaChart(rows, canvasId, stateKey, theme, toggleId);
+        };
+    }
     renderStatsBarChart(
         canvasId,
         stateKey,
@@ -2673,6 +2691,7 @@ function renderCompareCharts(entries, summary, theme, advancedEquityMode = false
         'compare-exceptionCriteriaChart',
         'compareExceptionCriteriaChartInstance',
         theme,
+        'compareExceptionCriteriaToggle',
     );
 
     pieCanvas.$statsGlowColor = theme.profit;

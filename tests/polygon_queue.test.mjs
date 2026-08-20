@@ -1,6 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { readPolygonResult, writePolygonResults } from '../js/polygon_result_cache.js';
+
+test('Polygon results survive reload and are keyed by ticker, date and entry minute', () => {
+    const values = new Map();
+    globalThis.localStorage = {
+        getItem: (key) => values.get(key) ?? null,
+        setItem: (key, value) => values.set(key, value),
+    };
+    writePolygonResults([{ symbol: 'aapl', date: '2026-08-19', entryMinute: 585, low: 211.42, lowTime: '2026-08-19T14:03:00Z' }]);
+    const restored = readPolygonResult({ symbol: 'AAPL', date: '2026-08-19', entryMinute: 585 });
+    assert.equal(restored.symbol, 'AAPL');
+    assert.equal(restored.date, '2026-08-19');
+    assert.equal(restored.entryMinute, 585);
+    assert.equal(restored.low, 211.42);
+    assert.equal(restored.lowTime, '2026-08-19T14:03:00Z');
+    assert.equal(typeof restored.savedAt, 'number');
+    assert.equal(readPolygonResult({ symbol: 'AAPL', date: '2026-08-19', entryMinute: 586 }), null);
+    delete globalThis.localStorage;
+});
 
 test('Polygon queue is global, private and atomically capped at five calls per minute', async () => {
     const migration = await readFile(new URL('../supabase/migrations/20260820122821_polygon_market_low_queue.sql', import.meta.url), 'utf8');
@@ -23,6 +42,8 @@ test('trade loading and Trades import start a cached Polygon backfill', async ()
     assert.match(parsers, /startPolygonLowBackfill\(state\.appData\.journal, 'trades-import'\)/);
     assert.match(worker, /INTERVAL_MS = 65000/);
     assert.match(worker, /REQUEST_LIMIT = 5/);
+    assert.match(worker, /readPolygonResult\(item\)/);
+    assert.match(worker, /writePolygonResults\(rows\)/);
     assert.match(worker, /console\.table/);
     assert.match(worker, /\[Polygon\] переглядається/);
     assert.match(edge, /claim_market_low_jobs/);

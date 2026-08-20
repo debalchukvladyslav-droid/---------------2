@@ -2319,6 +2319,30 @@ body {
 .stats-exception-bar i.negative { background: var(--loss); }
 .stats-exception-bar i.neutral { background: var(--text-muted); }
 
+.stats-chart-expand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    margin: 8px auto 0;
+    padding: 7px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: .78rem;
+    cursor: pointer;
+}
+
+.stats-chart-expand:hover {
+    border-color: var(--accent);
+    color: var(--text-main);
+    background: var(--accent-glow-05);
+}
+
+.stats-chart-expand[hidden] { display: none; }
+
 .positive { color: var(--profit) !important; }
 .negative { color: var(--loss) !important; }
 .neutral { color: var(--text-main) !important; }

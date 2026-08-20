@@ -1,4 +1,5 @@
 import { supabase, SUPABASE_URL } from './supabase.js';
+import { readPolygonResult, writePolygonResults } from './polygon_result_cache.js';
 
 const READY = new Set();
 let timer = null;
@@ -40,6 +41,9 @@ async function requestPolygonBatch(items) {
 async function runQueue(reason = 'background') {
     if (running) return;
     const all = collectSessionLowRequests(pendingJournal);
+    all.forEach((item) => {
+        if (readPolygonResult(item)) READY.add(`${item.symbol}|${item.date}`);
+    });
     const missing = all.filter((item) => !READY.has(`${item.symbol}|${item.date}`));
     if (!missing.length) {
         console.info(`[Polygon ${reason}] усі ${all.length} тікер-днів уже мають Low 09:30–12:00`);
@@ -49,6 +53,7 @@ async function runQueue(reason = 'background') {
     try {
         const payload = await requestPolygonBatch(missing.slice(0, REQUEST_LIMIT));
         const rows = Array.isArray(payload.results) ? payload.results.filter((row) => Number(row?.low) > 0) : [];
+        writePolygonResults(rows);
         rows.forEach((row) => READY.add(`${row.symbol}|${row.date}`));
         const returnedKeys = new Set(rows.map((row) => `${row.symbol}|${row.date}`));
         rows.forEach((row) => console.info(`[Polygon] ${row.symbol} · ${row.date}: Low $${Number(row.low).toFixed(2)} · ${row.lowTime} · ${row.cached ? 'кеш' : 'отримано'}`));

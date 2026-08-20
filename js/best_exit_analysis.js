@@ -1,10 +1,20 @@
 import { supabase, SUPABASE_URL } from './supabase.js';
 import { attachBestExitResult, bestExitWindowNY, collectTimedShortTrades, summarizeBestExits } from './best_exit_core.js';
+import { readPolygonResult, writePolygonResults } from './polygon_result_cache.js';
 
 const resultCache = new Map();
 let renderRequest = 0;
 const AUTO_ANALYZE_LIMIT = 40;
 const BATCH_SIZE = 5;
+
+function cachedMarketResult(trade) {
+    const key = `${trade.symbol}|${trade.date}|${trade.entryMinute}`;
+    if (!resultCache.has(key)) {
+        const stored = readPolygonResult(trade);
+        if (stored && bestExitWindowNY(stored.lowTime)) resultCache.set(key, stored);
+    }
+    return resultCache.get(key) || null;
+}
 
 function money(value) {
     return Number.isFinite(Number(value))
@@ -46,13 +56,14 @@ async function loadMarketResults(trades, onProgress = null) {
     const missing = [];
     trades.forEach((trade) => {
         const key = `${trade.symbol}|${trade.date}|${trade.entryMinute}`;
-        if (!resultCache.has(key)) missing.push(trade);
+        if (!cachedMarketResult(trade)) missing.push(trade);
     });
     let completed = trades.length - missing.length;
     onProgress?.(completed, trades.length);
     if (missing.length) {
         const chunk = missing.slice(0, BATCH_SIZE);
         const results = await fetchBatch(chunk.map(({ symbol, date, entryMinute }) => ({ symbol, date, entryMinute })));
+        writePolygonResults(results);
         results.forEach((row) => {
             if (!bestExitWindowNY(row?.lowTime)) return;
             resultCache.set(`${row.symbol}|${row.date}|${row.entryMinute}`, row);
@@ -62,7 +73,7 @@ async function loadMarketResults(trades, onProgress = null) {
     }
     return trades.map((trade) => attachBestExitResult(
         trade,
-        resultCache.get(`${trade.symbol}|${trade.date}|${trade.entryMinute}`),
+        cachedMarketResult(trade),
     )).filter(Boolean);
 }
 
@@ -142,7 +153,7 @@ export async function renderBestExitAnalysis({ journal = {}, periodDates = new S
         container.innerHTML = '<div class="stats-empty-note">У вибраному періоді немає закритих short-угод із коректними цінами входу/виходу після виключення Stop і Take.</div>';
         return;
     }
-    const uncached = trades.filter((trade) => !resultCache.has(`${trade.symbol}|${trade.date}|${trade.entryMinute}`)).length;
+    const uncached = trades.filter((trade) => !cachedMarketResult(trade)).length;
     if (uncached > AUTO_ANALYZE_LIMIT) {
         container.innerHTML = `
             <div class="best-exit-start">
