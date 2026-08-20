@@ -76,6 +76,10 @@ test('calculates best short exit and aggregate opportunity', () => {
     assert.equal(summary.avgCapturePct, 50);
 });
 
+test('keeps waiting when Polygon has not returned a market row yet', () => {
+    assert.equal(attachBestExitResult({ entryPrice: 10, actualExitPrice: 9 }, null), null);
+});
+
 test('formats the profitable exit minute as an aligned ten-minute New York window', () => {
     assert.equal(bestExitWindowNY('2026-07-10T14:47:00.000Z'), '10:40–10:49');
     assert.equal(bestExitWindowNY('2026-01-10T16:59:00.000Z'), '11:50–11:59');

@@ -88,9 +88,10 @@ export function collectTimedShortTrades(journal = {}, allowedDates = null) {
 }
 
 export function attachBestExitResult(trade, market = {}) {
+    if (!trade || !market || typeof market !== 'object') return null;
     const low = Number(market.low);
     const lowMinuteNY = marketMinuteNY(market.lowTime);
-    if (!trade || !(low > 0) || lowMinuteNY == null || lowMinuteNY < 570 || lowMinuteNY >= 720) return null;
+    if (!(low > 0) || lowMinuteNY == null || lowMinuteNY < 570 || lowMinuteNY >= 720) return null;
     const perShare = trade.entryPrice - low;
     const actualPerShare = Number(trade.actualExitPrice) > 0
         ? trade.entryPrice - Number(trade.actualExitPrice)
