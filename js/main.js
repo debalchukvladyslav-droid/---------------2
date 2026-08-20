@@ -59,7 +59,6 @@ import { continueAILearning, evaluateAILearning, initAILearningCenter, renderAIL
 import { closeCumulativeWeekly, openCumulativeWeekly, saveCumulativeDayloss, toggleCumulativeDayloss } from './cumulative_weekly_ui.js';
 import { initGrandmasterDashboard, renderGrandmasterDashboard, renderTraderDNAGlance } from './grandmaster_dashboard.js';
 import { initTerminalShortcuts } from './terminal_shortcuts.js';
-import { initSwarmCapture } from './swarm_capture.js';
 import { initExcelExport } from './excel_export.js';
 import { initTeamReport, renderTeamReport } from './team_report.js';
 import { initPwa, initTradeCardGestures } from './pwa.js';
@@ -1506,8 +1505,6 @@ window.appendReviewTag = function (chunk) {
 };
 
 initTradesView();
-initSwarmCapture();
-document.addEventListener('app:shell-ready', initSwarmCapture);
 initExcelExport();
 document.addEventListener('app:shell-ready', initExcelExport);
 initTeamReport(); window.renderTeamReport=renderTeamReport;

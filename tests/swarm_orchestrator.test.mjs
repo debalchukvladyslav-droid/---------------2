@@ -37,9 +37,9 @@ test('orchestrator routes vision to Gemini with strict timeout and JSON normaliz
     assert.equal(result.vision.setup, 'ORB'); assert.equal(result.vision.confidence, 0.8); assert.match(request.url, /generativelanguage\.googleapis\.com/); assert.ok(request.options.signal);
 });
 
-test('swarm UI exposes microphone, paste zone and persistent vision context', async () => {
+test('swarm backend remains available while its journal panel is hidden', async () => {
     const [html, client, api] = await Promise.all([readFile(new URL('../partials/views/trades-view.html', import.meta.url), 'utf8'), readFile(new URL('../js/swarm_capture.js', import.meta.url), 'utf8'), readFile(new URL('../api/gemini.js', import.meta.url), 'utf8')]);
-    assert.match(html, /id="swarm-mic-btn"/); assert.match(html, /id="swarm-dropzone"/); assert.match(client, /new MediaRecorder/); assert.match(client, /addEventListener\('paste'/); assert.match(client, /storage\.from\('trade-charts'\)\.upload/); assert.match(client, /trade_multimodal_inputs/); assert.match(api, /new SwarmOrchestrator\(\)\.run/); assert.match(api, /hydratePrivateChart/); assert.match(api, /voice: 'swarm-voice'.*vision: 'swarm-vision'.*'text-parse': 'swarm-parse'/s);
+    assert.doesNotMatch(html, /id="swarm-mic-btn"/); assert.doesNotMatch(html, /id="swarm-dropzone"/); assert.match(client, /new MediaRecorder/); assert.match(client, /addEventListener\('paste'/); assert.match(client, /storage\.from\('trade-charts'\)\.upload/); assert.match(client, /trade_multimodal_inputs/); assert.match(api, /new SwarmOrchestrator\(\)\.run/); assert.match(api, /hydratePrivateChart/); assert.match(api, /voice: 'swarm-voice'.*vision: 'swarm-vision'.*'text-parse': 'swarm-parse'/s);
 });
 
 test('multimodal migration creates a private owner-scoped storage contract', async () => {

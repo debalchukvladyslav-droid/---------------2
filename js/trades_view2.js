@@ -31,6 +31,29 @@ let _tradeDateCalendarMonth = null;
 let _tradeDates = [];
 let _tradeDateCalendarGlobalBound = false;
 const _storyObservers = new Set();
+const marketSessionLowCache = new Map();
+
+async function loadMarketSessionLow(symbol, dateStr) {
+    const normalizedSymbol = String(symbol || '').toUpperCase();
+    if (!/^[A-Z]{1,10}$/.test(normalizedSymbol) || !/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || ''))) return null;
+    const key = `${normalizedSymbol}|${dateStr}`;
+    if (marketSessionLowCache.has(key)) return marketSessionLowCache.get(key);
+    const request = (async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return null;
+        const response = await fetch(`${String(SUPABASE_URL).replace(/\/$/, '')}/functions/v1/market-best-exits`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+            body: JSON.stringify({ items: [{ symbol: normalizedSymbol, date: dateStr, entryMinute: 570 }] }),
+            signal: AbortSignal.timeout(15000),
+        });
+        const payload = await response.json().catch(() => ({}));
+        const row = Array.isArray(payload?.results) ? payload.results[0] : null;
+        return response.ok && Number(row?.low) > 0 ? Number(row.low) : null;
+    })().catch(() => null);
+    marketSessionLowCache.set(key, request);
+    return request;
+}
 
 // Активна угода для поточного дня { symbol, dateStr, tradeIndex }
 let _activeTrade = null;
@@ -544,6 +567,23 @@ function renderTradeInfoBar(trades) {
     }
 
     if (trade) {
+        const marketLow = document.createElement('div');
+        marketLow.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;padding:5px 12px;background:var(--bg-main);border:1px solid var(--border);border-radius:8px;min-width:112px;gap:2px;';
+        const marketLowValue = document.createElement('span');
+        marketLowValue.style.cssText = 'font-size:.85rem;font-weight:700;color:var(--text-main);line-height:1.2;';
+        marketLowValue.textContent = '…';
+        const marketLowLabel = document.createElement('span');
+        marketLowLabel.style.cssText = 'font-size:.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;';
+        marketLowLabel.textContent = 'Low 09:30–12:00';
+        marketLow.append(marketLowValue, marketLowLabel);
+        bar.appendChild(marketLow);
+        const lowSymbol = String(trade.symbol || '').toUpperCase();
+        const lowDate = _activeTrade?.dateStr || '';
+        void loadMarketSessionLow(lowSymbol, lowDate).then((low) => {
+            if (!marketLowValue.isConnected) return;
+            marketLowValue.textContent = low == null ? 'Немає даних' : `$${low.toFixed(2)}`;
+            marketLow.title = low == null ? 'Ринкові дані за цей день недоступні' : `Мінімальна ціна ${lowSymbol} від 09:30 до 12:00 NY`;
+        });
         const hasScreen = findScreenshotsForTicker(_activeTrade?.dateStr, trade.symbol).length > 0;
         const btn = document.createElement('button');
         btn.type = 'button';
