@@ -313,6 +313,10 @@ function activateAction(action, trigger, event = null) {
         'session-review-screen-prev': () => window.stepSessionReviewScreen?.(-1),
         'session-review-screen-next': () => window.stepSessionReviewScreen?.(1),
         'session-review-yesterday': () => window.toggleSessionReviewYesterday?.(),
+        'screens-unassigned-open': () => {
+            window.switchMainTab?.('screens');
+            window.setTimeout(() => document.getElementById('unassigned-container')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
+        },
         'cumulative-weekly-open': () => window.openCumulativeWeekly?.(),
         'cumulative-weekly-close': () => window.closeCumulativeWeekly?.(),
         'cumulative-weekly-backdrop': () => {

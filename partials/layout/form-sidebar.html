@@ -18,7 +18,7 @@
         <button type="button" class="tab-btn active" data-tab="tab-profit">Профіт</button>
         <button type="button" class="tab-btn" data-tab="tab-mind">Думка</button>
         <button type="button" class="tab-btn" data-tab="tab-errors">Помилки</button>
-        <button type="button" class="tab-btn" data-tab="tab-trades">Угоди</button>
+        <button type="button" class="tab-btn" data-tab="tab-trades">Скріншоти</button>
         <button type="button" class="tab-btn" data-tab="tab-session">🎯 Сесія</button>
         <button type="button" class="tab-btn" data-tab="tab-fields">Поля</button>
     </div>
@@ -93,10 +93,11 @@
     </div>
 
     <div id="tab-trades" class="tab-content">
-        <div id="trades-list-container" class="trades-list-container"></div>
+        <div id="trades-list-container" class="sidebar-screens-grid"></div>
         <div id="trades-empty" class="trades-empty">
-            Немає угод за цей день.<br>Імпортуйте Fondexx trades звіт.
+            Немає скріншотів за цей день.
         </div>
+        <button type="button" class="btn-secondary sidebar-unassigned-link" data-action="screens-unassigned-open">Нерозподілені скріншоти</button>
     </div>
 
     <div id="tab-session" class="tab-content">

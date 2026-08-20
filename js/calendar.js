@@ -344,7 +344,41 @@ function applyDateStrToCalendarSelectors(dateStr) {
 }
 
 /** Список угод дня у бічній вкладці «Угоди» (тикер + net з імпорту). */
+async function renderSidebarScreenshots(dateStr) {
+    const wrap = document.getElementById('trades-list-container');
+    const empty = document.getElementById('trades-empty');
+    if (!wrap) return;
+    const screenshots = state.appData.journal[dateStr]?.screenshots || {};
+    const paths = ['good', 'normal', 'bad', 'error'].flatMap((category) =>
+        (Array.isArray(screenshots[category]) ? screenshots[category] : []).map((path) => ({ path, category }))
+    );
+    wrap.innerHTML = '';
+    if (!paths.length) {
+        if (empty) empty.style.display = 'block';
+        return;
+    }
+    if (empty) empty.style.display = 'none';
+    const resolved = await Promise.all(paths.map(async (item) => ({ ...item, src: await getStorageUrl(item.path) })));
+    if (state.selectedDateStr !== dateStr) return;
+    const sources = resolved.map((item) => item.src).filter(Boolean);
+    resolved.forEach((item) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `sidebar-screen-thumb sidebar-screen-thumb--${item.category}`;
+        button.title = 'Відкрити скріншот';
+        const image = document.createElement('img');
+        image.alt = `Скріншот за ${dateStr}`;
+        image.loading = 'lazy';
+        if (item.src) image.src = item.src;
+        button.appendChild(image);
+        button.addEventListener('click', () => window.openZoomGallery?.(item.src, sources));
+        wrap.appendChild(button);
+    });
+}
+
 export function renderSidebarTradesList(dateStr) {
+    return renderSidebarScreenshots(dateStr);
+    /* legacy trade-list renderer retained below for compatibility */
     const wrap = document.getElementById('trades-list-container');
     const empty = document.getElementById('trades-empty');
     if (!wrap) return;

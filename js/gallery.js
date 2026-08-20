@@ -449,7 +449,39 @@ export async function loadMoreUnassigned() {
     } 
 }
 
+function screenCountForDate(dateStr) {
+    const screenshots = state.appData.journal?.[dateStr]?.screenshots || {};
+    return SCREEN_CATS.reduce((total, category) => total + (Array.isArray(screenshots[category.id]) ? screenshots[category.id].length : 0), 0);
+}
+
+function renderScreensDateStrip() {
+    const strip = document.getElementById('screens-date-strip');
+    const title = document.getElementById('screens-selected-date');
+    if (!strip) return;
+    const selected = /^\d{4}-\d{2}-\d{2}$/.test(state.selectedDateStr || '')
+        ? state.selectedDateStr
+        : new Date().toISOString().slice(0, 10);
+    const center = new Date(`${selected}T12:00:00`);
+    if (title) {
+        title.textContent = new Intl.DateTimeFormat('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' }).format(center);
+    }
+    strip.innerHTML = '';
+    for (let offset = -3; offset <= 3; offset++) {
+        const date = new Date(center);
+        date.setDate(center.getDate() + offset);
+        const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'screens-date-chip';
+        button.classList.toggle('active', dateStr === selected);
+        button.innerHTML = `<span>${new Intl.DateTimeFormat('uk-UA', { weekday: 'short' }).format(date)}</span><strong>${date.getDate()}</strong><small>${screenCountForDate(dateStr)} скр.</small>`;
+        button.addEventListener('click', () => void window.selectDate?.(dateStr));
+        strip.appendChild(button);
+    }
+}
+
 export async function renderAssignedScreens() {
+    renderScreensDateStrip();
     cleanupDuplicateScreensDetailTitles();
     let screens = state.appData.journal[state.selectedDateStr]?.screenshots || { good:[], normal:[], bad:[], error:[] }; 
     const assignedContainer = document.getElementById('assigned-container');
