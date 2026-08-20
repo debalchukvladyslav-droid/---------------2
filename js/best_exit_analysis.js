@@ -6,6 +6,7 @@ const resultCache = new Map();
 let renderRequest = 0;
 const AUTO_ANALYZE_LIMIT = 40;
 const BATCH_SIZE = 5;
+let bestExitRowsExpanded = false;
 
 function cachedMarketResult(trade) {
     const key = `${trade.symbol}|${trade.date}|${trade.entryMinute}`;
@@ -78,7 +79,15 @@ async function loadMarketResults(trades, onProgress = null) {
 }
 
 function renderSummary(container, summary, unavailable = 0) {
-    const topRows = summary.rows.slice(0, 20);
+    const sortedRows = [...(summary.rows || [])].sort((a, b) => {
+        const aCapture = Number.isFinite(Number(a.capturePct)) ? Number(a.capturePct) : -Infinity;
+        const bCapture = Number.isFinite(Number(b.capturePct)) ? Number(b.capturePct) : -Infinity;
+        return bCapture - aCapture || (Number(a.extraPnl) || 0) - (Number(b.extraPnl) || 0);
+    });
+    const compactRows = sortedRows.length <= 6
+        ? sortedRows
+        : [...sortedRows.slice(0, 3), ...sortedRows.slice(-3)];
+    const topRows = bestExitRowsExpanded ? sortedRows : compactRows;
     const commonWindow = bestWindowSummary(summary.rows);
     console.groupCollapsed(`[Polygon analysis] кращий вихід: ${summary.count} угод, забрано ${summary.avgCapturePct == null ? '—' : `${summary.avgCapturePct.toFixed(1)}%`} руху`);
     console.table(summary.rows.map((row) => ({ дата: row.date, тікер: row.symbol, вхід: row.entryPrice, фактичний_вихід: row.actualExitPrice, low: row.low, час_low: row.lowTime, причина_виходу: row.exitReason || 'не вказано', забрано_руху_pct: row.capturePct == null ? null : Number(row.capturePct.toFixed(1)), не_забрано_$: row.extraPnl == null ? null : Number(row.extraPnl.toFixed(2)) })));
@@ -101,7 +110,11 @@ function renderSummary(container, summary, unavailable = 0) {
                     <td><strong>${bestExitWindowNY(row.lowTime) || '—'}</strong></td><td>${money(row.bestPnl)}</td><td>${money(row.extraPnl)}</td>
                 </tr>`).join('')}</tbody>
             </table>
-        </div>`;
+        </div>
+        ${sortedRows.length > 6 ? `<button type="button" class="stats-chart-expand best-exit-expand" aria-expanded="${bestExitRowsExpanded}">
+            <span aria-hidden="true">${bestExitRowsExpanded ? '⌃' : '⌄'}</span>
+            ${bestExitRowsExpanded ? 'Згорнути' : `Показати всі (${sortedRows.length})`}
+        </button>` : ''}`;
     container.querySelectorAll('[data-best-exit-date]').forEach((button) => button.addEventListener('click', () => {
         const date = button.dataset.bestExitDate || '';
         const tradeIndex = Number(button.dataset.bestExitIndex);
@@ -110,6 +123,10 @@ function renderSummary(container, summary, unavailable = 0) {
         try { identity = JSON.parse(button.dataset.bestExitIdentity || 'null'); } catch (_) { identity = null; }
         void window.openTradesAtDayIndex?.(date, tradeIndex, identity);
     }));
+    container.querySelector('.best-exit-expand')?.addEventListener('click', () => {
+        bestExitRowsExpanded = !bestExitRowsExpanded;
+        renderSummary(container, summary, unavailable);
+    });
 }
 
 function escapeHtml(value) {
@@ -144,6 +161,7 @@ export async function renderBestExitAnalysis({ journal = {}, periodDates = new S
     const container = document.getElementById('stats-best-exit-content');
     if (!container) return;
     const requestId = ++renderRequest;
+    bestExitRowsExpanded = false;
     if (!['current', 'trader'].includes(sourceType)) {
         container.innerHTML = '<div class="stats-empty-note">Аналіз доступний для одного трейдера, а не для об’єднаного куща.</div>';
         return;

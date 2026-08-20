@@ -58,6 +58,10 @@ test('best-exit tickers open their exact journal trade and Polygon logs every ti
     assert.match(source, /data-best-exit-date/);
     assert.match(source, /data-best-exit-index/);
     assert.match(source, /window\.openTradesAtDayIndex/);
+    assert.match(source, /sortedRows\.slice\(0, 3\)/);
+    assert.match(source, /sortedRows\.slice\(-3\)/);
+    assert.match(source, /bCapture - aCapture/);
+    assert.match(source, /best-exit-expand/);
     assert.match(source, /\[Polygon\] переглядається/);
     assert.match(source, /очікує в черзі або дані недоступні/);
     assert.match(tradesView, /await window\.switchMainTab\('trades'\)/);
