@@ -1,5 +1,5 @@
 export function canAccessMentorReviewQueueState({ myRole, isMentorMode }) {
-    return myRole === 'mentor' || isMentorMode === true;
+    return myRole === 'admin' || myRole === 'mentor' || isMentorMode === true;
 }
 
 export function isViewingOtherProfileState({ userDocName, currentViewedUser }) {

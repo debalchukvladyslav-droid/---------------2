@@ -300,7 +300,7 @@ test('Fondexx Summary by date parser keeps blank no-activity rows as monthly adj
 test('access control opens viewing but keeps review and mentor comment role-scoped', () => {
     assert.equal(canAccessMentorReviewQueueState({ myRole: 'trader', isMentorMode: false }), false);
     assert.equal(canAccessMentorReviewQueueState({ myRole: 'mentor', isMentorMode: false }), true);
-    assert.equal(canAccessMentorReviewQueueState({ myRole: 'admin', isMentorMode: false }), false);
+    assert.equal(canAccessMentorReviewQueueState({ myRole: 'admin', isMentorMode: false }), true);
     assert.equal(canAccessMentorReviewQueueState({ myRole: 'trader', isMentorMode: true }), true);
 
     assert.equal(isViewingOtherProfileState({
