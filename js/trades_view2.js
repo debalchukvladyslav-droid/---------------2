@@ -52,7 +52,9 @@ async function loadMarketSessionLow(symbol, dateStr) {
         return response.ok && Number(row?.low) > 0 ? Number(row.low) : null;
     })().catch(() => null);
     marketSessionLowCache.set(key, request);
-    return request;
+    const result = await request;
+    if (result == null) marketSessionLowCache.delete(key);
+    return result;
 }
 
 // Активна угода для поточного дня { symbol, dateStr, tradeIndex }

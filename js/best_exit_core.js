@@ -1,4 +1,12 @@
-const TIME_EXIT_RE = /(?:^|\s)(?:по\s*часу|за\s*часом|time)(?:\s|$)/iu;
+const EXCLUDED_EXIT_RE = /stop(?:ped)?(?:\s*out|\s*loss)?|(?:^|\s)s\/?l(?:\s|$)|(?:^|\s)sl(?:\s|$)|стоп(?:ом|аут)?|стоп[-\s]?лосс|take(?:\s*profit)?|(?:^|\s)t\/?p(?:\s|$)|(?:^|\s)tp(?:\s|$)|target|profit\s*target|тейк(?:\s*профіт|\s*профит)?|таргет|ціль|цель/iu;
+
+export function tradeExitReason(trade = {}) {
+    return String(trade?.sheet?.exit || trade?.exitReason || trade?.closeReason || trade?.exitType || trade?.closeType || trade?.reason || '').trim();
+}
+
+export function isExcludedStopTakeExit(trade = {}) {
+    return EXCLUDED_EXIT_RE.test(tradeExitReason(trade).toLocaleLowerCase('uk-UA').replace(/[_.-]+/g, ' ').replace(/\s+/g, ' '));
+}
 
 export function normalizeTradeClock(value = '') {
     const match = String(value).match(/(?:^|\s|T)(\d{1,2}):(\d{2})(?::\d{2})?/);
@@ -35,7 +43,7 @@ export function bestExitWindowNY(value) {
 }
 
 export function isTimeExitTrade(trade = {}) {
-    return TIME_EXIT_RE.test(String(trade?.sheet?.exit || trade?.exitReason || trade?.closeReason || '').trim());
+    return /(?:^|\s)(?:по\s*часу|за\s*часом|time)(?:\s|$)/iu.test(tradeExitReason(trade));
 }
 
 export function isShortTrade(trade = {}) {
@@ -53,21 +61,23 @@ export function collectTimedShortTrades(journal = {}, allowedDates = null) {
     for (const [dateStr, day] of Object.entries(journal || {})) {
         if (allowedDates instanceof Set && !allowedDates.has(dateStr)) continue;
         for (const [tradeIndex, trade] of (day?.trades || []).entries()) {
-            if (!isShortTrade(trade) || !isTimeExitTrade(trade)) continue;
+            if (!isShortTrade(trade) || isExcludedStopTakeExit(trade)) continue;
             const openedMinute = normalizeTradeClock(trade?.opened);
             const entryMinute = Math.max(570, openedMinute ?? 570);
             if (entryMinute >= 720) continue;
             const entryPrice = Number(trade?.entry || trade?.sheet?.entryPrice);
+            const actualExitPrice = Number(trade?.exit || trade?.closePrice || trade?.sheet?.exitPrice);
             const qty = Math.abs(Number(trade?.qty || trade?.sheet?.qtyShares));
             if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr) || !/^[A-Z]{1,10}$/.test(String(trade?.symbol || '').toUpperCase())) continue;
-            if (!(entryPrice > 0)) continue;
+            if (!(entryPrice > 0) || !(actualExitPrice > 0)) continue;
             rows.push({
                 id: `${dateStr}:${tradeIndex}:${String(trade.symbol).toUpperCase()}`,
                 date: dateStr,
                 symbol: String(trade.symbol).toUpperCase(),
                 entryMinute,
                 entryPrice,
-                actualExitPrice: Number(trade?.exit) || null,
+                actualExitPrice,
+                exitReason: tradeExitReason(trade),
                 qty: qty > 0 ? qty : null,
             });
         }
@@ -91,6 +101,7 @@ export function attachBestExitResult(trade, market = {}) {
         bestPnl: trade.qty ? perShare * trade.qty : null,
         actualPnl: trade.qty && actualPerShare != null ? actualPerShare * trade.qty : null,
         extraPnl: trade.qty && actualPerShare != null ? (perShare - actualPerShare) * trade.qty : null,
+        capturedPerShare: actualPerShare,
         capturePct: actualPerShare != null && perShare > 0
             ? Math.max(0, Math.min(100, actualPerShare / perShare * 100))
             : null,
@@ -104,11 +115,13 @@ export function summarizeBestExits(rows = []) {
     const bestPnl = numeric('bestPnl');
     const extraPnl = numeric('extraPnl');
     const capture = numeric('capturePct');
+    const bestMove = numeric('perShare').filter((value) => value > 0);
+    const capturedMove = valid.filter((row) => Number(row.perShare) > 0 && Number.isFinite(Number(row.capturedPerShare))).map((row) => Math.max(0, Math.min(Number(row.perShare), Number(row.capturedPerShare))));
     return {
         count: valid.length,
         bestPnl: bestPnl.length ? sum(bestPnl) : null,
         extraPnl: extraPnl.length ? sum(extraPnl) : null,
-        avgCapturePct: capture.length ? sum(capture) / capture.length : null,
+        avgCapturePct: bestMove.length ? sum(capturedMove) / sum(bestMove) * 100 : (capture.length ? sum(capture) / capture.length : null),
         rows: [...valid].sort((a, b) => (Number(b.extraPnl) || 0) - (Number(a.extraPnl) || 0)),
     };
 }

@@ -4,7 +4,7 @@ import { attachBestExitResult, bestExitWindowNY, collectTimedShortTrades, summar
 const resultCache = new Map();
 let renderRequest = 0;
 const AUTO_ANALYZE_LIMIT = 40;
-const BATCH_SIZE = 5;
+const BATCH_SIZE = 200;
 
 function money(value) {
     return Number.isFinite(Number(value))
@@ -34,6 +34,7 @@ async function fetchBatch(items) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload?.message || `Market data: ${response.status}`);
+    console.info('[Polygon analysis] server response', { requested: items.length, returned: payload?.results?.length || 0, queued: payload?.queued || 0, processed: payload?.processed || 0 });
     return Array.isArray(payload.results) ? payload.results : [];
 }
 
@@ -62,11 +63,15 @@ async function loadMarketResults(trades, onProgress = null) {
 }
 
 function renderSummary(container, summary, unavailable = 0) {
-    const topRows = summary.rows.slice(0, 8);
+    const topRows = summary.rows.slice(0, 20);
     const commonWindow = bestWindowSummary(summary.rows);
+    console.groupCollapsed(`[Polygon analysis] кращий вихід: ${summary.count} угод, забрано ${summary.avgCapturePct == null ? '—' : `${summary.avgCapturePct.toFixed(1)}%`} руху`);
+    console.table(summary.rows.map((row) => ({ дата: row.date, тікер: row.symbol, вхід: row.entryPrice, фактичний_вихід: row.actualExitPrice, low: row.low, час_low: row.lowTime, причина_виходу: row.exitReason || 'не вказано', забрано_руху_pct: row.capturePct == null ? null : Number(row.capturePct.toFixed(1)), не_забрано_$: row.extraPnl == null ? null : Number(row.extraPnl.toFixed(2)) })));
+    console.info({ analyzed: summary.count, unavailable, bestPnl: summary.bestPnl, extraPnl: summary.extraPnl, capturedMovementPct: summary.avgCapturePct, commonBestWindow: commonWindow?.[0] || null });
+    console.groupEnd();
     container.innerHTML = `
         <div class="best-exit-metrics">
-            <div><span>Угод по часу</span><strong>${summary.count}</strong></div>
+            <div><span>Закритих угод без Stop/Take</span><strong>${summary.count}</strong></div>
             <div><span>Макс. результат на low</span><strong>${money(summary.bestPnl)}</strong></div>
             <div><span>Не забрано до low</span><strong>${money(summary.extraPnl)}</strong></div>
             <div><span>Забрано руху</span><strong>${summary.avgCapturePct == null ? '—' : `${summary.avgCapturePct.toFixed(0)}%`}</strong></div>
@@ -75,9 +80,9 @@ function renderSummary(container, summary, unavailable = 0) {
         ${unavailable ? `<p class="stats-chart-note">Без market data: ${unavailable}. Перевірте тариф Polygon для historical minute aggregates.</p>` : ''}
         <div class="best-exit-table-wrap">
             <table class="best-exit-table">
-                <thead><tr><th>Дата</th><th>Тікер</th><th>Найкраща ціна виходу</th><th>Найкращий 10-хв діапазон (NY)</th><th>Макс. P&amp;L</th><th>Не забрано</th></tr></thead>
+                <thead><tr><th>Дата</th><th>Тікер</th><th>Вихід</th><th>Low</th><th>Забрано руху</th><th>Найкращий 10-хв діапазон (NY)</th><th>Макс. P&amp;L</th><th>Не забрано</th></tr></thead>
                 <tbody>${topRows.map((row) => `<tr>
-                    <td>${row.date}</td><td>${row.symbol}</td><td>${row.low.toFixed(2)}</td>
+                    <td>${row.date}</td><td>${row.symbol}</td><td>${row.actualExitPrice.toFixed(2)}</td><td>${row.low.toFixed(2)}</td><td>${row.capturePct == null ? '—' : `${row.capturePct.toFixed(0)}%`}</td>
                     <td><strong>${bestExitWindowNY(row.lowTime) || '—'}</strong></td><td>${money(row.bestPnl)}</td><td>${money(row.extraPnl)}</td>
                 </tr>`).join('')}</tbody>
             </table>
@@ -122,7 +127,7 @@ export async function renderBestExitAnalysis({ journal = {}, periodDates = new S
     }
     const trades = collectTimedShortTrades(journal, periodDates);
     if (!trades.length) {
-        container.innerHTML = '<div class="stats-empty-note">У вибраному періоді немає short-угод із виходом «по часу» та коректною ціною входу.</div>';
+        container.innerHTML = '<div class="stats-empty-note">У вибраному періоді немає закритих short-угод із коректними цінами входу/виходу після виключення Stop і Take.</div>';
         return;
     }
     const uncached = trades.filter((trade) => !resultCache.has(`${trade.symbol}|${trade.date}|${trade.entryMinute}`)).length;

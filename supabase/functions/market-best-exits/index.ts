@@ -1,7 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 const DEFAULT_ORIGIN = 'https://traderjournal-six.vercel.app';
-const MAX_ITEMS = 5;
+const MAX_ITEMS = 200;
 
 function cors(req: Request) {
     const allowed = new Set([DEFAULT_ORIGIN, 'http://localhost:8787', 'http://127.0.0.1:8787', ...(Deno.env.get('APP_ALLOWED_ORIGINS') || '').split(',')]);
@@ -78,21 +78,26 @@ Deno.serve(async (req) => {
     const results: any[] = cachedChecks.map((row) => row.result).filter(Boolean);
     const missing = cachedChecks.filter((row) => !row.result).map((row) => row.item);
 
+    const uniqueMissing = [...new Map(missing.map((item) => [`${item.symbol}|${item.date}`, item])).values()];
+    if (uniqueMissing.length) {
+        await rest('market_low_jobs?on_conflict=symbol,trade_date', {
+            method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
+            body: JSON.stringify(uniqueMissing.map((item) => ({ symbol: item.symbol, trade_date: item.date }))),
+        });
+    }
+    const claimResponse = await rest('rpc/claim_market_low_jobs', { method: 'POST', body: JSON.stringify({ max_jobs: 5 }) });
+    const claimed = claimResponse.ok ? await claimResponse.json() : [];
     const polygonKey = Deno.env.get('POLYGON_API_KEY') || '';
-    const groups = new Map<string, any[]>();
-    missing.forEach((item) => {
-        const key = `${item.symbol}|${item.date}`;
-        groups.set(key, [...(groups.get(key) || []), item]);
-    });
-    const downloaded = await Promise.all([...groups.values()].map(async (groupItems) => {
-        const item = groupItems[0];
+    await Promise.all((claimed || []).map(async (job: any) => {
+        const item = { symbol: String(job.symbol), date: String(job.trade_date) };
+        try {
         const offset = nyOffset(item.date);
         const from = new Date(`${item.date}T09:30:00${offset}`).getTime();
         const to = new Date(`${item.date}T12:00:00${offset}`).getTime();
         const params = new URLSearchParams({ adjusted: 'false', sort: 'asc', limit: '1000', apiKey: polygonKey });
         const marketRes = await fetch(`https://api.polygon.io/v2/aggs/ticker/${item.symbol}/range/1/minute/${from}/${to}?${params}`, { signal: AbortSignal.timeout(12000) });
         const market = await marketRes.json().catch(() => ({}));
-        if (!marketRes.ok || !Array.isArray(market.results) || !market.results.length) return [];
+        if (!marketRes.ok || !Array.isArray(market.results) || !market.results.length) throw new Error(market?.error || market?.message || `Polygon ${marketRes.status}`);
         const minuteFormatter = new Intl.DateTimeFormat('en-US', {
             timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false,
         });
@@ -116,13 +121,22 @@ Deno.serve(async (req) => {
         await rest('market_best_exit_cache?on_conflict=symbol,trade_date,entry_minute', {
             method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify(cacheRows),
         });
-        const groupResults: any[] = [];
-        groupItems.forEach((requested) => {
-            const row = cacheRows.find((candidate) => candidate.entry_minute === requested.entryMinute);
-            if (row) groupResults.push({ symbol: item.symbol, date: item.date, entryMinute: requested.entryMinute, low: row.low_price, lowTime: row.low_at, cached: false });
+        await rest(`market_low_jobs?symbol=eq.${item.symbol}&trade_date=eq.${item.date}`, {
+            method: 'PATCH', body: JSON.stringify({ status: 'ready', updated_at: new Date().toISOString(), last_error: '' }),
         });
-        return groupResults;
+        console.log(`[Polygon queue] ready ${item.symbol} ${item.date}; cached ${cacheRows.length} entry-minute lows`);
+        } catch (error) {
+            const message = String(error?.message || error).slice(0, 500);
+            await rest(`market_low_jobs?symbol=eq.${item.symbol}&trade_date=eq.${item.date}`, {
+                method: 'PATCH', body: JSON.stringify({ status: 'failed', next_attempt_at: new Date(Date.now() + 65000).toISOString(), updated_at: new Date().toISOString(), last_error: message }),
+            });
+            console.warn(`[Polygon queue] failed ${item.symbol} ${item.date}: ${message}`);
+        }
     }));
-    downloaded.forEach((rows) => results.push(...rows));
-    return json(req, { results });
+    for (const item of missing) {
+        const query = `market_best_exit_cache?symbol=eq.${item.symbol}&trade_date=eq.${item.date}&entry_minute=eq.${item.entryMinute}&select=symbol,trade_date,entry_minute,low_price,low_at`;
+        const cachedRes = await rest(query); const cached = cachedRes.ok ? await cachedRes.json() : [];
+        if (cached?.[0]) results.push({ symbol: item.symbol, date: item.date, entryMinute: item.entryMinute, low: Number(cached[0].low_price), lowTime: cached[0].low_at, cached: false });
+    }
+    return json(req, { results, queued: Math.max(0, uniqueMissing.length - results.length), processed: (claimed || []).length });
 });
