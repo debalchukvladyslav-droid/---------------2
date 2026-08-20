@@ -4773,6 +4773,7 @@ body.is-offline [data-needs-network="true"] {
 .best-exit-metrics span { color: var(--text-muted); font-size: .76rem; }
 .best-exit-metrics strong { color: var(--text-main); font-size: 1.05rem; }
 .best-exit-table-wrap { overflow-x: auto; }
+.best-exit-table-wrap.is-expanded { max-height: 440px; overflow-y: auto; scrollbar-gutter: stable; }
 .best-exit-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
 .best-exit-table th,
 .best-exit-table td { padding: 8px 9px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }

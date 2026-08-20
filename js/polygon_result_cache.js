@@ -1,5 +1,6 @@
 const STORAGE_KEY = 'traderjournal:polygon-results:v1';
 const MAX_ROWS = 5000;
+let memoryStore = null;
 
 function resultKey(value = {}) {
     const symbol = String(value.symbol || '').trim().toUpperCase();
@@ -10,12 +11,14 @@ function resultKey(value = {}) {
 }
 
 function readStore() {
+    if (memoryStore) return memoryStore;
     try {
         const parsed = JSON.parse(globalThis.localStorage?.getItem(STORAGE_KEY) || '{}');
-        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+        memoryStore = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
     } catch (_) {
-        return {};
+        memoryStore = {};
     }
+    return memoryStore;
 }
 
 export function readPolygonResult(value = {}) {
@@ -45,6 +48,7 @@ export function writePolygonResults(rows = []) {
         const compact = Object.fromEntries(Object.entries(store)
             .sort((a, b) => Number(b[1]?.savedAt || 0) - Number(a[1]?.savedAt || 0))
             .slice(0, MAX_ROWS));
+        memoryStore = compact;
         globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(compact));
     } catch (_) {
         // Supabase remains the authoritative cache when local storage is unavailable.

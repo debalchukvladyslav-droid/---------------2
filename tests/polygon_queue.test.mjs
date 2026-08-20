@@ -62,6 +62,9 @@ test('best-exit tickers open their exact journal trade and Polygon logs every ti
     assert.match(source, /sortedRows\.slice\(-3\)/);
     assert.match(source, /bCapture - aCapture/);
     assert.match(source, /best-exit-expand/);
+    assert.match(source, /scheduleSilentRefresh/);
+    assert.match(source, /REFRESH_WHEN_WAITING_MS = 65000/);
+    assert.match(source, /renderSummary\(container, summarizeBestExits\(rows\), after, false\)/);
     assert.match(source, /\[Polygon\] переглядається/);
     assert.match(source, /очікує в черзі або дані недоступні/);
     assert.match(tradesView, /await window\.switchMainTab\('trades'\)/);

@@ -7,6 +7,9 @@ let renderRequest = 0;
 const AUTO_ANALYZE_LIMIT = 40;
 const BATCH_SIZE = 5;
 let bestExitRowsExpanded = false;
+let silentRefreshTimer = null;
+const REFRESH_AFTER_PROGRESS_MS = 3000;
+const REFRESH_WHEN_WAITING_MS = 65000;
 
 function cachedMarketResult(trade) {
     const key = `${trade.symbol}|${trade.date}|${trade.entryMinute}`;
@@ -78,7 +81,8 @@ async function loadMarketResults(trades, onProgress = null) {
     )).filter(Boolean);
 }
 
-function renderSummary(container, summary, unavailable = 0) {
+function renderSummary(container, summary, unavailable = 0, logToConsole = true) {
+    const previousScrollTop = container.querySelector('.best-exit-table-wrap')?.scrollTop || 0;
     const sortedRows = [...(summary.rows || [])].sort((a, b) => {
         const aCapture = Number.isFinite(Number(a.capturePct)) ? Number(a.capturePct) : -Infinity;
         const bCapture = Number.isFinite(Number(b.capturePct)) ? Number(b.capturePct) : -Infinity;
@@ -89,10 +93,12 @@ function renderSummary(container, summary, unavailable = 0) {
         : [...sortedRows.slice(0, 3), ...sortedRows.slice(-3)];
     const topRows = bestExitRowsExpanded ? sortedRows : compactRows;
     const commonWindow = bestWindowSummary(summary.rows);
-    console.groupCollapsed(`[Polygon analysis] кращий вихід: ${summary.count} угод, забрано ${summary.avgCapturePct == null ? '—' : `${summary.avgCapturePct.toFixed(1)}%`} руху`);
-    console.table(summary.rows.map((row) => ({ дата: row.date, тікер: row.symbol, вхід: row.entryPrice, фактичний_вихід: row.actualExitPrice, low: row.low, час_low: row.lowTime, причина_виходу: row.exitReason || 'не вказано', забрано_руху_pct: row.capturePct == null ? null : Number(row.capturePct.toFixed(1)), не_забрано_$: row.extraPnl == null ? null : Number(row.extraPnl.toFixed(2)) })));
-    console.info({ analyzed: summary.count, unavailable, bestPnl: summary.bestPnl, extraPnl: summary.extraPnl, capturedMovementPct: summary.avgCapturePct, commonBestWindow: commonWindow?.[0] || null });
-    console.groupEnd();
+    if (logToConsole) {
+        console.groupCollapsed(`[Polygon analysis] кращий вихід: ${summary.count} угод, забрано ${summary.avgCapturePct == null ? '—' : `${summary.avgCapturePct.toFixed(1)}%`} руху`);
+        console.table(summary.rows.map((row) => ({ дата: row.date, тікер: row.symbol, вхід: row.entryPrice, фактичний_вихід: row.actualExitPrice, low: row.low, час_low: row.lowTime, причина_виходу: row.exitReason || 'не вказано', забрано_руху_pct: row.capturePct == null ? null : Number(row.capturePct.toFixed(1)), не_забрано_$: row.extraPnl == null ? null : Number(row.extraPnl.toFixed(2)) })));
+        console.info({ analyzed: summary.count, unavailable, bestPnl: summary.bestPnl, extraPnl: summary.extraPnl, capturedMovementPct: summary.avgCapturePct, commonBestWindow: commonWindow?.[0] || null });
+        console.groupEnd();
+    }
     container.innerHTML = `
         <div class="best-exit-metrics">
             <div><span>Закритих угод без Stop/Take</span><strong>${summary.count}</strong></div>
@@ -102,7 +108,7 @@ function renderSummary(container, summary, unavailable = 0) {
             <div><span>Найчастіший найкращий час</span><strong>${commonWindow ? `${commonWindow[0]} NY` : '—'}</strong></div>
         </div>
         ${unavailable ? `<p class="stats-chart-note">Без market data: ${unavailable}. Перевірте тариф Polygon для historical minute aggregates.</p>` : ''}
-        <div class="best-exit-table-wrap">
+        <div class="best-exit-table-wrap${bestExitRowsExpanded ? ' is-expanded' : ''}">
             <table class="best-exit-table">
                 <thead><tr><th>Дата</th><th>Тікер</th><th>Вихід</th><th>Low</th><th>Забрано руху</th><th>Найкращий 10-хв діапазон (NY)</th><th>Макс. P&amp;L</th><th>Не забрано</th></tr></thead>
                 <tbody>${topRows.map((row) => `<tr>
@@ -123,10 +129,38 @@ function renderSummary(container, summary, unavailable = 0) {
         try { identity = JSON.parse(button.dataset.bestExitIdentity || 'null'); } catch (_) { identity = null; }
         void window.openTradesAtDayIndex?.(date, tradeIndex, identity);
     }));
+    const tableWrap = container.querySelector('.best-exit-table-wrap');
+    if (tableWrap && bestExitRowsExpanded) tableWrap.scrollTop = previousScrollTop;
     container.querySelector('.best-exit-expand')?.addEventListener('click', () => {
         bestExitRowsExpanded = !bestExitRowsExpanded;
         renderSummary(container, summary, unavailable);
     });
+}
+
+function countMissingMarketResults(trades) {
+    return trades.reduce((count, trade) => count + (cachedMarketResult(trade) ? 0 : 1), 0);
+}
+
+function scheduleSilentRefresh(container, trades, requestId, delay = REFRESH_AFTER_PROGRESS_MS) {
+    clearTimeout(silentRefreshTimer);
+    if (requestId !== renderRequest || !container?.isConnected || !countMissingMarketResults(trades)) return;
+    silentRefreshTimer = setTimeout(async () => {
+        if (requestId !== renderRequest || !container?.isConnected) return;
+        const before = countMissingMarketResults(trades);
+        try {
+            const rows = await loadMarketResults(trades);
+            if (requestId !== renderRequest || !container?.isConnected) return;
+            const after = countMissingMarketResults(trades);
+            if (after < before) {
+                console.info(`[Polygon analysis] тихо додано ${before - after}; готово ${trades.length - after}/${trades.length}`);
+                renderSummary(container, summarizeBestExits(rows), after, false);
+            }
+            scheduleSilentRefresh(container, trades, requestId, after < before ? REFRESH_AFTER_PROGRESS_MS : REFRESH_WHEN_WAITING_MS);
+        } catch (error) {
+            console.warn('[Polygon analysis] фонове оновлення відкладено:', error?.message || error);
+            scheduleSilentRefresh(container, trades, requestId, REFRESH_WHEN_WAITING_MS);
+        }
+    }, delay);
 }
 
 function escapeHtml(value) {
@@ -148,6 +182,7 @@ async function runAnalysis(container, trades, requestId) {
         const rows = await loadMarketResults(trades, updateProgress);
         if (requestId !== renderRequest) return;
         renderSummary(container, summarizeBestExits(rows), trades.length - rows.length);
+        scheduleSilentRefresh(container, trades, requestId);
     } catch (error) {
         if (requestId !== renderRequest) return;
         container.innerHTML = `
@@ -161,6 +196,7 @@ export async function renderBestExitAnalysis({ journal = {}, periodDates = new S
     const container = document.getElementById('stats-best-exit-content');
     if (!container) return;
     const requestId = ++renderRequest;
+    clearTimeout(silentRefreshTimer);
     bestExitRowsExpanded = false;
     if (!['current', 'trader'].includes(sourceType)) {
         container.innerHTML = '<div class="stats-empty-note">Аналіз доступний для одного трейдера, а не для об’єднаного куща.</div>';
