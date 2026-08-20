@@ -1304,6 +1304,9 @@ async function bootApp(user) {
     startInitTimeout();
     try {
         await ensureAppShellLoaded();
+        document.querySelectorAll('.trader-dna-nav-item').forEach((item) => {
+            item.classList.toggle('initially-hidden', state.myRole !== 'admin');
+        });
         initNotifications();
 
         document.getElementById('auth-overlay').style.display = 'none';
@@ -1316,7 +1319,6 @@ async function bootApp(user) {
         await initDashboardWidgets();
         initGrandmasterDashboard();
         initTerminalShortcuts();
-        void renderTraderDNAGlance();
 
         if (canAccessMentorReviewQueue()) {
             document.querySelectorAll('.mentor-review-nav-item').forEach((el) => {
@@ -1390,7 +1392,7 @@ function showLoginScreen() {
     document.querySelectorAll('.mentor-review-nav-item').forEach((el) => {
         el.classList.add('initially-hidden');
     });
-    document.querySelectorAll('.admin-nav-item, .admin-tab-mobile').forEach((el) => {
+    document.querySelectorAll('.admin-nav-item, .admin-tab-mobile, .trader-dna-nav-item').forEach((el) => {
         el.classList.add('initially-hidden');
     });
     setMentorReviewNavBadges(0);

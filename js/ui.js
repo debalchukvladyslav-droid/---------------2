@@ -825,6 +825,9 @@ function updateRouteForTab(tab, mode = 'push') {
 }
 
 export async function switchMainTab(tab, options = {}) {
+    if (tab === 'debrief' && state.myRole !== 'admin') {
+        tab = 'dash';
+    }
     if (!document.getElementById('view-' + tab)) {
         tab = 'dash';
     }
