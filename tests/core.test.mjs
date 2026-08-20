@@ -35,7 +35,7 @@ const { parseFondexxSummaryByDateRows } = await import('../js/fondexx_summary_pa
 const { collectDatagridRows } = await import('../js/datagrid_rows.js');
 const { enrichTradeWithSheet, findSheetMatchIndex, parseSheetGridToTrades } = await import('../js/sheet_sync_core.js');
 const { summarizeJournalPnl } = await import('../js/stats_math.js');
-const { getCalendarDayResult, getEffectiveDayPnl, isPureGoogleSheetTrade, visibleTradeRows } = await import('../js/trade_filters.js');
+const { findTradeIndexByIdentity, getCalendarDayResult, getEffectiveDayPnl, isPureGoogleSheetTrade, visibleTradeRows } = await import('../js/trade_filters.js');
 const { normalizeBrokerTradeType } = await import('../js/trade_import_utils.js');
 const { duplicateSheetMappingConfig, getCumulativeArchiveSchedule } = await import('../js/sheet_import_modes.js');
 const { detectExactSheetAutoMapping, migrateLegacyClassificationMapping, normalizeExactSheetHeader, relocateSheetDataStartRow } = await import('../js/sheet_auto_mapping.js');
@@ -467,6 +467,14 @@ test('trade filters hide pure Google Sheet rows but keep matched trades', () => 
     assert.equal(isPureGoogleSheetTrade(sheetOnly, 'other-sheet'), false);
     assert.equal(isPureGoogleSheetTrade(matched), false);
     assert.deepEqual(visibleTradeRows([realTrade, sheetOnly, matched]).map((row) => row.index), [0, 2]);
+});
+
+test('trade identity finds the exact trade after journal rows are reordered', () => {
+    const trades = [
+        { symbol: 'AAPL', opened: '09:35', entry: 10, exit: 9.2, qty: 100 },
+        { symbol: 'AAPL', opened: '10:05', entry: 8, exit: 7.4, qty: 250 },
+    ];
+    assert.equal(findTradeIndexByIdentity(trades, { symbol: 'AAPL', opened: '10:05', entry: 8, exit: 7.4, qty: 250 }), 1);
 });
 
 test('Trades import direction normalizes obvious broker Short and Long values', () => {

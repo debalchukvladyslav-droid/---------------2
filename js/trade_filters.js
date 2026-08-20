@@ -20,6 +20,28 @@ export function visibleTradeRowsForDate(journal = {}, dateStr = '') {
     return visibleTradeRows(trades);
 }
 
+const identityText = (value) => String(value ?? '').trim().toUpperCase();
+const identityNumber = (value) => Number.isFinite(Number(value)) ? Number(value) : null;
+
+export function findTradeIndexByIdentity(trades = [], identity = {}) {
+    const symbol = identityText(identity.symbol);
+    if (!symbol) return -1;
+    const opened = identityText(identity.opened);
+    const entry = identityNumber(identity.entry);
+    const exit = identityNumber(identity.exit);
+    const qty = identityNumber(identity.qty);
+    const candidates = (Array.isArray(trades) ? trades : []).map((trade, index) => {
+        if (identityText(trade?.symbol || trade?.ticker) !== symbol || isPureGoogleSheetTrade(trade)) return null;
+        let score = 1;
+        if (opened && identityText(trade?.opened || trade?.entryTime || trade?.time) === opened) score += 100;
+        if (entry != null && identityNumber(trade?.entry || trade?.sheet?.entryPrice) === entry) score += 20;
+        if (exit != null && identityNumber(trade?.exit || trade?.closePrice || trade?.sheet?.exitPrice) === exit) score += 20;
+        if (qty != null && Math.abs(identityNumber(trade?.qty || trade?.shares || trade?.sheet?.qtyShares) || 0) === Math.abs(qty)) score += 10;
+        return { index, score };
+    }).filter(Boolean).sort((a, b) => b.score - a.score || a.index - b.index);
+    return candidates[0]?.index ?? -1;
+}
+
 function sourceHasMoney(source) {
     return !!(
         Number(source?.gross)

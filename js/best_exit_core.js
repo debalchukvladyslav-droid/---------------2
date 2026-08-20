@@ -80,6 +80,7 @@ export function collectTimedShortTrades(journal = {}, allowedDates = null) {
                 actualExitPrice,
                 exitReason: tradeExitReason(trade),
                 qty: qty > 0 ? qty : null,
+                tradeIdentity: { symbol: trade.symbol, opened: trade.opened || trade.entryTime || trade.time || '', entry: entryPrice, exit: actualExitPrice, qty: qty > 0 ? qty : null },
             });
         }
     }

@@ -7,7 +7,7 @@ import { saveJournalData, markJournalDayDirty, loadTradeDays } from './storage.j
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 import { findScreenshotsForTicker, openScreenshotForTrade } from './gallery.js';
 import { ensureLightweightCharts } from './vendor_loader.js';
-import { isPureGoogleSheetTrade, visibleTradeRowsForDate } from './trade_filters.js';
+import { findTradeIndexByIdentity, isPureGoogleSheetTrade, visibleTradeRowsForDate } from './trade_filters.js';
 
 function sanitizeHTML(str) {
     const div = document.createElement('div');
@@ -492,13 +492,15 @@ export function loadTradeChart(symbol, dateStr) {
 }
 
 /** Відкрити вкладку «Угоди» і конкретну угоду дня (після імпорту Fondexx). */
-export async function openTradesAtDayIndex(dateStr, tradeIndex) {
-    const rows = visibleTradeRows(dateStr);
-    if (!dateStr || !rows.length) return;
-    const rawIdx = parseInt(tradeIndex, 10) || 0;
-    const idx = rows.some(row => row.index === rawIdx) ? rawIdx : rows[Math.max(0, Math.min(rawIdx, rows.length - 1))].index;
+export async function openTradesAtDayIndex(dateStr, tradeIndex, identity = null) {
+    if (!dateStr) return;
     if (window.switchMainTab) window.switchMainTab('trades');
     await populateDateSelect();
+    const currentRows = visibleTradeRows(dateStr);
+    if (!currentRows.length) return;
+    const identityIdx = identity ? findTradeIndexByIdentity(state.appData.journal?.[dateStr]?.trades || [], identity) : -1;
+    const rawIdx = identityIdx >= 0 ? identityIdx : (parseInt(tradeIndex, 10) || 0);
+    const idx = currentRows.some(row => row.index === rawIdx) ? rawIdx : currentRows[Math.max(0, Math.min(rawIdx, currentRows.length - 1))].index;
     const sel = document.getElementById('trades-date-select');
     if (sel) {
         if (!sel.querySelector(`option[value="${dateStr}"]`)) await populateDateSelect();
