@@ -802,7 +802,7 @@ test('shared Google Sheet merge stores all rows but only updates existing Trades
     assert.equal(sheetRowsStore['sheet-1']['2026-04-02'][0].type, 'do not take');
 });
 
-test('main Google Sheet writes summed trade PnL into the matching calendar day', () => {
+test('main Google Sheet writes grouped metrics and Gross without replacing net calendar PnL', () => {
     const journal = {};
     const touched = [];
     const result = mergeGoogleSheetTradesIntoJournal(journal, {
@@ -817,16 +817,42 @@ test('main Google Sheet writes summed trade PnL into the matching calendar day',
         markTouched: (dateStr) => touched.push(dateStr),
     });
 
-    assert.equal(journal['2026-04-03'].pnl, 15.5);
+    assert.equal(journal['2026-04-03'].pnl, null);
+    assert.equal(journal['2026-04-03'].gross_pnl, 15.5);
     assert.deepEqual(journal['2026-04-03'].tradeTypesData, {
         'Синя': { pnl: 25.5, kf: 1.5 },
         'Зелена': { pnl: -10, kf: -0.5 },
         'Фіолетова': { pnl: '', kf: '' },
         'Візуально': { pnl: '', kf: '' },
     });
-    assert.equal(journal['2026-04-03'].sheetPnlSource, 'sheet-1');
+    assert.equal(journal['2026-04-03'].sheetGrossSource, 'sheet-1');
     assert.deepEqual(result.syncedPnlDates, ['2026-04-03']);
     assert.ok(touched.includes('2026-04-03'));
+});
+
+test('sheet resync removes deleted rows and restores Summary by Date net PnL', () => {
+    const journal = {
+        '2026-04-03': {
+            ...normalizeDayEntry({}),
+            pnl: 999,
+            gross_pnl: 15.5,
+            fondexxSource: 'summary-by-date',
+            fondexx: { gross: 30, net: 20, comm: 5, locates: 3, tickers: [] },
+            ppro: { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
+            tradeTypesData: { 'Синя': { pnl: 15.5, kf: 1.5 } },
+            sheetPnlSource: 'sheet-1',
+            sheetGrossSource: 'sheet-1',
+            sheetGrossValue: 15.5,
+            sheetTradeTypesSource: 'sheet-1',
+        },
+    };
+
+    mergeGoogleSheetTradesIntoJournal(journal, {}, 'sheet-1', { mode: 'main', sheetRowsStore: {} });
+
+    assert.equal(journal['2026-04-03'].pnl, 17);
+    assert.equal(journal['2026-04-03'].gross_pnl, null);
+    assert.deepEqual(journal['2026-04-03'].tradeTypesData, {});
+    assert.equal(journal['2026-04-03'].sheetPnlSource, undefined);
 });
 
 test('datagrid rows prefer current sheetRows and keep sheet-only rows out of real trade counts', () => {

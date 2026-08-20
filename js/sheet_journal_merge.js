@@ -4,7 +4,7 @@ import {
     isValidIsoDateString,
 } from './sheet_sync_core.js';
 import { isPureGoogleSheetTrade } from './trade_filters.js';
-import { buildAutoTradeTypesData, getDefaultDayEntry, isNotTakenTrade } from './data_utils.js';
+import { buildAutoTradeTypesData, DEFAULT_TRADE_TYPES, getDefaultDayEntry, isNotTakenTrade } from './data_utils.js';
 
 function sumTradeMoney(trades = []) {
     return trades.reduce((sum, trade) => {
@@ -90,8 +90,52 @@ function tradeHasMainSheetContext(trade, spreadsheetId = '') {
     return sheet.spreadsheetId !== spreadsheetId;
 }
 
-function syncMainSheetPnlToCalendar(journal, outByDay, spreadsheetId, markTouched) {
+function restoreAuthoritativeDayPnl(day) {
+    const fondexx = day?.fondexx && typeof day.fondexx === 'object' ? day.fondexx : {};
+    const ppro = day?.ppro && typeof day.ppro === 'object' ? day.ppro : {};
+    const hasImport = day?.fondexxSource === 'summary-by-date'
+        || day?.pproSource === 'ppro-total-report'
+        || Number(fondexx.net) || Number(fondexx.locates) || Number(ppro.net);
+    return hasImport
+        ? Number(((Number(fondexx.net) || 0) - (Number(fondexx.locates) || 0) + (Number(ppro.net) || 0)).toFixed(2))
+        : null;
+}
+
+function syncMainSheetMetricsToCalendar(journal, outByDay, spreadsheetId, markTouched) {
     const syncedDates = [];
+    const deletedDates = [];
+
+    Object.keys(journal || {}).forEach((dateStr) => {
+        const day = journal[dateStr];
+        if (!day || (day.sheetGrossSource !== spreadsheetId && day.sheetPnlSource !== spreadsheetId && day.sheetTradeTypesSource !== spreadsheetId)) return;
+        const sheetOnlyDay = day.sheetCalendarOnly === true;
+
+        // Migrate the previous behavior that incorrectly overwrote net day PnL.
+        if (day.sheetPnlSource === spreadsheetId) {
+            day.pnl = restoreAuthoritativeDayPnl(day);
+            delete day.sheetPnlSource;
+        }
+        if (day.sheetGrossSource === spreadsheetId) {
+            if (day.sheetGrossValue === undefined || Number(day.gross_pnl) === Number(day.sheetGrossValue)) day.gross_pnl = null;
+            delete day.sheetGrossSource;
+            delete day.sheetGrossValue;
+        }
+        if (day.sheetTradeTypesSource === spreadsheetId || sheetOnlyDay) {
+            const data = day.tradeTypesData && typeof day.tradeTypesData === 'object' ? { ...day.tradeTypesData } : {};
+            DEFAULT_TRADE_TYPES.forEach((type) => delete data[type]);
+            day.tradeTypesData = data;
+            delete day.sheetTradeTypesSource;
+        }
+        delete day.sheetCalendarOnly;
+
+        if (sheetOnlyDay && isDayEmptyAfterSheetCleanup(day)) {
+            delete journal[dateStr];
+            deletedDates.push(dateStr);
+        } else {
+            markTouched(dateStr, day);
+        }
+    });
+
     Object.entries(outByDay || {}).forEach(([dateStr, rows]) => {
         if (!isValidIsoDateString(dateStr) || !Array.isArray(rows)) return;
         const executedRows = rows.filter((trade) => !isNotTakenTrade(trade));
@@ -103,24 +147,27 @@ function syncMainSheetPnlToCalendar(journal, outByDay, spreadsheetId, markTouche
         const tradeTypesData = buildAutoTradeTypesData(executedRows);
         if (!pnlRows.length && !Object.keys(tradeTypesData).length) return;
 
-        const day = journal[dateStr] && typeof journal[dateStr] === 'object'
-            ? journal[dateStr]
-            : getDefaultDayEntry();
+        const existed = journal[dateStr] && typeof journal[dateStr] === 'object';
+        const day = existed ? journal[dateStr] : getDefaultDayEntry();
         if (pnlRows.length) {
-            day.pnl = Number(pnlRows.reduce((sum, trade) => sum + Number(trade.sheet.sheetNet), 0).toFixed(2));
+            const gross = Number(pnlRows.reduce((sum, trade) => sum + Number(trade.sheet.sheetNet), 0).toFixed(2));
+            day.gross_pnl = gross;
+            day.sheetGrossSource = spreadsheetId;
+            day.sheetGrossValue = gross;
         }
         if (Object.keys(tradeTypesData).length) {
             day.tradeTypesData = {
                 ...(day.tradeTypesData && typeof day.tradeTypesData === 'object' ? day.tradeTypesData : {}),
                 ...tradeTypesData,
             };
+            day.sheetTradeTypesSource = spreadsheetId;
         }
-        day.sheetPnlSource = spreadsheetId;
+        if (!existed) day.sheetCalendarOnly = true;
         journal[dateStr] = day;
         markTouched(dateStr, day);
         syncedDates.push(dateStr);
     });
-    return syncedDates;
+    return { syncedDates, deletedDates };
 }
 
 export function isDayEmptyAfterSheetCleanup(day) {
@@ -231,9 +278,14 @@ export function mergeGoogleSheetTradesIntoJournal(journal = {}, outByDay = {}, s
     }
 
     if (!isCumulative) {
-        syncedPnlDates = syncMainSheetPnlToCalendar(journal, outByDay, spreadsheetId, (dateStr, day) => {
+        const sheetMetrics = syncMainSheetMetricsToCalendar(journal, outByDay, spreadsheetId, (dateStr, day) => {
             touchedDates.add(dateStr);
             markTouched(dateStr, day);
+        });
+        syncedPnlDates = sheetMetrics.syncedDates;
+        sheetMetrics.deletedDates.forEach((dateStr) => {
+            touchedDates.delete(dateStr);
+            if (!deletedDates.includes(dateStr)) deletedDates.push(dateStr);
         });
     }
 
