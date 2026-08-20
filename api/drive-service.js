@@ -19,7 +19,10 @@ async function driveFetch(path, token, query = {}, options = {}) {
     }
     const response = await fetch(url.toString(), {
         ...options,
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+            Authorization: `Bearer ${token}`,
+            ...(options.headers || {}),
+        },
     });
     return response;
 }
@@ -50,16 +53,22 @@ async function deleteDriveFile(req, res, token, user) {
     }
 
     const response = await driveFetch(`files/${fileId}`, token, {
+        fields: 'id,trashed',
         supportsAllDrives: 'true',
-    }, { method: 'DELETE' });
+    }, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trashed: true }),
+    });
     if (!response.ok) {
         const data = await response.json().catch(() => ({}));
         return sendJson(res, response.status, {
             ok: false,
-            error: data.error?.message || 'Service account needs Editor access to delete this file',
+            code: 'DRIVE_TRASH_FAILED',
+            error: data.error?.message || 'Google Drive could not move this file to trash',
         });
     }
-    return sendJson(res, 200, { ok: true, deleted: true });
+    return sendJson(res, 200, { ok: true, deleted: true, trashed: true });
 }
 
 async function listFolder(req, res, token) {

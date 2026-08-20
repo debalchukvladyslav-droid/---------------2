@@ -769,7 +769,12 @@ async function deleteDriveSource(path) {
             body: JSON.stringify({ fileId: driveId }),
         });
         const result = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(result.error || `Google Drive (${response.status})`);
+        if (!response.ok) {
+            const error = new Error(result.error || `Google Drive (${response.status})`);
+            error.status = response.status;
+            error.code = result.code || '';
+            throw error;
+        }
         return { deleted: true, skipped: false };
     } catch (error) {
         console.warn('[Screenshots] Drive source delete failed:', error?.message || error);
@@ -808,7 +813,7 @@ export function deleteFileFromPC(encodedPath) {
         const driveResult = await permanentlyDeleteScreenshot(url);
         await saveSettings();
         await loadImages();
-        if (driveResult.error) showToast('Скріншот видалено із сайту, але для видалення з Google Drive надайте service account роль Editor.');
+        if (driveResult.error) showToast(`Скріншот прибрано із сайту. Google Drive: ${driveResult.error.message}`);
     });
 }
 
@@ -825,7 +830,7 @@ export function deleteAssignedImage(encodedPath, category) {
             .then(() => {
                 loadImages();
                 if(window.renderView) window.renderView();
-                if (driveResult.error) showToast('Скріншот видалено із сайту, але для видалення з Google Drive надайте service account роль Editor.');
+                if (driveResult.error) showToast(`Скріншот прибрано із сайту. Google Drive: ${driveResult.error.message}`);
             });
     });
 }
