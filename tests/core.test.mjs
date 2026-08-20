@@ -855,6 +855,28 @@ test('sheet resync removes deleted rows and restores Summary by Date net PnL', (
     assert.equal(journal['2026-04-03'].sheetPnlSource, undefined);
 });
 
+test('sheet resync clears legacy calendar metrics using the previously stored row dates', () => {
+    const journal = {
+        '2026-04-04': {
+            ...normalizeDayEntry({}),
+            pnl: 12,
+            gross_pnl: 40,
+            tradeTypesData: { 'Синя': { pnl: 40, kf: 2 } },
+        },
+    };
+    const sheetRowsStore = {
+        'sheet-1': {
+            '2026-04-04': [{ sheet: { sheetRow: 10, sheetNet: 40, tradeType: 'синя%' } }],
+        },
+    };
+
+    mergeGoogleSheetTradesIntoJournal(journal, {}, 'sheet-1', { mode: 'main', sheetRowsStore });
+
+    assert.equal(journal['2026-04-04'].pnl, 12);
+    assert.equal(journal['2026-04-04'].gross_pnl, null);
+    assert.deepEqual(journal['2026-04-04'].tradeTypesData, {});
+});
+
 test('datagrid rows prefer current sheetRows and keep sheet-only rows out of real trade counts', () => {
     const appData = {
         sheetRows: {

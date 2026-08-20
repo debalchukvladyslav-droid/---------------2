@@ -101,26 +101,27 @@ function restoreAuthoritativeDayPnl(day) {
         : null;
 }
 
-function syncMainSheetMetricsToCalendar(journal, outByDay, spreadsheetId, markTouched) {
+function syncMainSheetMetricsToCalendar(journal, outByDay, spreadsheetId, markTouched, previouslyManagedDates = new Set()) {
     const syncedDates = [];
     const deletedDates = [];
 
     Object.keys(journal || {}).forEach((dateStr) => {
         const day = journal[dateStr];
-        if (!day || (day.sheetGrossSource !== spreadsheetId && day.sheetPnlSource !== spreadsheetId && day.sheetTradeTypesSource !== spreadsheetId)) return;
+        const wasPreviouslyManaged = previouslyManagedDates.has(dateStr);
+        if (!day || (!wasPreviouslyManaged && day.sheetGrossSource !== spreadsheetId && day.sheetPnlSource !== spreadsheetId && day.sheetTradeTypesSource !== spreadsheetId)) return;
         const sheetOnlyDay = day.sheetCalendarOnly === true;
 
         // Migrate the previous behavior that incorrectly overwrote net day PnL.
-        if (day.sheetPnlSource === spreadsheetId) {
+        if (day.sheetPnlSource === spreadsheetId || (wasPreviouslyManaged && day.fondexxSource === 'summary-by-date')) {
             day.pnl = restoreAuthoritativeDayPnl(day);
             delete day.sheetPnlSource;
         }
-        if (day.sheetGrossSource === spreadsheetId) {
-            if (day.sheetGrossValue === undefined || Number(day.gross_pnl) === Number(day.sheetGrossValue)) day.gross_pnl = null;
+        if (day.sheetGrossSource === spreadsheetId || wasPreviouslyManaged) {
+            if (wasPreviouslyManaged || day.sheetGrossValue === undefined || Number(day.gross_pnl) === Number(day.sheetGrossValue)) day.gross_pnl = null;
             delete day.sheetGrossSource;
             delete day.sheetGrossValue;
         }
-        if (day.sheetTradeTypesSource === spreadsheetId || sheetOnlyDay) {
+        if (day.sheetTradeTypesSource === spreadsheetId || sheetOnlyDay || wasPreviouslyManaged) {
             const data = day.tradeTypesData && typeof day.tradeTypesData === 'object' ? { ...day.tradeTypesData } : {};
             DEFAULT_TRADE_TYPES.forEach((type) => delete data[type]);
             day.tradeTypesData = data;
@@ -202,6 +203,12 @@ export function mergeGoogleSheetTradesIntoJournal(journal = {}, outByDay = {}, s
     let importedSheetRows = 0;
     let syncedPnlDates = [];
 
+    const previouslyManagedDates = new Set(
+        sheetRowsStore && spreadsheetId && sheetRowsStore[spreadsheetId] && typeof sheetRowsStore[spreadsheetId] === 'object'
+            ? Object.keys(sheetRowsStore[spreadsheetId])
+            : []
+    );
+
     importedSheetRows = storeSheetRows(sheetRowsStore, spreadsheetId, outByDay);
 
     if (!isCumulative) {
@@ -281,7 +288,7 @@ export function mergeGoogleSheetTradesIntoJournal(journal = {}, outByDay = {}, s
         const sheetMetrics = syncMainSheetMetricsToCalendar(journal, outByDay, spreadsheetId, (dateStr, day) => {
             touchedDates.add(dateStr);
             markTouched(dateStr, day);
-        });
+        }, previouslyManagedDates);
         syncedPnlDates = sheetMetrics.syncedDates;
         sheetMetrics.deletedDates.forEach((dateStr) => {
             touchedDates.delete(dateStr);

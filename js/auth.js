@@ -393,6 +393,13 @@ function dayEntryToJournalRow(userId, tradeDate, entry) {
             checkedParams: Array.isArray(day.checkedParams) ? day.checkedParams : [],
             sliders: day.sliders && typeof day.sliders === 'object' ? day.sliders : {},
             tradeTypesData: day.tradeTypesData && typeof day.tradeTypesData === 'object' ? day.tradeTypesData : {},
+            sheetSync: {
+                grossSource: day.sheetGrossSource || '',
+                grossValue: day.sheetGrossValue ?? null,
+                tradeTypesSource: day.sheetTradeTypesSource || '',
+                calendarOnly: day.sheetCalendarOnly === true,
+                legacyPnlSource: day.sheetPnlSource || '',
+            },
             screenshots: day.screenshots && typeof day.screenshots === 'object'
                 ? day.screenshots
                 : { good: [], normal: [], bad: [], error: [] },
