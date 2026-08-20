@@ -4756,6 +4756,8 @@ body.is-offline [data-needs-network="true"] {
 .best-exit-table td:first-child,
 .best-exit-table th:nth-child(2),
 .best-exit-table td:nth-child(2) { text-align: left; }
+.best-exit-trade-link { padding: 3px 7px; border: 1px solid color-mix(in srgb,var(--accent) 35%,var(--border)); border-radius: 7px; background: color-mix(in srgb,var(--accent) 8%,transparent); color: var(--accent); font: 700 .76rem var(--font-mono,monospace); cursor: pointer; }
+.best-exit-trade-link:hover { border-color: var(--accent); background: color-mix(in srgb,var(--accent) 15%,transparent); }
 .best-exit-loading { display: flex; align-items: center; gap: 9px; padding: 20px 0; color: var(--text-muted); }
 .best-exit-loading span { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
 .best-exit-progress { height: 7px; overflow: hidden; margin: 4px 0 10px; border-radius: 999px; background: var(--border); }

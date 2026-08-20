@@ -72,6 +72,7 @@ export function collectTimedShortTrades(journal = {}, allowedDates = null) {
             if (!(entryPrice > 0) || !(actualExitPrice > 0)) continue;
             rows.push({
                 id: `${dateStr}:${tradeIndex}:${String(trade.symbol).toUpperCase()}`,
+                tradeIndex,
                 date: dateStr,
                 symbol: String(trade.symbol).toUpperCase(),
                 entryMinute,

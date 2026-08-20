@@ -24,6 +24,7 @@ function bestWindowSummary(rows = []) {
 async function fetchBatch(items) {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) throw new Error('Потрібно увійти в акаунт');
+    items.forEach((item) => console.info(`[Polygon] переглядається ${item.symbol} · ${item.date} · від ${String(Math.floor(item.entryMinute / 60)).padStart(2, '0')}:${String(item.entryMinute % 60).padStart(2, '0')} NY`));
     const response = await fetch(`${String(SUPABASE_URL).replace(/\/$/, '')}/functions/v1/market-best-exits`, {
         method: 'POST',
         headers: {
@@ -35,6 +36,9 @@ async function fetchBatch(items) {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload?.message || `Market data: ${response.status}`);
     console.info('[Polygon analysis] server response', { requested: items.length, returned: payload?.results?.length || 0, queued: payload?.queued || 0, processed: payload?.processed || 0 });
+    const returnedKeys = new Set((payload?.results || []).map((row) => `${row.symbol}|${row.date}|${row.entryMinute}`));
+    (payload?.results || []).forEach((row) => console.info(`[Polygon] ${row.symbol} · ${row.date}: Low $${Number(row.low).toFixed(2)} · ${row.lowTime} · ${row.cached ? 'кеш' : 'отримано'}`));
+    items.filter((item) => !returnedKeys.has(`${item.symbol}|${item.date}|${item.entryMinute}`)).forEach((item) => console.info(`[Polygon] ${item.symbol} · ${item.date}: очікує в черзі або дані недоступні`));
     return Array.isArray(payload.results) ? payload.results : [];
 }
 
@@ -82,11 +86,17 @@ function renderSummary(container, summary, unavailable = 0) {
             <table class="best-exit-table">
                 <thead><tr><th>Дата</th><th>Тікер</th><th>Вихід</th><th>Low</th><th>Забрано руху</th><th>Найкращий 10-хв діапазон (NY)</th><th>Макс. P&amp;L</th><th>Не забрано</th></tr></thead>
                 <tbody>${topRows.map((row) => `<tr>
-                    <td>${row.date}</td><td>${row.symbol}</td><td>${row.actualExitPrice.toFixed(2)}</td><td>${row.low.toFixed(2)}</td><td>${row.capturePct == null ? '—' : `${row.capturePct.toFixed(0)}%`}</td>
+                    <td>${row.date}</td><td><button type="button" class="best-exit-trade-link" data-best-exit-date="${escapeHtml(row.date)}" data-best-exit-index="${Number(row.tradeIndex)}" title="Відкрити ${escapeHtml(row.symbol)} у журналі">${escapeHtml(row.symbol)}</button></td><td>${row.actualExitPrice.toFixed(2)}</td><td>${row.low.toFixed(2)}</td><td>${row.capturePct == null ? '—' : `${row.capturePct.toFixed(0)}%`}</td>
                     <td><strong>${bestExitWindowNY(row.lowTime) || '—'}</strong></td><td>${money(row.bestPnl)}</td><td>${money(row.extraPnl)}</td>
                 </tr>`).join('')}</tbody>
             </table>
         </div>`;
+    container.querySelectorAll('[data-best-exit-date]').forEach((button) => button.addEventListener('click', () => {
+        const date = button.dataset.bestExitDate || '';
+        const tradeIndex = Number(button.dataset.bestExitIndex);
+        console.info(`[Polygon analysis] відкриваю трейд ${button.textContent?.trim() || ''} · ${date} · index ${tradeIndex}`);
+        void window.openTradesAtDayIndex?.(date, tradeIndex);
+    }));
 }
 
 function escapeHtml(value) {

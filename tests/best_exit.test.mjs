@@ -46,6 +46,7 @@ test('collects short time exits from the selected dates and clamps entry to mark
     assert.equal(rows.length, 1);
     assert.equal(rows[0].entryMinute, 570);
     assert.equal(rows[0].symbol, 'AAPL');
+    assert.equal(rows[0].tradeIndex, 0);
 });
 
 test('excludes a time exit opened at or after noon New York', () => {

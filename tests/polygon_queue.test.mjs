@@ -24,6 +24,16 @@ test('trade loading and Trades import start a cached Polygon backfill', async ()
     assert.match(worker, /INTERVAL_MS = 65000/);
     assert.match(worker, /REQUEST_LIMIT = 5/);
     assert.match(worker, /console\.table/);
+    assert.match(worker, /\[Polygon\] переглядається/);
     assert.match(edge, /claim_market_low_jobs/);
     assert.match(edge, /console\.log\(`\[Polygon queue\]/);
+});
+
+test('best-exit tickers open their exact journal trade and Polygon logs every ticker', async () => {
+    const source = await readFile(new URL('../js/best_exit_analysis.js', import.meta.url), 'utf8');
+    assert.match(source, /data-best-exit-date/);
+    assert.match(source, /data-best-exit-index/);
+    assert.match(source, /window\.openTradesAtDayIndex/);
+    assert.match(source, /\[Polygon\] переглядається/);
+    assert.match(source, /очікує в черзі або дані недоступні/);
 });

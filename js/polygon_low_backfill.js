@@ -25,6 +25,7 @@ function collectSessionLowRequests(journal = {}) {
 async function requestPolygonBatch(items) {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) throw new Error('Немає активної сесії');
+    items.forEach((item) => console.info(`[Polygon] переглядається ${item.symbol} · ${item.date} · Low 09:30–12:00 NY`));
     const response = await fetch(`${String(SUPABASE_URL).replace(/\/$/, '')}/functions/v1/market-best-exits`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
@@ -49,6 +50,9 @@ async function runQueue(reason = 'background') {
         const payload = await requestPolygonBatch(missing.slice(0, REQUEST_LIMIT));
         const rows = Array.isArray(payload.results) ? payload.results.filter((row) => Number(row?.low) > 0) : [];
         rows.forEach((row) => READY.add(`${row.symbol}|${row.date}`));
+        const returnedKeys = new Set(rows.map((row) => `${row.symbol}|${row.date}`));
+        rows.forEach((row) => console.info(`[Polygon] ${row.symbol} · ${row.date}: Low $${Number(row.low).toFixed(2)} · ${row.lowTime} · ${row.cached ? 'кеш' : 'отримано'}`));
+        missing.slice(0, REQUEST_LIMIT).filter((item) => !returnedKeys.has(`${item.symbol}|${item.date}`)).forEach((item) => console.info(`[Polygon] ${item.symbol} · ${item.date}: очікує наступної спроби`));
         console.groupCollapsed(`[Polygon ${reason}] Low 09:30–12:00: готово ${READY.size}/${all.length}, у черзі ${payload.queued || 0}`);
         if (rows.length) console.table(rows.map((row) => ({ дата: row.date, тікер: row.symbol, low: Number(row.low), час_low: row.lowTime, кеш: row.cached === true })));
         console.info({ requested: Math.min(missing.length, REQUEST_LIMIT), processedNow: payload.processed || 0, returned: rows.length, remaining: all.length - READY.size });
