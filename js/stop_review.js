@@ -337,6 +337,12 @@ async function renderCurrentCard() {
             <aside class="stop-stage2-mistakes">
                 <div class="stop-stage2-head"><h4>Помилки</h4><small>Список із форми дня</small></div>
                 <div class="stop-mistake-picker">${mistakeOptions.length ? mistakeOptions.map(item => `<div class="stop-stage2-mistake ${item.archived ? 'archived' : ''}" data-stop-mistake-row="${item.id}"><label><input type="checkbox" value="${item.id}" data-stop-mistake ${chosen.has(item.id) ? 'checked' : ''}><span>${escapeHtml(item.title)}</span></label></div>`).join('') : '<p>Додайте помилки у формі редагування дня.</p>'}</div>
+                ${isOwner() ? `<div class="stop-stage2-tools">
+                    <button type="button" class="btn-secondary btn-auto" data-stop-mistake-add>+ Додати</button>
+                    <button type="button" class="btn-secondary btn-auto" data-stop-mistake-edit disabled>Редагувати</button>
+                    <button type="button" class="btn-secondary btn-auto danger" data-stop-mistake-delete disabled>Видалити</button>
+                </div>` : ''}
+                <small class="stop-stage2-hint" data-stop-selection-hint>${chosen.size ? `Вибрано: ${chosen.size}` : 'Виберіть хоча б одну помилку'}</small>
             </aside>
             <div class="stop-finalize">
                 <button type="button" class="btn-primary btn-auto" data-stop-complete ${chosen.size ? '' : 'disabled'}>Далі →</button>
@@ -349,11 +355,32 @@ async function renderCurrentCard() {
     host.querySelectorAll('[data-stop-status]').forEach(button => button.addEventListener('click', () => classify(review, button.dataset.stopStatus)));
     host.querySelector('[data-stop-skip]')?.addEventListener('click', skipCurrent);
     host.querySelector('[data-stop-complete]')?.addEventListener('click', () => completeMistakes(review, host));
+    host.querySelector('[data-stop-mistake-add]')?.addEventListener('click', () => void addMistake());
+    host.querySelector('[data-stop-mistake-edit]')?.addEventListener('click', () => {
+        const id = host.querySelector('[data-stop-mistake]:checked')?.value;
+        if (id) void quickEditMistake(id);
+    });
+    host.querySelector('[data-stop-mistake-delete]')?.addEventListener('click', () => {
+        const id = host.querySelector('[data-stop-mistake]:checked')?.value;
+        const mistake = runtime.mistakes.find(item => item.id === id);
+        if (mistake) void toggleArchive(mistake);
+    });
+    const syncStage2Controls = () => {
+        const selected = [...host.querySelectorAll('[data-stop-mistake]:checked')];
+        const nextButton = host.querySelector('[data-stop-complete]');
+        const editButton = host.querySelector('[data-stop-mistake-edit]');
+        const deleteButton = host.querySelector('[data-stop-mistake-delete]');
+        const hint = host.querySelector('[data-stop-selection-hint]');
+        if (nextButton) nextButton.disabled = selected.length === 0;
+        if (editButton) editButton.disabled = selected.length !== 1;
+        if (deleteButton) deleteButton.disabled = selected.length !== 1;
+        if (hint) hint.textContent = selected.length ? `Вибрано: ${selected.length}` : 'Виберіть хоча б одну помилку';
+    };
     host.querySelectorAll('[data-stop-mistake]').forEach(input => input.addEventListener('change', () => {
         if (input.checked) runtime.lastPickedMistakeId = input.value;
-        const nextButton = host.querySelector('[data-stop-complete]');
-        if (nextButton) nextButton.disabled = !host.querySelector('[data-stop-mistake]:checked');
+        syncStage2Controls();
     }));
+    syncStage2Controls();
     const focusId = runtime.lastPickedMistakeId || [...chosen][0] || '';
     if (focusId) {
         requestAnimationFrame(() => {
