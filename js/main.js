@@ -4,6 +4,7 @@
 import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { getDefaultDayEntry } from './data_utils.js';
+import { hasImportedNetPnl } from './trade_filters.js';
 import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm, canAccessMentorReviewQueue, mentorAcceptReviewRequest, ensureAuthUserProfile, rejectBlockedProfile, rejectPendingProfile, submitRegistrationRequest, isPasswordRecoveryUrl, showPasswordRecoveryForm } from './auth.js';
 import { loadTeams, openTeamManager, createNewTeam, moveTrader, deleteTeam, renameTeam, deleteTraderProfile, renderTeamSidebar, switchUser } from './teams.js';
 import { saveToLocal, saveJournalData, saveSettings, markJournalDayDirty, markAllJournalDirty, initializeApp, resetRuntimeDataForAccountSwitch, exportData, importData, loadMonth, loadTradeDays, resolveViewedUserId, setCurrentViewedUserId,
@@ -655,7 +656,7 @@ function openSessionReview() {
     document.getElementById('session-review-date').textContent = `📅 ${today}`;
     document.getElementById('session-review-notes').value = day.notes || '';
     document.getElementById('session-review-improvement').value = day.nextSessionImprovement || '';
-    document.getElementById('session-review-pnl').value = day.gross_pnl ?? day.pnl ?? '';
+    document.getElementById('session-review-pnl').value = day.gross_pnl ?? '';
     document.getElementById('session-review-kf').value = day.kf ?? '';
     sessionReviewIncludesYesterday = false;
     sessionReviewScreens = collectSessionReviewScreens(today, false);
@@ -728,6 +729,7 @@ window.saveSessionReview = async function() {
     }
     const day = state.appData.journal?.[today] || getDefaultDayEntry();
     day.gross_pnl = parseDecimalInput(document.getElementById('session-review-pnl')?.value);
+    if (!hasImportedNetPnl(day)) day.pnl = null;
     day.kf = parseDecimalInput(document.getElementById('session-review-kf')?.value);
     day.notes = document.getElementById('session-review-notes')?.value || '';
     day.nextSessionImprovement = document.getElementById('session-review-improvement')?.value || '';

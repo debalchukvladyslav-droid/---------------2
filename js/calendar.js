@@ -391,11 +391,10 @@ function fillSelectedDateUI(dateStr) {
     renderSidebarTradesList(dateStr);
 
     const dayData = state.appData.journal[dateStr] || {};
-    const manualGross = getCalendarDayResult(dayData);
     const sheetOnlyPnl = isSheetOnlyPnl(dayData);
     const importedNet = hasImportedNetPnl(dayData) ? getEffectiveDayPnl(dayData) : null;
     document.getElementById('trade-pnl').value = importedNet !== null ? importedNet.toFixed(2) : '';
-    document.getElementById('trade-gross').value = formatStoredDecimal(dayData.gross_pnl ?? (manualGross.kind === 'gross' ? manualGross.value : null));
+    document.getElementById('trade-gross').value = formatStoredDecimal(dayData.gross_pnl);
     document.getElementById('trade-comm').value = !sheetOnlyPnl ? formatStoredDecimal(dayData.commissions) : '';
     document.getElementById('trade-locates').value = !sheetOnlyPnl ? formatStoredDecimal(dayData.locates) : '';
     document.getElementById('trade-kf').value = formatStoredDecimal(dayData.kf);
@@ -569,7 +568,7 @@ export function saveEntry() {
     let oldData = state.appData.journal[state.selectedDateStr] || {};
     let dayData = {
         ...oldData,
-        pnl: oldData.pnl ?? null,
+        pnl: hasImportedNetPnl(oldData) ? (oldData.pnl ?? null) : null,
         gross_pnl: parseDecimalInput(grossValRaw),
         commissions: parseDecimalInput(commValRaw),
         locates: parseDecimalInput(locValRaw),
