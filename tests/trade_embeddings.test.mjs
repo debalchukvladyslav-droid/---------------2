@@ -44,5 +44,13 @@ test('embed-trade verifies JWT and builds text and vectors on the server', async
     assert.match(source, /enumerateTrades\(day, row\.trade_date\)/);
     assert.match(source, /new Supabase\.ai\.Session\('gte-small'\)/);
     assert.match(source, /embedding\.length !== 384/);
+    assert.match(source, /existingByKey\.get\(tradeKey\) === contentHash/);
+    assert.match(source, /skipped_unchanged_trades/);
     assert.doesNotMatch(source, /body\.(trade_text|embedding|user_id)/);
+});
+
+test('journal embedding sync invokes one saved day at a time', async () => {
+    const source = await readFile(new URL('../js/storage.js', import.meta.url), 'utf8');
+    assert.match(source, /for \(let i = 0; i < ids\.length; i \+= 1\)/);
+    assert.match(source, /journal_day_ids: \[ids\[i\]\]/);
 });

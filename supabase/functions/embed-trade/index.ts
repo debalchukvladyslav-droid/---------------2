@@ -61,6 +61,7 @@ Deno.serve(async (req) => {
 
     const adminHeaders = { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' };
     let embeddedTrades = 0;
+    let skippedTrades = 0;
     for (const row of days) {
         const day = { ...(row.daily_metrics || {}), notes: row.notes || '' };
         const multimodalIds = (Array.isArray(day.trades) ? day.trades : []).map(multimodalIdForTrade).filter(Boolean);
@@ -74,11 +75,25 @@ Deno.serve(async (req) => {
             if (!multimodalResponse.ok) throw new Error(`Multimodal context read failed: ${await multimodalResponse.text()}`);
             for (const item of await multimodalResponse.json()) multimodalById.set(item.id, item);
         }
+        const existingUrl = new URL(`${supabaseUrl}/rest/v1/trade_embeddings`);
+        existingUrl.searchParams.set('journal_day_id', `eq.${row.id}`);
+        existingUrl.searchParams.set('user_id', `eq.${user.id}`);
+        existingUrl.searchParams.set('select', 'trade_key,content_hash');
+        const existingResponse = await fetch(existingUrl, { headers: adminHeaders });
+        if (!existingResponse.ok) throw new Error(`Existing embeddings read failed: ${await existingResponse.text()}`);
+        const existingByKey = new Map<string, string>((await existingResponse.json())
+            .map((item: any) => [String(item.trade_key), String(item.content_hash)]));
         const records = [];
+        const currentTradeKeys = [];
         for (const item of enumerateTrades(day, row.trade_date)) {
             const tradeKey = await sha256(item.identity);
             const tradeText = buildUnifiedEmbeddingText({ baseText: item.text, trade: item.trade, multimodal: multimodalById.get(multimodalIdForTrade(item.trade)) });
             const contentHash = await sha256(tradeText);
+            currentTradeKeys.push(tradeKey);
+            if (existingByKey.get(tradeKey) === contentHash) {
+                skippedTrades += 1;
+                continue;
+            }
             const rawEmbedding = await session.run(tradeText, { mean_pool: true, normalize: true });
             const embedding = Array.from(rawEmbedding as ArrayLike<number>);
             if (embedding.length !== 384) throw new Error(`Unexpected embedding dimensions: ${embedding.length}`);
@@ -91,9 +106,9 @@ Deno.serve(async (req) => {
         }
         const staleUrl = new URL(`${supabaseUrl}/rest/v1/trade_embeddings`);
         staleUrl.searchParams.set('journal_day_id', `eq.${row.id}`);
-        if (records.length) staleUrl.searchParams.set('trade_key', `not.in.(${records.map((record) => record.trade_key).join(',')})`);
+        if (currentTradeKeys.length) staleUrl.searchParams.set('trade_key', `not.in.(${currentTradeKeys.join(',')})`);
         const stale = await fetch(staleUrl, { method: 'DELETE', headers: adminHeaders });
         if (!stale.ok) throw new Error(`Stale embedding cleanup failed: ${await stale.text()}`);
     }
-    return json({ processed_days: days.length, embedded_trades: embeddedTrades });
+    return json({ processed_days: days.length, embedded_trades: embeddedTrades, skipped_unchanged_trades: skippedTrades });
 });

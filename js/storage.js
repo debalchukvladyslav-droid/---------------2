@@ -12,9 +12,12 @@ import { startPolygonLowBackfill } from './polygon_low_backfill.js';
 
 async function syncTradeEmbeddings(savedDays) {
     const ids = [...new Set((savedDays || []).map((row) => row?.id).filter(Boolean))];
-    for (let i = 0; i < ids.length; i += 20) {
+    // gte-small is CPU intensive. One durable journal day per invocation keeps
+    // the Edge worker below its resource ceiling; unchanged trades are skipped
+    // by the function using their content hash.
+    for (let i = 0; i < ids.length; i += 1) {
         const { error } = await supabase.functions.invoke('embed-trade', {
-            body: { journal_day_ids: ids.slice(i, i + 20) },
+            body: { journal_day_ids: [ids[i]] },
         });
         if (error) throw error;
     }
