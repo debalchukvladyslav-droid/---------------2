@@ -4,6 +4,7 @@ const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const OWNER_BUCKETS = new Set(['screenshots', 'backgrounds', 'avatars']);
 const AUTO_CREATE_BUCKETS = new Set(['screenshots', 'backgrounds', 'avatars']);
 const ALLOWED_BUCKETS = new Set(['screenshots', 'backgrounds', 'avatars']);
+const LEGACY_READ_BUCKETS = new Set(['files']);
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
 export const config = {
@@ -84,7 +85,14 @@ async function canReadObject({ url, serviceKey, bucket, ownerKey, userId }) {
     const profiles = await getProfilesById({ url, serviceKey, ids: [userId] });
     const caller = profiles.get(userId);
     if (caller?.role === 'admin') return true;
-    return bucket === 'screenshots' && (caller?.role === 'mentor' || caller?.mentor_enabled === true);
+    return (bucket === 'screenshots' || bucket === 'files') && (caller?.role === 'mentor' || caller?.mentor_enabled === true);
+}
+
+function objectOwnerKey(bucket, objectPath) {
+    const parts = String(objectPath || '').split('/').filter(Boolean);
+    // Legacy layout: files/screenshots/{userId}/{filename}
+    if (bucket === 'files' && parts[0] === 'screenshots' && isUuid(parts[1])) return parts[1];
+    return parts[0] || '';
 }
 
 async function readBody(req) {
@@ -175,9 +183,10 @@ export default async function handler(req, res) {
         const bucket = cleanBucket(req.query.bucket);
         const objectPath = cleanObjectPath(req.query.objectPath);
         if (!bucket || !objectPath) return sendJson(res, 400, { ok: false, error: 'Missing bucket or objectPath' });
-        if (!ALLOWED_BUCKETS.has(bucket)) return sendJson(res, 403, { ok: false, error: 'Bucket is not allowed' });
+        const allowed = ALLOWED_BUCKETS.has(bucket) || (req.method === 'GET' && LEGACY_READ_BUCKETS.has(bucket));
+        if (!allowed) return sendJson(res, 403, { ok: false, error: 'Bucket is not allowed' });
 
-        const ownerKey = objectPath.split('/')[0] || '';
+        const ownerKey = objectOwnerKey(bucket, objectPath);
         if (req.method !== 'GET' && OWNER_BUCKETS.has(bucket) && (!isUuid(ownerKey) || ownerKey !== user.id)) {
             return sendJson(res, 403, { ok: false, error: 'Storage owner mismatch' });
         }

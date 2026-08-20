@@ -22,6 +22,7 @@ test('trade loading and Trades import start a cached Polygon backfill', async ()
     assert.match(storage, /startPolygonLowBackfill\(state\.appData\.journal/);
     assert.match(parsers, /startPolygonLowBackfill\(state\.appData\.journal, 'trades-import'\)/);
     assert.match(worker, /INTERVAL_MS = 65000/);
+    assert.match(worker, /REQUEST_LIMIT = 5/);
     assert.match(worker, /console\.table/);
     assert.match(edge, /claim_market_low_jobs/);
     assert.match(edge, /console\.log\(`\[Polygon queue\]/);

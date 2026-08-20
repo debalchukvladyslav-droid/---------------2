@@ -4,7 +4,7 @@ import { attachBestExitResult, bestExitWindowNY, collectTimedShortTrades, summar
 const resultCache = new Map();
 let renderRequest = 0;
 const AUTO_ANALYZE_LIMIT = 40;
-const BATCH_SIZE = 200;
+const BATCH_SIZE = 5;
 
 function money(value) {
     return Number.isFinite(Number(value))
@@ -46,8 +46,8 @@ async function loadMarketResults(trades, onProgress = null) {
     });
     let completed = trades.length - missing.length;
     onProgress?.(completed, trades.length);
-    for (let index = 0; index < missing.length; index += BATCH_SIZE) {
-        const chunk = missing.slice(index, index + BATCH_SIZE);
+    if (missing.length) {
+        const chunk = missing.slice(0, BATCH_SIZE);
         const results = await fetchBatch(chunk.map(({ symbol, date, entryMinute }) => ({ symbol, date, entryMinute })));
         results.forEach((row) => {
             if (!bestExitWindowNY(row?.lowTime)) return;

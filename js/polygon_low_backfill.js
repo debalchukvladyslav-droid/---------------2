@@ -5,7 +5,9 @@ let timer = null;
 let running = false;
 let pendingJournal = {};
 const INTERVAL_MS = 65000;
-const REQUEST_LIMIT = 200;
+// Keep compatibility with the previously deployed Edge Function (max 5 rows).
+// The shared server queue also uses five Polygon calls per minute globally.
+const REQUEST_LIMIT = 5;
 
 function collectSessionLowRequests(journal = {}) {
     const unique = new Map();
