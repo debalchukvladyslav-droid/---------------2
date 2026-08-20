@@ -4,7 +4,7 @@ import {
     isValidIsoDateString,
 } from './sheet_sync_core.js';
 import { isPureGoogleSheetTrade } from './trade_filters.js';
-import { getDefaultDayEntry, isNotTakenTrade } from './data_utils.js';
+import { buildAutoTradeTypesData, getDefaultDayEntry, isNotTakenTrade } from './data_utils.js';
 
 function sumTradeMoney(trades = []) {
     return trades.reduce((sum, trade) => {
@@ -94,18 +94,27 @@ function syncMainSheetPnlToCalendar(journal, outByDay, spreadsheetId, markTouche
     const syncedDates = [];
     Object.entries(outByDay || {}).forEach(([dateStr, rows]) => {
         if (!isValidIsoDateString(dateStr) || !Array.isArray(rows)) return;
-        const pnlRows = rows.filter((trade) => {
-            if (isNotTakenTrade(trade)) return false;
+        const executedRows = rows.filter((trade) => !isNotTakenTrade(trade));
+        const pnlRows = executedRows.filter((trade) => {
             const sheet = trade?.sheet && typeof trade.sheet === 'object' ? trade.sheet : {};
             return sheet.sheetNet !== undefined && sheet.sheetNet !== null && sheet.sheetNet !== ''
                 && Number.isFinite(Number(sheet.sheetNet));
         });
-        if (!pnlRows.length) return;
+        const tradeTypesData = buildAutoTradeTypesData(executedRows);
+        if (!pnlRows.length && !Object.keys(tradeTypesData).length) return;
 
         const day = journal[dateStr] && typeof journal[dateStr] === 'object'
             ? journal[dateStr]
             : getDefaultDayEntry();
-        day.pnl = Number(pnlRows.reduce((sum, trade) => sum + Number(trade.sheet.sheetNet), 0).toFixed(2));
+        if (pnlRows.length) {
+            day.pnl = Number(pnlRows.reduce((sum, trade) => sum + Number(trade.sheet.sheetNet), 0).toFixed(2));
+        }
+        if (Object.keys(tradeTypesData).length) {
+            day.tradeTypesData = {
+                ...(day.tradeTypesData && typeof day.tradeTypesData === 'object' ? day.tradeTypesData : {}),
+                ...tradeTypesData,
+            };
+        }
         day.sheetPnlSource = spreadsheetId;
         journal[dateStr] = day;
         markTouched(dateStr, day);

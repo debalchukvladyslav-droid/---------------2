@@ -807,9 +807,9 @@ test('main Google Sheet writes summed trade PnL into the matching calendar day',
     const touched = [];
     const result = mergeGoogleSheetTradesIntoJournal(journal, {
         '2026-04-03': [
-            { symbol: 'AAPL', net: 25.5, sheet: { source: 'google', sheetNet: 25.5, tradeType: 'синя%' } },
-            { symbol: 'TSLA', net: -10, sheet: { source: 'google', sheetNet: -10, tradeType: 'РПзелена' } },
-            { symbol: 'NVDA', net: 999, sheet: { source: 'google', sheetNet: 999, tradeType: 'не брав' } },
+            { symbol: 'AAPL', net: 25.5, sheet: { source: 'google', sheetNet: 25.5, profitRisk: '1.5R', tradeType: 'синя%' } },
+            { symbol: 'TSLA', net: -10, sheet: { source: 'google', sheetNet: -10, profitRisk: '-0.5R', tradeType: 'РПзелена' } },
+            { symbol: 'NVDA', net: 999, sheet: { source: 'google', sheetNet: 999, profitRisk: '9R', tradeType: 'не брав' } },
         ],
     }, 'sheet-1', {
         mode: 'main',
@@ -818,6 +818,12 @@ test('main Google Sheet writes summed trade PnL into the matching calendar day',
     });
 
     assert.equal(journal['2026-04-03'].pnl, 15.5);
+    assert.deepEqual(journal['2026-04-03'].tradeTypesData, {
+        'Синя': { pnl: 25.5, kf: 1.5 },
+        'Зелена': { pnl: -10, kf: -0.5 },
+        'Фіолетова': { pnl: '', kf: '' },
+        'Візуально': { pnl: '', kf: '' },
+    });
     assert.equal(journal['2026-04-03'].sheetPnlSource, 'sheet-1');
     assert.deepEqual(result.syncedPnlDates, ['2026-04-03']);
     assert.ok(touched.includes('2026-04-03'));
