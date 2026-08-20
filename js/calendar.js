@@ -460,8 +460,10 @@ function fillSelectedDateUI(dateStr) {
         const savedTT = dayData.tradeTypesData || {};
         let ttHtml = '';
         state.appData.tradeTypes.forEach(tt => {
-            const pnl = savedTT[tt]?.pnl !== undefined ? savedTT[tt].pnl : '';
-            const kf = savedTT[tt]?.kf !== undefined ? savedTT[tt].kf : '';
+            const rawPnl = savedTT[tt]?.pnl;
+            const rawKf = savedTT[tt]?.kf;
+            const pnl = rawPnl == null || String(rawPnl).trim().toLowerCase() === 'null' ? '' : rawPnl;
+            const kf = rawKf == null || String(rawKf).trim().toLowerCase() === 'null' ? '' : rawKf;
             const safeTT = sanitizeHTML(tt);
             const safePnl = sanitizeHTML(String(pnl));
             const safeKf = sanitizeHTML(String(kf));
