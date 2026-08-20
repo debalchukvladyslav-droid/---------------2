@@ -6,7 +6,7 @@ import { isMentorViewingOtherJournal, canAccessMentorReviewQueue } from './auth.
 import { reviewReasonsForDay } from './review_signals.js';
 import { updateDashMiniEquityChart } from './dash_mini_chart.js';
 import { hideGlobalLoader, setElementLoading, showGlobalLoader } from './loading.js';
-import { findScreenshotsForTicker, openScreenshotForTrade } from './gallery.js';
+import { findScreenshotsForTicker, getStorageUrl, openScreenshotForTrade } from './gallery.js';
 import { getCalendarDayResult, getEffectiveDayPnl, hasImportedNetPnl, isSheetOnlyPnl, visibleTradeRows } from './trade_filters.js';
 import { pickSheetRowsSource } from './datagrid_rows.js';
 import { getNyseDaySchedule } from './nyse_calendar.js';

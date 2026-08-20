@@ -14,6 +14,9 @@ let storageRepairPromise = null;
 let storageRepairLastRun = 0;
 const STORAGE_REPAIR_COOLDOWN_MS = 10 * 60 * 1000;
 const storageRepairAttempts = new Map();
+const missingStorageUrls = new Map();
+const storageUrlRequests = new Map();
+const MISSING_STORAGE_URL_TTL_MS = 10 * 60 * 1000;
 let unassignedRenderId = 0;
 let unassignedLoadMoreBusy = false;
 
@@ -192,20 +195,35 @@ export async function getStorageUrl(pathOrUrl) {
     }
     const cached = _getCachedUrl(storagePath);
     if (cached) return cached;
-    try {
-        let url = await getSupabaseStorageUrl(storagePath);
-        if (!url && isManagedStoragePath(storagePath)) {
-            console.warn('[Storage] signed URL missing, trying repair sync:', storagePath);
-            await tryRepairMissingStoragePath(storagePath);
-            url = await getSupabaseStorageUrl(storagePath);
+    const missingAt = missingStorageUrls.get(storagePath) || 0;
+    if (Date.now() - missingAt < MISSING_STORAGE_URL_TTL_MS) return '';
+    if (storageUrlRequests.has(storagePath)) return storageUrlRequests.get(storagePath);
+
+    const request = (async () => {
+        try {
+            let url = await getSupabaseStorageUrl(storagePath);
+            if (!url && isManagedStoragePath(storagePath)) {
+                console.warn('[Storage] signed URL missing, trying repair sync:', storagePath);
+                await tryRepairMissingStoragePath(storagePath);
+                url = await getSupabaseStorageUrl(storagePath);
+            }
+            if (!url) {
+                missingStorageUrls.set(storagePath, Date.now());
+                return '';
+            }
+            missingStorageUrls.delete(storagePath);
+            _setCachedUrl(storagePath, url);
+            return url;
+        } catch(e) {
+            console.warn('Storage URL error:', e.message);
+            if (isManagedStoragePath(storagePath)) missingStorageUrls.set(storagePath, Date.now());
+            return isManagedStoragePath(storagePath) ? '' : pathOrUrl;
+        } finally {
+            storageUrlRequests.delete(storagePath);
         }
-        if (!url) return '';
-        _setCachedUrl(storagePath, url);
-        return url;
-    } catch(e) {
-        console.warn('Storage URL error:', e.message);
-        return isManagedStoragePath(storagePath) ? '' : pathOrUrl;
-    }
+    })();
+    storageUrlRequests.set(storagePath, request);
+    return request;
 }
 
 function applyScreensDistributionCollapsed(collapsed) {
