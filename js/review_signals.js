@@ -34,11 +34,11 @@ function pnlFieldEmpty(pnl) {
     return pnl === null || pnl === undefined || (typeof pnl === 'string' && !String(pnl).trim()) || pnl === '';
 }
 
-/** Немає PnL або є рух по PnL, але порожні нотатки дня. */
+/** Немає Gross або є рух по Gross, але порожні нотатки дня. */
 function dayHasIncompleteData(data) {
     if (!data || typeof data !== 'object') return false;
-    if (pnlFieldEmpty(data.pnl)) return true;
-    const pnl = parseFloat(data.pnl);
+    if (pnlFieldEmpty(data.gross_pnl)) return true;
+    const pnl = parseFloat(data.gross_pnl);
     const hasMeaningfulPnl = Number.isFinite(pnl) && Math.abs(pnl) > 1e-9;
     if (hasMeaningfulPnl && !String(data.notes || '').trim()) return true;
     return false;
@@ -52,7 +52,7 @@ function dayHasIncompleteData(data) {
  */
 export function reviewReasonsForDay(data, lossThreshold = -200) {
     if (!data || typeof data !== 'object') return [];
-    const pnl = parseFloat(data.pnl);
+    const pnl = parseFloat(data.gross_pnl);
     const hasPnl = Number.isFinite(pnl) && pnl !== 0;
     const reasons = [];
 
@@ -76,7 +76,7 @@ export function mergedJournalDayForReview(row, metrics) {
     const metErr = Array.isArray(m.errors) ? m.errors : [];
     const errors = metErr.length ? metErr : rowErr;
     return {
-        pnl: row?.pnl,
+        gross_pnl: row?.gross_pnl ?? m.gross_pnl,
         mentor_comment: row?.mentor_comment,
         notes: row?.notes,
         ai_advice: row?.ai_advice,

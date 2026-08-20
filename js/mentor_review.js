@@ -158,11 +158,11 @@ function makeRowKey(userId, dateStr) {
 
 function rowPnl(row) {
     if (!row) return null;
-    const directRaw = row.pnl;
+    const directRaw = row.gross_pnl;
     const direct = directRaw === null || directRaw === undefined || directRaw === '' ? NaN : Number(directRaw);
     if (Number.isFinite(direct)) return direct;
     const metrics = parseMetrics(row?.daily_metrics);
-    const nestedRaw = metrics?.pnl ?? metrics?.gross_pnl;
+    const nestedRaw = metrics?.gross_pnl;
     const nested = nestedRaw === null || nestedRaw === undefined || nestedRaw === '' ? NaN : Number(nestedRaw);
     return Number.isFinite(nested) ? nested : null;
 }
@@ -286,7 +286,7 @@ function buildTraderReview(profile, rowMap, dates, kyiv, periodStart) {
 
     const cells = [
         makeBaseCell('prep', 'Підготовка до сесії', missingPrep, pendingPrep),
-        makeBaseCell('pnl', 'Результат PnL', missingPnl, pendingPnl, pnlCount ? money(totalPnl) : 'заповнено'),
+        makeBaseCell('pnl', 'Результат Gross', missingPnl, pendingPnl, pnlCount ? money(totalPnl) : 'заповнено'),
         makeBaseCell('thought', 'Думка дня', missingThought, pendingThought),
     ];
 
@@ -348,7 +348,7 @@ async function fetchRowsForProfiles(profiles, startStr, endStr) {
         const chunk = userIds.slice(i, i + 60);
         const { data, error } = await supabase
             .from('journal_days')
-            .select('id, user_id, trade_date, pnl, notes, daily_metrics')
+            .select('id, user_id, trade_date, gross_pnl, notes, daily_metrics')
             .in('user_id', chunk)
             .gte('trade_date', startStr)
             .lte('trade_date', endStr)

@@ -248,7 +248,7 @@ export async function fetchMentorReviewNotificationHits() {
         try {
             const { data: dayRows, error: dayErr } = await supabase
                 .from('journal_days')
-                .select('user_id, trade_date, pnl')
+                .select('user_id, trade_date, gross_pnl')
                 .in('user_id', traderIds)
                 .eq('trade_date', kyiv.date)
                 .limit(500);
@@ -258,7 +258,7 @@ export async function fetchMentorReviewNotificationHits() {
                 for (const p of profiles) {
                     if (!isTraderProfile(p) || p.id === state.myUserId || (p.team || 'Без куща') !== team) continue;
                     const row = rowsByUser.get(p.id);
-                    if (row && !pnlFieldEmpty(row.pnl)) continue;
+                    if (row && !pnlFieldEmpty(row.gross_pnl)) continue;
                     const sid = `missing-day|${p.id}|${kyiv.date}`;
                     if (seen[sid]) continue;
                     seen[sid] = 1;

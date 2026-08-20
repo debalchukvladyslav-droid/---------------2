@@ -250,7 +250,7 @@ export function scanJournalForNotifications() {
     }
 
     const hour = today.getHours();
-    const pnlEmpty = day.pnl === null || day.pnl === undefined || String(day.pnl).trim() === '';
+    const pnlEmpty = day.gross_pnl === null || day.gross_pnl === undefined || String(day.gross_pnl).trim() === '';
     const keyRem = `rem:${todayStr}`;
     if (!isMentorViewingOtherJournal() && hour >= 18 && pnlEmpty && !snap[keyRem]) {
         snap[keyRem] = '1';
@@ -258,7 +258,7 @@ export function scanJournalForNotifications() {
         addNotification({
             type: 'remind',
             title: 'Нагадування: день не закрито',
-            body: 'Запишіть PnL або відмітку, що не торгували.',
+            body: 'Запишіть Gross або відмітку, що не торгували.',
             href: `tab:dash`,
         });
     }

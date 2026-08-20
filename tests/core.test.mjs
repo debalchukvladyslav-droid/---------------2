@@ -45,6 +45,15 @@ const { getZonedClockParts, isEndOfSessionReviewTime } = await import('../js/ses
 const { buildServiceBotSnapshot, hashServiceBotApiKey, hasServiceBotPermission, parseServiceBotRange } = await import('../lib/service_bots.js');
 const { calculateCumulativeWeek, collectWeekStarts, getWeekRange, getWeekStartIso, parseCumulativeNumber, resolveMonthlyDayloss } = await import('../js/cumulative_weekly.js');
 const { getNyseDaySchedule } = await import('../js/nyse_calendar.js');
+const { mergedJournalDayForReview, reviewReasonsForDay } = await import('../js/review_signals.js');
+
+test('review completeness uses trader Gross instead of imported net PnL', () => {
+    const completed = reviewReasonsForDay({ gross_pnl: 125, pnl: null, notes: 'День заповнено' });
+    assert.equal(completed.some((reason) => reason.key === 'inc'), false);
+    const netOnly = reviewReasonsForDay({ gross_pnl: null, pnl: 120, notes: 'Є лише net' });
+    assert.equal(netOnly.some((reason) => reason.key === 'inc'), true);
+    assert.equal(mergedJournalDayForReview({ gross_pnl: 125, pnl: 120 }, {}).gross_pnl, 125);
+});
 
 test('NYSE calendar marks official holidays and shortened sessions', () => {
     assert.deepEqual(getNyseDaySchedule('2026-07-03'), {
