@@ -124,6 +124,8 @@ const SHEET_PREVIEW_RENDER_MAX_COLS = 52;
 const SHEET_MAPPING_SELECT_MAX_COLS = 80;
 
 let _sheetSyncInProgress = false;
+let _lastFullMainSheetSyncAt = 0;
+const MAIN_SHEET_FULL_SYNC_COOLDOWN_MS = 15 * 60 * 1000;
 
 function userScopedStorageKey(key) {
     return state.myUserId ? `${key}:${state.myUserId}` : key;
@@ -1370,8 +1372,9 @@ async function executeSyncWithCfg(cfg, options = {}) {
 
     try {
         const mod = await import('./google_sheet_connector.js');
-        const endRow = cumulative ? '' : '2000';
-        const values = await mod.fetchSpreadsheetValuesRange(spreadsheetId, `A${startRow}:ZZ${endRow}`, cfg.sheetTitle || getSelectedSheetTitle(mode));
+        // Read the complete main sheet so historical/missed rows are reconciled too.
+        // Frequency is throttled by refreshSheetMatchesAfterTradesImport.
+        const values = await mod.fetchSpreadsheetValuesRange(spreadsheetId, `A${startRow}:ZZ`, cfg.sheetTitle || getSelectedSheetTitle(mode));
         const parsedSmart = normalizeSmartColumnsForCore(smart);
         const { outByDay, dateAnchors, stats } = parseSheetGridToTradesCore(values, parsedSmart, spreadsheetId, startRow);
 
@@ -1901,6 +1904,7 @@ async function rematchStoredMainSheetRows(spreadsheetId) {
 export async function refreshSheetMatchesAfterTradesImport(options = {}) {
     const quiet = options.quiet !== false;
     const requireFresh = options.requireFresh === true;
+    const forceFresh = options.forceFresh === true;
     const cfg = readStoredConfig(SHEET_MODE_MAIN);
     const spreadsheetId = cfg?.spreadsheetId || getModeStoredItem('spreadsheetId', SHEET_MODE_MAIN);
     if (!spreadsheetId) {
@@ -1908,16 +1912,26 @@ export async function refreshSheetMatchesAfterTradesImport(options = {}) {
         return { ok: false, reason: 'no-main-sheet-mapping' };
     }
 
-    if (cfg?.smartColumns && !validateSheetMappingConfig(cfg).length) {
+    const fullSyncCoolingDown = !forceFresh
+        && _lastFullMainSheetSyncAt > 0
+        && Date.now() - _lastFullMainSheetSyncAt < MAIN_SHEET_FULL_SYNC_COOLDOWN_MS;
+
+    if (cfg?.smartColumns && !validateSheetMappingConfig(cfg).length && !fullSyncCoolingDown) {
         try {
             const result = await executeSyncWithCfg(cfg, { quiet: true, mode: SHEET_MODE_MAIN });
             if (!result?.ok) throw new Error(result?.skipped ? 'sheet sync already in progress' : 'sheet sync did not complete');
+            _lastFullMainSheetSyncAt = Date.now();
             if (!quiet) showToast('Статуси Google Sheets оновлено після імпорту Trades.');
             return { ok: true, resynced: true, result };
         } catch (error) {
             if (requireFresh) throw error;
             console.warn('[Google Sheets] quiet resync after Trades import failed; trying local rematch', error?.message || error);
         }
+    }
+
+    if (fullSyncCoolingDown) {
+        const localResult = await rematchStoredMainSheetRows(spreadsheetId);
+        return { ...localResult, throttled: true };
     }
 
     if (requireFresh) {

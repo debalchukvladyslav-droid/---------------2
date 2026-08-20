@@ -177,7 +177,11 @@ async function manualSyncAll(trigger = null, options = {}) {
             await runManualSyncStep('load-trades', () => loadTradeDays()),
             // Google Sheets must be checked before optional services: a backup or
             // Drive failure must never prevent a new trade from reaching calendar PnL.
-            await runManualSyncStep('google-sheet', () => isOwnProfile ? window.refreshSheetMatchesAfterTradesImport?.({ quiet: true, requireFresh: true }) : null),
+            await runManualSyncStep('google-sheet', () => isOwnProfile ? window.refreshSheetMatchesAfterTradesImport?.({
+                quiet: true,
+                requireFresh: true,
+                forceFresh: !quiet,
+            }) : null),
             await runManualSyncStep('backup', () => isOwnProfile ? createCompressedBackup({ reason: 'manual-sync', force: true, requireServer: true }) : null),
             await runManualSyncStep('drive-screenshots', () => isOwnProfile ? syncDriveScreenshots(true) : null),
             await runManualSyncStep('background-ocr', () => isOwnProfile ? window.enqueueBackgroundOCRForAllScreens?.() : null),
