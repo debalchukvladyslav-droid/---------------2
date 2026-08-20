@@ -6,6 +6,7 @@ import { getDefaultDayEntry } from './data_utils.js';
 import { deleteFromSupabaseStorage, ensureSupabaseStorageUser, getSupabaseStorageUrl, uploadToSupabaseStorage } from './supabase_storage.js';
 import { buildScreenshotPath } from './storage_paths.js';
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
+import { INVALID_IMAGE_FORMAT_MESSAGE, isJpegOrPng } from './image_file_validation.js';
 
 let zoomSources = [];
 let zoomIndex = -1;
@@ -1112,6 +1113,11 @@ window.addEventListener('paste', async function(e) {
         if (items[i].type.indexOf('image') !== -1) { file = items[i].getAsFile(); break; }
     }
     if (!file) return;
+
+    if (!isJpegOrPng(file)) {
+        showToast(INVALID_IMAGE_FORMAT_MESSAGE);
+        return;
+    }
 
     if (state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) {
         showToast('Ви не можете завантажувати скріншоти в чужий профіль!');

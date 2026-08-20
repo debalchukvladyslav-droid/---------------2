@@ -1,4 +1,5 @@
 import { showToast } from './utils.js';
+import { INVALID_IMAGE_FORMAT_MESSAGE, isJpegOrPng } from './image_file_validation.js';
 
 const MAX_IMPORT_SIZE_MB = 35;
 let dayFormDirty = false;
@@ -6,6 +7,24 @@ let offlineBanner = null;
 let globalEnhancementsReady = false;
 let dayFormTrackingReady = false;
 let networkListenersReady = false;
+let imageFormatGuardReady = false;
+
+function guardImageFileFormats() {
+    document.querySelectorAll('input[type="file"][accept*="image/"]').forEach((input) => {
+        input.setAttribute('accept', 'image/jpeg,image/png');
+    });
+    if (imageFormatGuardReady) return;
+    imageFormatGuardReady = true;
+    document.addEventListener('change', (event) => {
+        const input = event.target;
+        if (!(input instanceof HTMLInputElement) || input.type !== 'file' || !input.accept.includes('image/')) return;
+        const files = Array.from(input.files || []);
+        if (!files.some((file) => !isJpegOrPng(file))) return;
+        event.stopImmediatePropagation();
+        input.value = '';
+        showToast(INVALID_IMAGE_FORMAT_MESSAGE);
+    }, true);
+}
 
 function markBusy(button, duration = 900) {
     if (!button || button.dataset.busy === 'true') return;
@@ -548,6 +567,7 @@ function refreshDomEnhancements() {
     setExternalLinkDefaults();
     enhanceIconButtons();
     guardLargeImports();
+    guardImageFileFormats();
     improveResetCodeInput();
     trackDayFormChanges();
     addLiveRegions();
