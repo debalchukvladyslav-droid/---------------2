@@ -480,8 +480,10 @@ export function loadAIChatHistory() {
 
 export function switchAITab(tab) {
     if (tab === 'learning' && state.myRole !== 'admin') tab = 'chat';
-    document.getElementById('ai-chat-section').style.display = tab === 'chat' ? 'flex' : 'none';
-    document.getElementById('ai-saved-section').style.display = tab === 'saved' ? 'flex' : 'none';
+    const chatSection = document.getElementById('ai-chat-section');
+    const savedSection = document.getElementById('ai-saved-section');
+    if (chatSection) chatSection.style.display = tab === 'chat' ? 'flex' : 'none';
+    if (savedSection) savedSection.style.display = tab === 'saved' ? 'flex' : 'none';
     const learningSection = document.getElementById('ai-learning-section');
     if (learningSection) {
         learningSection.style.display = tab === 'learning' ? 'flex' : 'none';

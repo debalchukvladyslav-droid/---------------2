@@ -2778,6 +2778,10 @@ body {
     padding: 2px 3px 24px;
 }
 
+#ai-learning-section.initially-hidden {
+    display: none;
+}
+
 .ai-learning__hero {
     display: flex;
     align-items: center;
