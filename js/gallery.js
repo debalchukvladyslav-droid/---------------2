@@ -7,6 +7,8 @@ import { deleteFromSupabaseStorage, ensureSupabaseStorageUser, getSupabaseStorag
 import { buildScreenshotPath } from './storage_paths.js';
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 import { INVALID_IMAGE_FORMAT_MESSAGE, isJpegOrPng } from './image_file_validation.js';
+import { deleteScreenshotRegistry } from './screenshot_registry.js';
+import { supabase } from './supabase.js';
 
 let zoomSources = [];
 let zoomIndex = -1;
@@ -751,6 +753,47 @@ async function deleteFromStorage(path) {
     }
 }
 
+async function deleteDriveSource(path) {
+    const driveId = state.appData?.screenMeta?.[path]?.driveId;
+    if (!driveId) return { deleted: false, skipped: true };
+    try {
+        const { data } = await supabase.auth.getSession();
+        const token = data?.session?.access_token || '';
+        if (!token) throw new Error('Немає активної сесії');
+        const response = await fetch('/api/drive-service?action=delete', {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ fileId: driveId }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || `Google Drive (${response.status})`);
+        return { deleted: true, skipped: false };
+    } catch (error) {
+        console.warn('[Screenshots] Drive source delete failed:', error?.message || error);
+        return { deleted: false, skipped: false, error };
+    }
+}
+
+async function permanentlyDeleteScreenshot(path) {
+    const driveResult = await deleteDriveSource(path);
+    const userId = state.myUserId || state.currentUser?.id || '';
+    await deleteFromStorage(path);
+    if (userId) {
+        try {
+            await deleteScreenshotRegistry(userId, path);
+        } catch (error) {
+            console.warn('[Screenshots] registry delete failed:', error?.message || error);
+        }
+    }
+    delete state.appData.screenMeta?.[path];
+    delete state.appData.screenTags?.[path];
+    delete state.appData.screenDiscipline?.[path];
+    return driveResult;
+}
+
 function addToBlacklist(url) {
     if (!state.appData.settings.driveIgnored) state.appData.settings.driveIgnored = [];
     if (!state.appData.settings.driveIgnored.includes(url)) state.appData.settings.driveIgnored.push(url);
@@ -762,8 +805,10 @@ export function deleteFileFromPC(encodedPath) {
         const idx = state.appData.unassignedImages.indexOf(url);
         if (idx > -1) state.appData.unassignedImages.splice(idx, 1);
         addToBlacklist(url);
-        await deleteFromStorage(url);
-        saveSettings().then(() => loadImages());
+        const driveResult = await permanentlyDeleteScreenshot(url);
+        await saveSettings();
+        await loadImages();
+        if (driveResult.error) showToast('Скріншот видалено із сайту, але для видалення з Google Drive надайте service account роль Editor.');
     });
 }
 
@@ -773,11 +818,15 @@ export function deleteAssignedImage(encodedPath, category) {
         const arr = state.appData.journal[state.selectedDateStr]?.screenshots?.[category];
         if (arr) { const i = arr.indexOf(url); if (i > -1) arr.splice(i, 1); }
         addToBlacklist(url);
-        await deleteFromStorage(url);
+        const driveResult = await permanentlyDeleteScreenshot(url);
         markJournalDayDirty(state.selectedDateStr);
         saveJournalData()
             .then(() => saveSettings())
-            .then(() => { loadImages(); if(window.renderView) window.renderView(); });
+            .then(() => {
+                loadImages();
+                if(window.renderView) window.renderView();
+                if (driveResult.error) showToast('Скріншот видалено із сайту, але для видалення з Google Drive надайте service account роль Editor.');
+            });
     });
 }
 

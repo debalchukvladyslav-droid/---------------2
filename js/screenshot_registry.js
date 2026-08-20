@@ -43,8 +43,17 @@ export async function registerDriveScreenshot(userId, storagePath, file, mimeTyp
     if (error) throw error;
 }
 
-export function mergeScreenshotRegistry(appData, rows = []) {
+export async function deleteScreenshotRegistry(userId, storagePath) {
+    if (!userId || !storagePath) return;
+    const { error } = await supabase.from('screenshots').delete()
+        .eq('user_id', userId)
+        .eq('storage_path', storagePath);
+    if (error) throw error;
+}
+
+export function mergeScreenshotRegistry(appData, rows = [], ignoredPaths = appData?.settings?.driveIgnored || []) {
     if (!appData || !Array.isArray(rows)) return 0;
+    const ignored = ignoredPaths instanceof Set ? ignoredPaths : new Set(ignoredPaths || []);
     if (!Array.isArray(appData.unassignedImages)) appData.unassignedImages = [];
     if (!appData.screenMeta || typeof appData.screenMeta !== 'object') appData.screenMeta = {};
     const assigned = new Set();
@@ -57,7 +66,7 @@ export function mergeScreenshotRegistry(appData, rows = []) {
     let added = 0;
     for (const row of rows) {
         const path = String(row?.storage_path || '');
-        if (!path) continue;
+        if (!path || ignored.has(path)) continue;
         if (!known.has(path)) {
             appData.unassignedImages.push(path);
             known.add(path);

@@ -1,4 +1,4 @@
-import { getGoogleAccessToken, verifySupabaseUser } from '../lib/google_sheet_sync.js';
+import { getGoogleAccessToken, supabaseRest, verifySupabaseUser } from '../lib/google_sheet_sync.js';
 
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
 
@@ -12,15 +12,54 @@ function cleanDriveId(value) {
     return /^[a-zA-Z0-9_-]+$/.test(id) ? id : '';
 }
 
-async function driveFetch(path, token, query = {}) {
+async function driveFetch(path, token, query = {}, options = {}) {
     const url = new URL(`https://www.googleapis.com/drive/v3/${path.replace(/^\/+/, '')}`);
     for (const [key, value] of Object.entries(query)) {
         if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, value);
     }
     const response = await fetch(url.toString(), {
+        ...options,
         headers: { Authorization: `Bearer ${token}` },
     });
     return response;
+}
+
+async function deleteDriveFile(req, res, token, user) {
+    const rawBody = typeof req.body === 'string'
+        ? JSON.parse(req.body || '{}')
+        : (req.body || {});
+    const fileId = cleanDriveId(rawBody.fileId);
+    if (!fileId) return sendJson(res, 400, { ok: false, error: 'Missing fileId' });
+
+    const profiles = await supabaseRest(
+        `profiles?id=eq.${encodeURIComponent(user.id)}&select=settings&limit=1`,
+    );
+    const folderId = cleanDriveId(profiles?.[0]?.settings?.driveFolderId);
+    if (!folderId) return sendJson(res, 403, { ok: false, error: 'Google Drive folder is not configured' });
+
+    const metaResponse = await driveFetch(`files/${fileId}`, token, {
+        fields: 'id,parents,trashed',
+        supportsAllDrives: 'true',
+    });
+    const meta = await metaResponse.json().catch(() => ({}));
+    if (!metaResponse.ok) {
+        return sendJson(res, metaResponse.status, { ok: false, error: meta.error?.message || metaResponse.statusText });
+    }
+    if (!Array.isArray(meta.parents) || !meta.parents.includes(folderId)) {
+        return sendJson(res, 403, { ok: false, error: 'File does not belong to the configured folder' });
+    }
+
+    const response = await driveFetch(`files/${fileId}`, token, {
+        supportsAllDrives: 'true',
+    }, { method: 'DELETE' });
+    if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        return sendJson(res, response.status, {
+            ok: false,
+            error: data.error?.message || 'Service account needs Editor access to delete this file',
+        });
+    }
+    return sendJson(res, 200, { ok: true, deleted: true });
 }
 
 async function listFolder(req, res, token) {
@@ -118,8 +157,8 @@ export default async function handler(req, res) {
             method: req.method,
             action: req.query.action || 'list',
         });
-        if (req.method !== 'GET') {
-            res.setHeader('Allow', 'GET');
+        if (req.method !== 'GET' && req.method !== 'POST') {
+            res.setHeader('Allow', 'GET, POST');
             return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
         }
 
@@ -129,7 +168,10 @@ export default async function handler(req, res) {
 
         let token;
         try {
-            token = await getGoogleAccessToken('https://www.googleapis.com/auth/drive.readonly');
+            const scope = req.method === 'POST' && String(req.query.action || '') === 'delete'
+                ? 'https://www.googleapis.com/auth/drive'
+                : 'https://www.googleapis.com/auth/drive.readonly';
+            token = await getGoogleAccessToken(scope);
         } catch (error) {
             console.warn('[Drive service] service account token unavailable', {
                 message: error?.message || String(error),
@@ -141,6 +183,8 @@ export default async function handler(req, res) {
             });
         }
         const action = String(req.query.action || 'list');
+        if (req.method === 'POST' && action === 'delete') return deleteDriveFile(req, res, token, user);
+        if (req.method !== 'GET') return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
         if (action === 'list') return listFolder(req, res, token);
         if (action === 'media') return streamFile(req, res, token);
         return sendJson(res, 400, { ok: false, error: 'Unknown action' });
