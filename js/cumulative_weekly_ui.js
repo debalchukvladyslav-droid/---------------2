@@ -2,7 +2,7 @@ import { state } from './state.js';
 import { saveSettings } from './storage.js';
 import { getEffectiveSpreadsheetId } from './sheet_table.js';
 import { SHEET_MODE_MAIN } from './sheet_import_modes.js';
-import { calculateCumulativeWeek, collectWeekStarts, getWeekRange } from './cumulative_weekly.js';
+import { calculateCumulativeWeek, collectWeekStarts, getWeekRange, resolveMonthlyDayloss } from './cumulative_weekly.js';
 import { showToast } from './utils.js';
 
 let selectedWeek = '';
@@ -53,11 +53,23 @@ function setMetric(id, value, money = true) {
     if (target) target.textContent = money ? formatMoney(value) : value;
 }
 
+function setTradeTypeMetric(id, pnl, kf, kfCount) {
+    const target = element(id);
+    if (!target) return;
+    target.textContent = `${formatMoney(pnl)}${kfCount ? ` · КФ ${Number(kf).toFixed(2)}` : ''}`;
+}
+
+function setResultWithKf(id, value, kf, kfCount) {
+    const target = element(id);
+    if (!target) return;
+    target.textContent = `${value}${kfCount ? ` · КФ ${Number(kf).toFixed(2)}` : ''}`;
+}
+
 export function renderCumulativeWeekly() {
     const { spreadsheetId, rowsByDay } = activeRows();
     renderWeekOptions(rowsByDay);
     const monthKey = selectedWeek.slice(0, 7);
-    const storedDayloss = monthlyLimits()[monthKey];
+    const storedDayloss = resolveMonthlyDayloss(monthlyLimits(), monthKey);
     const result = calculateCumulativeWeek({
         weekStart: selectedWeek,
         journal: state.appData?.journal || {},
@@ -70,11 +82,11 @@ export function renderCumulativeWeekly() {
     setMetric('cumulative-table-profit', result.tableProfit);
     setMetric('cumulative-metro-result', result.metroResult);
     setMetric('cumulative-pv-result', result.pvResult, false);
-    setMetric('cumulative-not-taken', result.notTakenResult, false);
-    setMetric('cumulative-blue', result.blue);
-    setMetric('cumulative-green', result.green);
-    setMetric('cumulative-purple', result.purple);
-    setMetric('cumulative-visual', result.visual);
+    setResultWithKf('cumulative-not-taken', result.notTakenResult, result.notTakenKf, result.notTakenKfCount);
+    setTradeTypeMetric('cumulative-blue', result.blue, result.blueKf, result.blueKfCount);
+    setTradeTypeMetric('cumulative-green', result.green, result.greenKf, result.greenKfCount);
+    setTradeTypeMetric('cumulative-purple', result.purple, result.purpleKf, result.purpleKfCount);
+    setTradeTypeMetric('cumulative-visual', result.visual, result.visualKf, result.visualKfCount);
     setMetric('cumulative-effectiveness', result.effectiveness === null ? '—' : result.effectiveness.toFixed(4), false);
 
     const hint = element('cumulative-week-hint');

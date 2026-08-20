@@ -14,6 +14,11 @@ function normalizeTradeType(value) {
         .replace(/[^a-zа-яіїєґ0-9]+/gi, '');
 }
 
+function isNotTakenType(value) {
+    const normalized = String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    return normalized.includes('не брав') || normalized.includes('не брала');
+}
+
 export function parseCumulativeNumber(value) {
     if (value == null || value === '') return null;
     const cleaned = String(value)
@@ -25,6 +30,22 @@ export function parseCumulativeNumber(value) {
     if (!cleaned || ['+', '-', '.', '+.', '-.'].includes(cleaned)) return null;
     const number = Number(cleaned);
     return Number.isFinite(number) ? number : null;
+}
+
+export function resolveMonthlyDayloss(limits = {}, monthKey = '') {
+    const exact = parseCumulativeNumber(limits?.[monthKey]);
+    if (exact !== null && exact !== 0) return Math.abs(exact);
+
+    const previousKey = Object.keys(limits || {})
+        .filter((key) => /^\d{4}-\d{2}$/.test(key) && key < monthKey)
+        .sort()
+        .reverse()
+        .find((key) => {
+            const value = parseCumulativeNumber(limits[key]);
+            return value !== null && value !== 0;
+        });
+    if (!previousKey) return null;
+    return Math.abs(parseCumulativeNumber(limits[previousKey]));
 }
 
 function isoDate(date) {
@@ -79,10 +100,20 @@ export function calculateCumulativeWeek({ weekStart, journal = {}, rowsByDay = {
         metroResult: 0,
         pvResult: 0,
         notTakenResult: 0,
+        notTakenKf: 0,
+        notTakenKfCount: 0,
         blue: 0,
         green: 0,
         purple: 0,
         visual: 0,
+        blueKf: 0,
+        greenKf: 0,
+        purpleKf: 0,
+        visualKf: 0,
+        blueKfCount: 0,
+        greenKfCount: 0,
+        purpleKfCount: 0,
+        visualKfCount: 0,
         rowCount: 0,
     };
 
@@ -109,20 +140,32 @@ export function calculateCumulativeWeek({ weekStart, journal = {}, rowsByDay = {
             const sheet = row?.sheet && typeof row.sheet === 'object' ? row.sheet : {};
             const pnl = parseCumulativeNumber(sheet.sheetNet ?? row?.net);
             const pv = parseCumulativeNumber(sheet.pv);
+            const kf = parseCumulativeNumber(sheet.profitRisk ?? row?.kf);
             const rawType = String(sheet.tradeType ?? row?.type ?? '');
             const type = normalizeTradeType(rawType);
             totals.rowCount += 1;
             if (pnl !== null) totals.tableProfit += pnl;
             if (pv !== null) totals.pvResult += pv;
-            if (rawType.trim().toLowerCase() === 'не брав' && pv !== null) totals.notTakenResult += pv;
+            if (isNotTakenType(rawType)) {
+                if (pv !== null) totals.notTakenResult += pv;
+                if (kf !== null) {
+                    totals.notTakenKf += kf;
+                    totals.notTakenKfCount += 1;
+                }
+            }
             Object.entries(CATEGORY_TYPES).forEach(([key, types]) => {
-                if (types.has(type) && pnl !== null) totals[key] += pnl;
+                if (!types.has(type)) return;
+                if (pnl !== null) totals[key] += pnl;
+                if (kf !== null) {
+                    totals[`${key}Kf`] += kf;
+                    totals[`${key}KfCount`] += 1;
+                }
             });
         });
     });
 
     Object.keys(totals).forEach((key) => {
-        if (key !== 'rowCount') totals[key] = round(totals[key]);
+        if (key !== 'rowCount' && !key.endsWith('Count')) totals[key] = round(totals[key]);
     });
     const limit = Math.abs(parseCumulativeNumber(dayloss) || 0);
     totals.effectiveness = limit ? round(totals.metroResult / limit, 4) : null;

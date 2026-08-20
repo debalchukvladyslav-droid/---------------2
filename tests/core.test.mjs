@@ -43,7 +43,7 @@ const { buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets,
 const { parseDecimalInput } = await import('../js/utils.js');
 const { getZonedClockParts, isEndOfSessionReviewTime } = await import('../js/session_schedule.js');
 const { buildServiceBotSnapshot, hashServiceBotApiKey, hasServiceBotPermission, parseServiceBotRange } = await import('../lib/service_bots.js');
-const { calculateCumulativeWeek, collectWeekStarts, getWeekRange, getWeekStartIso, parseCumulativeNumber } = await import('../js/cumulative_weekly.js');
+const { calculateCumulativeWeek, collectWeekStarts, getWeekRange, getWeekStartIso, parseCumulativeNumber, resolveMonthlyDayloss } = await import('../js/cumulative_weekly.js');
 const { getNyseDaySchedule } = await import('../js/nyse_calendar.js');
 
 test('NYSE calendar marks official holidays and shortened sessions', () => {
@@ -89,9 +89,9 @@ test('cumulative week aggregates exact sheet types and authoritative imported pn
         },
         rowsByDay: {
             '2026-07-27': [
-                { sheet: { sheetNet: '$10', pv: '1,5R', tradeType: 'не брав' } },
-                { sheet: { sheetNet: '-3', pv: '-0.5', tradeType: 'синя%' } },
-                { sheet: { sheetNet: '7', pv: '2', tradeType: 'РПфіолетова' } },
+                { sheet: { sheetNet: '$10', pv: '1,5R', profitRisk: '0.7R', tradeType: 'виняток — не брав(ла)' } },
+                { sheet: { sheetNet: '-3', pv: '-0.5', profitRisk: '-0,4R', tradeType: 'синя%' } },
+                { sheet: { sheetNet: '7', pv: '2', profitRisk: '1.5R', tradeType: 'РПфіолетова' } },
                 { sheet: { sheetNet: '4', pv: '1', tradeType: 'РПвізуально' } },
                 { sheet: { sheetNet: '50', pv: '3', tradeType: 'РПзелена' } },
             ],
@@ -102,10 +102,17 @@ test('cumulative week aggregates exact sheet types and authoritative imported pn
     assert.equal(result.metroResult, 17);
     assert.equal(result.pvResult, 7);
     assert.equal(result.notTakenResult, 1.5);
+    assert.equal(result.notTakenKf, 0.7);
+    assert.equal(result.notTakenKfCount, 1);
     assert.equal(result.blue, -3);
     assert.equal(result.green, 50);
     assert.equal(result.purple, 7);
     assert.equal(result.visual, 4);
+    assert.equal(result.blueKf, -0.4);
+    assert.equal(result.blueKfCount, 1);
+    assert.equal(result.purpleKf, 1.5);
+    assert.equal(result.purpleKfCount, 1);
+    assert.equal(result.greenKfCount, 0);
     assert.equal(result.effectiveness, 0.17);
 });
 
@@ -127,6 +134,13 @@ test('cumulative metro result falls back to calendar import formula with locates
 test('cumulative week list always includes current week', () => {
     const weeks = collectWeekStarts({}, {}, new Date(2026, 6, 29));
     assert.deepEqual(weeks, ['2026-07-27']);
+});
+
+test('cumulative dayloss repeats the latest previous month until overridden', () => {
+    const limits = { '2026-05': 80, '2026-07': -120, '2026-09': 200 };
+    assert.equal(resolveMonthlyDayloss(limits, '2026-07'), 120);
+    assert.equal(resolveMonthlyDayloss(limits, '2026-08'), 120);
+    assert.equal(resolveMonthlyDayloss(limits, '2026-04'), null);
 });
 
 test('parser utils find ECN fee columns across supported header names', () => {

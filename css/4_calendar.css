@@ -9,6 +9,7 @@
 .calendar-cumulative-btn { white-space: nowrap; }
 .cumulative-weekly-overlay { padding: 20px; }
 .cumulative-weekly-card {
+    box-sizing: border-box;
     width: min(620px, 100%);
     max-height: calc(100vh - 40px);
     overflow: auto;
@@ -62,6 +63,8 @@
 .cumulative-metrics span { color: var(--text-muted); }
 .cumulative-metrics strong { font-family: var(--font-mono, monospace); }
 .cumulative-dayloss-editor {
+    box-sizing: border-box;
+    width: 100%;
     display: flex;
     align-items: end;
     gap: 10px;
@@ -70,7 +73,8 @@
     border: 1px solid var(--accent);
     border-radius: 12px;
 }
-.cumulative-dayloss-editor label { display: grid; flex: 1; gap: 6px; color: var(--text-muted); font-size: .85rem; }
+.cumulative-dayloss-editor label { display: grid; flex: 1 1 auto; min-width: 0; gap: 6px; color: var(--text-muted); font-size: .85rem; }
+.cumulative-dayloss-editor .btn-primary { flex: 0 0 auto; max-width: 100%; }
 .cumulative-dayloss-editor input {
     width: 100%;
     padding: 9px 11px;
@@ -83,6 +87,7 @@
 @media (max-width: 620px) {
     .cumulative-metrics { grid-template-columns: 1fr; }
     .cumulative-dayloss-editor { align-items: stretch; flex-direction: column; }
+    .cumulative-dayloss-editor .btn-primary { width: 100%; }
 }
 
 /* FIX 2: week-label keeps a simple semi-transparent bg - no backdrop-filter */
