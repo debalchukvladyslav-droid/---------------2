@@ -1,7 +1,11 @@
 ﻿        <div id="view-screens" class="view-content">
             <div class="screens-date-context panel">
                 <div><span>Скріншоти за день</span><strong id="screens-selected-date">—</strong></div>
-                <div id="screens-date-strip" class="screens-date-strip" aria-label="Вибір дня для скріншотів"></div>
+                <div class="screens-date-navigation">
+                    <button type="button" id="screens-date-prev" class="screens-date-arrow" aria-label="Попередній день" title="Попередній день">‹</button>
+                    <div id="screens-date-strip" class="screens-date-strip" aria-label="Вибір дня для скріншотів"></div>
+                    <button type="button" id="screens-date-next" class="screens-date-arrow" aria-label="Наступний день" title="Наступний день">›</button>
+                </div>
             </div>
             <div class="panel" id="screens-distribution-panel">
                 <div class="screens-panel-head">

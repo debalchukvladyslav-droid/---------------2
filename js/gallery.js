@@ -464,6 +464,16 @@ function renderScreensDateStrip() {
         ? state.selectedDateStr
         : new Date().toISOString().slice(0, 10);
     const center = new Date(`${selected}T12:00:00`);
+    const shiftSelectedDay = (offset) => {
+        const next = new Date(center);
+        next.setDate(center.getDate() + offset);
+        const nextDate = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
+        void window.selectDate?.(nextDate);
+    };
+    const previousButton = document.getElementById('screens-date-prev');
+    const nextButton = document.getElementById('screens-date-next');
+    if (previousButton) previousButton.onclick = () => shiftSelectedDay(-1);
+    if (nextButton) nextButton.onclick = () => shiftSelectedDay(1);
     if (title) {
         title.textContent = new Intl.DateTimeFormat('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' }).format(center);
     }
