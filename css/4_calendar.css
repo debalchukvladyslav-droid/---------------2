@@ -65,7 +65,8 @@
 .cumulative-dayloss-editor {
     box-sizing: border-box;
     width: 100%;
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: end;
     gap: 10px;
     margin-top: 14px;
@@ -73,9 +74,11 @@
     border: 1px solid var(--accent);
     border-radius: 12px;
 }
-.cumulative-dayloss-editor label { display: grid; flex: 1 1 auto; min-width: 0; gap: 6px; color: var(--text-muted); font-size: .85rem; }
-.cumulative-dayloss-editor .btn-primary { flex: 0 0 auto; max-width: 100%; }
+.cumulative-dayloss-editor label { display: grid; min-width: 0; gap: 6px; color: var(--text-muted); font-size: .85rem; }
+.cumulative-dayloss-editor .btn-primary { width: auto !important; min-width: 124px; max-width: 100%; margin: 0 !important; white-space: nowrap; }
 .cumulative-dayloss-editor input {
+    box-sizing: border-box;
+    min-width: 0;
     width: 100%;
     padding: 9px 11px;
     border: 1px solid var(--border);
@@ -86,8 +89,8 @@
 .cumulative-week-hint { margin: 14px 0 0; color: var(--text-muted); font-size: .85rem; }
 @media (max-width: 620px) {
     .cumulative-metrics { grid-template-columns: 1fr; }
-    .cumulative-dayloss-editor { align-items: stretch; flex-direction: column; }
-    .cumulative-dayloss-editor .btn-primary { width: 100%; }
+    .cumulative-dayloss-editor { grid-template-columns: 1fr; align-items: stretch; }
+    .cumulative-dayloss-editor .btn-primary { width: 100% !important; }
 }
 
 /* FIX 2: week-label keeps a simple semi-transparent bg - no backdrop-filter */
