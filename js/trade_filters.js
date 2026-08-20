@@ -56,3 +56,24 @@ export function getEffectiveDayPnl(day = {}) {
     if (isSheetOnlyPnl(day)) return null;
     return parseDecimalInput(day.pnl);
 }
+
+export function hasImportedNetPnl(day = {}) {
+    const fondexxSource = String(day?.fondexxSource || '').trim();
+    const pproSource = String(day?.pproSource || '').trim();
+    return fondexxSource === 'summary-by-date'
+        || fondexxSource === 'fondexx-report'
+        || fondexxSource === 'trades-report'
+        || pproSource === 'ppro-total-report';
+}
+
+export function getCalendarDayResult(day = {}) {
+    if (hasImportedNetPnl(day)) {
+        return { value: parseDecimalInput(day.pnl), kind: 'net' };
+    }
+
+    const gross = parseDecimalInput(day.gross_pnl);
+    if (gross !== null) return { value: gross, kind: 'gross' };
+
+    // Старі ручні записи зберігалися у pnl. У календарі трактуємо їх як Gross.
+    return { value: parseDecimalInput(day.pnl), kind: 'gross' };
+}

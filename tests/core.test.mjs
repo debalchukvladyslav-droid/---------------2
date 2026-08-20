@@ -35,7 +35,7 @@ const { parseFondexxSummaryByDateRows } = await import('../js/fondexx_summary_pa
 const { collectDatagridRows } = await import('../js/datagrid_rows.js');
 const { enrichTradeWithSheet, findSheetMatchIndex, parseSheetGridToTrades } = await import('../js/sheet_sync_core.js');
 const { summarizeJournalPnl } = await import('../js/stats_math.js');
-const { getEffectiveDayPnl, isPureGoogleSheetTrade, visibleTradeRows } = await import('../js/trade_filters.js');
+const { getCalendarDayResult, getEffectiveDayPnl, isPureGoogleSheetTrade, visibleTradeRows } = await import('../js/trade_filters.js');
 const { normalizeBrokerTradeType } = await import('../js/trade_import_utils.js');
 const { duplicateSheetMappingConfig, getCumulativeArchiveSchedule } = await import('../js/sheet_import_modes.js');
 const { detectExactSheetAutoMapping, migrateLegacyClassificationMapping, normalizeExactSheetHeader, relocateSheetDataStartRow } = await import('../js/sheet_auto_mapping.js');
@@ -504,6 +504,12 @@ test('PPRO-only pnl remains effective day profit', () => {
 
     assert.equal(getEffectiveDayPnl(pproOnlyDay), 732.93);
     assert.equal(getEffectiveDayPnl(combinedBrokerDay), 932.93);
+});
+
+test('calendar shows manual values as Gross and imported file values as Net', () => {
+    assert.deepEqual(getCalendarDayResult({ gross_pnl: '125,50', pnl: 90 }), { value: 125.5, kind: 'gross' });
+    assert.deepEqual(getCalendarDayResult({ pnl: -42, gross_pnl: -30, fondexxSource: 'summary-by-date' }), { value: -42, kind: 'net' });
+    assert.deepEqual(getCalendarDayResult({ pnl: 18, gross_pnl: null }), { value: 18, kind: 'gross' });
 });
 
 test('day normalization preserves PPRO source marker', () => {

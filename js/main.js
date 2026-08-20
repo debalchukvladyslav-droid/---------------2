@@ -655,7 +655,7 @@ function openSessionReview() {
     document.getElementById('session-review-date').textContent = `📅 ${today}`;
     document.getElementById('session-review-notes').value = day.notes || '';
     document.getElementById('session-review-improvement').value = day.nextSessionImprovement || '';
-    document.getElementById('session-review-pnl').value = day.pnl ?? '';
+    document.getElementById('session-review-pnl').value = day.gross_pnl ?? day.pnl ?? '';
     document.getElementById('session-review-kf').value = day.kf ?? '';
     sessionReviewIncludesYesterday = false;
     sessionReviewScreens = collectSessionReviewScreens(today, false);
@@ -727,7 +727,7 @@ window.saveSessionReview = async function() {
         return;
     }
     const day = state.appData.journal?.[today] || getDefaultDayEntry();
-    day.pnl = parseDecimalInput(document.getElementById('session-review-pnl')?.value);
+    day.gross_pnl = parseDecimalInput(document.getElementById('session-review-pnl')?.value);
     day.kf = parseDecimalInput(document.getElementById('session-review-kf')?.value);
     day.notes = document.getElementById('session-review-notes')?.value || '';
     day.nextSessionImprovement = document.getElementById('session-review-improvement')?.value || '';

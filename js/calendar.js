@@ -7,7 +7,7 @@ import { reviewReasonsForDay } from './review_signals.js';
 import { updateDashMiniEquityChart } from './dash_mini_chart.js';
 import { hideGlobalLoader, setElementLoading, showGlobalLoader } from './loading.js';
 import { findScreenshotsForTicker, openScreenshotForTrade } from './gallery.js';
-import { getEffectiveDayPnl, isSheetOnlyPnl, visibleTradeRows } from './trade_filters.js';
+import { getCalendarDayResult, getEffectiveDayPnl, hasImportedNetPnl, isSheetOnlyPnl, visibleTradeRows } from './trade_filters.js';
 import { pickSheetRowsSource } from './datagrid_rows.js';
 import { getNyseDaySchedule } from './nyse_calendar.js';
 
@@ -391,10 +391,11 @@ function fillSelectedDateUI(dateStr) {
     renderSidebarTradesList(dateStr);
 
     const dayData = state.appData.journal[dateStr] || {};
-    const effectivePnl = getEffectiveDayPnl(dayData);
+    const effectivePnl = hasImportedNetPnl(dayData) ? getEffectiveDayPnl(dayData) : null;
+    const manualGross = getCalendarDayResult(dayData);
     const sheetOnlyPnl = isSheetOnlyPnl(dayData);
     document.getElementById('trade-pnl').value = effectivePnl !== null ? effectivePnl.toFixed(2) : '';
-    document.getElementById('trade-gross').value = !sheetOnlyPnl ? formatStoredDecimal(dayData.gross_pnl) : '';
+    document.getElementById('trade-gross').value = manualGross.kind === 'gross' ? formatStoredDecimal(manualGross.value) : '';
     document.getElementById('trade-comm').value = !sheetOnlyPnl ? formatStoredDecimal(dayData.commissions) : '';
     document.getElementById('trade-locates').value = !sheetOnlyPnl ? formatStoredDecimal(dayData.locates) : '';
     document.getElementById('trade-kf').value = formatStoredDecimal(dayData.kf);
@@ -480,7 +481,7 @@ function fillSelectedDateUI(dateStr) {
 
 function focusActiveDayEditorField() {
     const activeTabId = document.querySelector('#form-sidebar .tab-content.active')?.id || 'tab-profit';
-    const focusId = activeTabId === 'tab-mind' ? 'trade-notes' : 'trade-pnl';
+    const focusId = activeTabId === 'tab-mind' ? 'trade-notes' : 'trade-gross';
     const el = document.getElementById(focusId);
     if (!el || el.disabled) return;
     el.focus({ preventScroll: true });
@@ -559,15 +560,16 @@ export function saveEntry() {
         }
     });
 
-    let pnlVal = document.getElementById('trade-pnl').value;
     let kfValMain = document.getElementById('trade-kf').value;
     const grossValRaw = document.getElementById('trade-gross').value;
     const commValRaw = document.getElementById('trade-comm').value;
     const locValRaw = document.getElementById('trade-locates').value;
 
     // Формуємо об'єкт дня (захист від NaN)
+    let oldData = state.appData.journal[state.selectedDateStr] || {};
     let dayData = {
-        pnl: parseDecimalInput(pnlVal),
+        ...oldData,
+        pnl: oldData.pnl ?? null,
         gross_pnl: parseDecimalInput(grossValRaw),
         commissions: parseDecimalInput(commValRaw),
         locates: parseDecimalInput(locValRaw),
@@ -580,7 +582,6 @@ export function saveEntry() {
         tradeTypesData: ttData
     };
 
-    let oldData = state.appData.journal[state.selectedDateStr] || {};
     dayData.screenshots = oldData.screenshots || { good: [], normal: [], bad: [], error: [] };
     if (oldData.mentor_comment) dayData.mentor_comment = oldData.mentor_comment;
     if (oldData.tickers) dayData.tickers = oldData.tickers;
@@ -693,10 +694,11 @@ function buildWeekHoverText(wkKey) {
 
 function buildDayDetailBody(dateKey, data, currentMonthDayloss) {
     const lines = [];
-    const effectivePnl = getEffectiveDayPnl(data);
+    const calendarResult = getCalendarDayResult(data);
+    const effectivePnl = calendarResult.value;
     if (effectivePnl !== null) {
         const rp = effectivePnl;
-        lines.push(`PnL: ${rp >= 0 ? '+' : ''}${rp.toFixed(2)}$`);
+        lines.push(`${calendarResult.kind === 'gross' ? 'Gross' : 'Net PnL'}: ${rp >= 0 ? '+' : ''}${rp.toFixed(2)}$`);
     }
     if (effectivePnl !== null && effectivePnl <= currentMonthDayloss) {
         lines.push('Увага: день на рівні денного ліміту.');
@@ -786,7 +788,7 @@ function renderCalendarTooltip(el, text, type) {
     const metaTitle = noteIndex >= 0 ? title : '';
 
     const iconForLine = (line) => {
-        if (/pnl/i.test(line)) return '🎯';
+        if (/pnl|gross/i.test(line)) return '🎯';
         if (/помил|увага|ліміт/i.test(line)) return '⚠️';
         if (/скрін/i.test(line)) return '🖼️';
         if (/що\s+(змінити|покращити)/i.test(line)) return '💡';
@@ -796,7 +798,7 @@ function renderCalendarTooltip(el, text, type) {
     };
 
     const rows = lines.map((line) => {
-        const cls = /pnl/i.test(line) ? ' calendar-tooltip-row--metric' : '';
+        const cls = /pnl|gross/i.test(line) ? ' calendar-tooltip-row--metric' : '';
         return `
             <div class="calendar-tooltip-row${cls}">
                 <span class="calendar-tooltip-icon">${iconForLine(line)}</span>
@@ -922,15 +924,18 @@ export async function renderView() {
         const dayPnl = document.createElement('div');
 
         if (data) {
-            const effectivePnl = getEffectiveDayPnl(data);
+            const effectivePnl = getCalendarDayResult(data).value;
             if (effectivePnl !== null) { 
                 let roundedPnl = parseFloat(effectivePnl.toFixed(2));
                 pnlDisplay = roundedPnl >= 0 ? `+${roundedPnl}$` : `${roundedPnl}$`; 
                 
                 cell.classList.add(roundedPnl >= 0 ? 'green' : 'red'); 
-                totalPnl += roundedPnl; 
-                totalComm += parseStoredDecimalOrZero(data.commissions);
-                totalLocates += parseStoredDecimalOrZero(data.locates); 
+                const importedNet = hasImportedNetPnl(data) ? getEffectiveDayPnl(data) : null;
+                if (importedNet !== null) {
+                    totalPnl += parseFloat(importedNet.toFixed(2));
+                    totalComm += parseStoredDecimalOrZero(data.commissions);
+                    totalLocates += parseStoredDecimalOrZero(data.locates);
+                }
                 
                 if (state.autoFlagsCache.absoluteRecord === dateKey) { cell.classList.add('record-day'); } 
                 else if (state.autoFlagsCache.records.has(dateKey)) { cell.classList.add('record-day-old'); }
@@ -983,7 +988,7 @@ export async function renderView() {
             cell.onmousemove = (e) => positionCalendarTooltip(e, tooltip);
             cell.onmouseleave = () => { tooltip.style.display = 'none'; };
         }
-        const effectivePnlForClass = data ? getEffectiveDayPnl(data) : null;
+        const effectivePnlForClass = data ? getCalendarDayResult(data).value : null;
         dayPnl.className = 'day-pnl' + (effectivePnlForClass !== null ? (effectivePnlForClass >= 0 ? ' text-green' : ' text-red') : '');
         dayPnl.textContent = pnlDisplay;
         cell.appendChild(dayNum);
