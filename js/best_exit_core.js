@@ -61,7 +61,8 @@ export function collectTimedShortTrades(journal = {}, allowedDates = null) {
     for (const [dateStr, day] of Object.entries(journal || {})) {
         if (allowedDates instanceof Set && !allowedDates.has(dateStr)) continue;
         for (const [tradeIndex, trade] of (day?.trades || []).entries()) {
-            if (!isShortTrade(trade) || isExcludedStopTakeExit(trade)) continue;
+            const exitReason = tradeExitReason(trade);
+            if (!isShortTrade(trade) || !exitReason || isExcludedStopTakeExit(trade)) continue;
             const openedMinute = normalizeTradeClock(trade?.opened);
             const exitMinute = normalizeTradeClock(
                 trade?.closed || trade?.exited || trade?.exitTime || trade?.closeTime || trade?.sheet?.exitTime || ''
@@ -82,7 +83,7 @@ export function collectTimedShortTrades(journal = {}, allowedDates = null) {
                 exitMinute,
                 entryPrice,
                 actualExitPrice,
-                exitReason: tradeExitReason(trade),
+                exitReason,
                 qty: qty > 0 ? qty : null,
                 tradeIdentity: { symbol: trade.symbol, opened: trade.opened || trade.entryTime || trade.time || '', entry: entryPrice, exit: actualExitPrice, qty: qty > 0 ? qty : null },
             });

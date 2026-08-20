@@ -20,12 +20,13 @@ test('excludes common Stop and Take spellings but keeps other closed exits', () 
     ['по часу', 'manual', 'market', 'cover', 'закрив руками', ''].forEach((reason) => assert.equal(isExcludedStopTakeExit({ sheet: { exit: reason } }), false, reason));
 });
 
-test('collects every closed short except Stop and Take variants', () => {
+test('collects closed shorts with a known exit reason except Stop and Take variants', () => {
     const journal = { '2026-07-10': { trades: [
         { symbol: 'AAA', type: 'Short', opened: '09:31', entry: 10, exit: 9, sheet: { exit: 'manual' } },
         { symbol: 'BBB', type: 'Short', opened: '09:32', entry: 10, exit: 11, sheet: { exit: 'Stop Loss' } },
         { symbol: 'CCC', type: 'Short', opened: '09:33', entry: 10, exit: 8, sheet: { exit: 'TP' } },
         { symbol: 'DDD', type: 'Short', opened: '09:34', entry: 10, exit: 9.5, closeReason: 'cover' },
+        { symbol: 'EMPTY', type: 'Short', opened: '09:35', entry: 10, exit: 9.4 },
         { symbol: 'EEE', type: 'Short', opened: '09:35', entry: 10 },
     ] } };
     assert.deepEqual(collectTimedShortTrades(journal).map((row) => row.symbol), ['AAA', 'DDD']);
