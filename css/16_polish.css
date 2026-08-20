@@ -1075,6 +1075,8 @@ body {
 .session-review-categories { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; }
 .session-review-categories button { padding: 6px 9px; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--text-muted); cursor: pointer; }
 .session-review-categories button.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.session-review-categories .session-review-skip { border-style: dashed; color: var(--text-muted); }
+.session-review-categories .session-review-skip:hover { border-color: var(--gold); color: var(--gold); background: color-mix(in srgb, var(--gold) 8%, transparent); }
 .session-review-card > .session-modal-actions { margin-top: 18px; }
 @media (max-width: 800px) { .session-review-overlay { padding: 0; } .session-review-card { width: 100%; max-height: 100dvh; min-height: 100dvh; border: 0; border-radius: 0; } .session-review-grid { grid-template-columns: 1fr; } .session-review-screen-stage { min-height: 240px; } .session-review-screen-nav { grid-template-columns: auto 1fr auto; } }
 

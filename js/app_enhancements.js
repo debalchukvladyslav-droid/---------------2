@@ -312,6 +312,7 @@ function activateAction(action, trigger, event = null) {
         'session-review-snooze': () => window.snoozeSessionReview?.(),
         'session-review-screen-prev': () => window.stepSessionReviewScreen?.(-1),
         'session-review-screen-next': () => window.stepSessionReviewScreen?.(1),
+        'session-review-screen-skip': () => window.skipSessionReviewScreen?.(),
         'session-review-yesterday': () => window.toggleSessionReviewYesterday?.(),
         'screens-unassigned-open': () => {
             window.switchMainTab?.('screens');

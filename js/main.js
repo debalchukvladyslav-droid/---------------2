@@ -575,6 +575,7 @@ function previousDateKey(dateKey) {
 
 function collectSessionReviewScreens(today, includeYesterday = false) {
     const meta = state.appData.screenMeta || {};
+    const skipped = new Set(state.appData?.settings?.sessionReviewSkippedScreens || []);
     const seen = new Set();
     const rows = [];
     const dates = includeYesterday ? [previousDateKey(today), today] : [today];
@@ -582,7 +583,7 @@ function collectSessionReviewScreens(today, includeYesterday = false) {
         const day = state.appData.journal?.[dateKey] || {};
         ['good', 'normal', 'bad', 'error'].forEach((category) => {
             (day.screenshots?.[category] || []).forEach((path) => {
-                if (!path || seen.has(path)) return;
+                if (!path || seen.has(path) || skipped.has(path)) return;
                 const createdAt = meta[path]?.createdAt || meta[path]?.driveCreatedTime || '';
                 if (createdAt && !dates.includes(localDateKey(createdAt))) return;
                 seen.add(path);
@@ -591,7 +592,7 @@ function collectSessionReviewScreens(today, includeYesterday = false) {
         });
     });
     (state.appData.unassignedImages || []).forEach((path) => {
-        if (!path || seen.has(path)) return;
+        if (!path || seen.has(path) || skipped.has(path)) return;
         const createdAt = meta[path]?.createdAt || meta[path]?.driveCreatedTime || '';
         const createdDate = localDateKey(createdAt);
         if (!createdAt || !dates.includes(createdDate)) return;
@@ -628,6 +629,26 @@ async function renderSessionReviewScreen() {
 window.stepSessionReviewScreen = function(direction = 1) {
     if (!sessionReviewScreens.length) return;
     sessionReviewScreenIndex = (sessionReviewScreenIndex + (Number(direction) < 0 ? -1 : 1) + sessionReviewScreens.length) % sessionReviewScreens.length;
+    void renderSessionReviewScreen();
+};
+
+window.skipSessionReviewScreen = function() {
+    if (!sessionReviewScreens.length) return;
+    const current = sessionReviewScreens[sessionReviewScreenIndex];
+    if (!current?.path) return;
+    const settings = state.appData.settings || (state.appData.settings = {});
+    const skipped = new Set(Array.isArray(settings.sessionReviewSkippedScreens) ? settings.sessionReviewSkippedScreens : []);
+    skipped.add(current.path);
+    settings.sessionReviewSkippedScreens = [...skipped].slice(-1000);
+    current.category = 'skipped';
+    sessionReviewReviewed.add(current.path);
+    void saveSettings();
+    const nextIndex = sessionReviewScreens.findIndex((screen, index) => index > sessionReviewScreenIndex && !sessionReviewReviewed.has(screen.path));
+    if (nextIndex >= 0) sessionReviewScreenIndex = nextIndex;
+    else {
+        const firstPending = sessionReviewScreens.findIndex((screen) => !sessionReviewReviewed.has(screen.path));
+        if (firstPending >= 0) sessionReviewScreenIndex = firstPending;
+    }
     void renderSessionReviewScreen();
 };
 
