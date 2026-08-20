@@ -12,6 +12,34 @@ function normalizeLearningPreference(value) {
     return String(value || '').replace(/\s+/g, ' ').trim().slice(0, MAX_PREFERENCE_LENGTH);
 }
 
+function buildPreferenceFallbackQueries(preference, errors = [], tags = []) {
+    const topic = normalizeLearningPreference(preference);
+    if (topic) {
+        return [
+            `${topic} stock trading chart examples`,
+            `${topic} entries stops risk management trade review`,
+            `${topic} catalyst volume market context analysis`,
+        ];
+    }
+    const profileTopic = normalizeLearningPreference(errors[0] || tags[0] || 'small cap short selling');
+    return [
+        `${profileTopic} stock trading chart examples`,
+        `${profileTopic} risk management trade review`,
+        'small cap news catalyst volume trading analysis',
+    ];
+}
+
+function applyPreferenceToQueries(queries, preference) {
+    const topic = normalizeLearningPreference(preference);
+    if (!topic) return queries.slice(0, MAX_QUERIES);
+    return queries.slice(0, MAX_QUERIES).map((query, index) => {
+        const cleanQuery = normalizeLearningPreference(query);
+        if (index > 1) return cleanQuery;
+        if (cleanQuery.toLocaleLowerCase('uk-UA').includes(topic.toLocaleLowerCase('uk-UA'))) return cleanQuery;
+        return `${topic} ${cleanQuery}`.slice(0, 180);
+    });
+}
+
 function syncLearningPreferenceInput() {
     const input = document.getElementById('learn-preference-input');
     const count = document.getElementById('learn-preference-count');
@@ -26,6 +54,17 @@ function syncLearningPreferenceInput() {
         input.addEventListener('input', () => {
             const currentCount = document.getElementById('learn-preference-count');
             if (currentCount) currentCount.textContent = `${input.value.length} / ${MAX_PREFERENCE_LENGTH}`;
+        });
+    }
+    if (!input.dataset.saveBound) {
+        input.dataset.saveBound = '1';
+        input.addEventListener('change', async () => {
+            if (!state.appData.settings) state.appData.settings = {};
+            state.appData.settings.learnVideoPreference = normalizeLearningPreference(input.value);
+            const { saveSettings } = await import('./storage.js');
+            await saveSettings();
+            const status = document.getElementById('learn-preference-save-status');
+            if (status) status.textContent = 'збережено';
         });
     }
     if (count) count.textContent = `${input.value.length} / ${MAX_PREFERENCE_LENGTH}`;
@@ -240,7 +279,10 @@ export async function loadLearnContent() {
         const learningPreference = syncLearningPreferenceInput();
         if (!state.appData.settings) state.appData.settings = {};
         state.appData.settings.learnVideoPreference = learningPreference;
-        void import('./storage.js').then((module) => module.saveSettings());
+        const { saveSettings } = await import('./storage.js');
+        await saveSettings();
+        const preferenceStatus = document.getElementById('learn-preference-save-status');
+        if (preferenceStatus) preferenceStatus.textContent = learningPreference ? 'збережено й застосовано' : 'побажання не задано';
         const errors = state.appData.errorTypes || [];
         const tags = state.appData.screenTags ? [...new Set(Object.values(state.appData.screenTags).flat())] : [];
         const playbook = state.appData.playbook || [];
@@ -287,23 +329,19 @@ Return only a JSON array of strings.`;
         const geminiKey = getGeminiKeys()[0];
         if (!geminiKey) throw new Error('AI недоступний. Перевірте GEMINI_API_KEY на сервері.');
 
-        const aiResponse = await callGemini(geminiKey, {
-            contents: [{ parts: [{ text: contextPrompt }] }],
-        });
-
         let queries = [];
         try {
+            const aiResponse = await callGemini(geminiKey, {
+                contents: [{ parts: [{ text: contextPrompt }] }],
+            });
             const match = aiResponse.match(/\[.*\]/s);
             const parsed = match ? JSON.parse(match[0]) : [];
             queries = Array.isArray(parsed) ? parsed.map(String).filter(Boolean).slice(0, MAX_QUERIES) : [];
-        } catch {
-            queries = [];
+        } catch (error) {
+            console.warn('[Learn] AI query generation unavailable, using preference fallback:', error?.message || error);
         }
-        if (!queries.length) queries = [
-            'small cap gapper VWAP rejection short strategy',
-            'opening range breakdown day trading examples',
-            'news catalyst stock trading trade review',
-        ];
+        if (!queries.length) queries = buildPreferenceFallbackQueries(learningPreference, errors, tags);
+        queries = applyPreferenceToQueries(queries, learningPreference);
 
         const allVideos = [];
         let fallbackReason = null;
