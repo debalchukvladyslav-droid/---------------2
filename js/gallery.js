@@ -18,7 +18,8 @@ const STORAGE_REPAIR_COOLDOWN_MS = 10 * 60 * 1000;
 const storageRepairAttempts = new Map();
 const missingStorageUrls = new Map();
 const storageUrlRequests = new Map();
-const MISSING_STORAGE_URL_TTL_MS = 10 * 60 * 1000;
+const MISSING_STORAGE_URL_TTL_MS = 24 * 60 * 60 * 1000;
+const MISSING_STORAGE_CACHE_PREFIX = 'sc-missing:';
 let unassignedRenderId = 0;
 let unassignedLoadMoreBusy = false;
 
@@ -177,6 +178,29 @@ function _setCachedUrl(path, url) {
     try { localStorage.setItem('sc:' + path, JSON.stringify(e)); } catch (_) {}
 }
 
+function _getMissingStorageAt(path) {
+    const memoryValue = missingStorageUrls.get(path) || 0;
+    if (memoryValue) return memoryValue;
+    try {
+        const stored = Number(localStorage.getItem(MISSING_STORAGE_CACHE_PREFIX + path)) || 0;
+        if (stored) missingStorageUrls.set(path, stored);
+        return stored;
+    } catch (_) {
+        return 0;
+    }
+}
+
+function _setMissingStorage(path) {
+    const timestamp = Date.now();
+    missingStorageUrls.set(path, timestamp);
+    try { localStorage.setItem(MISSING_STORAGE_CACHE_PREFIX + path, String(timestamp)); } catch (_) {}
+}
+
+function _clearMissingStorage(path) {
+    missingStorageUrls.delete(path);
+    try { localStorage.removeItem(MISSING_STORAGE_CACHE_PREFIX + path); } catch (_) {}
+}
+
 export async function getStorageUrl(pathOrUrl) {
     if (!pathOrUrl) return '';
     let storagePath = pathOrUrl;
@@ -197,7 +221,7 @@ export async function getStorageUrl(pathOrUrl) {
     }
     const cached = _getCachedUrl(storagePath);
     if (cached) return cached;
-    const missingAt = missingStorageUrls.get(storagePath) || 0;
+    const missingAt = _getMissingStorageAt(storagePath);
     if (Date.now() - missingAt < MISSING_STORAGE_URL_TTL_MS) return '';
     if (storageUrlRequests.has(storagePath)) return storageUrlRequests.get(storagePath);
 
@@ -210,15 +234,15 @@ export async function getStorageUrl(pathOrUrl) {
                 url = await getSupabaseStorageUrl(storagePath);
             }
             if (!url) {
-                missingStorageUrls.set(storagePath, Date.now());
+                _setMissingStorage(storagePath);
                 return '';
             }
-            missingStorageUrls.delete(storagePath);
+            _clearMissingStorage(storagePath);
             _setCachedUrl(storagePath, url);
             return url;
         } catch(e) {
             console.warn('Storage URL error:', e.message);
-            if (isManagedStoragePath(storagePath)) missingStorageUrls.set(storagePath, Date.now());
+            if (isManagedStoragePath(storagePath)) _setMissingStorage(storagePath);
             return isManagedStoragePath(storagePath) ? '' : pathOrUrl;
         } finally {
             storageUrlRequests.delete(storagePath);

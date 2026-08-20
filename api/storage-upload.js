@@ -205,7 +205,9 @@ export default async function handler(req, res) {
                 objectPath,
                 expiresIn: cleanExpiresIn(req.query.expiresIn),
             });
-            if (!signedUrl) return sendJson(res, 404, { ok: false, error: 'Storage object not found or cannot be signed' });
+            // A stale screenshot reference is an expected legacy state, not a
+            // broken API request. Avoid a red 404 error on every page load.
+            if (!signedUrl) return sendJson(res, 200, { ok: true, missing: true, bucket, objectPath, signedUrl: '' });
             return sendJson(res, 200, { ok: true, bucket, objectPath, signedUrl });
         }
 
