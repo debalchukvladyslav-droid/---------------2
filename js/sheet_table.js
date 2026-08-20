@@ -1900,9 +1900,13 @@ async function rematchStoredMainSheetRows(spreadsheetId) {
 
 export async function refreshSheetMatchesAfterTradesImport(options = {}) {
     const quiet = options.quiet !== false;
+    const requireFresh = options.requireFresh === true;
     const cfg = readStoredConfig(SHEET_MODE_MAIN);
     const spreadsheetId = cfg?.spreadsheetId || getModeStoredItem('spreadsheetId', SHEET_MODE_MAIN);
-    if (!spreadsheetId) return { ok: false, reason: 'no-main-sheet-mapping' };
+    if (!spreadsheetId) {
+        if (requireFresh) throw new Error('Основна Google-таблиця не підключена.');
+        return { ok: false, reason: 'no-main-sheet-mapping' };
+    }
 
     if (cfg?.smartColumns && !validateSheetMappingConfig(cfg).length) {
         try {
@@ -1911,8 +1915,13 @@ export async function refreshSheetMatchesAfterTradesImport(options = {}) {
             if (!quiet) showToast('Статуси Google Sheets оновлено після імпорту Trades.');
             return { ok: true, resynced: true, result };
         } catch (error) {
+            if (requireFresh) throw error;
             console.warn('[Google Sheets] quiet resync after Trades import failed; trying local rematch', error?.message || error);
         }
+    }
+
+    if (requireFresh) {
+        throw new Error('Для перевірки нових угод збережіть мапінг колонок основної Google-таблиці.');
     }
 
     const localResult = await rematchStoredMainSheetRows(spreadsheetId);
