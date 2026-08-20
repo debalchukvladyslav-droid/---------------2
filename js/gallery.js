@@ -14,6 +14,8 @@ let storageRepairPromise = null;
 let storageRepairLastRun = 0;
 const STORAGE_REPAIR_COOLDOWN_MS = 10 * 60 * 1000;
 const storageRepairAttempts = new Map();
+let unassignedRenderId = 0;
+let unassignedLoadMoreBusy = false;
 
 function isManagedStoragePath(value = '') {
     const path = String(value || '').replace(/^\/+/, '');
@@ -345,6 +347,7 @@ function cleanupDuplicateScreensDetailTitles() {
 }
 
 export async function renderUnassignedUI() {
+    const renderId = ++unassignedRenderId;
     let container = document.getElementById('unassigned-container');
     let titleEl = document.getElementById('unassigned-title');
     if (!container || !titleEl) return;
@@ -408,17 +411,18 @@ export async function renderUnassignedUI() {
 
         item.appendChild(zoomWrapper);
         item.appendChild(btns);
-        container.appendChild(item);
-
-        if (window.updateBadgeUI) window.updateBadgeUI(encodedPath);
         const src = await getStorageUrl(img);
+        if (renderId !== unassignedRenderId) return;
         if (src) imgEl.src = src;
         else imgEl.removeAttribute('src');
         imgEl.onclick = () => openZoom(src);
+        container.appendChild(item);
+        if (window.updateBadgeUI) window.updateBadgeUI(encodedPath);
         if (src && (!state.appData.tickers[img] || state.appData.tickers[img] === '???') && window.runOCR) {
             window.runOCR(encodedPath);
         }
     }));
+    if (renderId !== unassignedRenderId) return;
     if (leftCount > 0) {
         const moreBtn = document.createElement('div');
         moreBtn.style.cssText = 'width:100%;display:flex;justify-content:center;padding:10px 0;flex-basis:100%;';
@@ -437,16 +441,14 @@ export async function renderUnassignedUI() {
 }
 
 export async function loadMoreUnassigned() { 
-    state.unassignedVisibleCount += 5; 
-    renderUnassignedUI(); 
-    let imagesToShow = state.currentUnassignedImages.slice(0, state.unassignedVisibleCount); 
-    for (let img of imagesToShow) { 
-        let encodedPath = encodeURIComponent(img); 
-        if (!state.appData.tickers[img] && window.runOCR) {
-            const src = await getStorageUrl(img);
-            if (src) window.runOCR(encodedPath);
-        }
-    } 
+    if (unassignedLoadMoreBusy) return;
+    unassignedLoadMoreBusy = true;
+    try {
+        state.unassignedVisibleCount += 5;
+        await renderUnassignedUI();
+    } finally {
+        unassignedLoadMoreBusy = false;
+    }
 }
 
 function screenCountForDate(dateStr) {
