@@ -802,6 +802,27 @@ test('shared Google Sheet merge stores all rows but only updates existing Trades
     assert.equal(sheetRowsStore['sheet-1']['2026-04-02'][0].type, 'do not take');
 });
 
+test('main Google Sheet writes summed trade PnL into the matching calendar day', () => {
+    const journal = {};
+    const touched = [];
+    const result = mergeGoogleSheetTradesIntoJournal(journal, {
+        '2026-04-03': [
+            { symbol: 'AAPL', net: 25.5, sheet: { source: 'google', sheetNet: 25.5, tradeType: 'синя%' } },
+            { symbol: 'TSLA', net: -10, sheet: { source: 'google', sheetNet: -10, tradeType: 'РПзелена' } },
+            { symbol: 'NVDA', net: 999, sheet: { source: 'google', sheetNet: 999, tradeType: 'не брав' } },
+        ],
+    }, 'sheet-1', {
+        mode: 'main',
+        sheetRowsStore: {},
+        markTouched: (dateStr) => touched.push(dateStr),
+    });
+
+    assert.equal(journal['2026-04-03'].pnl, 15.5);
+    assert.equal(journal['2026-04-03'].sheetPnlSource, 'sheet-1');
+    assert.deepEqual(result.syncedPnlDates, ['2026-04-03']);
+    assert.ok(touched.includes('2026-04-03'));
+});
+
 test('datagrid rows prefer current sheetRows and keep sheet-only rows out of real trade counts', () => {
     const appData = {
         sheetRows: {

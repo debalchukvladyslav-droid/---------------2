@@ -4,6 +4,7 @@ import {
     isValidIsoDateString,
 } from './sheet_sync_core.js';
 import { isPureGoogleSheetTrade } from './trade_filters.js';
+import { getDefaultDayEntry, isNotTakenTrade } from './data_utils.js';
 
 function sumTradeMoney(trades = []) {
     return trades.reduce((sum, trade) => {
@@ -89,6 +90,30 @@ function tradeHasMainSheetContext(trade, spreadsheetId = '') {
     return sheet.spreadsheetId !== spreadsheetId;
 }
 
+function syncMainSheetPnlToCalendar(journal, outByDay, spreadsheetId, markTouched) {
+    const syncedDates = [];
+    Object.entries(outByDay || {}).forEach(([dateStr, rows]) => {
+        if (!isValidIsoDateString(dateStr) || !Array.isArray(rows)) return;
+        const pnlRows = rows.filter((trade) => {
+            if (isNotTakenTrade(trade)) return false;
+            const sheet = trade?.sheet && typeof trade.sheet === 'object' ? trade.sheet : {};
+            return sheet.sheetNet !== undefined && sheet.sheetNet !== null && sheet.sheetNet !== ''
+                && Number.isFinite(Number(sheet.sheetNet));
+        });
+        if (!pnlRows.length) return;
+
+        const day = journal[dateStr] && typeof journal[dateStr] === 'object'
+            ? journal[dateStr]
+            : getDefaultDayEntry();
+        day.pnl = Number(pnlRows.reduce((sum, trade) => sum + Number(trade.sheet.sheetNet), 0).toFixed(2));
+        day.sheetPnlSource = spreadsheetId;
+        journal[dateStr] = day;
+        markTouched(dateStr, day);
+        syncedDates.push(dateStr);
+    });
+    return syncedDates;
+}
+
 export function isDayEmptyAfterSheetCleanup(day) {
     if (!day || typeof day !== 'object') return true;
     if (Array.isArray(day.trades) && day.trades.length > 0) return false;
@@ -119,6 +144,7 @@ export function mergeGoogleSheetTradesIntoJournal(journal = {}, outByDay = {}, s
     let matchedSheetRows = 0;
     let skippedSheetRows = 0;
     let importedSheetRows = 0;
+    let syncedPnlDates = [];
 
     importedSheetRows = storeSheetRows(sheetRowsStore, spreadsheetId, outByDay);
 
@@ -195,11 +221,19 @@ export function mergeGoogleSheetTradesIntoJournal(journal = {}, outByDay = {}, s
         markTouched(dateStr, day);
     }
 
+    if (!isCumulative) {
+        syncedPnlDates = syncMainSheetPnlToCalendar(journal, outByDay, spreadsheetId, (dateStr, day) => {
+            touchedDates.add(dateStr);
+            markTouched(dateStr, day);
+        });
+    }
+
     return {
         deletedDates,
         touchedDates: [...touchedDates],
         importedSheetRows,
         matchedSheetRows,
         skippedSheetRows,
+        syncedPnlDates,
     };
 }
