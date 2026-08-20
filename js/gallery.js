@@ -966,45 +966,30 @@ window.runTagSearch = function() {
     // Track filenames already added to avoid duplicates when iterating journal
     const seen = new Set();
 
-    if (tag) {
-        // Tag filter: only files that have a matching tag
-        for (const [filename, tags] of Object.entries(screenTags)) {
-            if (!tags.some(t => t.toLowerCase().includes(tag))) continue;
-            for (const [date, dayData] of Object.entries(journal)) {
-                if (from && date < from) continue;
-                if (to   && date > to)   continue;
-                const screens = dayData.screenshots || {};
-                let cat = null;
-                if ((screens.good  ||[]).includes(filename)) cat = '✅ Хороший';
-                else if ((screens.normal||[]).includes(filename)) cat = '🟡 Норм';
-                else if ((screens.bad   ||[]).includes(filename)) cat = '🟠 Поганий';
-                else if ((screens.error ||[]).includes(filename)) cat = '🔴 Помилка';
-                if (!cat) continue;
-                const matchedTags = tags.filter(t => t.toLowerCase().includes(tag));
-                results.push({ date, pnl: parseFloat(dayData.pnl) || 0, filename, cat, tags: matchedTags });
-            }
-        }
-    } else {
-        // No tag filter: collect ALL screenshots from journal, ordered by date desc
-        const sortedDates = Object.keys(journal).sort((a, b) => b.localeCompare(a));
-        for (const date of sortedDates) {
-            if (from && date < from) continue;
-            if (to   && date > to)   continue;
-            const dayData = journal[date];
-            const screens = dayData.screenshots || {};
-            const catMap = [
-                [screens.good   || [], '✅ Хороший'],
-                [screens.normal || [], '🟡 Норм'],
-                [screens.bad    || [], '🟠 Поганий'],
-                [screens.error  || [], '🔴 Помилка'],
-            ];
-            for (const [list, cat] of catMap) {
-                for (const filename of list) {
-                    if (seen.has(filename)) continue;
-                    seen.add(filename);
-                    const tags = screenTags[filename] || [];
-                    results.push({ date, pnl: parseFloat(dayData.pnl) || 0, filename, cat, tags });
-                }
+    const sortedDates = Object.keys(journal).sort((a, b) => b.localeCompare(a));
+    const tickers = state.appData.tickers || {};
+    for (const date of sortedDates) {
+        if (from && date < from) continue;
+        if (to && date > to) continue;
+        const dayData = journal[date];
+        const screens = dayData.screenshots || {};
+        const catMap = [
+            [screens.good || [], '✅ Хороший'],
+            [screens.normal || [], '🟡 Норм'],
+            [screens.bad || [], '🟠 Поганий'],
+            [screens.error || [], '🔴 Помилка'],
+        ];
+        for (const [list, cat] of catMap) {
+            for (const filename of list) {
+                if (seen.has(filename)) continue;
+                const tags = screenTags[filename] || [];
+                const ticker = String(tickers[filename] || '').trim();
+                const matchesQuery = !tag
+                    || ticker.toLowerCase().includes(tag)
+                    || tags.some(item => item.toLowerCase().includes(tag));
+                if (!matchesQuery) continue;
+                seen.add(filename);
+                results.push({ date, pnl: parseFloat(dayData.pnl) || 0, filename, cat, tags, ticker });
             }
         }
     }
@@ -1017,8 +1002,7 @@ window.runTagSearch = function() {
         return;
     }
 
-    // Already sorted by date desc for the empty-tag path; re-sort for tag path
-    if (tag) results.sort((a, b) => b.date.localeCompare(a.date));
+    results.sort((a, b) => b.date.localeCompare(a.date) || String(a.ticker || '').localeCompare(String(b.ticker || '')));
     const limited = results.slice(0, limit);
 
     const totalPnl  = limited.reduce((s, r) => s + r.pnl, 0);
@@ -1054,7 +1038,7 @@ window.runTagSearch = function() {
         const info    = document.createElement('div');
         const dateDiv = document.createElement('div');
         dateDiv.style.cssText = 'font-weight:bold; margin-bottom:4px;';
-        dateDiv.textContent = `${r.date}  ${r.cat}`;
+        dateDiv.textContent = `${r.ticker ? `${r.ticker} · ` : ''}${r.date} · ${r.cat}`;
 
         const pnlDiv = document.createElement('div');
         pnlDiv.style.cssText = `color:${r.pnl >= 0 ? 'var(--profit)' : 'var(--loss)'}; margin-bottom:6px;`;

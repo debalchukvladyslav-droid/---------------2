@@ -1,34 +1,35 @@
 ﻿        <div id="view-screens" class="view-content">
-            <div class="screens-date-context panel">
-                <div><span>Скріншоти за день</span><strong id="screens-selected-date">—</strong></div>
+            <div class="screens-date-context panel screens-workbench-nav">
+                <div><span>Обраний день</span><strong id="screens-selected-date">—</strong></div>
                 <div class="screens-date-navigation">
                     <button type="button" id="screens-date-prev" class="screens-date-arrow" aria-label="Попередній день" title="Попередній день">‹</button>
                     <div id="screens-date-strip" class="screens-date-strip" aria-label="Вибір дня для скріншотів"></div>
                     <button type="button" id="screens-date-next" class="screens-date-arrow" aria-label="Наступний день" title="Наступний день">›</button>
                 </div>
             </div>
-            <div class="panel" id="screens-distribution-panel">
+            <div class="panel screens-inbox-panel" id="screens-distribution-panel">
                 <div class="screens-panel-head">
-                    <h3 class="panel-title-accent" id="unassigned-title">
-                        Нерозподілені скріншоти: 
-                        <span class="muted-inline-note">(або вставте картинку через Ctrl+V)</span>
-                    </h3>
+                    <div class="screens-section-heading">
+                        <span class="screens-section-kicker">Вхідні</span>
+                        <h3 class="panel-title-accent" id="unassigned-title">Нерозподілені скріншоти</h3>
+                        <small>Розподіліть їх за категоріями обраного дня або вставте новий через Ctrl+V.</small>
+                    </div>
                     <div class="inline-flex-row">
                         <span id="drive-sync-status" class="muted-status"></span>
                         <button class="screens-collapse-toggle" type="button" id="screens-distribution-toggle" data-action="screens-distribution-toggle" aria-expanded="true" aria-controls="screens-distribution-body" aria-label="Згорнути розподіл скріншотів" title="Згорнути розподіл">⌃</button>
-                        <button class="btn-secondary btn-auto" data-action="tag-search-toggle">🔍 Пошук по тегах</button>
+                        <button class="btn-secondary btn-auto" data-action="tag-search-toggle">🔍 Пошук в архіві</button>
                         <button class="btn-secondary btn-auto" data-action="leader-screens">🏆 Лідер дня</button>
                         <button class="btn-secondary btn-auto screens-settings-btn" type="button" data-action="screens-settings-toggle" aria-expanded="false" aria-controls="screens-settings-panel" title="Налаштування скріншотів">⚙️</button>
                     </div>
                 </div>
 
                 <div id="screens-distribution-body">
-                    <!-- Панель пошуку -->
-                    <div id="tag-search-panel" class="tag-search-panel">
+                    <div id="tag-search-panel" class="tag-search-panel screens-archive-search">
+                        <div class="screens-search-heading"><strong>Пошук в архіві</strong><span>За тикером, тегом або періодом</span></div>
                         <div class="tag-search-grid">
                             <div class="tag-search-field">
-                                <label class="tag-search-label">Тег</label>
-                                <input type="text" id="tag-search-input" class="tag-search-input" placeholder="напр. пробій" data-action="tag-search-input">
+                                <label class="tag-search-label">Тикер або тег</label>
+                                <input type="search" id="tag-search-input" class="tag-search-input" placeholder="AAPL, пробій, помилка..." data-action="tag-search-input">
                                 <div id="tag-search-suggestions" class="tag-suggestions"></div>
                             </div>
                             <div>
@@ -98,9 +99,9 @@
                 </div>
             </div>
 
-            <div class="panel panel-flex-grow">
+            <div class="panel panel-flex-grow screens-day-panel">
                 <div class="detail-title-row">
-                    <h3 class="detail-title">Детальний розбір сетапів за: <span id="big-screen-date" class="text-accent"></span></h3>
+                    <div class="screens-section-heading"><span class="screens-section-kicker">Архів дня</span><h3 class="detail-title">Скріншоти за <span id="big-screen-date" class="text-accent"></span></h3><small>Категорії не змішуються. Натисніть на зображення для повного перегляду.</small></div>
                     <button type="button" id="rr-btn-screens-detail" class="btn-secondary btn-auto rr-toggle-btn rr-exempt-access detail-review-btn" data-action="review-request" data-review-type="screens_general" title="Запит розбору скріншотів до ментора">Розбір скріншотів</button>
                 </div>
                 <div id="assigned-container"></div>
