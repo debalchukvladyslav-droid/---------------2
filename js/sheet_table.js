@@ -23,7 +23,7 @@ import {
     SHEET_MODE_CUMULATIVE,
     SHEET_MODE_MAIN,
 } from './sheet_import_modes.js';
-import { detectExactSheetAutoMapping, migrateLegacyClassificationMapping } from './sheet_auto_mapping.js';
+import { detectExactSheetAutoMapping, migrateLegacyClassificationMapping, relocateSheetDataStartRow } from './sheet_auto_mapping.js';
 
 const LS_KEY = 'tj_google_sheet_import_v1';
 const LS_KEY_CUMULATIVE = 'tj_google_sheet_cumulative_import_v1';
@@ -1359,7 +1359,7 @@ async function executeSyncWithCfg(cfg, options = {}) {
     }
 
     const smart = cfg.smartColumns || {};
-    const startRow = Math.max(1, Number(cfg.dataStartRow) || deriveSheetStartRow(cfg.smartAnchors || {}, SHEET_DATA_FIRST_ROW));
+    let startRow = Math.max(1, Number(cfg.dataStartRow) || deriveSheetStartRow(cfg.smartAnchors || {}, SHEET_DATA_FIRST_ROW));
     const dateIdx = smartValueToColumnIndex(smart.date || '');
     const symIdx = smartValueToColumnIndex(smart.symbol || '');
     if (dateIdx < 0 || symIdx < 0) {
@@ -1374,7 +1374,25 @@ async function executeSyncWithCfg(cfg, options = {}) {
         const mod = await import('./google_sheet_connector.js');
         // Read the complete main sheet so historical/missed rows are reconciled too.
         // Frequency is throttled by refreshSheetMatchesAfterTradesImport.
-        const values = await mod.fetchSpreadsheetValuesRange(spreadsheetId, `A${startRow}:ZZ`, cfg.sheetTitle || getSelectedSheetTitle(mode));
+        const fullValues = await mod.fetchSpreadsheetValuesRange(spreadsheetId, 'A1:ZZ', cfg.sheetTitle || getSelectedSheetTitle(mode));
+        const previousStartRow = startRow;
+        const relocated = relocateSheetDataStartRow(fullValues, previousStartRow);
+        if (relocated.moved) {
+            startRow = relocated.startRow;
+            cfg.dataStartRow = startRow;
+            cfg.smartAnchors = cfg.smartAnchors && typeof cfg.smartAnchors === 'object' ? { ...cfg.smartAnchors } : {};
+            Object.entries(cfg.smartAnchors).forEach(([field, reference]) => {
+                const parsed = parseCellReference(reference);
+                if (parsed) cfg.smartAnchors[field] = `${parsed.letter}${startRow}`;
+            });
+            cfg.savedAt = new Date().toISOString();
+            setStoredValue(modeStorageKeys(mode).config, JSON.stringify(cfg));
+            if (!cumulative) void persistServerSheetSyncConfig(cfg);
+            if (mode === getActiveSheetMode()) _sheetSmartAnchors = { ...cfg.smartAnchors };
+            console.info(`[Google Sheets] Рядки змістилися: старт мапінгу ${relocated.startRow} (було ${previousStartRow}).`);
+        }
+        const values = fullValues.slice(startRow - 1);
+        if (Array.isArray(fullValues.hyperlinks)) values.hyperlinks = fullValues.hyperlinks.slice(startRow - 1);
         const parsedSmart = normalizeSmartColumnsForCore(smart);
         const { outByDay, dateAnchors, stats } = parseSheetGridToTradesCore(values, parsedSmart, spreadsheetId, startRow);
 

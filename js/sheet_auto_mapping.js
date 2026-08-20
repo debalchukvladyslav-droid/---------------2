@@ -168,6 +168,26 @@ export function detectExactSheetAutoMapping(grid = [], options = {}) {
     return { ok: true, mapped, headerRows, headers, startRow: tickerRow + 1 };
 }
 
+export function relocateSheetDataStartRow(grid = [], previousStartRow = 1) {
+    const rows = Array.isArray(grid) ? grid : [];
+    const fallback = Math.max(1, Number(previousStartRow) || 1);
+    if (!rows.length) return { startRow: fallback, moved: false, detected: null };
+
+    // Search the whole practical header area. The first valid ticker below the
+    // rediscovered headers is more reliable than a fixed saved row number.
+    const detected = detectExactSheetAutoMapping(rows, {
+        headerScanRows: Math.min(Math.max(fallback + 25, 60), rows.length),
+    });
+    if (!detected.ok || !Number.isInteger(detected.startRow)) {
+        return { startRow: fallback, moved: false, detected };
+    }
+    return {
+        startRow: detected.startRow,
+        moved: detected.startRow !== fallback,
+        detected,
+    };
+}
+
 function columnLetterToIndex(value) {
     const match = /^([A-Z]+)(?:\d+)?$/i.exec(String(value || '').trim());
     if (!match) return -1;

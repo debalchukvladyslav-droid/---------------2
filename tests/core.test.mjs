@@ -38,7 +38,7 @@ const { summarizeJournalPnl } = await import('../js/stats_math.js');
 const { getEffectiveDayPnl, isPureGoogleSheetTrade, visibleTradeRows } = await import('../js/trade_filters.js');
 const { normalizeBrokerTradeType } = await import('../js/trade_import_utils.js');
 const { duplicateSheetMappingConfig, getCumulativeArchiveSchedule } = await import('../js/sheet_import_modes.js');
-const { detectExactSheetAutoMapping, migrateLegacyClassificationMapping, normalizeExactSheetHeader } = await import('../js/sheet_auto_mapping.js');
+const { detectExactSheetAutoMapping, migrateLegacyClassificationMapping, normalizeExactSheetHeader, relocateSheetDataStartRow } = await import('../js/sheet_auto_mapping.js');
 const { buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets, buildSummaryByDateWeekdayPnl, combineStatsSheetRows, parseSheetProfitRisk } = await import('../js/stats_sheet_metrics.js');
 const { parseDecimalInput } = await import('../js/utils.js');
 const { getZonedClockParts, isEndOfSessionReviewTime } = await import('../js/session_schedule.js');
@@ -1139,6 +1139,23 @@ test('exact sheet automapping detects trade type column from approved values', (
     assert.equal(result.ok, true);
     assert.equal(result.mapped.tradeType, 1);
     assert.equal(result.mapped.exceptions, 2);
+});
+
+test('sheet mapping relocates its data row after rows are inserted or the old first trade changes', () => {
+    const grid = [
+        ['Новий службовий рядок'],
+        ['Ще один вставлений рядок'],
+        ['Дата', 'Ticker', 'Профіт факт', 'профіт в ризиках'],
+        ['', '', '', ''],
+        ['01/08/2026', 'AAPL', '25', '1R'],
+    ];
+    const relocated = relocateSheetDataStartRow(grid, 3);
+    assert.equal(relocated.startRow, 5);
+    assert.equal(relocated.moved, true);
+
+    grid[4][1] = '';
+    grid.push(['02/08/2026', 'TSLA', '-10', '-0.5R']);
+    assert.equal(relocateSheetDataStartRow(grid, 5).startRow, 6);
 });
 
 test('explicit trade type header has priority over value-based detection', () => {
