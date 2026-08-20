@@ -1,5 +1,5 @@
 import { supabase, SUPABASE_URL } from './supabase.js';
-import { attachBestExitResult, bestExitWindowNY, collectTimedShortTrades, summarizeBestExits } from './best_exit_core.js';
+import { attachBestExitResult, bestExitWindowNY, buildExitTimeCaptureSeries, collectTimedShortTrades, summarizeBestExits } from './best_exit_core.js';
 import { readPolygonResult, writePolygonResults } from './polygon_result_cache.js';
 
 const resultCache = new Map();
@@ -33,6 +33,29 @@ function bestWindowSummary(rows = []) {
         if (window) counts.set(window, (counts.get(window) || 0) + 1);
     });
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0] || null;
+}
+
+function exitTimeChart(rows = []) {
+    const series = buildExitTimeCaptureSeries(rows);
+    const heading = `<div><strong>Час виходу → забрано руху</strong><span>Середній % у 10-хвилинному інтервалі, NY</span></div>`;
+    if (!series.length) return `<section class="best-exit-time-chart"><div class="best-exit-time-chart__head">${heading}</div><div class="stats-empty-note">У завантажених угодах немає часу закриття.</div></section>`;
+    const width = 680;
+    const height = 190;
+    const pad = { left: 42, right: 16, top: 18, bottom: 32 };
+    const x = (minute) => pad.left + ((minute - 570) / 140) * (width - pad.left - pad.right);
+    const y = (pct) => pad.top + (1 - Math.max(0, Math.min(100, pct)) / 100) * (height - pad.top - pad.bottom);
+    const points = series.map((item) => `${x(item.minute).toFixed(1)},${y(item.capturePct).toFixed(1)}`).join(' ');
+    const best = series.reduce((winner, item) => item.capturePct > winner.capturePct ? item : winner, series[0]);
+    const xTicks = [570, 600, 630, 660, 690, 710];
+    return `<section class="best-exit-time-chart">
+        <div class="best-exit-time-chart__head">${heading}<div class="best-exit-time-chart__best"><span>Найкращий час</span><strong>${best.label} · ${best.capturePct.toFixed(0)}%</strong><small>${best.count} угод</small></div></div>
+        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Відсоток забраного руху залежно від часу виходу">
+            ${[0, 25, 50, 75, 100].map((pct) => `<line x1="${pad.left}" y1="${y(pct)}" x2="${width - pad.right}" y2="${y(pct)}" class="best-exit-chart-grid"/><text x="${pad.left - 8}" y="${y(pct) + 4}" text-anchor="end">${pct}%</text>`).join('')}
+            ${xTicks.map((minute) => `<text x="${x(minute)}" y="${height - 8}" text-anchor="middle">${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}</text>`).join('')}
+            <polyline points="${points}" class="best-exit-chart-line"/>
+            ${series.map((item) => `<circle cx="${x(item.minute)}" cy="${y(item.capturePct)}" r="4"><title>${item.label} NY: ${item.capturePct.toFixed(1)}% · ${item.count} угод</title></circle>`).join('')}
+        </svg>
+    </section>`;
 }
 
 async function fetchBatch(items) {
@@ -108,6 +131,7 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
             <div><span>Найчастіший найкращий час</span><strong>${commonWindow ? `${commonWindow[0]} NY` : '—'}</strong></div>
         </div>
         ${unavailable ? `<p class="stats-chart-note">Без market data: ${unavailable}. Перевірте тариф Polygon для historical minute aggregates.</p>` : ''}
+        ${exitTimeChart(summary.rows)}
         <div class="best-exit-table-wrap${bestExitRowsExpanded ? ' is-expanded' : ''}">
             <table class="best-exit-table">
                 <thead><tr><th>Дата</th><th>Тікер</th><th>Вихід</th><th>Low</th><th>Забрано руху</th><th>Найкращий 10-хв діапазон (NY)</th><th>Макс. P&amp;L</th><th>Не забрано</th></tr></thead>

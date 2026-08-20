@@ -4772,6 +4772,20 @@ body.is-offline [data-needs-network="true"] {
 
 .best-exit-metrics span { color: var(--text-muted); font-size: .76rem; }
 .best-exit-metrics strong { color: var(--text-main); font-size: 1.05rem; }
+.best-exit-time-chart { margin: 12px 0 16px; padding: 14px 16px 8px; border: 1px solid var(--border); border-radius: 12px; background: color-mix(in srgb, var(--bg-main) 68%, transparent); }
+.best-exit-time-chart__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 4px; }
+.best-exit-time-chart__head > div:first-child { display: flex; flex-direction: column; gap: 3px; }
+.best-exit-time-chart__head strong { color: var(--text-main); font-size: .88rem; }
+.best-exit-time-chart__head span,
+.best-exit-time-chart__head small { color: var(--text-muted); font-size: .72rem; }
+.best-exit-time-chart__best { display: grid; grid-template-columns: auto auto; column-gap: 8px; align-items: baseline; text-align: right; }
+.best-exit-time-chart__best span { grid-column: 1 / -1; }
+.best-exit-time-chart svg { display: block; width: 100%; min-width: 520px; height: 190px; overflow: visible; }
+.best-exit-time-chart { overflow-x: auto; }
+.best-exit-time-chart svg text { fill: var(--text-muted); font-size: 10px; }
+.best-exit-chart-grid { stroke: color-mix(in srgb, var(--border) 72%, transparent); stroke-width: 1; }
+.best-exit-chart-line { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 2px 5px color-mix(in srgb, var(--accent) 30%, transparent)); }
+.best-exit-time-chart circle { fill: var(--bg-panel); stroke: var(--accent); stroke-width: 2.5; }
 .best-exit-table-wrap { overflow-x: auto; }
 .best-exit-table-wrap.is-expanded { max-height: 440px; overflow-y: auto; scrollbar-gutter: stable; }
 .best-exit-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
@@ -4794,6 +4808,8 @@ body.is-offline [data-needs-network="true"] {
 
 @media (max-width: 720px) {
     .best-exit-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .best-exit-time-chart__head { flex-direction: column; }
+    .best-exit-time-chart__best { text-align: left; }
     .best-exit-start { align-items: stretch; flex-direction: column; }
 }
 

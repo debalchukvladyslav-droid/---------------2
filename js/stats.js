@@ -3234,9 +3234,20 @@ export function renderStatsTab() {
         tradeTypes: state.currentStatsContext.tradeTypes || state.appData.tradeTypes || DEFAULT_TRADE_TYPES,
         settings: state.currentStatsContext.settings || {},
     });
-    const bestExitDates = new Set(filteredEntries.map((entry) => entry.dateStr));
+    // The regular dashboard intentionally opens on a compact two-month slice.
+    // Trade rows, however, are loaded for the whole journal by loadTradeDays().
+    // Do not accidentally limit the Polygon exit analysis to those two months:
+    // without an explicit period selection it must use every loaded trade day.
+    const hasExplicitBestExitPeriod = state.activeFilters.length > 0 && !isAllTime;
+    const isCurrentBestExitSource = (state.statsSourceSelection?.type || 'current') === 'current';
+    const bestExitJournal = !hasExplicitBestExitPeriod && isCurrentBestExitSource
+        ? prepareStatsJournal({ ...(state.appData.journal || {}), ...statsJournal })
+        : statsJournal;
+    const bestExitDates = hasExplicitBestExitPeriod
+        ? new Set(filteredEntries.map((entry) => entry.dateStr))
+        : null;
     void renderBestExitAnalysis({
-        journal: statsJournal,
+        journal: bestExitJournal,
         periodDates: bestExitDates,
         sourceType: state.statsSourceSelection?.type || 'current',
     });

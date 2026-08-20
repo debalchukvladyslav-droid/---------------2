@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
     attachBestExitResult,
     bestExitWindowNY,
+    buildExitTimeCaptureSeries,
     collectTimedShortTrades,
     isExcludedStopTakeExit,
     isTimeExitTrade,
@@ -74,6 +75,20 @@ test('calculates best short exit and aggregate opportunity', () => {
     assert.equal(summary.bestPnl, 200);
     assert.equal(summary.extraPnl, 100);
     assert.equal(summary.avgCapturePct, 50);
+});
+
+test('groups captured movement by ten-minute actual exit windows', () => {
+    const series = buildExitTimeCaptureSeries([
+        { exitMinute: 601, capturePct: 40 },
+        { exitMinute: 609, capturePct: 80 },
+        { exitMinute: 615, capturePct: 90 },
+        { exitMinute: 721, capturePct: 100 },
+        { exitMinute: 620, capturePct: null },
+    ]);
+    assert.deepEqual(series, [
+        { minute: 600, label: '10:00', capturePct: 60, count: 2 },
+        { minute: 610, label: '10:10', capturePct: 90, count: 1 },
+    ]);
 });
 
 test('keeps waiting when Polygon has not returned a market row yet', () => {

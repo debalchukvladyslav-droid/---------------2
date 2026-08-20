@@ -63,6 +63,9 @@ export function collectTimedShortTrades(journal = {}, allowedDates = null) {
         for (const [tradeIndex, trade] of (day?.trades || []).entries()) {
             if (!isShortTrade(trade) || isExcludedStopTakeExit(trade)) continue;
             const openedMinute = normalizeTradeClock(trade?.opened);
+            const exitMinute = normalizeTradeClock(
+                trade?.closed || trade?.exited || trade?.exitTime || trade?.closeTime || trade?.sheet?.exitTime || ''
+            );
             const entryMinute = Math.max(570, openedMinute ?? 570);
             if (entryMinute >= 720) continue;
             const entryPrice = Number(trade?.entry || trade?.sheet?.entryPrice);
@@ -76,6 +79,7 @@ export function collectTimedShortTrades(journal = {}, allowedDates = null) {
                 date: dateStr,
                 symbol: String(trade.symbol).toUpperCase(),
                 entryMinute,
+                exitMinute,
                 entryPrice,
                 actualExitPrice,
                 exitReason: tradeExitReason(trade),
@@ -85,6 +89,28 @@ export function collectTimedShortTrades(journal = {}, allowedDates = null) {
         }
     }
     return rows;
+}
+
+export function buildExitTimeCaptureSeries(rows = []) {
+    const buckets = new Map();
+    rows.forEach((row) => {
+        const minute = Number(row?.exitMinute);
+        const capturePct = Number(row?.capturePct);
+        if (row?.exitMinute == null || row?.capturePct == null || !Number.isFinite(minute) || minute < 570 || minute >= 720 || !Number.isFinite(capturePct)) return;
+        const bucketMinute = Math.floor(minute / 10) * 10;
+        const bucket = buckets.get(bucketMinute) || { minute: bucketMinute, total: 0, count: 0 };
+        bucket.total += Math.max(0, Math.min(100, capturePct));
+        bucket.count += 1;
+        buckets.set(bucketMinute, bucket);
+    });
+    return [...buckets.values()]
+        .sort((a, b) => a.minute - b.minute)
+        .map((bucket) => ({
+            minute: bucket.minute,
+            label: `${String(Math.floor(bucket.minute / 60)).padStart(2, '0')}:${String(bucket.minute % 60).padStart(2, '0')}`,
+            capturePct: bucket.total / bucket.count,
+            count: bucket.count,
+        }));
 }
 
 export function attachBestExitResult(trade, market = {}) {
