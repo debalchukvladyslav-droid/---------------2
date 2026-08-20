@@ -41,9 +41,11 @@ export async function callGeminiViaProxy(payload, model = DEFAULT_MODEL) {
         const token = await getAccessToken();
         if (token) headers.Authorization = `Bearer ${token}`;
 
-        const hasImage = (payload?.contents || []).some((item) => (item?.parts || []).some((part) => Boolean(part?.inlineData?.data || part?.inline_data?.data)));
-        const primaryUrl = hasImage ? geminiEdgeUrl() : PROXY_FALLBACK;
-        const fallbackUrl = hasImage ? PROXY_FALLBACK : geminiEdgeUrl();
+        // Keep the authenticated Edge Function as the stable primary route for
+        // both text and vision. Vercel is a fallback only; using it first caused
+        // visible 502 resource errors even when Edge subsequently succeeded.
+        const primaryUrl = geminiEdgeUrl();
+        const fallbackUrl = PROXY_FALLBACK;
         let res = await fetch(primaryUrl, {
             method: 'POST',
             headers,

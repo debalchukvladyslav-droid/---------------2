@@ -5,6 +5,14 @@ import { openRouterCandidates, payloadHasImages, selectAIProvider } from '../api
 import { summarizeAIPayload } from '../js/ai/telemetry.js';
 import { outcomeBlindJournalContext, requireVisualPatternEvidence } from '../js/ai/outcome_guard.js';
 import { buildBoundedJournalContext, buildBoundedScreenTagContext } from '../js/ai/journal_context.js';
+import { readFile } from 'node:fs/promises';
+
+test('AI client uses Supabase Edge first and Vercel only as fallback', async () => {
+    const source = await readFile(new URL('../js/ai/client.js', import.meta.url), 'utf8');
+    assert.match(source, /const primaryUrl = geminiEdgeUrl\(\)/);
+    assert.match(source, /const fallbackUrl = PROXY_FALLBACK/);
+    assert.doesNotMatch(source, /const primaryUrl = hasImage/);
+});
 
 test('general AI proxy routes screenshots only through explicit vision models', () => {
     const payload = { contents: [{ parts: [
