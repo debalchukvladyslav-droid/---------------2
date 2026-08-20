@@ -1,7 +1,7 @@
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-120b';
+const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-20b';
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 const DEFAULT_OPENROUTER_MODEL = 'openrouter/free';
 const FREE_VISION_MODELS = [
@@ -142,7 +142,12 @@ async function handleGroq(res, payload) {
         response = await fetch(GROQ_CHAT_URL, {
             method: 'POST',
             headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model, messages: geminiPayloadToOpenAIMessages(payload), temperature: 0.2, max_completion_tokens: 1800 }),
+            body: JSON.stringify({
+                model,
+                messages: geminiPayloadToOpenAIMessages(payload),
+                temperature: Number(payload?.generationConfig?.temperature) || 0.2,
+                max_completion_tokens: Math.min(1800, Math.max(300, Number(payload?.generationConfig?.maxOutputTokens) || 1800)),
+            }),
             signal: AbortSignal.timeout(25000),
         });
     } catch (error) {
