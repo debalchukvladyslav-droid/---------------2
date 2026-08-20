@@ -52,11 +52,13 @@ export function disposeStatsView() {
         'daysChartInstance',
         'hourlyChartInstance',
         'entryPriceChartInstance',
+        'exceptionCriteriaChartInstance',
         'winLossChartInstance',
         'mistakeChartInstance',
         'comparePnlChartInstance',
         'compareDaysChartInstance',
         'compareHourlyChartInstance',
+        'compareExceptionCriteriaChartInstance',
         'compareWinLossChartInstance',
     ].forEach((key) => {
         if (state[key]) {
@@ -2177,6 +2179,29 @@ function sheetDateMatchesStatsFilters(dateStr, filters = []) {
     });
 }
 
+function renderExceptionCriteriaChart(rows = [], canvasId = 'exceptionCriteriaChart', stateKey = 'exceptionCriteriaChartInstance', theme) {
+    const visibleRows = rows.slice(0, 18);
+    renderStatsBarChart(
+        canvasId,
+        stateKey,
+        visibleRows.map(row => row.criterion),
+        visibleRows.map(row => row.kf),
+        theme,
+        {
+            valueFormatter: fmtKf,
+            tickFormatter: fmtKf,
+            tooltipLabel: (index) => {
+                const row = visibleRows[index] || {};
+                return [
+                    ` КФ: ${fmtKf(row.kf || 0)}`,
+                    ` Середній КФ: ${fmtKf(row.avgKf || 0)}`,
+                    ` Угод із таблиць: ${row.trades || 0}`,
+                ];
+            },
+        },
+    );
+}
+
 function renderEntryPriceRowsChart(canvasId, stateKey, rows, theme) {
     renderStatsBarChart(canvasId, stateKey, rows.map(row => row.label), rows.map(row => row.pnl), theme, {
         tooltipLabel: (index) => {
@@ -2441,7 +2466,7 @@ function setCompareDelta(id, value, options = {}) {
 }
 
 function destroyCompareCharts() {
-    ['comparePnlChartInstance', 'compareDaysChartInstance', 'compareHourlyChartInstance', 'compareEntryPriceChartInstance', 'compareWinLossChartInstance'].forEach((key) => {
+    ['comparePnlChartInstance', 'compareDaysChartInstance', 'compareHourlyChartInstance', 'compareEntryPriceChartInstance', 'compareExceptionCriteriaChartInstance', 'compareWinLossChartInstance'].forEach((key) => {
         if (state[key]) {
             state[key].destroy();
             state[key] = null;
@@ -2643,7 +2668,12 @@ function renderCompareCharts(entries, summary, theme, advancedEquityMode = false
         summary.entryPriceBuckets || [],
         theme,
     );
-    renderExceptionCriteriaKfRows(summary.exceptionKfRows || [], 'compare-exception-criteria-list');
+    renderExceptionCriteriaChart(
+        summary.exceptionKfRows || [],
+        'compare-exceptionCriteriaChart',
+        'compareExceptionCriteriaChartInstance',
+        theme,
+    );
 
     pieCanvas.$statsGlowColor = theme.profit;
     state.compareWinLossChartInstance = new Chart(pieCanvas.getContext('2d'), {
@@ -3391,10 +3421,10 @@ export function renderStatsTab() {
     );
     
     renderEntryPriceSheetChart(statsChartTheme);
-    renderExceptionCriteriaKfRows(buildExceptionKfRows(filteredEntries, ttFilter, {
+    renderExceptionCriteriaChart(buildExceptionKfRows(filteredEntries, ttFilter, {
         sheetRows: getStatsSheetRows(),
         dateMatches: dateStr => sheetDateMatchesStatsFilters(dateStr, state.activeFilters || []),
-    }));
+    }), 'exceptionCriteriaChart', 'exceptionCriteriaChartInstance', statsChartTheme);
 
     const ctxPie = document.getElementById('winLossChart').getContext('2d');
     ctxPie.canvas.$statsGlowColor = cssGreen;

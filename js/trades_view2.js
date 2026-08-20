@@ -494,7 +494,7 @@ export function loadTradeChart(symbol, dateStr) {
 /** Відкрити вкладку «Угоди» і конкретну угоду дня (після імпорту Fondexx). */
 export async function openTradesAtDayIndex(dateStr, tradeIndex, identity = null) {
     if (!dateStr) return;
-    if (window.switchMainTab) window.switchMainTab('trades');
+    if (window.switchMainTab) await window.switchMainTab('trades');
     await populateDateSelect();
     const currentRows = visibleTradeRows(dateStr);
     if (!currentRows.length) return;

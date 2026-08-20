@@ -30,10 +30,15 @@ test('trade loading and Trades import start a cached Polygon backfill', async ()
 });
 
 test('best-exit tickers open their exact journal trade and Polygon logs every ticker', async () => {
-    const source = await readFile(new URL('../js/best_exit_analysis.js', import.meta.url), 'utf8');
+    const [source, tradesView] = await Promise.all([
+        readFile(new URL('../js/best_exit_analysis.js', import.meta.url), 'utf8'),
+        readFile(new URL('../js/trades_view2.js', import.meta.url), 'utf8'),
+    ]);
     assert.match(source, /data-best-exit-date/);
     assert.match(source, /data-best-exit-index/);
     assert.match(source, /window\.openTradesAtDayIndex/);
     assert.match(source, /\[Polygon\] переглядається/);
     assert.match(source, /очікує в черзі або дані недоступні/);
+    assert.match(tradesView, /await window\.switchMainTab\('trades'\)/);
+    assert.match(tradesView, /findTradeIndexByIdentity/);
 });
