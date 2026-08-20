@@ -1,8 +1,18 @@
 const CATEGORY_TYPES = {
-    exceptions: new Set(['виключення', 'шортНС', 'РПвиключ']),
-    purple: new Set(['фіолетова', 'виключення-фіолетова', 'РПфіолетова']),
-    visual: new Set(['виключення візуально', 'візуально', 'РПвізуально']),
+    blue: new Set(['синя', 'рпсиня']),
+    green: new Set(['зелена', 'рпзелена']),
+    purple: new Set(['фіолетова', 'рпфіолетова']),
+    visual: new Set(['візуально', 'рпвізуально']),
 };
+
+function normalizeTradeType(value) {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/ё/g, 'е')
+        .replace(/i/g, 'і')
+        .replace(/[^a-zа-яіїєґ0-9]+/gi, '');
+}
 
 export function parseCumulativeNumber(value) {
     if (value == null || value === '') return null;
@@ -69,7 +79,8 @@ export function calculateCumulativeWeek({ weekStart, journal = {}, rowsByDay = {
         metroResult: 0,
         pvResult: 0,
         notTakenResult: 0,
-        exceptions: 0,
+        blue: 0,
+        green: 0,
         purple: 0,
         visual: 0,
         rowCount: 0,
@@ -98,11 +109,12 @@ export function calculateCumulativeWeek({ weekStart, journal = {}, rowsByDay = {
             const sheet = row?.sheet && typeof row.sheet === 'object' ? row.sheet : {};
             const pnl = parseCumulativeNumber(sheet.sheetNet ?? row?.net);
             const pv = parseCumulativeNumber(sheet.pv);
-            const type = String(sheet.tradeType ?? row?.type ?? '');
+            const rawType = String(sheet.tradeType ?? row?.type ?? '');
+            const type = normalizeTradeType(rawType);
             totals.rowCount += 1;
             if (pnl !== null) totals.tableProfit += pnl;
             if (pv !== null) totals.pvResult += pv;
-            if (type === 'не брав' && pv !== null) totals.notTakenResult += pv;
+            if (rawType.trim().toLowerCase() === 'не брав' && pv !== null) totals.notTakenResult += pv;
             Object.entries(CATEGORY_TYPES).forEach(([key, types]) => {
                 if (types.has(type) && pnl !== null) totals[key] += pnl;
             });

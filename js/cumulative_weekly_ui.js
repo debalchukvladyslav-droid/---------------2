@@ -71,7 +71,8 @@ export function renderCumulativeWeekly() {
     setMetric('cumulative-metro-result', result.metroResult);
     setMetric('cumulative-pv-result', result.pvResult, false);
     setMetric('cumulative-not-taken', result.notTakenResult, false);
-    setMetric('cumulative-exceptions', result.exceptions);
+    setMetric('cumulative-blue', result.blue);
+    setMetric('cumulative-green', result.green);
     setMetric('cumulative-purple', result.purple);
     setMetric('cumulative-visual', result.visual);
     setMetric('cumulative-effectiveness', result.effectiveness === null ? '—' : result.effectiveness.toFixed(4), false);
@@ -131,4 +132,3 @@ export async function saveCumulativeDayloss() {
     renderCumulativeWeekly();
     showToast('Дейлос для місяця збережено.');
 }
-

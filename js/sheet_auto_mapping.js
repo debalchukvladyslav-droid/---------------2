@@ -23,6 +23,14 @@ export const EXACT_SHEET_HEADER_ALIASES = {
 const EXCEPTION_HEADER_PHRASES = ['в чому виключення', 'у чому виключення'];
 const EXIT_VALUE_PHRASES = ['стоп', 'тейк', 'по часу'];
 export const SHEET_TRADE_TYPE_VALUES = [
+    'синя%',
+    'зелена%',
+    'фіолетова',
+    'візуально',
+    'РПсиня',
+    'РПзелена',
+    'РПфіолетова',
+    'РПвізуально',
     'шорт',
     'не брав',
     'виключення',

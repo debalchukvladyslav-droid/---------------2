@@ -90,10 +90,10 @@ test('cumulative week aggregates exact sheet types and authoritative imported pn
         rowsByDay: {
             '2026-07-27': [
                 { sheet: { sheetNet: '$10', pv: '1,5R', tradeType: 'не брав' } },
-                { sheet: { sheetNet: '-3', pv: '-0.5', tradeType: 'виключення' } },
+                { sheet: { sheetNet: '-3', pv: '-0.5', tradeType: 'синя%' } },
                 { sheet: { sheetNet: '7', pv: '2', tradeType: 'РПфіолетова' } },
                 { sheet: { sheetNet: '4', pv: '1', tradeType: 'РПвізуально' } },
-                { sheet: { sheetNet: '50', pv: '3', tradeType: 'Виключення' } },
+                { sheet: { sheetNet: '50', pv: '3', tradeType: 'РПзелена' } },
             ],
             '2026-08-01': [{ sheet: { sheetNet: 999, pv: 999, tradeType: 'не брав' } }],
         },
@@ -102,7 +102,8 @@ test('cumulative week aggregates exact sheet types and authoritative imported pn
     assert.equal(result.metroResult, 17);
     assert.equal(result.pvResult, 7);
     assert.equal(result.notTakenResult, 1.5);
-    assert.equal(result.exceptions, -3);
+    assert.equal(result.blue, -3);
+    assert.equal(result.green, 50);
     assert.equal(result.purple, 7);
     assert.equal(result.visual, 4);
     assert.equal(result.effectiveness, 0.17);
@@ -384,16 +385,16 @@ test('day entry normalization falls back for unsafe values', () => {
 
 test('auto trade type metrics group imported trades by default categories', () => {
     const auto = buildAutoTradeTypesData([
-        { net: 10, type: 'шорт', sheet: { profitRisk: '1.5' } },
-        { net: -4, sheet: { tradeType: 'шортНС', profitRisk: '-0,4R' } },
-        { net: 6, sheet: { tradeType: 'РПвиключення', profitRisk: '0.6' } },
-        { net: 3, sheet: { tradeType: 'виключення-фіолетова', profitRisk: '0.3' } },
+        { net: 10, sheet: { tradeType: 'синя%', profitRisk: '1.5' } },
+        { net: -4, sheet: { tradeType: 'РПсиня', profitRisk: '-0,4R' } },
+        { net: 6, sheet: { tradeType: 'зелена%', profitRisk: '0.6' } },
+        { net: 3, sheet: { tradeType: 'РПфіолетова', profitRisk: '0.3' } },
         { net: 2, sheet: { tradeType: 'РПвізуально', profitRisk: '0.2' } },
     ]);
 
     assert.deepEqual(auto, {
-        'Шорт': { pnl: 10, kf: 1.5 },
-        'Виключення': { pnl: 2, kf: 0.2 },
+        'Синя': { pnl: 6, kf: 1.1 },
+        'Зелена': { pnl: 6, kf: 0.6 },
         'Фіолетова': { pnl: 3, kf: 0.3 },
         'Візуально': { pnl: 2, kf: 0.2 },
     });
@@ -420,17 +421,17 @@ test('stored daily KФ wins and missing trade R stays unknown', () => {
 test('not-taken sheet trade types are detected but excluded from auto trade PnL buckets', () => {
     assert.equal(isNotTakenTrade({ sheet: { tradeType: 'не брав візуально' } }), true);
     assert.equal(isNotTakenTrade({ type: 'do not take' }), true);
-    assert.equal(isNotTakenTrade({ sheet: { tradeType: 'Виключення' } }), false);
+    assert.equal(isNotTakenTrade({ sheet: { tradeType: 'синя%' } }), false);
 
     const auto = buildAutoTradeTypesData([
-        { net: 10, type: 'шорт', sheet: { profitRisk: '1R' } },
+        { net: 10, sheet: { tradeType: 'синя%', profitRisk: '1R' } },
         { net: -999, type: 'не брав візуально', sheet: { tradeType: 'не брав візуально', profitRisk: '-5R' } },
         { net: 500, sheet: { tradeType: 'do not take', profitRisk: '3R' } },
     ]);
 
     assert.deepEqual(auto, {
-        'Шорт': { pnl: 10, kf: 1 },
-        'Виключення': { pnl: '', kf: '' },
+        'Синя': { pnl: 10, kf: 1 },
+        'Зелена': { pnl: '', kf: '' },
         'Фіолетова': { pnl: '', kf: '' },
         'Візуально': { pnl: '', kf: '' },
     });

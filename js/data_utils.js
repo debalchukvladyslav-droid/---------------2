@@ -42,7 +42,7 @@ export function getDefaultDayEntry() {
     };
 }
 
-export const DEFAULT_TRADE_TYPES = ['Шорт', 'Виключення', 'Фіолетова', 'Візуально'];
+export const DEFAULT_TRADE_TYPES = ['Синя', 'Зелена', 'Фіолетова', 'Візуально'];
 
 export function getDefaultAppData() {
     return {
@@ -92,10 +92,10 @@ export function classifyTradeTypeGroup(trade) {
     const key = normalizeTradeTypeText(rawType);
     if (!key) return null;
 
-    if (['шортнс', 'рпвиключення', 'виключення'].includes(key)) return 'Виключення';
-    if (['фіолетова', 'виключенняфіолетова'].includes(key)) return 'Фіолетова';
-    if (['візуально', 'виключеннявізуально', 'рпвізуально'].includes(key)) return 'Візуально';
-    if (key === 'шорт') return 'Шорт';
+    if (['синя', 'рпсиня'].includes(key)) return 'Синя';
+    if (['зелена', 'рпзелена'].includes(key)) return 'Зелена';
+    if (['фіолетова', 'рпфіолетова'].includes(key)) return 'Фіолетова';
+    if (['візуально', 'рпвізуально'].includes(key)) return 'Візуально';
     return null;
 }
 
@@ -208,9 +208,8 @@ export function applyAutoTradeTypesData(dayEntry) {
 
 export function normalizeTradeTypesList(value) {
     const incoming = Array.isArray(value) ? value.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()) : [];
-    const oldDefault = ['Шорт', 'Виключення', 'Виключення фіолетова'];
-    const isOnlyOldDefault = incoming.length === oldDefault.length && oldDefault.every((item, index) => incoming[index] === item);
-    const base = isOnlyOldDefault || incoming.length === 0 ? [] : incoming;
+    const retiredDefaults = new Set(['Шорт', 'Виключення', 'Виключення фіолетова']);
+    const base = incoming.filter((item) => !retiredDefaults.has(item));
     return [...new Set([...DEFAULT_TRADE_TYPES, ...base])];
 }
 
