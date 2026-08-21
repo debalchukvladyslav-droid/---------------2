@@ -5,7 +5,7 @@ import { readPolygonResult, readPolygonTimePrice, writePolygonResults, writePoly
 const resultCache = new Map();
 let renderRequest = 0;
 const BATCH_SIZE = 5;
-const MAX_ITEMS_PER_PRICE_REQUEST = 200;
+const MAX_ITEMS_PER_PRICE_REQUEST = 20;
 let bestExitRowsExpanded = false;
 let lowChartFromTen = false;
 let silentRefreshTimer = null;
@@ -98,17 +98,19 @@ function exitTimeChart(rows = []) {
 }
 
 async function fetchBatch(items) {
-    const { data: { session } } = await supabase.auth.getSession();
+    let { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) throw new Error('Потрібно увійти в акаунт');
     items.forEach((item) => console.info(`[Polygon] переглядається ${item.symbol} · ${item.date} · від ${String(Math.floor(item.entryMinute / 60)).padStart(2, '0')}:${String(item.entryMinute % 60).padStart(2, '0')} NY`));
-    const response = await fetch(`${String(SUPABASE_URL).replace(/\/$/, '')}/functions/v1/market-best-exits`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-        },
+    const request = (accessToken) => fetch(`${String(SUPABASE_URL).replace(/\/$/, '')}/functions/v1/market-best-exits`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({ items, targetMinute: selectedExitMinute }),
     });
+    let response = await request(session.access_token);
+    if (response.status === 401) {
+        const refreshed = await supabase.auth.refreshSession();
+        session = refreshed.data?.session || null;
+        if (session?.access_token) response = await request(session.access_token);
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload?.message || `Market data: ${response.status}`);
     console.info('[Polygon analysis] server response', { requested: items.length, returned: payload?.results?.length || 0, queued: payload?.queued || 0, processed: payload?.processed || 0 });

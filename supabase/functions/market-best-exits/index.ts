@@ -134,10 +134,10 @@ Deno.serve(async (req) => {
             method: 'PATCH', body: JSON.stringify({ status: 'pending', next_attempt_at: '1970-01-01T00:00:00.000Z', updated_at: new Date().toISOString() }),
         })));
     }
-    const claimResponse = await rest('rpc/claim_market_low_jobs', { method: 'POST', body: JSON.stringify({ max_jobs: 5 }) });
+    const claimResponse = await rest('rpc/claim_market_low_jobs', { method: 'POST', body: JSON.stringify({ max_jobs: 1 }) });
     const claimed = claimResponse.ok ? await claimResponse.json() : [];
     const polygonKey = Deno.env.get('POLYGON_API_KEY') || '';
-    await Promise.all((claimed || []).map(async (job: any) => {
+    const backgroundWork = Promise.all((claimed || []).slice(0, 1).map(async (job: any) => {
         const item = { symbol: String(job.symbol), date: String(job.trade_date) };
         try {
         const offset = nyOffset(item.date);
@@ -167,9 +167,10 @@ Deno.serve(async (req) => {
                 provider: 'polygon', updated_at: new Date().toISOString(),
             });
         }
-        await rest('market_best_exit_cache?on_conflict=symbol,trade_date,entry_minute', {
+        const lowCacheSaved = await rest('market_best_exit_cache?on_conflict=symbol,trade_date,entry_minute', {
             method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify(cacheRows),
         });
+        if (!lowCacheSaved.ok) throw new Error(`Low cache write ${lowCacheSaved.status}`);
         const priceRows = [...barsByMinute.entries()]
             .filter(([minute, bar]) => minute >= 240 && minute <= 1200 && Number(bar?.c) > 0 && Number(bar?.h) > 0)
             .map(([minute, bar]) => ({
@@ -183,16 +184,21 @@ Deno.serve(async (req) => {
                 transactions: Number.isInteger(Number(bar.n)) ? Number(bar.n) : null,
                 provider: 'polygon', updated_at: new Date().toISOString(),
             }));
-        if (priceRows.length) await rest('market_time_price_cache?on_conflict=symbol,trade_date,target_minute', {
-            method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify(priceRows),
-        });
-        await rest('market_intraday_cache_status?on_conflict=symbol,trade_date', {
+        for (let offset = 0; offset < priceRows.length; offset += 150) {
+            const chunk = priceRows.slice(offset, offset + 150);
+            const saved = await rest('market_time_price_cache?on_conflict=symbol,trade_date,target_minute', {
+                method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify(chunk),
+            });
+            if (!saved.ok) throw new Error(`Intraday cache write ${saved.status}`);
+        }
+        const statusSaved = await rest('market_intraday_cache_status?on_conflict=symbol,trade_date', {
             method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify({
                 symbol: item.symbol, trade_date: item.date, from_minute: 240, to_minute: 1200,
                 bar_count: priceRows.length, cache_version: INTRADAY_CACHE_VERSION,
                 provider: 'polygon', fetched_at: new Date().toISOString(),
             }),
         });
+        if (!statusSaved.ok) throw new Error(`Cache status write ${statusSaved.status}`);
         await rest(`market_low_jobs?symbol=eq.${item.symbol}&trade_date=eq.${item.date}`, {
             method: 'PATCH', body: JSON.stringify({ status: 'ready', updated_at: new Date().toISOString(), last_error: '' }),
         });
@@ -205,6 +211,7 @@ Deno.serve(async (req) => {
             console.warn(`[Polygon queue] failed ${item.symbol} ${item.date}: ${message}`);
         }
     }));
+    EdgeRuntime.waitUntil(backgroundWork);
     for (const item of missing) {
         const query = `market_best_exit_cache?symbol=eq.${item.symbol}&trade_date=eq.${item.date}&entry_minute=eq.${item.entryMinute}&select=symbol,trade_date,entry_minute,low_price,low_at`;
         const cachedRes = await rest(query); const cached = cachedRes.ok ? await cachedRes.json() : [];

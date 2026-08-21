@@ -10,6 +10,8 @@ import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 import { createCompressedBackup } from './backups.js';
 import { startPolygonLowBackfill } from './polygon_low_backfill.js';
 
+let tradeEmbeddingQueue = Promise.resolve();
+
 async function syncTradeEmbeddings(savedDays) {
     const ids = [...new Set((savedDays || []).map((row) => row?.id).filter(Boolean))];
     // gte-small is CPU intensive. One durable journal day per invocation keeps
@@ -21,6 +23,13 @@ async function syncTradeEmbeddings(savedDays) {
         });
         if (error) throw error;
     }
+}
+
+function enqueueTradeEmbeddingSync(savedDays) {
+    tradeEmbeddingQueue = tradeEmbeddingQueue
+        .catch(() => undefined)
+        .then(() => syncTradeEmbeddings(savedDays));
+    return tradeEmbeddingQueue;
 }
 
 function monthKey(dateStr) {
@@ -492,7 +501,7 @@ async function _doSave(opts = {}) {
 
         // Semantic memory is derived after the durable journal write. A temporary
         // inference failure must never roll back or block the trader's save flow.
-        void syncTradeEmbeddings(savedDays).catch((error) => {
+        void enqueueTradeEmbeddingSync(savedDays).catch((error) => {
             console.warn('[trade-memory] embedding sync deferred:', error?.message || error);
         });
 
