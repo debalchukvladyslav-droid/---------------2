@@ -12,6 +12,7 @@ let silentRefreshTimer = null;
 let activeAnalysisTrades = [];
 let activeAnalysisRequestId = 0;
 let analysisRunning = false;
+let analysisStarted = false;
 let marketOpenStopsOnly = false;
 let activeAnalysisContext = null;
 let activePeriodLabel = 'За весь час';
@@ -206,7 +207,11 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
         <div class="best-exit-run-status">
             <div class="best-exit-run-status__head">
                 <div><strong>Перевірка Polygon</strong><span>Пройдено ${completedTrades} із ${totalTrades} · залишилось ${remainingTrades}</span></div>
-                <span class="best-exit-auto-status">${analysisRunning ? 'Оновлюється автоматично…' : 'Автоматичне оновлення'}</span>
+                ${analysisRunning
+                    ? '<span class="best-exit-auto-status">Оновлюється…</span>'
+                    : (analysisStarted
+                        ? '<span class="best-exit-auto-status">Запущено вручну</span>'
+                        : '<button type="button" class="btn-secondary best-exit-start" data-best-exit-start>Почати</button>')}
             </div>
             <div class="best-exit-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progressPercent}"><i style="width:${progressPercent}%"></i></div>
         </div>
@@ -256,6 +261,15 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
         renderSummary(container, summary, unavailable, false);
     });
     attachMarketStopFilter(container);
+    container.querySelector('[data-best-exit-start]')?.addEventListener('click', () => {
+        if (analysisRunning) return;
+        analysisStarted = true;
+        const requestId = ++renderRequest;
+        activeAnalysisRequestId = requestId;
+        analysisAbortController?.abort();
+        analysisAbortController = new AbortController();
+        void runAnalysis(container, activeAnalysisTrades, requestId, selectedExitMinute, analysisAbortController.signal);
+    });
     const timeSelect = container.querySelector('[data-best-exit-target-time]');
     const changeSelectedTime = (nextMinute) => {
         if (!Number.isInteger(nextMinute) || nextMinute < 540 || nextMinute > 720 || nextMinute % 5 !== 0 || nextMinute === selectedExitMinute) return;
@@ -273,11 +287,16 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
         if (theoreticalValue) theoreticalValue.textContent = 'Оновлюється…';
         if (priceHeading) priceHeading.textContent = `Ціна @ ${clock}`;
         console.info(`[Polygon analysis] вибрано час виходу ${clock} NY`);
-        const requestId = ++renderRequest;
-        activeAnalysisRequestId = requestId;
-        analysisAbortController?.abort();
-        analysisAbortController = new AbortController();
-        void runAnalysis(container, activeAnalysisTrades, requestId, selectedExitMinute, analysisAbortController.signal);
+        if (analysisStarted) {
+            const requestId = ++renderRequest;
+            activeAnalysisRequestId = requestId;
+            analysisAbortController?.abort();
+            analysisAbortController = new AbortController();
+            void runAnalysis(container, activeAnalysisTrades, requestId, selectedExitMinute, analysisAbortController.signal);
+        } else {
+            const rows = buildRowsFromCache(activeAnalysisTrades, selectedExitMinute);
+            renderSummary(container, summarizeBestExits(rows), countMissingMarketResults(activeAnalysisTrades, selectedExitMinute), false);
+        }
     };
     timeSelect?.addEventListener('change', (event) => {
         changeSelectedTime(Number(event.currentTarget.value));
@@ -299,7 +318,7 @@ function countMissingMarketResults(trades, targetMinute = selectedExitMinute) {
 
 function scheduleSilentRefresh(container, trades, requestId, delay = REFRESH_AFTER_PROGRESS_MS) {
     clearTimeout(silentRefreshTimer);
-    if (requestId !== renderRequest || !container?.isConnected || !countMissingMarketResults(trades)) return;
+    if (!analysisStarted || requestId !== renderRequest || !container?.isConnected || !countMissingMarketResults(trades)) return;
     silentRefreshTimer = setTimeout(async () => {
         if (requestId !== renderRequest || !container?.isConnected) return;
         if (analysisRunning) {
@@ -387,6 +406,7 @@ export async function renderBestExitAnalysis({ journal = {}, periodDates = new S
     activeAnalysisTrades = trades;
     activeAnalysisRequestId = requestId;
     analysisRunning = false;
+    analysisStarted = false;
     if (!trades.length) {
         container.innerHTML = `${marketStopFilterControl()}<div class="stats-empty-note">${marketOpenStopsOnly ? 'У вибраному періоді немає мінусових позицій, перенесених через відкриття маркету 09:30 NY.' : 'У вибраному періоді немає закритих short-угод із коректними цінами входу/виходу після виключення Stop і Take.'}</div>`;
         attachMarketStopFilter(container);
@@ -394,5 +414,4 @@ export async function renderBestExitAnalysis({ journal = {}, periodDates = new S
     }
     const initialRows = buildRowsFromCache(trades);
     renderSummary(container, summarizeBestExits(initialRows), countMissingMarketResults(trades), false);
-    await runAnalysis(container, trades, requestId, selectedExitMinute, analysisAbortController.signal);
 }
