@@ -172,6 +172,10 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
     const remainingTrades = countMissingMarketResults(activeAnalysisTrades);
     const completedTrades = Math.max(0, totalTrades - remainingTrades);
     const progressPercent = totalTrades ? Math.round(completedTrades / totalTrades * 100) : 100;
+    const actualRows = summary.rows.filter((row) => Number.isFinite(Number(row.actualPnl)));
+    const actualGrossTotal = actualRows.reduce((total, row) => total + Number(row.actualPnl), 0);
+    const theoreticalRows = summary.rows.filter((row) => Number.isFinite(Number(row.selectedGross)));
+    const theoreticalGrossTotal = theoreticalRows.reduce((total, row) => total + Number(row.selectedGross), 0);
     if (logToConsole) {
         console.groupCollapsed(`[Polygon analysis] кращий вихід: ${summary.count} угод, забрано ${summary.avgCapturePct == null ? '—' : `${summary.avgCapturePct.toFixed(1)}%`} руху`);
         console.table(summary.rows.map((row) => ({ дата: row.date, тікер: row.symbol, вхід: row.entryPrice, фактичний_вихід: row.actualExitPrice, low: row.low, час_low: row.lowTime, причина_виходу: row.exitReason || 'не вказано', забрано_руху_pct: row.capturePct == null ? null : Number(row.capturePct.toFixed(1)), не_забрано_$: row.extraPnl == null ? null : Number(row.extraPnl.toFixed(2)) })));
@@ -197,6 +201,10 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
         ${exitTimeChart(summary.rows)}
         <div class="best-exit-time-simulator">
             <div><strong>Результат при виході у вибраний час</strong><span>Gross через entry × shares, час NY</span></div>
+            <div class="best-exit-time-totals">
+                <div><span>Фактичний Gross</span><strong>${actualRows.length ? money(actualGrossTotal) : '—'}</strong></div>
+                <div><span data-best-exit-theoretical-label>Теоретичний Gross · ${minuteToClock(selectedExitMinute)}</span><strong data-best-exit-theoretical-value>${theoreticalRows.length ? money(theoreticalGrossTotal) : '…'}</strong></div>
+            </div>
             <div class="best-exit-time-picker" aria-label="Час виходу від 09:00 до 12:00">
                 <button type="button" data-best-exit-time-step="-5" aria-label="На 5 хвилин раніше" ${selectedExitMinute <= 540 ? 'disabled' : ''}>‹</button>
                 <label><span>Час виходу</span><select data-best-exit-target-time>${timeOptions()}</select></label>
@@ -205,7 +213,7 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
         </div>
         <div class="best-exit-table-wrap${bestExitRowsExpanded ? ' is-expanded' : ''}">
             <table class="best-exit-table">
-                <thead><tr><th>Дата</th><th>Тікер</th><th>Вихід</th><th>Low</th><th>Забрано руху</th><th>Найкращий 10-хв діапазон (NY)</th><th>Макс. P&amp;L</th><th>Не забрано</th><th>Ціна @ ${minuteToClock(selectedExitMinute)}</th><th>Gross @ час</th><th>Δ до факту</th></tr></thead>
+                <thead><tr><th>Дата</th><th>Тікер</th><th>Вихід</th><th>Low</th><th>Забрано руху</th><th>Найкращий 10-хв діапазон (NY)</th><th>Макс. P&amp;L</th><th>Не забрано</th><th data-best-exit-price-heading>Ціна @ ${minuteToClock(selectedExitMinute)}</th><th>Gross @ час</th><th>Δ до факту</th></tr></thead>
                 <tbody>${topRows.map((row) => `<tr>
                     <td>${row.date}</td><td><button type="button" class="best-exit-trade-link" data-best-exit-date="${escapeHtml(row.date)}" data-best-exit-index="${Number(row.tradeIndex)}" data-best-exit-identity="${escapeHtml(JSON.stringify(row.tradeIdentity || {}))}" title="Відкрити ${escapeHtml(row.symbol)} у журналі">${escapeHtml(row.symbol)}</button></td><td>${row.actualExitPrice.toFixed(2)}</td><td>${row.low.toFixed(2)}</td><td>${row.capturePct == null ? '—' : `${row.capturePct.toFixed(0)}%`}</td>
                     <td><strong>${bestExitWindowNY(row.lowTime) || '—'}</strong></td><td>${money(row.bestPnl)}</td><td>${money(row.extraPnl)}</td><td>${row.selectedPrice == null ? '…' : row.selectedPrice.toFixed(2)}</td><td>${money(row.selectedGross)}</td><td class="${Number(row.selectedGrossDiff) >= 0 ? 'positive' : 'negative'}">${row.selectedGrossDiff == null ? '—' : money(row.selectedGrossDiff)}</td>
@@ -229,19 +237,33 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
         renderSummary(container, summary, unavailable, false);
     });
     attachMarketStopFilter(container);
+    const timeSelect = container.querySelector('[data-best-exit-target-time]');
     const changeSelectedTime = (nextMinute) => {
         if (!Number.isInteger(nextMinute) || nextMinute < 540 || nextMinute > 720 || nextMinute % 5 !== 0 || nextMinute === selectedExitMinute) return;
         selectedExitMinute = nextMinute;
+        const clock = minuteToClock(selectedExitMinute);
+        if (timeSelect) timeSelect.value = String(selectedExitMinute);
+        container.querySelectorAll('[data-best-exit-time-step]').forEach((button) => {
+            const step = Number(button.getAttribute('data-best-exit-time-step') || 0);
+            button.disabled = selectedExitMinute + step < 540 || selectedExitMinute + step > 720;
+        });
+        const theoreticalLabel = container.querySelector('[data-best-exit-theoretical-label]');
+        const theoreticalValue = container.querySelector('[data-best-exit-theoretical-value]');
+        const priceHeading = container.querySelector('[data-best-exit-price-heading]');
+        if (theoreticalLabel) theoreticalLabel.textContent = `Теоретичний Gross · ${clock}`;
+        if (theoreticalValue) theoreticalValue.textContent = 'Оновлюється…';
+        if (priceHeading) priceHeading.textContent = `Ціна @ ${clock}`;
+        console.info(`[Polygon analysis] вибрано час виходу ${clock} NY`);
         const requestId = ++renderRequest;
         activeAnalysisRequestId = requestId;
         analysisRunning = false;
         void runAnalysis(container, activeAnalysisTrades, requestId);
     };
-    container.querySelector('[data-best-exit-target-time]')?.addEventListener('change', (event) => {
+    timeSelect?.addEventListener('change', (event) => {
         changeSelectedTime(Number(event.currentTarget.value));
     });
     container.querySelectorAll('[data-best-exit-time-step]').forEach((button) => button.addEventListener('click', () => {
-        changeSelectedTime(selectedExitMinute + Number(button.dataset.bestExitTimeStep || 0));
+        changeSelectedTime(selectedExitMinute + Number(button.getAttribute('data-best-exit-time-step') || 0));
     }));
     const tableWrap = container.querySelector('.best-exit-table-wrap');
     if (tableWrap && bestExitRowsExpanded) tableWrap.scrollTop = previousScrollTop;
