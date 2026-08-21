@@ -6,6 +6,7 @@ let timer = null;
 let running = false;
 let pendingJournal = {};
 const INTERVAL_MS = 65000;
+const POLYGON_DISABLED = true;
 // Keep compatibility with the previously deployed Edge Function (max 5 rows).
 // The shared server queue also uses five Polygon calls per minute globally.
 const REQUEST_LIMIT = 5;
@@ -74,6 +75,7 @@ async function runQueue(reason = 'background') {
 }
 
 export function startPolygonLowBackfill(journal = {}, reason = 'load') {
+    if (POLYGON_DISABLED) return;
     pendingJournal = journal && typeof journal === 'object' ? journal : {};
     clearTimeout(timer);
     timer = setTimeout(() => void runQueue(reason), 1500);

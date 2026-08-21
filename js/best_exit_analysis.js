@@ -99,7 +99,10 @@ function exitTimeChart(rows = []) {
     </section>`;
 }
 
+const POLYGON_DISABLED = true;
+
 async function fetchBatch(items, targetMinute, signal = null) {
+    if (POLYGON_DISABLED) throw new Error('Polygon тимчасово вимкнено адміністратором.');
     let { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) throw new Error('Потрібно увійти в акаунт');
     items.forEach((item) => console.info(`[Polygon] переглядається ${item.symbol} · ${item.date} · від ${String(Math.floor(item.entryMinute / 60)).padStart(2, '0')}:${String(item.entryMinute % 60).padStart(2, '0')} NY`));

@@ -33,8 +33,10 @@ let _tradeDates = [];
 let _tradeDateCalendarGlobalBound = false;
 const _storyObservers = new Set();
 const marketSessionLowCache = new Map();
+const POLYGON_DISABLED = true;
 
 async function loadMarketSessionLow(symbol, dateStr) {
+    if (POLYGON_DISABLED) return null;
     const normalizedSymbol = String(symbol || '').toUpperCase();
     if (!/^[A-Z]{1,10}$/.test(normalizedSymbol) || !/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || ''))) return null;
     const key = `${normalizedSymbol}|${dateStr}`;
@@ -910,6 +912,7 @@ function mapPolygonResults(data) {
 }
 
 async function fetchPolygon(symbol, fromMs, toMs) {
+    if (POLYGON_DISABLED) throw new Error('Polygon тимчасово вимкнено адміністратором.');
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
     if (!token) {

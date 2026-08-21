@@ -7,6 +7,7 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 const MAX_REQUEST_BYTES = 16 * 1024;
 const MAX_RANGE_MS = 7 * 24 * 60 * 60 * 1000;
 const MIN_TIMESTAMP_MS = Date.UTC(2020, 0, 1);
+const POLYGON_DISABLED = true;
 const DEFAULT_ALLOWED_ORIGINS = new Set([
     'https://traderjournal-six.vercel.app',
     'http://127.0.0.1:8787',
@@ -60,6 +61,9 @@ async function verifyUserJwt(authHeader: string | null): Promise<{ ok: true } | 
 Deno.serve(async (req) => {
     if (req.method === 'OPTIONS') {
         return new Response(null, { status: 204, headers: cors(req) });
+    }
+    if (POLYGON_DISABLED) {
+        return json({ message: 'Polygon тимчасово вимкнено адміністратором.', results: [] }, 503, req);
     }
     if (req.method !== 'POST') {
         return json({ message: 'Method not allowed' }, 405, req);

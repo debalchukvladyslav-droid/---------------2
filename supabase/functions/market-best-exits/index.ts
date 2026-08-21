@@ -6,6 +6,7 @@ const INTRADAY_CACHE_VERSION = 2;
 const POLYGON_ARCHIVE_BUCKET = 'polygon-cache';
 const POLYGON_ARCHIVE_VERSION = 1;
 const POLYGON_CONTROL_PATH = '_control/state.json';
+const POLYGON_DISABLED = true;
 
 function cors(req: Request) {
     const allowed = new Set([DEFAULT_ORIGIN, 'http://localhost:8787', 'http://127.0.0.1:8787', ...(Deno.env.get('APP_ALLOWED_ORIGINS') || '').split(',')]);
@@ -190,6 +191,7 @@ async function readDatabaseGraph(symbol: string, date: string) {
 
 Deno.serve(async (req) => {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(req) });
+    if (POLYGON_DISABLED) return json(req, { message: 'Polygon тимчасово вимкнено адміністратором.', results: [] }, 503);
     if (req.method !== 'POST') return json(req, { message: 'Method not allowed' }, 405);
     const body = await req.json().catch(() => ({}));
     const cronWorker = body?.action === 'cron-worker';
