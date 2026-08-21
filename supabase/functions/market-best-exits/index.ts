@@ -2,6 +2,7 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 const DEFAULT_ORIGIN = 'https://traderjournal-six.vercel.app';
 const MAX_ITEMS = 200;
+const INTRADAY_CACHE_VERSION = 2;
 
 function cors(req: Request) {
     const allowed = new Set([DEFAULT_ORIGIN, 'http://localhost:8787', 'http://127.0.0.1:8787', ...(Deno.env.get('APP_ALLOWED_ORIGINS') || '').split(',')]);
@@ -103,6 +104,9 @@ Deno.serve(async (req) => {
         const query = `market_best_exit_cache?symbol=eq.${item.symbol}&trade_date=eq.${item.date}&entry_minute=eq.${item.entryMinute}&select=symbol,trade_date,entry_minute,low_price,low_at`;
         const cachedRes = await rest(query);
         const cached = cachedRes.ok ? await cachedRes.json() : [];
+        const statusRes = await rest(`market_intraday_cache_status?symbol=eq.${item.symbol}&trade_date=eq.${item.date}&cache_version=gte.${INTRADAY_CACHE_VERSION}&select=bar_count,cache_version&limit=1`);
+        const statusRows = statusRes.ok ? await statusRes.json() : [];
+        const fullGraphCached = Number(statusRows?.[0]?.bar_count) > 0;
         const cachedMinute = cached?.[0] ? minuteInNewYork(cached[0].low_at) : null;
         let timePrice: any = null;
         if (targetMinute != null) {
@@ -112,7 +116,7 @@ Deno.serve(async (req) => {
             timePrice = prices?.[0] || null;
         }
         const stopScenario = await readStopScenario(item, targetMinute);
-        if (cached?.[0] && cachedMinute != null && cachedMinute >= 570 && cachedMinute < 720 && (targetMinute == null || (timePrice && stopScenario.available))) {
+        if (fullGraphCached && cached?.[0] && cachedMinute != null && cachedMinute >= 570 && cachedMinute < 720 && (targetMinute == null || (timePrice && stopScenario.available))) {
             return { item, result: { symbol: item.symbol, date: item.date, entryMinute: item.entryMinute, low: Number(cached[0].low_price), lowTime: cached[0].low_at, cached: true, ...(timePrice ? { targetMinute, priceMinute: Number(timePrice.target_minute), priceAtTime: Number(timePrice.close_price), priceTime: timePrice.price_at, ...stopScenario.result } : {}) } };
         }
         return { item, result: null };
@@ -137,8 +141,8 @@ Deno.serve(async (req) => {
         const item = { symbol: String(job.symbol), date: String(job.trade_date) };
         try {
         const offset = nyOffset(item.date);
-        const from = new Date(`${item.date}T09:00:00${offset}`).getTime();
-        const to = new Date(`${item.date}T12:00:00${offset}`).getTime();
+        const from = new Date(`${item.date}T04:00:00${offset}`).getTime();
+        const to = new Date(`${item.date}T20:00:00${offset}`).getTime();
         const params = new URLSearchParams({ adjusted: 'false', sort: 'asc', limit: '1000', apiKey: polygonKey });
         const marketRes = await fetch(`https://api.polygon.io/v2/aggs/ticker/${item.symbol}/range/1/minute/${from}/${to}?${params}`, { signal: AbortSignal.timeout(12000) });
         const market = await marketRes.json().catch(() => ({}));
@@ -167,20 +171,32 @@ Deno.serve(async (req) => {
             method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify(cacheRows),
         });
         const priceRows = [...barsByMinute.entries()]
-            .filter(([minute, bar]) => minute >= 540 && minute <= 720 && Number(bar?.c) > 0 && Number(bar?.h) > 0)
+            .filter(([minute, bar]) => minute >= 240 && minute <= 1200 && Number(bar?.c) > 0 && Number(bar?.h) > 0)
             .map(([minute, bar]) => ({
                 symbol: item.symbol, trade_date: item.date, target_minute: minute,
+                open_price: Number(bar.o),
                 close_price: Number(bar.c), price_at: new Date(Number(bar.t)).toISOString(),
                 high_price: Number(bar.h), high_at: new Date(Number(bar.t)).toISOString(),
+                low_price: Number(bar.l),
+                volume: Number(bar.v) || 0,
+                vwap: Number(bar.vw) || null,
+                transactions: Number.isInteger(Number(bar.n)) ? Number(bar.n) : null,
                 provider: 'polygon', updated_at: new Date().toISOString(),
             }));
         if (priceRows.length) await rest('market_time_price_cache?on_conflict=symbol,trade_date,target_minute', {
             method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify(priceRows),
         });
+        await rest('market_intraday_cache_status?on_conflict=symbol,trade_date', {
+            method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify({
+                symbol: item.symbol, trade_date: item.date, from_minute: 240, to_minute: 1200,
+                bar_count: priceRows.length, cache_version: INTRADAY_CACHE_VERSION,
+                provider: 'polygon', fetched_at: new Date().toISOString(),
+            }),
+        });
         await rest(`market_low_jobs?symbol=eq.${item.symbol}&trade_date=eq.${item.date}`, {
             method: 'PATCH', body: JSON.stringify({ status: 'ready', updated_at: new Date().toISOString(), last_error: '' }),
         });
-        console.log(`[Polygon queue] ready ${item.symbol} ${item.date}; cached ${cacheRows.length} entry-minute lows and ${priceRows.length} five-minute prices`);
+        console.log(`[Polygon queue] ready ${item.symbol} ${item.date}; full graph cached: ${priceRows.length} one-minute OHLCV bars`);
         } catch (error) {
             const message = String(error?.message || error).slice(0, 500);
             await rest(`market_low_jobs?symbol=eq.${item.symbol}&trade_date=eq.${item.date}`, {
