@@ -8,7 +8,6 @@ import { ensureSupabaseStorageUser, uploadToSupabaseStorage, deleteFromSupabaseS
 import { loadScreenshotRegistry, mergeScreenshotRegistry } from './screenshot_registry.js';
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 import { createCompressedBackup } from './backups.js';
-import { startPolygonLowBackfill } from './polygon_low_backfill.js';
 
 let tradeEmbeddingQueue = Promise.resolve();
 
@@ -797,7 +796,6 @@ export async function initializeApp() {
         // Critical dashboard data: keep heavy trade views lazy, but make the
         // home curve/recent trades complete immediately after login.
         await loadTradeDays(nick, viewedUserId);
-        startPolygonLowBackfill(state.appData.journal, isViewingOwnProfile ? 'account-load' : 'viewed-account-load');
 
         // Restore only after journal days are present, so screenshots that are
         // already assigned to a day are not also shown as unassigned.

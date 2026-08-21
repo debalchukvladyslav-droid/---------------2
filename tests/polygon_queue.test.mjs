@@ -42,15 +42,15 @@ test('Polygon queue is global, private and atomically capped at five calls per m
     assert.match(migration, /attempted_at >= now\(\) - interval '1 minute'/i);
 });
 
-test('trade loading and Trades import start a cached Polygon backfill', async () => {
+test('site loading and Trades import do not start Polygon automatically', async () => {
     const [storage, parsers, worker, edge] = await Promise.all([
         readFile(new URL('../js/storage.js', import.meta.url), 'utf8'),
         readFile(new URL('../js/parsers.js', import.meta.url), 'utf8'),
         readFile(new URL('../js/polygon_low_backfill.js', import.meta.url), 'utf8'),
         readFile(new URL('../supabase/functions/market-best-exits/index.ts', import.meta.url), 'utf8'),
     ]);
-    assert.match(storage, /startPolygonLowBackfill\(state\.appData\.journal/);
-    assert.match(parsers, /startPolygonLowBackfill\(state\.appData\.journal, 'trades-import'\)/);
+    assert.doesNotMatch(storage, /startPolygonLowBackfill/);
+    assert.doesNotMatch(parsers, /startPolygonLowBackfill/);
     assert.match(worker, /INTERVAL_MS = 65000/);
     assert.match(worker, /REQUEST_LIMIT = 5/);
     assert.match(worker, /readPolygonResult\(item\)/);
@@ -102,6 +102,7 @@ test('Polygon full charts are archived in private Supabase Storage before callin
     assert.match(migration, /'polygon-cache'.*false/s);
     assert.doesNotMatch(migration, /create policy/i);
     assert.match(edge, /readPolygonArchive\(item\.symbol, item\.date\)/);
+    assert.match(edge, /response\.status === 400 \|\| response\.status === 404/);
     assert.match(edge, /readDatabaseGraph\(item\.symbol, item\.date\)/);
     assert.match(edge, /if \(!marketResults\)/);
     assert.match(edge, /writePolygonArchive\(item\.symbol, item\.date, marketResults\)/);

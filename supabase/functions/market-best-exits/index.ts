@@ -89,7 +89,9 @@ async function readPolygonArchive(symbol: string, date: string) {
     const response = await fetch(`${url}/storage/v1/object/authenticated/${POLYGON_ARCHIVE_BUCKET}/${path}`, {
         headers: { apikey: key, Authorization: `Bearer ${key}` },
     });
-    if (response.status === 404) return null;
+    // Storage returns 400 ("Object not found") for a missing private object.
+    // A missing archive is a cache miss, not a failed Polygon job.
+    if (response.status === 400 || response.status === 404) return null;
     if (!response.ok) throw new Error(`Polygon archive read ${response.status}`);
     const archive = await response.json().catch(() => null);
     if (Number(archive?.version) !== POLYGON_ARCHIVE_VERSION || !Array.isArray(archive?.results) || !archive.results.length) return null;

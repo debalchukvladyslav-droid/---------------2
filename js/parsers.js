@@ -7,7 +7,6 @@ import { ecnFeeColumnIndex, parsePPROTotalReportRows } from './parser_utils.js';
 import { isGoogleSheetTrade, isPureGoogleSheetTrade } from './trade_filters.js';
 import { parseFondexxSummaryByDateRows as parseFondexxSummaryByDateRowsPure } from './fondexx_summary_parser.js';
 import { normalizeBrokerTradeType } from './trade_import_utils.js';
-import { startPolygonLowBackfill } from './polygon_low_backfill.js';
 
 export { parseFondexxSummaryByDateRowsPure as parseFondexxSummaryByDateRows };
 
@@ -712,7 +711,6 @@ export function importFondexxTrades(event) {
                     window.refreshStatsView();
                 }
                 if (window.selectDate) window.selectDate(state.selectedDateStr);
-                startPolygonLowBackfill(state.appData.journal, 'trades-import');
             }).catch(err => {
                 showToast('Import save error: ' + (err?.message || err));
             });
