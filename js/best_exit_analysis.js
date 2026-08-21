@@ -14,6 +14,7 @@ let activeAnalysisRequestId = 0;
 let analysisRunning = false;
 let marketOpenStopsOnly = false;
 let activeAnalysisContext = null;
+let activePeriodLabel = 'За весь час';
 let selectedExitMinute = 600;
 const REFRESH_AFTER_PROGRESS_MS = 3000;
 const REFRESH_WHEN_WAITING_MS = 65000;
@@ -187,6 +188,9 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
         console.groupEnd();
     }
     container.innerHTML = `
+        <button type="button" class="best-exit-period-control" data-best-exit-period-open>
+            <span>Період</span><strong>${escapeHtml(activePeriodLabel)}</strong><em>${totalTrades} short-угод</em><b aria-hidden="true">▼</b>
+        </button>
         <div class="best-exit-metrics">
             <div><span>Закритих угод без Stop/Take</span><strong>${summary.count}</strong></div>
             <div><span>Макс. результат на low</span><strong>${money(summary.bestPnl)}</strong></div>
@@ -238,6 +242,11 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
         try { identity = JSON.parse(button.dataset.bestExitIdentity || 'null'); } catch (_) { identity = null; }
         void window.openTradesAtDayIndex?.(date, tradeIndex, identity);
     }));
+    container.querySelector('[data-best-exit-period-open]')?.addEventListener('click', () => {
+        const trigger = document.getElementById('stats-period-trigger');
+        trigger?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => trigger?.click(), 220);
+    });
     container.querySelector('[data-low-chart-from-ten]')?.addEventListener('change', (event) => {
         lowChartFromTen = !!event.currentTarget.checked;
         renderSummary(container, summary, unavailable, false);
@@ -355,13 +364,14 @@ async function runAnalysis(container, trades, requestId) {
     }
 }
 
-export async function renderBestExitAnalysis({ journal = {}, periodDates = new Set(), sourceType = 'current' } = {}) {
+export async function renderBestExitAnalysis({ journal = {}, periodDates = new Set(), sourceType = 'current', periodLabel = 'За весь час' } = {}) {
     const container = document.getElementById('stats-best-exit-content');
     if (!container) return;
     const requestId = ++renderRequest;
     clearTimeout(silentRefreshTimer);
     bestExitRowsExpanded = false;
-    activeAnalysisContext = { journal, periodDates, sourceType };
+    activePeriodLabel = String(periodLabel || 'За весь час');
+    activeAnalysisContext = { journal, periodDates, sourceType, periodLabel: activePeriodLabel };
     if (!['current', 'trader'].includes(sourceType)) {
         container.innerHTML = '<div class="stats-empty-note">Аналіз доступний для одного трейдера, а не для об’єднаного куща.</div>';
         return;

@@ -3250,6 +3250,9 @@ export function renderStatsTab() {
         journal: bestExitJournal,
         periodDates: bestExitDates,
         sourceType: state.statsSourceSelection?.type || 'current',
+        periodLabel: hasExplicitBestExitPeriod
+            ? (document.getElementById('stats-period-trigger-label')?.textContent || 'Вибраний період')
+            : 'За весь час',
     });
     const longHorizon = !!equityAnalysis.longHorizon;
     const worstDrawdownAbs = Math.abs(equityAnalysis.worstDrawdown);

@@ -4753,6 +4753,12 @@ body.is-offline [data-needs-network="true"] {
     .stats-loss-pattern { padding: 14px; }
 }
 /* Best exit analysis */
+.best-exit-period-control { display: grid; grid-template-columns: auto minmax(0,1fr) auto auto; align-items: center; gap: 9px; width: 100%; margin: 12px 0 4px; padding: 10px 12px; border: 1px solid color-mix(in srgb,var(--accent) 28%,var(--border)); border-radius: 11px; background: color-mix(in srgb,var(--accent) 6%,var(--bg-main)); color: var(--text-main); text-align: left; cursor: pointer; }
+.best-exit-period-control:hover { border-color: var(--accent); background: color-mix(in srgb,var(--accent) 10%,var(--bg-main)); }
+.best-exit-period-control span { color: var(--text-muted); font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.best-exit-period-control strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; }
+.best-exit-period-control em { padding: 4px 8px; border-radius: 999px; background: color-mix(in srgb,var(--accent) 12%,transparent); color: var(--accent); font-size: .72rem; font-style: normal; font-weight: 750; white-space: nowrap; }
+.best-exit-period-control b { color: var(--text-muted); font-size: .68rem; }
 .best-exit-metrics {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
