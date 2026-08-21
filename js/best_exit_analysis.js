@@ -4,7 +4,6 @@ import { readPolygonResult, readPolygonTimePrice, writePolygonResults, writePoly
 
 const resultCache = new Map();
 let renderRequest = 0;
-const AUTO_ANALYZE_LIMIT = 40;
 const BATCH_SIZE = 5;
 const MAX_ITEMS_PER_PRICE_REQUEST = 200;
 let bestExitRowsExpanded = false;
@@ -51,6 +50,14 @@ function money(value) {
 
 function minuteToClock(minute) {
     return `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
+}
+
+function timeOptions() {
+    const options = [];
+    for (let minute = 540; minute <= 720; minute += 5) {
+        options.push(`<option value="${minute}" ${minute === selectedExitMinute ? 'selected' : ''}>${minuteToClock(minute)}</option>`);
+    }
+    return options.join('');
 }
 
 function bestWindowSummary(rows = []) {
@@ -183,14 +190,18 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
         <div class="best-exit-run-status">
             <div class="best-exit-run-status__head">
                 <div><strong>Перевірка Polygon</strong><span>Пройдено ${completedTrades} із ${totalTrades} · залишилось ${remainingTrades}</span></div>
-                <button type="button" class="btn-secondary best-exit-check-all" ${analysisRunning ? 'disabled' : ''}>${analysisRunning ? 'Перевіряємо…' : 'Старт / перевірити все'}</button>
+                <span class="best-exit-auto-status">${analysisRunning ? 'Оновлюється автоматично…' : 'Автоматичне оновлення'}</span>
             </div>
             <div class="best-exit-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progressPercent}"><i style="width:${progressPercent}%"></i></div>
         </div>
         ${exitTimeChart(summary.rows)}
         <div class="best-exit-time-simulator">
             <div><strong>Результат при виході у вибраний час</strong><span>Gross через entry × shares, час NY</span></div>
-            <label><span>Час виходу</span><input type="time" min="09:00" max="12:00" step="300" value="${minuteToClock(selectedExitMinute)}" data-best-exit-target-time></label>
+            <div class="best-exit-time-picker" aria-label="Час виходу від 09:00 до 12:00">
+                <button type="button" data-best-exit-time-step="-5" aria-label="На 5 хвилин раніше" ${selectedExitMinute <= 540 ? 'disabled' : ''}>‹</button>
+                <label><span>Час виходу</span><select data-best-exit-target-time>${timeOptions()}</select></label>
+                <button type="button" data-best-exit-time-step="5" aria-label="На 5 хвилин пізніше" ${selectedExitMinute >= 720 ? 'disabled' : ''}>›</button>
+            </div>
         </div>
         <div class="best-exit-table-wrap${bestExitRowsExpanded ? ' is-expanded' : ''}">
             <table class="best-exit-table">
@@ -217,21 +228,21 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
         lowChartFromTen = !!event.currentTarget.checked;
         renderSummary(container, summary, unavailable, false);
     });
-    container.querySelector('.best-exit-check-all')?.addEventListener('click', () => {
-        if (analysisRunning || activeAnalysisRequestId !== renderRequest) return;
-        void runAnalysis(container, activeAnalysisTrades, activeAnalysisRequestId);
-    });
     attachMarketStopFilter(container);
-    container.querySelector('[data-best-exit-target-time]')?.addEventListener('change', (event) => {
-        const [hour, minute] = String(event.currentTarget.value || '').split(':').map(Number);
-        const nextMinute = hour * 60 + minute;
-        if (!Number.isInteger(nextMinute) || nextMinute < 540 || nextMinute > 720 || nextMinute % 5 !== 0) {
-            event.currentTarget.value = minuteToClock(selectedExitMinute);
-            return;
-        }
+    const changeSelectedTime = (nextMinute) => {
+        if (!Number.isInteger(nextMinute) || nextMinute < 540 || nextMinute > 720 || nextMinute % 5 !== 0 || nextMinute === selectedExitMinute) return;
         selectedExitMinute = nextMinute;
-        if (activeAnalysisContext) void renderBestExitAnalysis(activeAnalysisContext);
+        const requestId = ++renderRequest;
+        activeAnalysisRequestId = requestId;
+        analysisRunning = false;
+        void runAnalysis(container, activeAnalysisTrades, requestId);
+    };
+    container.querySelector('[data-best-exit-target-time]')?.addEventListener('change', (event) => {
+        changeSelectedTime(Number(event.currentTarget.value));
     });
+    container.querySelectorAll('[data-best-exit-time-step]').forEach((button) => button.addEventListener('click', () => {
+        changeSelectedTime(selectedExitMinute + Number(button.dataset.bestExitTimeStep || 0));
+    }));
     const tableWrap = container.querySelector('.best-exit-table-wrap');
     if (tableWrap && bestExitRowsExpanded) tableWrap.scrollTop = previousScrollTop;
     container.querySelector('.best-exit-expand')?.addEventListener('click', () => {
@@ -282,6 +293,18 @@ async function runAnalysis(container, trades, requestId) {
     const updateProgress = (done, total) => {
         if (requestId !== renderRequest) return;
         const percent = total ? Math.round(done / total * 100) : 0;
+        const status = container.querySelector('.best-exit-run-status');
+        if (status) {
+            const text = status.querySelector('.best-exit-run-status__head div span');
+            const bar = status.querySelector('.best-exit-progress');
+            if (text) text.textContent = `Пройдено ${done} із ${total} · залишилось ${Math.max(0, total - done)}`;
+            if (bar) {
+                bar.setAttribute('aria-valuenow', String(percent));
+                const fill = bar.querySelector('i');
+                if (fill) fill.style.width = `${percent}%`;
+            }
+            return;
+        }
         container.innerHTML = `
             <div class="best-exit-loading"><span></span> Оброблено ${done} із ${total} угод (${percent}%)</div>
             <div class="best-exit-loading-counts">Пройдено ${done} · залишилось ${Math.max(0, total - done)}</div>
@@ -321,23 +344,6 @@ export async function renderBestExitAnalysis({ journal = {}, periodDates = new S
     analysisRunning = false;
     if (!trades.length) {
         container.innerHTML = `${marketStopFilterControl()}<div class="stats-empty-note">${marketOpenStopsOnly ? 'У вибраному періоді немає мінусових позицій, перенесених через відкриття маркету 09:30 NY.' : 'У вибраному періоді немає закритих short-угод із коректними цінами входу/виходу після виключення Stop і Take.'}</div>`;
-        attachMarketStopFilter(container);
-        return;
-    }
-    const uncached = countMissingMarketResults(trades);
-    if (uncached > AUTO_ANALYZE_LIMIT) {
-        const completed = trades.length - uncached;
-        const percent = trades.length ? Math.round(completed / trades.length * 100) : 0;
-        container.innerHTML = `
-            <div class="best-exit-start">
-                <div><strong>${trades.length} угод у періоді</strong><span>${uncached} ще потребують market data</span></div>
-                ${marketStopFilterControl()}
-                <button type="button" class="btn-primary best-exit-start-btn">Старт / перевірити все</button>
-            </div>
-            <div class="best-exit-loading-counts">Пройдено ${completed} · залишилось ${uncached}</div>
-            <div class="best-exit-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><i style="width:${percent}%"></i></div>
-            <p class="stats-chart-note">Дані завантажуються короткими пакетами по ${BATCH_SIZE} угод і зберігаються в Supabase. Повторний запуск не починається спочатку.</p>`;
-        container.querySelector('.best-exit-start-btn')?.addEventListener('click', () => runAnalysis(container, trades, requestId));
         attachMarketStopFilter(container);
         return;
     }

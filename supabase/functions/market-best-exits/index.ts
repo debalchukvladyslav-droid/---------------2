@@ -101,11 +101,9 @@ Deno.serve(async (req) => {
             method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
             body: JSON.stringify(uniqueMissing.map((item) => ({ symbol: item.symbol, trade_date: item.date }))),
         });
-        if (targetMinute != null) {
-            await Promise.all(uniqueMissing.map((item) => rest(`market_low_jobs?symbol=eq.${item.symbol}&trade_date=eq.${item.date}&status=eq.ready`, {
-                method: 'PATCH', body: JSON.stringify({ status: 'pending', next_attempt_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
-            })));
-        }
+        await Promise.all(uniqueMissing.map((item) => rest(`market_low_jobs?symbol=eq.${item.symbol}&trade_date=eq.${item.date}&status=neq.processing`, {
+            method: 'PATCH', body: JSON.stringify({ status: 'pending', next_attempt_at: '1970-01-01T00:00:00.000Z', updated_at: new Date().toISOString() }),
+        })));
     }
     const claimResponse = await rest('rpc/claim_market_low_jobs', { method: 'POST', body: JSON.stringify({ max_jobs: 5 }) });
     const claimed = claimResponse.ok ? await claimResponse.json() : [];

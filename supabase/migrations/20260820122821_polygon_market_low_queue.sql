@@ -45,7 +45,7 @@ begin
           from public.market_low_jobs job
          where job.status in ('pending', 'failed')
            and job.next_attempt_at <= now()
-         order by job.created_at
+         order by job.next_attempt_at, job.created_at
          for update skip locked
          limit available_slots
     ), updated as (

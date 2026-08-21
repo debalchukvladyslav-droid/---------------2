@@ -4814,14 +4814,20 @@ body.is-offline [data-needs-network="true"] {
 .best-exit-run-status__head > div { display: flex; flex-direction: column; gap: 3px; }
 .best-exit-run-status__head strong { color: var(--text-main); font-size: .84rem; }
 .best-exit-run-status__head span { color: var(--text-muted); font-size: .76rem; }
+.best-exit-auto-status { padding: 6px 9px; border-radius: 999px; background: color-mix(in srgb, var(--profit) 10%, transparent); color: var(--profit) !important; font-weight: 700; }
 .best-exit-run-status .best-exit-progress { margin: 0; }
 .best-exit-check-all:disabled { opacity: .65; cursor: wait; }
 .best-exit-time-simulator { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 12px 0 8px; padding: 11px 13px; border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border)); border-radius: 10px; background: color-mix(in srgb, var(--accent) 7%, transparent); }
 .best-exit-time-simulator > div { display: flex; flex-direction: column; gap: 3px; }
 .best-exit-time-simulator strong { color: var(--text-main); font-size: .84rem; }
 .best-exit-time-simulator span { color: var(--text-muted); font-size: .72rem; }
-.best-exit-time-simulator label { display: flex; align-items: center; gap: 8px; }
-.best-exit-time-simulator input { height: 34px; padding: 0 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-input); color: var(--text-main); font: 700 .8rem var(--font-mono, monospace); color-scheme: dark; }
+.best-exit-time-picker { display: flex; align-items: stretch; gap: 6px; padding: 4px; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border)); border-radius: 11px; background: color-mix(in srgb, var(--bg-main) 78%, transparent); }
+.best-exit-time-picker label { display: grid; grid-template-columns: auto minmax(78px, auto); align-items: center; gap: 8px; padding: 0 6px; }
+.best-exit-time-picker select { height: 34px; min-width: 86px; padding: 0 28px 0 10px; border: 1px solid var(--border); border-radius: 8px; outline: none; background: var(--bg-input); color: var(--text-main); font: 750 .82rem var(--font-mono, monospace); cursor: pointer; color-scheme: dark; }
+.best-exit-time-picker select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 13%, transparent); }
+.best-exit-time-picker > button { width: 34px; min-width: 34px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); border-radius: 8px; background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel)); color: var(--accent); font: 800 1.25rem/1 var(--font-display); cursor: pointer; }
+.best-exit-time-picker > button:hover:not(:disabled) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--bg-panel)); }
+.best-exit-time-picker > button:disabled { opacity: .32; cursor: default; }
 .best-exit-start { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0 8px; }
 .best-exit-start > div { display: flex; flex-direction: column; gap: 4px; }
 .best-exit-start span { color: var(--text-muted); font-size: .8rem; }
@@ -4833,7 +4839,8 @@ body.is-offline [data-needs-network="true"] {
     .best-exit-time-chart__best { text-align: left; }
     .best-exit-run-status__head { align-items: stretch; flex-direction: column; }
     .best-exit-time-simulator { align-items: stretch; flex-direction: column; }
-    .best-exit-time-simulator label { justify-content: space-between; }
+    .best-exit-time-picker { align-self: stretch; }
+    .best-exit-time-picker label { flex: 1; grid-template-columns: 1fr auto; }
     .best-exit-start { align-items: stretch; flex-direction: column; }
 }
 
