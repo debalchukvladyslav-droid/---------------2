@@ -104,6 +104,7 @@ export function collectTimedShortTrades(journal = {}, allowedDates = null, { mar
                 trade?.closed || trade?.exited || trade?.exitTime || trade?.closeTime || trade?.sheet?.exitTime || ''
             );
             const entryMinute = Math.max(570, openedMinute ?? 570);
+            const stopEntryMinute = Math.max(540, openedMinute ?? 570);
             if (entryMinute >= 720) continue;
             const entryPrice = Number(trade?.entry || trade?.sheet?.entryPrice);
             const actualExitPrice = Number(trade?.exit || trade?.closePrice || trade?.sheet?.exitPrice);
@@ -116,12 +117,18 @@ export function collectTimedShortTrades(journal = {}, allowedDates = null, { mar
                 date: dateStr,
                 symbol: String(trade.symbol).toUpperCase(),
                 entryMinute,
+                stopEntryMinute,
                 exitMinute,
                 entryPrice,
                 actualExitPrice,
                 exitReason,
                 isMarketOpenStop,
                 qty: qty > 0 ? qty : null,
+                stopPrice: Number(trade?.sheet?.stopPrice) > 0
+                    ? Number(trade.sheet.stopPrice)
+                    : (Number(trade?.sheet?.consolidateCents) >= 0
+                        ? Math.round((entryPrice + Number(trade.sheet.consolidateCents) / 100) * 10000) / 10000
+                        : null),
                 tradeIdentity: { symbol: trade.symbol, opened: trade.opened || trade.entryTime || trade.time || '', entry: entryPrice, exit: actualExitPrice, qty: qty > 0 ? qty : null },
             });
         }

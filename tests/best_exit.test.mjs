@@ -39,7 +39,7 @@ test('collects short time exits from the selected dates and clamps entry to mark
     const journal = {
         '2026-07-10': {
             trades: [
-                { symbol: 'AAPL', type: 'Short', opened: '2026-07-10 09:12:00', entry: 10, exit: 9, qty: 100, sheet: { exit: 'по часу' } },
+                { symbol: 'AAPL', type: 'Short', opened: '2026-07-10 09:12:00', entry: 10, exit: 9, qty: 100, sheet: { exit: 'по часу', consolidateCents: 15 } },
                 { symbol: 'TSLA', type: 'Long', opened: '09:45:00', entry: 20, sheet: { exit: 'по часу' } },
             ],
         },
@@ -50,6 +50,8 @@ test('collects short time exits from the selected dates and clamps entry to mark
     const rows = collectTimedShortTrades(journal, new Set(['2026-07-10']));
     assert.equal(rows.length, 1);
     assert.equal(rows[0].entryMinute, 570);
+    assert.equal(rows[0].stopEntryMinute, 552);
+    assert.equal(rows[0].stopPrice, 10.15);
     assert.equal(rows[0].symbol, 'AAPL');
     assert.equal(rows[0].tradeIndex, 0);
 });

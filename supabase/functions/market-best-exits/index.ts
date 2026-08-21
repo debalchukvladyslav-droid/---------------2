@@ -45,6 +45,28 @@ function fiveMinutePriceQuery(item: { symbol: string; date: string }, targetMinu
     return `market_time_price_cache?symbol=eq.${item.symbol}&trade_date=eq.${item.date}&target_minute=in.(${candidates.join(',')})&order=target_minute.asc&limit=1&select=target_minute,close_price,price_at`;
 }
 
+async function readStopScenario(item: any, targetMinute: number | null) {
+    const stopPrice = Number(item?.stopPrice);
+    const stopEntryMinute = Number(item?.stopEntryMinute);
+    if (targetMinute != null && Number.isInteger(stopEntryMinute) && targetMinute < stopEntryMinute) {
+        return { available: true, result: { notOpened: true, stopHit: false, stopPrice: stopPrice > 0 ? stopPrice : null, stopEntryMinute } };
+    }
+    if (!(stopPrice > 0) || !Number.isInteger(stopEntryMinute) || targetMinute == null) {
+        return { available: true, result: { stopHit: false, stopPrice: stopPrice > 0 ? stopPrice : null, stopEntryMinute } };
+    }
+    const query = `market_time_price_cache?symbol=eq.${item.symbol}&trade_date=eq.${item.date}&target_minute=gte.${stopEntryMinute}&target_minute=lte.${targetMinute}&high_price=not.is.null&order=target_minute.asc&select=target_minute,high_price,high_at`;
+    const response = await rest(query);
+    const rows = response.ok ? await response.json() : [];
+    if (!rows.length) return { available: false, result: null };
+    const hit = rows.find((row: any) => Number(row.high_price) >= stopPrice);
+    return {
+        available: true,
+        result: hit
+            ? { stopHit: true, stopPrice, stopEntryMinute, stopMinute: Number(hit.target_minute), stopTime: hit.high_at }
+            : { stopHit: false, stopPrice, stopEntryMinute },
+    };
+}
+
 async function rest(path: string, init: RequestInit = {}) {
     const url = Deno.env.get('SUPABASE_URL')!;
     const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -73,6 +95,8 @@ Deno.serve(async (req) => {
         symbol: String(item?.symbol || '').toUpperCase(),
         date: String(item?.date || ''),
         entryMinute: Math.max(570, Number(item?.entryMinute) || 570),
+        stopEntryMinute: Math.max(540, Math.min(720, Number(item?.stopEntryMinute) || Number(item?.entryMinute) || 570)),
+        stopPrice: Number(item?.stopPrice) > 0 ? Number(item.stopPrice) : null,
     })).filter((item: any) => /^[A-Z]{1,10}$/.test(item.symbol) && /^\d{4}-\d{2}-\d{2}$/.test(item.date) && item.entryMinute < 720);
 
     const cachedChecks = await Promise.all(normalized.map(async (item) => {
@@ -87,8 +111,9 @@ Deno.serve(async (req) => {
             const prices = priceRes.ok ? await priceRes.json() : [];
             timePrice = prices?.[0] || null;
         }
-        if (cached?.[0] && cachedMinute != null && cachedMinute >= 570 && cachedMinute < 720 && (targetMinute == null || timePrice)) {
-            return { item, result: { symbol: item.symbol, date: item.date, entryMinute: item.entryMinute, low: Number(cached[0].low_price), lowTime: cached[0].low_at, cached: true, ...(timePrice ? { targetMinute, priceMinute: Number(timePrice.target_minute), priceAtTime: Number(timePrice.close_price), priceTime: timePrice.price_at } : {}) } };
+        const stopScenario = await readStopScenario(item, targetMinute);
+        if (cached?.[0] && cachedMinute != null && cachedMinute >= 570 && cachedMinute < 720 && (targetMinute == null || (timePrice && stopScenario.available))) {
+            return { item, result: { symbol: item.symbol, date: item.date, entryMinute: item.entryMinute, low: Number(cached[0].low_price), lowTime: cached[0].low_at, cached: true, ...(timePrice ? { targetMinute, priceMinute: Number(timePrice.target_minute), priceAtTime: Number(timePrice.close_price), priceTime: timePrice.price_at, ...stopScenario.result } : {}) } };
         }
         return { item, result: null };
     }));
@@ -142,10 +167,11 @@ Deno.serve(async (req) => {
             method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify(cacheRows),
         });
         const priceRows = [...barsByMinute.entries()]
-            .filter(([minute, bar]) => minute >= 540 && minute <= 720 && minute % 5 === 0 && Number(bar?.c) > 0)
+            .filter(([minute, bar]) => minute >= 540 && minute <= 720 && Number(bar?.c) > 0 && Number(bar?.h) > 0)
             .map(([minute, bar]) => ({
                 symbol: item.symbol, trade_date: item.date, target_minute: minute,
                 close_price: Number(bar.c), price_at: new Date(Number(bar.t)).toISOString(),
+                high_price: Number(bar.h), high_at: new Date(Number(bar.t)).toISOString(),
                 provider: 'polygon', updated_at: new Date().toISOString(),
             }));
         if (priceRows.length) await rest('market_time_price_cache?on_conflict=symbol,trade_date,target_minute', {
@@ -172,7 +198,8 @@ Deno.serve(async (req) => {
             const priceRes = await rest(priceQuery); const prices = priceRes.ok ? await priceRes.json() : [];
             timePrice = prices?.[0] || null;
         }
-        if (cached?.[0] && (targetMinute == null || timePrice)) results.push({ symbol: item.symbol, date: item.date, entryMinute: item.entryMinute, low: Number(cached[0].low_price), lowTime: cached[0].low_at, cached: false, ...(timePrice ? { targetMinute, priceMinute: Number(timePrice.target_minute), priceAtTime: Number(timePrice.close_price), priceTime: timePrice.price_at } : {}) });
+        const stopScenario = await readStopScenario(item, targetMinute);
+        if (cached?.[0] && (targetMinute == null || (timePrice && stopScenario.available))) results.push({ symbol: item.symbol, date: item.date, entryMinute: item.entryMinute, low: Number(cached[0].low_price), lowTime: cached[0].low_at, cached: false, ...(timePrice ? { targetMinute, priceMinute: Number(timePrice.target_minute), priceAtTime: Number(timePrice.close_price), priceTime: timePrice.price_at, ...stopScenario.result } : {}) });
     }
     return json(req, { results, queued: Math.max(0, uniqueMissing.length - results.length), processed: (claimed || []).length });
 });

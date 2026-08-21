@@ -66,7 +66,9 @@ function timePriceKey(value = {}) {
     const date = String(value.date || '');
     const targetMinute = Number(value.targetMinute);
     if (!/^[A-Z]{1,10}$/.test(symbol) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isInteger(targetMinute)) return '';
-    return `${symbol}|${date}|${targetMinute}`;
+    const stopEntryMinute = Number.isInteger(Number(value.stopEntryMinute)) ? Number(value.stopEntryMinute) : '';
+    const stopPrice = Number(value.stopPrice) > 0 ? Number(value.stopPrice).toFixed(4) : '';
+    return `${symbol}|${date}|${targetMinute}|${stopEntryMinute}|${stopPrice}`;
 }
 
 function readTimePriceStore() {
@@ -91,7 +93,7 @@ export function writePolygonTimePrices(rows = []) {
         rows.forEach((row) => {
             const key = timePriceKey(row);
             if (!key || !(Number(row.priceAtTime) > 0)) return;
-            store[key] = { symbol: String(row.symbol).toUpperCase(), date: String(row.date), targetMinute: Number(row.targetMinute), priceMinute: Number(row.priceMinute), priceAtTime: Number(row.priceAtTime), priceTime: String(row.priceTime || ''), savedAt: now };
+            store[key] = { symbol: String(row.symbol).toUpperCase(), date: String(row.date), targetMinute: Number(row.targetMinute), stopEntryMinute: Number.isInteger(Number(row.stopEntryMinute)) ? Number(row.stopEntryMinute) : null, priceMinute: Number(row.priceMinute), priceAtTime: Number(row.priceAtTime), priceTime: String(row.priceTime || ''), notOpened: row.notOpened === true, stopHit: row.stopHit === true, stopPrice: Number(row.stopPrice) || null, stopMinute: Number.isInteger(Number(row.stopMinute)) ? Number(row.stopMinute) : null, stopTime: String(row.stopTime || ''), savedAt: now };
         });
         timePriceMemoryStore = Object.fromEntries(Object.entries(store).sort((a, b) => Number(b[1]?.savedAt || 0) - Number(a[1]?.savedAt || 0)).slice(0, MAX_ROWS));
         globalThis.localStorage?.setItem(TIME_PRICE_STORAGE_KEY, JSON.stringify(timePriceMemoryStore));
