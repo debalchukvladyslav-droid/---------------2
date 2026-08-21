@@ -7,6 +7,7 @@ import {
     buildLowTimeFrequencySeries,
     collectTimedShortTrades,
     isExcludedStopTakeExit,
+    isMarketOpenStopTrade,
     isTimeExitTrade,
     summarizeBestExits,
 } from '../js/best_exit_core.js';
@@ -63,6 +64,25 @@ test('excludes a time exit opened at or after noon New York', () => {
     };
     const rows = collectTimedShortTrades(journal, new Set(['2026-07-10']));
     assert.deepEqual(rows.map((row) => row.symbol), ['AAPL']);
+});
+
+test('detects a losing position held through the 09:30 NY market open', () => {
+    assert.equal(isMarketOpenStopTrade({ opened: '2026-08-20 08:45', closed: '2026-08-20 09:31', net: -100 }, '2026-08-20'), true);
+    assert.equal(isMarketOpenStopTrade({ opened: '2026-08-19 16:00', closed: '2026-08-20 09:35', net: -50 }, '2026-08-20'), true);
+    assert.equal(isMarketOpenStopTrade({ opened: '08:45', closed: '09:29', net: -100 }, '2026-08-20'), false);
+    assert.equal(isMarketOpenStopTrade({ opened: '09:30', closed: '09:40', net: -100 }, '2026-08-20'), false);
+    assert.equal(isMarketOpenStopTrade({ opened: '08:45', closed: '09:40', net: 20 }, '2026-08-20'), false);
+});
+
+test('market-open stop filter includes only automatically detected losses, including Stop and blank reasons', () => {
+    const journal = { '2026-08-20': { trades: [
+        { symbol: 'AAA', type: 'Short', opened: '08:40', closed: '09:31', entry: 10, exit: 11, net: -100, sheet: { exit: 'Stop Loss' } },
+        { symbol: 'BBB', type: 'Short', opened: '08:50', closed: '09:45', entry: 5, exit: 6, net: -50 },
+        { symbol: 'CCC', type: 'Short', opened: '09:31', closed: '09:45', entry: 5, exit: 6, net: -50, sheet: { exit: 'manual' } },
+    ] } };
+    const rows = collectTimedShortTrades(journal, null, { marketOpenStopsOnly: true });
+    assert.deepEqual(rows.map((row) => row.symbol), ['AAA', 'BBB']);
+    assert.ok(rows.every((row) => row.isMarketOpenStop));
 });
 
 test('calculates best short exit and aggregate opportunity', () => {

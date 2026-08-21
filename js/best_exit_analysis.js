@@ -12,8 +12,21 @@ let silentRefreshTimer = null;
 let activeAnalysisTrades = [];
 let activeAnalysisRequestId = 0;
 let analysisRunning = false;
+let marketOpenStopsOnly = false;
+let activeAnalysisContext = null;
 const REFRESH_AFTER_PROGRESS_MS = 3000;
 const REFRESH_WHEN_WAITING_MS = 65000;
+
+function marketStopFilterControl() {
+    return `<label class="best-exit-market-filter"><input type="checkbox" data-market-open-stops ${marketOpenStopsOnly ? 'checked' : ''}><span>Стопи на маркеті</span></label>`;
+}
+
+function attachMarketStopFilter(container) {
+    container.querySelector('[data-market-open-stops]')?.addEventListener('change', (event) => {
+        marketOpenStopsOnly = !!event.currentTarget.checked;
+        if (activeAnalysisContext) void renderBestExitAnalysis(activeAnalysisContext);
+    });
+}
 
 function cachedMarketResult(trade) {
     const key = `${trade.symbol}|${trade.date}|${trade.entryMinute}`;
@@ -146,6 +159,7 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
         <div class="best-exit-run-status">
             <div class="best-exit-run-status__head">
                 <div><strong>Перевірка Polygon</strong><span>Пройдено ${completedTrades} із ${totalTrades} · залишилось ${remainingTrades}</span></div>
+                ${marketStopFilterControl()}
                 <button type="button" class="btn-secondary best-exit-check-all" ${analysisRunning ? 'disabled' : ''}>${analysisRunning ? 'Перевіряємо…' : 'Старт / перевірити все'}</button>
             </div>
             <div class="best-exit-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progressPercent}"><i style="width:${progressPercent}%"></i></div>
@@ -180,6 +194,7 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
         if (analysisRunning || activeAnalysisRequestId !== renderRequest) return;
         void runAnalysis(container, activeAnalysisTrades, activeAnalysisRequestId);
     });
+    attachMarketStopFilter(container);
     const tableWrap = container.querySelector('.best-exit-table-wrap');
     if (tableWrap && bestExitRowsExpanded) tableWrap.scrollTop = previousScrollTop;
     container.querySelector('.best-exit-expand')?.addEventListener('click', () => {
@@ -258,16 +273,18 @@ export async function renderBestExitAnalysis({ journal = {}, periodDates = new S
     const requestId = ++renderRequest;
     clearTimeout(silentRefreshTimer);
     bestExitRowsExpanded = false;
+    activeAnalysisContext = { journal, periodDates, sourceType };
     if (!['current', 'trader'].includes(sourceType)) {
         container.innerHTML = '<div class="stats-empty-note">Аналіз доступний для одного трейдера, а не для об’єднаного куща.</div>';
         return;
     }
-    const trades = collectTimedShortTrades(journal, periodDates);
+    const trades = collectTimedShortTrades(journal, periodDates, { marketOpenStopsOnly });
     activeAnalysisTrades = trades;
     activeAnalysisRequestId = requestId;
     analysisRunning = false;
     if (!trades.length) {
-        container.innerHTML = '<div class="stats-empty-note">У вибраному періоді немає закритих short-угод із коректними цінами входу/виходу після виключення Stop і Take.</div>';
+        container.innerHTML = `${marketStopFilterControl()}<div class="stats-empty-note">${marketOpenStopsOnly ? 'У вибраному періоді немає мінусових позицій, перенесених через відкриття маркету 09:30 NY.' : 'У вибраному періоді немає закритих short-угод із коректними цінами входу/виходу після виключення Stop і Take.'}</div>`;
+        attachMarketStopFilter(container);
         return;
     }
     const uncached = trades.filter((trade) => !cachedMarketResult(trade)).length;
@@ -277,12 +294,14 @@ export async function renderBestExitAnalysis({ journal = {}, periodDates = new S
         container.innerHTML = `
             <div class="best-exit-start">
                 <div><strong>${trades.length} угод у періоді</strong><span>${uncached} ще потребують market data</span></div>
+                ${marketStopFilterControl()}
                 <button type="button" class="btn-primary best-exit-start-btn">Старт / перевірити все</button>
             </div>
             <div class="best-exit-loading-counts">Пройдено ${completed} · залишилось ${uncached}</div>
             <div class="best-exit-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><i style="width:${percent}%"></i></div>
             <p class="stats-chart-note">Дані завантажуються короткими пакетами по ${BATCH_SIZE} угод і зберігаються в Supabase. Повторний запуск не починається спочатку.</p>`;
         container.querySelector('.best-exit-start-btn')?.addEventListener('click', () => runAnalysis(container, trades, requestId));
+        attachMarketStopFilter(container);
         return;
     }
     await runAnalysis(container, trades, requestId);

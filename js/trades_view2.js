@@ -8,6 +8,7 @@ import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 import { findScreenshotsForTicker, openScreenshotForTrade } from './gallery.js';
 import { ensureLightweightCharts } from './vendor_loader.js';
 import { findTradeIndexByIdentity, isPureGoogleSheetTrade, visibleTradeRowsForDate } from './trade_filters.js';
+import { isMarketOpenStopTrade } from './best_exit_core.js';
 
 function sanitizeHTML(str) {
     const div = document.createElement('div');
@@ -542,6 +543,10 @@ function renderTradeInfoBar(trades) {
     if (stopPrice != null && stopPrice !== '') items.push({ label: 'Стоп', value: String(stopPrice), color: 'var(--gold)' });
     if (sheet.exit) items.push({ label: 'Вихід', value: String(sheet.exit), color: 'var(--text-main)' });
     if (sheetException) items.push({ label: 'Виключення', value: sheetException, color: 'var(--loss)' });
+
+    if (trades.some((item) => isMarketOpenStopTrade(item, _activeTrade?.dateStr || ''))) {
+        items.push({ label: 'Група', value: 'Стопи на маркеті', color: 'var(--loss)' });
+    }
 
     bar.innerHTML = '';
     bar.style.display = 'flex';

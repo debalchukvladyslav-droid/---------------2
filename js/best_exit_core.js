@@ -56,13 +56,49 @@ export function isShortTrade(trade = {}) {
     return values.some((value) => /short|шорт/.test(value));
 }
 
-export function collectTimedShortTrades(journal = {}, allowedDates = null) {
+function tradeDatePart(value = '') {
+    return String(value).match(/\b(\d{4}-\d{2}-\d{2})\b/)?.[1] || '';
+}
+
+export function tradeResultValue(trade = {}) {
+    const sheet = trade?.sheet && typeof trade.sheet === 'object' ? trade.sheet : {};
+    const candidates = [trade?.net, trade?.pnl, trade?.profit, trade?.gross, sheet.sheetNet, sheet.pnl, sheet.profit];
+    for (const value of candidates) {
+        if (value === '' || value === null || value === undefined) continue;
+        const parsed = Number(String(value).replace(',', '.'));
+        if (Number.isFinite(parsed)) return parsed;
+    }
+    return null;
+}
+
+export function isMarketOpenStopTrade(trade = {}, dateStr = '') {
+    if (!(tradeResultValue(trade) < 0)) return false;
+    const opened = trade?.opened || trade?.entryTime || trade?.openTime || '';
+    const closed = trade?.closed || trade?.exited || trade?.exitTime || trade?.closeTime || '';
+    const openedMinute = normalizeTradeClock(opened);
+    const closedMinute = normalizeTradeClock(closed);
+    if (openedMinute == null || closedMinute == null) return false;
+
+    const openedDate = tradeDatePart(opened);
+    const closedDate = tradeDatePart(closed);
+    const openedBeforeMarket = openedDate && dateStr
+        ? openedDate < dateStr || (openedDate === dateStr && openedMinute < 570)
+        : openedMinute < 570;
+    const closedAfterMarket = closedDate && dateStr
+        ? closedDate > dateStr || (closedDate === dateStr && closedMinute >= 570)
+        : closedMinute >= 570;
+    return openedBeforeMarket && closedAfterMarket;
+}
+
+export function collectTimedShortTrades(journal = {}, allowedDates = null, { marketOpenStopsOnly = false } = {}) {
     const rows = [];
     for (const [dateStr, day] of Object.entries(journal || {})) {
         if (allowedDates instanceof Set && !allowedDates.has(dateStr)) continue;
         for (const [tradeIndex, trade] of (day?.trades || []).entries()) {
             const exitReason = tradeExitReason(trade);
-            if (!isShortTrade(trade) || !exitReason || isExcludedStopTakeExit(trade)) continue;
+            const isMarketOpenStop = isMarketOpenStopTrade(trade, dateStr);
+            if (!isShortTrade(trade)) continue;
+            if (marketOpenStopsOnly ? !isMarketOpenStop : (!exitReason || isExcludedStopTakeExit(trade))) continue;
             const openedMinute = normalizeTradeClock(trade?.opened);
             const exitMinute = normalizeTradeClock(
                 trade?.closed || trade?.exited || trade?.exitTime || trade?.closeTime || trade?.sheet?.exitTime || ''
@@ -84,6 +120,7 @@ export function collectTimedShortTrades(journal = {}, allowedDates = null) {
                 entryPrice,
                 actualExitPrice,
                 exitReason,
+                isMarketOpenStop,
                 qty: qty > 0 ? qty : null,
                 tradeIdentity: { symbol: trade.symbol, opened: trade.opened || trade.entryTime || trade.time || '', entry: entryPrice, exit: actualExitPrice, qty: qty > 0 ? qty : null },
             });
