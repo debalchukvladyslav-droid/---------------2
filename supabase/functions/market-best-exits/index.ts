@@ -41,9 +41,7 @@ function minuteInNewYork(value: string) {
 }
 
 function fiveMinutePriceQuery(item: { symbol: string; date: string }, targetMinute: number) {
-    const candidates: number[] = [];
-    for (let minute = targetMinute; minute <= 720; minute += 5) candidates.push(minute);
-    return `market_time_price_cache?symbol=eq.${item.symbol}&trade_date=eq.${item.date}&target_minute=in.(${candidates.join(',')})&order=target_minute.asc&limit=1&select=target_minute,close_price,price_at`;
+    return `market_time_price_cache?symbol=eq.${item.symbol}&trade_date=eq.${item.date}&target_minute=eq.${targetMinute}&limit=1&select=target_minute,close_price,price_at`;
 }
 
 async function readStopScenario(item: any, targetMinute: number | null) {

@@ -27,6 +27,11 @@ test('Polygon selected-time prices are cached independently for every minute', (
     assert.equal(readPolygonTimePrice({ symbol: 'AAPL', date: '2026-08-19', targetMinute: 601 }), null);
 });
 
+test('Polygon selected-time cache rejects a later candle or stop from an old calculation', () => {
+    writePolygonTimePrices([{ symbol: 'NIVF', date: '2026-06-16', targetMinute: 570, priceMinute: 625, priceAtTime: 2.1, stopHit: true, stopMinute: 625, stopPrice: 2.2 }]);
+    assert.equal(readPolygonTimePrice({ symbol: 'NIVF', date: '2026-06-16', targetMinute: 570, stopPrice: 2.2 }), null);
+});
+
 test('Polygon queue is global, private and atomically capped at five calls per minute', async () => {
     const migration = await readFile(new URL('../supabase/migrations/20260820122821_polygon_market_low_queue.sql', import.meta.url), 'utf8');
     assert.match(migration, /primary key \(symbol, trade_date\)/i);
@@ -75,4 +80,16 @@ test('best-exit tickers open their exact journal trade and Polygon logs every ti
     assert.match(source, /очікує в черзі або дані недоступні/);
     assert.match(tradesView, /await window\.switchMainTab\('trades'\)/);
     assert.match(tradesView, /findTradeIndexByIdentity/);
+});
+
+test('selected exit time never falls forward to a later candle and stale calculations are cancelled', async () => {
+    const [source, edge] = await Promise.all([
+        readFile(new URL('../js/best_exit_analysis.js', import.meta.url), 'utf8'),
+        readFile(new URL('../supabase/functions/market-best-exits/index.ts', import.meta.url), 'utf8'),
+    ]);
+    assert.match(edge, /target_minute=eq\.\$\{targetMinute\}/);
+    assert.doesNotMatch(edge, /for \(let minute = targetMinute; minute <= 720/);
+    assert.match(source, /analysisAbortController\?\.abort\(\)/);
+    assert.match(source, /JSON\.stringify\(\{ items, targetMinute \}\)/);
+    assert.match(source, /signal,/);
 });

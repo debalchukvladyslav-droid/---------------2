@@ -16,6 +16,7 @@ let marketOpenStopsOnly = false;
 let activeAnalysisContext = null;
 let activePeriodLabel = 'За весь час';
 let selectedExitMinute = 600;
+let analysisAbortController = null;
 const REFRESH_AFTER_PROGRESS_MS = 3000;
 const REFRESH_WHEN_WAITING_MS = 65000;
 
@@ -39,8 +40,8 @@ function cachedMarketResult(trade) {
     return resultCache.get(key) || null;
 }
 
-function cachedTimePrice(trade) {
-    return readPolygonTimePrice({ symbol: trade.symbol, date: trade.date, targetMinute: selectedExitMinute, stopEntryMinute: trade.stopEntryMinute, stopPrice: trade.stopPrice });
+function cachedTimePrice(trade, targetMinute = selectedExitMinute) {
+    return readPolygonTimePrice({ symbol: trade.symbol, date: trade.date, targetMinute, stopEntryMinute: trade.stopEntryMinute, stopPrice: trade.stopPrice });
 }
 
 function money(value) {
@@ -97,13 +98,14 @@ function exitTimeChart(rows = []) {
     </section>`;
 }
 
-async function fetchBatch(items) {
+async function fetchBatch(items, targetMinute, signal = null) {
     let { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) throw new Error('Потрібно увійти в акаунт');
     items.forEach((item) => console.info(`[Polygon] переглядається ${item.symbol} · ${item.date} · від ${String(Math.floor(item.entryMinute / 60)).padStart(2, '0')}:${String(item.entryMinute % 60).padStart(2, '0')} NY`));
     const request = (accessToken) => fetch(`${String(SUPABASE_URL).replace(/\/$/, '')}/functions/v1/market-best-exits`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({ items, targetMinute: selectedExitMinute }),
+        body: JSON.stringify({ items, targetMinute }),
+        signal,
     });
     let response = await request(session.access_token);
     if (response.status === 401) {
@@ -122,7 +124,7 @@ async function fetchBatch(items) {
     return rows;
 }
 
-async function loadMarketResults(trades, onProgress = null) {
+async function loadMarketResults(trades, onProgress = null, targetMinute = selectedExitMinute, signal = null) {
     const missing = [];
     trades.forEach((trade) => {
         const key = `${trade.symbol}|${trade.date}|${trade.entryMinute}`;
@@ -132,7 +134,7 @@ async function loadMarketResults(trades, onProgress = null) {
     onProgress?.(completed, trades.length);
     if (missing.length) {
         const chunk = missing.slice(0, BATCH_SIZE);
-        const results = await fetchBatch(chunk.map(({ symbol, date, entryMinute, stopEntryMinute, stopPrice }) => ({ symbol, date, entryMinute, stopEntryMinute, stopPrice })));
+        const results = await fetchBatch(chunk.map(({ symbol, date, entryMinute, stopEntryMinute, stopPrice }) => ({ symbol, date, entryMinute, stopEntryMinute, stopPrice })), targetMinute, signal);
         writePolygonResults(results);
         results.forEach((row) => {
             if (!bestExitWindowNY(row?.lowTime)) return;
@@ -141,22 +143,22 @@ async function loadMarketResults(trades, onProgress = null) {
         completed = trades.length - countMissingMarketResults(trades);
         onProgress?.(completed, trades.length);
     }
-    const missingTimePrices = trades.filter((trade) => !cachedTimePrice(trade));
+    const missingTimePrices = trades.filter((trade) => !cachedTimePrice(trade, targetMinute));
     if (missingTimePrices.length) {
         const priceItems = missingTimePrices.slice(0, MAX_ITEMS_PER_PRICE_REQUEST).map(({ symbol, date, entryMinute, stopEntryMinute, stopPrice }) => ({ symbol, date, entryMinute, stopEntryMinute, stopPrice }));
-        const priceResults = await fetchBatch(priceItems);
+        const priceResults = await fetchBatch(priceItems, targetMinute, signal);
         writePolygonResults(priceResults);
         completed = trades.length - countMissingMarketResults(trades);
         onProgress?.(completed, trades.length);
     }
-    return buildRowsFromCache(trades);
+    return buildRowsFromCache(trades, targetMinute);
 }
 
-function buildRowsFromCache(trades = []) {
+function buildRowsFromCache(trades = [], targetMinute = selectedExitMinute) {
     return trades.map((trade) => {
         const row = attachBestExitResult(trade, cachedMarketResult(trade));
         if (!row) return null;
-        const timePrice = cachedTimePrice(trade);
+        const timePrice = cachedTimePrice(trade, targetMinute);
         const selectedPrice = timePrice?.notOpened ? NaN : (timePrice?.stopHit ? Number(timePrice.stopPrice) : Number(timePrice?.priceAtTime));
         const comparison = calculateShortExitComparison({ entryPrice: row.entryPrice, actualExitPrice: row.actualExitPrice, selectedPrice, qty: row.qty });
         return { ...row, selectedPrice: selectedPrice > 0 ? selectedPrice : null, selectedPriceMinute: timePrice?.priceMinute ?? null, notOpened: timePrice?.notOpened === true, stopHit: timePrice?.stopHit === true, stopMinute: timePrice?.stopMinute ?? null, stopTime: timePrice?.stopTime || '', actualGross: comparison?.actualGross ?? null, selectedGross: comparison?.selectedGross ?? null, selectedGrossDiff: comparison?.difference ?? null };
@@ -273,8 +275,9 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
         console.info(`[Polygon analysis] вибрано час виходу ${clock} NY`);
         const requestId = ++renderRequest;
         activeAnalysisRequestId = requestId;
-        analysisRunning = false;
-        void runAnalysis(container, activeAnalysisTrades, requestId);
+        analysisAbortController?.abort();
+        analysisAbortController = new AbortController();
+        void runAnalysis(container, activeAnalysisTrades, requestId, selectedExitMinute, analysisAbortController.signal);
     };
     timeSelect?.addEventListener('change', (event) => {
         changeSelectedTime(Number(event.currentTarget.value));
@@ -290,8 +293,8 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
     });
 }
 
-function countMissingMarketResults(trades) {
-    return trades.reduce((count, trade) => count + (cachedMarketResult(trade) && cachedTimePrice(trade) ? 0 : 1), 0);
+function countMissingMarketResults(trades, targetMinute = selectedExitMinute) {
+    return trades.reduce((count, trade) => count + (cachedMarketResult(trade) && cachedTimePrice(trade, targetMinute) ? 0 : 1), 0);
 }
 
 function scheduleSilentRefresh(container, trades, requestId, delay = REFRESH_AFTER_PROGRESS_MS) {
@@ -326,8 +329,7 @@ function escapeHtml(value) {
     return node.innerHTML;
 }
 
-async function runAnalysis(container, trades, requestId) {
-    if (analysisRunning) return;
+async function runAnalysis(container, trades, requestId, targetMinute = selectedExitMinute, signal = null) {
     analysisRunning = true;
     const updateProgress = (done, total) => {
         if (requestId !== renderRequest) return;
@@ -351,13 +353,14 @@ async function runAnalysis(container, trades, requestId) {
             <p class="stats-chart-note">Можна перейти на іншу сторінку. Повторний запуск продовжить із кешованих результатів.</p>`;
     };
     try {
-        const rows = await loadMarketResults(trades, updateProgress);
-        if (requestId !== renderRequest) { analysisRunning = false; return; }
+        const rows = await loadMarketResults(trades, updateProgress, targetMinute, signal);
+        if (requestId !== renderRequest) return;
         analysisRunning = false;
         renderSummary(container, summarizeBestExits(rows), trades.length - rows.length);
         scheduleSilentRefresh(container, trades, requestId);
     } catch (error) {
-        analysisRunning = false;
+        if (requestId === renderRequest) analysisRunning = false;
+        if (error?.name === 'AbortError') return;
         if (requestId !== renderRequest) return;
         container.innerHTML = `
             <div class="stats-empty-note">Завантаження зупинилося: ${escapeHtml(error?.message || error)}</div>
@@ -370,6 +373,8 @@ export async function renderBestExitAnalysis({ journal = {}, periodDates = new S
     const container = document.getElementById('stats-best-exit-content');
     if (!container) return;
     const requestId = ++renderRequest;
+    analysisAbortController?.abort();
+    analysisAbortController = new AbortController();
     clearTimeout(silentRefreshTimer);
     bestExitRowsExpanded = false;
     activePeriodLabel = String(periodLabel || 'За весь час');
@@ -389,5 +394,5 @@ export async function renderBestExitAnalysis({ journal = {}, periodDates = new S
     }
     const initialRows = buildRowsFromCache(trades);
     renderSummary(container, summarizeBestExits(initialRows), countMissingMarketResults(trades), false);
-    await runAnalysis(container, trades, requestId);
+    await runAnalysis(container, trades, requestId, selectedExitMinute, analysisAbortController.signal);
 }
