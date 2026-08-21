@@ -93,3 +93,17 @@ test('selected exit time never falls forward to a later candle and stale calcula
     assert.match(source, /JSON\.stringify\(\{ items, targetMinute \}\)/);
     assert.match(source, /signal,/);
 });
+
+test('Polygon full charts are archived in private Supabase Storage before calling Polygon again', async () => {
+    const [edge, migration] = await Promise.all([
+        readFile(new URL('../supabase/functions/market-best-exits/index.ts', import.meta.url), 'utf8'),
+        readFile(new URL('../supabase/migrations/20260821143000_polygon_storage_archive.sql', import.meta.url), 'utf8'),
+    ]);
+    assert.match(migration, /'polygon-cache'.*false/s);
+    assert.doesNotMatch(migration, /create policy/i);
+    assert.match(edge, /readPolygonArchive\(item\.symbol, item\.date\)/);
+    assert.match(edge, /readDatabaseGraph\(item\.symbol, item\.date\)/);
+    assert.match(edge, /if \(!marketResults\)/);
+    assert.match(edge, /writePolygonArchive\(item\.symbol, item\.date, marketResults\)/);
+    assert.match(edge, /source: \$\{marketSource\}/);
+});

@@ -3,6 +3,8 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 const DEFAULT_ORIGIN = 'https://traderjournal-six.vercel.app';
 const MAX_ITEMS = 200;
 const INTRADAY_CACHE_VERSION = 2;
+const POLYGON_ARCHIVE_BUCKET = 'polygon-cache';
+const POLYGON_ARCHIVE_VERSION = 1;
 
 function cors(req: Request) {
     const allowed = new Set([DEFAULT_ORIGIN, 'http://localhost:8787', 'http://127.0.0.1:8787', ...(Deno.env.get('APP_ALLOWED_ORIGINS') || '').split(',')]);
@@ -75,6 +77,54 @@ async function rest(path: string, init: RequestInit = {}) {
     });
 }
 
+function polygonArchivePath(symbol: string, date: string) {
+    return `${symbol}/${date}.json`;
+}
+
+async function readPolygonArchive(symbol: string, date: string) {
+    const url = Deno.env.get('SUPABASE_URL')!;
+    const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const path = polygonArchivePath(symbol, date).split('/').map(encodeURIComponent).join('/');
+    const response = await fetch(`${url}/storage/v1/object/authenticated/${POLYGON_ARCHIVE_BUCKET}/${path}`, {
+        headers: { apikey: key, Authorization: `Bearer ${key}` },
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`Polygon archive read ${response.status}`);
+    const archive = await response.json().catch(() => null);
+    if (Number(archive?.version) !== POLYGON_ARCHIVE_VERSION || !Array.isArray(archive?.results) || !archive.results.length) return null;
+    return archive.results;
+}
+
+async function writePolygonArchive(symbol: string, date: string, results: any[]) {
+    const url = Deno.env.get('SUPABASE_URL')!;
+    const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const path = polygonArchivePath(symbol, date).split('/').map(encodeURIComponent).join('/');
+    const response = await fetch(`${url}/storage/v1/object/${POLYGON_ARCHIVE_BUCKET}/${path}`, {
+        method: 'POST',
+        headers: {
+            apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json',
+            'x-upsert': 'true', 'Cache-Control': 'max-age=31536000',
+        },
+        body: JSON.stringify({ version: POLYGON_ARCHIVE_VERSION, symbol, date, provider: 'polygon', savedAt: new Date().toISOString(), results }),
+    });
+    if (!response.ok) throw new Error(`Polygon archive write ${response.status}`);
+}
+
+async function readDatabaseGraph(symbol: string, date: string) {
+    const statusResponse = await rest(`market_intraday_cache_status?symbol=eq.${symbol}&trade_date=eq.${date}&select=bar_count&limit=1`);
+    const statusRows = statusResponse.ok ? await statusResponse.json() : [];
+    const expectedBars = Number(statusRows?.[0]?.bar_count) || 0;
+    if (!expectedBars) return null;
+    const rowsResponse = await rest(`market_time_price_cache?symbol=eq.${symbol}&trade_date=eq.${date}&order=target_minute.asc&limit=1000&select=open_price,high_price,low_price,close_price,price_at,volume,vwap,transactions`);
+    const rows = rowsResponse.ok ? await rowsResponse.json() : [];
+    if (rows.length < expectedBars) return null;
+    return rows.map((row: any) => ({
+        t: new Date(row.price_at).getTime(), o: Number(row.open_price), h: Number(row.high_price),
+        l: Number(row.low_price), c: Number(row.close_price), v: Number(row.volume) || 0,
+        vw: Number(row.vwap) || null, n: Number.isInteger(Number(row.transactions)) ? Number(row.transactions) : null,
+    })).filter((bar: any) => Number.isFinite(bar.t) && bar.o > 0 && bar.h > 0 && bar.l > 0 && bar.c > 0);
+}
+
 Deno.serve(async (req) => {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(req) });
     if (req.method !== 'POST') return json(req, { message: 'Method not allowed' }, 405);
@@ -138,18 +188,29 @@ Deno.serve(async (req) => {
     const backgroundWork = Promise.all((claimed || []).slice(0, 1).map(async (job: any) => {
         const item = { symbol: String(job.symbol), date: String(job.trade_date) };
         try {
-        const offset = nyOffset(item.date);
-        const from = new Date(`${item.date}T04:00:00${offset}`).getTime();
-        const to = new Date(`${item.date}T20:00:00${offset}`).getTime();
-        const params = new URLSearchParams({ adjusted: 'false', sort: 'asc', limit: '1000', apiKey: polygonKey });
-        const marketRes = await fetch(`https://api.polygon.io/v2/aggs/ticker/${item.symbol}/range/1/minute/${from}/${to}?${params}`, { signal: AbortSignal.timeout(12000) });
-        const market = await marketRes.json().catch(() => ({}));
-        if (!marketRes.ok || !Array.isArray(market.results) || !market.results.length) throw new Error(market?.error || market?.message || `Polygon ${marketRes.status}`);
+        let marketResults = await readPolygonArchive(item.symbol, item.date);
+        let marketSource = 'supabase-storage';
+        if (!marketResults) {
+            marketResults = await readDatabaseGraph(item.symbol, item.date);
+            marketSource = marketResults ? 'supabase-database' : 'polygon';
+            if (!marketResults) {
+                const offset = nyOffset(item.date);
+                const from = new Date(`${item.date}T04:00:00${offset}`).getTime();
+                const to = new Date(`${item.date}T20:00:00${offset}`).getTime();
+                const params = new URLSearchParams({ adjusted: 'false', sort: 'asc', limit: '1000', apiKey: polygonKey });
+                const marketRes = await fetch(`https://api.polygon.io/v2/aggs/ticker/${item.symbol}/range/1/minute/${from}/${to}?${params}`, { signal: AbortSignal.timeout(12000) });
+                const market = await marketRes.json().catch(() => ({}));
+                if (!marketRes.ok || !Array.isArray(market.results) || !market.results.length) throw new Error(market?.error || market?.message || `Polygon ${marketRes.status}`);
+                marketResults = market.results;
+            }
+            try { await writePolygonArchive(item.symbol, item.date, marketResults); }
+            catch (archiveError) { console.warn(`[Polygon archive] write deferred ${item.symbol} ${item.date}: ${archiveError?.message || archiveError}`); }
+        }
         const minuteFormatter = new Intl.DateTimeFormat('en-US', {
             timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false,
         });
         const barsByMinute = new Map<number, any>();
-        market.results.forEach((bar: any) => {
+        marketResults.forEach((bar: any) => {
             const [hour, minute] = minuteFormatter.format(new Date(Number(bar.t))).split(':').map(Number);
             barsByMinute.set(hour * 60 + minute, bar);
         });
@@ -200,7 +261,7 @@ Deno.serve(async (req) => {
         await rest(`market_low_jobs?symbol=eq.${item.symbol}&trade_date=eq.${item.date}`, {
             method: 'PATCH', body: JSON.stringify({ status: 'ready', updated_at: new Date().toISOString(), last_error: '' }),
         });
-        console.log(`[Polygon queue] ready ${item.symbol} ${item.date}; full graph cached: ${priceRows.length} one-minute OHLCV bars`);
+        console.log(`[Polygon queue] ready ${item.symbol} ${item.date}; source: ${marketSource}; full graph cached: ${priceRows.length} one-minute OHLCV bars`);
         } catch (error) {
             const message = String(error?.message || error).slice(0, 500);
             await rest(`market_low_jobs?symbol=eq.${item.symbol}&trade_date=eq.${item.date}`, {
