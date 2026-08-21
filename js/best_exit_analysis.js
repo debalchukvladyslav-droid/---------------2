@@ -20,6 +20,7 @@ let selectedExitMinute = 600;
 let analysisAbortController = null;
 const REFRESH_AFTER_PROGRESS_MS = 3000;
 const REFRESH_WHEN_WAITING_MS = 65000;
+const TIME_EXIT_ANALYSIS_DISABLED = true;
 
 function marketStopFilterControl() {
     return `<label class="best-exit-market-filter"><input type="checkbox" data-market-open-stops ${marketOpenStopsOnly ? 'checked' : ''}><span>Стопи на маркеті</span></label>`;
@@ -147,13 +148,15 @@ async function loadMarketResults(trades, onProgress = null, targetMinute = selec
         completed = trades.length - countMissingMarketResults(trades);
         onProgress?.(completed, trades.length);
     }
-    const missingTimePrices = trades.filter((trade) => !cachedTimePrice(trade, targetMinute));
-    if (missingTimePrices.length) {
-        const priceItems = missingTimePrices.slice(0, MAX_ITEMS_PER_PRICE_REQUEST).map(({ symbol, date, entryMinute, stopEntryMinute, stopPrice }) => ({ symbol, date, entryMinute, stopEntryMinute, stopPrice }));
-        const priceResults = await fetchBatch(priceItems, targetMinute, signal);
-        writePolygonResults(priceResults);
-        completed = trades.length - countMissingMarketResults(trades);
-        onProgress?.(completed, trades.length);
+    if (!TIME_EXIT_ANALYSIS_DISABLED) {
+        const missingTimePrices = trades.filter((trade) => !cachedTimePrice(trade, targetMinute));
+        if (missingTimePrices.length) {
+            const priceItems = missingTimePrices.slice(0, MAX_ITEMS_PER_PRICE_REQUEST).map(({ symbol, date, entryMinute, stopEntryMinute, stopPrice }) => ({ symbol, date, entryMinute, stopEntryMinute, stopPrice }));
+            const priceResults = await fetchBatch(priceItems, targetMinute, signal);
+            writePolygonResults(priceResults);
+            completed = trades.length - countMissingMarketResults(trades);
+            onProgress?.(completed, trades.length);
+        }
     }
     return buildRowsFromCache(trades, targetMinute);
 }
@@ -219,7 +222,7 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
             <div class="best-exit-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progressPercent}"><i style="width:${progressPercent}%"></i></div>
         </div>
         ${exitTimeChart(summary.rows)}
-        <div class="best-exit-time-simulator">
+        ${!TIME_EXIT_ANALYSIS_DISABLED ? `<div class="best-exit-time-simulator">
             <div><strong>Результат при виході у вибраний час</strong><span>Gross через entry × shares, час NY</span></div>
             <div class="best-exit-time-totals">
                 <div><span>Фактичний Gross</span><strong>${actualRows.length ? money(actualGrossTotal) : '—'}</strong></div>
@@ -230,7 +233,7 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
                 <label><span>Час виходу</span><select data-best-exit-target-time>${timeOptions()}</select></label>
                 <button type="button" data-best-exit-time-step="5" aria-label="На 5 хвилин пізніше" ${selectedExitMinute >= 720 ? 'disabled' : ''}>›</button>
             </div>
-        </div>
+        </div>` : ''}
         <div class="best-exit-table-wrap${bestExitRowsExpanded ? ' is-expanded' : ''}">
             <table class="best-exit-table">
                 <thead><tr><th>Дата</th><th>Тікер</th><th>Вихід</th><th>Low</th><th>Забрано руху</th><th>Найкращий 10-хв діапазон (NY)</th><th>Макс. P&amp;L</th><th>Не забрано</th><th>Сценарій</th><th data-best-exit-price-heading>Ціна @ ${minuteToClock(selectedExitMinute)}</th><th>Gross @ час</th><th>Δ до факту</th></tr></thead>
@@ -275,6 +278,7 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
     });
     const timeSelect = container.querySelector('[data-best-exit-target-time]');
     const changeSelectedTime = (nextMinute) => {
+        if (TIME_EXIT_ANALYSIS_DISABLED) return;
         if (!Number.isInteger(nextMinute) || nextMinute < 540 || nextMinute > 720 || nextMinute % 5 !== 0 || nextMinute === selectedExitMinute) return;
         selectedExitMinute = nextMinute;
         const clock = minuteToClock(selectedExitMinute);

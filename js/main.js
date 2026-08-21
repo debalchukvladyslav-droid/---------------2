@@ -217,7 +217,8 @@ function startManualSyncScheduler() {
             console.warn('[Scheduled sync]', error?.message || error);
         });
     };
-    runScheduledSync();
+    // Let the initial app render finish before starting the full network sync.
+    setTimeout(runScheduledSync, 30000);
     manualSyncIntervalId = setInterval(runScheduledSync, MANUAL_SYNC_INTERVAL_MS);
 }
 
