@@ -116,6 +116,7 @@ test('admin can pause Polygon globally and enqueue only Trades missing from the 
         readFile(new URL('../supabase/migrations/20260821151000_polygon_archive_admin_index.sql', import.meta.url), 'utf8'),
     ]);
     assert.match(edge, /body\.action === 'admin-pause'/);
+    assert.match(edge, /authorization, x-client-info, apikey, content-type/);
     assert.match(edge, /body\.action === 'admin-enqueue-all'/);
     assert.match(edge, /const missing = \[\.\.\.unique\.entries\(\)\]\.filter/);
     assert.match(edge, /control\.paused \? null : await rest\('rpc\/claim_market_low_jobs'/);

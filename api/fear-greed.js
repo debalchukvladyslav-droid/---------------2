@@ -17,7 +17,18 @@ export default async function handler(req, res) {
     if (req.method !== 'GET') return res.status(405).json({ message: 'Method not allowed' });
 
     const authResult = await verifySupabaseAuth(req);
-    if (!authResult.ok) return res.status(authResult.status).json({ message: authResult.message });
+    if (!authResult.ok) {
+        if (authResult.status === 502) {
+            return res.status(200).json({
+                provider: 'cnn',
+                sourceUrl: 'https://www.cnn.com/markets/fear-and-greed',
+                degraded: true,
+                reason: 'Market sentiment temporarily unavailable',
+                updatedAt: new Date().toISOString(),
+            });
+        }
+        return res.status(authResult.status).json({ message: authResult.message });
+    }
 
     if (cache.payload && Date.now() - cache.ts < CACHE_TTL_MS) {
         return res.status(200).json({ ...cache.payload, cached: true });

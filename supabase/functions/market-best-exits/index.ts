@@ -12,7 +12,7 @@ function cors(req: Request) {
     const origin = req.headers.get('Origin') || '';
     return {
         'Access-Control-Allow-Origin': allowed.has(origin) ? origin : DEFAULT_ORIGIN,
-        'Access-Control-Allow-Headers': 'authorization, apikey, content-type',
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         Vary: 'Origin',
     };
