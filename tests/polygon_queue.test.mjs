@@ -130,3 +130,17 @@ test('admin can pause Polygon globally and enqueue only Trades missing from the 
     assert.match(archiveIndex, /revoke all.*public, anon, authenticated/is);
     assert.match(archiveIndex, /grant execute.*service_role/is);
 });
+
+test('Supabase cron drains up to five Polygon jobs per minute without opening the site', async () => {
+    const [edge, migration] = await Promise.all([
+        readFile(new URL('../supabase/functions/market-best-exits/index.ts', import.meta.url), 'utf8'),
+        readFile(new URL('../supabase/migrations/20260821184500_polygon_durable_worker_cron.sql', import.meta.url), 'utf8'),
+    ]);
+    assert.match(migration, /polygon-durable-worker/);
+    assert.match(migration, /'\* \* \* \* \*'/);
+    assert.match(migration, /claim_polygon_worker_wake/);
+    assert.match(migration, /revoke all.*public, anon, authenticated/is);
+    assert.match(edge, /body\?\.action === 'cron-worker'/);
+    assert.match(edge, /max_jobs: cronWorker \? 5 : 1/);
+    assert.match(edge, /slice\(0, cronWorker \? 5 : 1\)/);
+});

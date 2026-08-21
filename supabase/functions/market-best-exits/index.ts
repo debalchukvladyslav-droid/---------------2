@@ -191,13 +191,27 @@ async function readDatabaseGraph(symbol: string, date: string) {
 Deno.serve(async (req) => {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(req) });
     if (req.method !== 'POST') return json(req, { message: 'Method not allowed' }, 405);
-    const auth = req.headers.get('Authorization');
-    const anon = Deno.env.get('SUPABASE_ANON_KEY') || '';
-    const user = await fetch(`${Deno.env.get('SUPABASE_URL')}/auth/v1/user`, { headers: { Authorization: auth || '', apikey: anon } });
-    if (!user.ok) return json(req, { message: 'Invalid auth token' }, 401);
-    const userData = await user.json().catch(() => ({}));
-
     const body = await req.json().catch(() => ({}));
+    const cronWorker = body?.action === 'cron-worker';
+    let userData: any = {};
+    if (cronWorker) {
+        const wakeToken = String(body?.wakeToken || '');
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(wakeToken)) return json(req, { message: 'Invalid worker token' }, 401);
+        const claimedWake = await rest('rpc/claim_polygon_worker_wake', { method: 'POST', body: JSON.stringify({ wake_token: wakeToken }) });
+        const claimedValue = claimedWake.ok ? await claimedWake.json().catch(() => false) : false;
+        if (claimedValue !== true) return json(req, { message: 'Expired worker token' }, 401);
+        const pendingResponse = await rest(`market_low_jobs?status=in.(pending,failed)&next_attempt_at=lte.${encodeURIComponent(new Date().toISOString())}&order=updated_at.asc&limit=5&select=symbol,trade_date`);
+        const pending = pendingResponse.ok ? await pendingResponse.json() : [];
+        if (!pending.length) return json(req, { processed: 0, queued: 0 });
+        body.action = '';
+        body.items = pending.map((row: any) => ({ symbol: row.symbol, date: row.trade_date, entryMinute: 570 }));
+    } else {
+        const auth = req.headers.get('Authorization');
+        const anon = Deno.env.get('SUPABASE_ANON_KEY') || '';
+        const user = await fetch(`${Deno.env.get('SUPABASE_URL')}/auth/v1/user`, { headers: { Authorization: auth || '', apikey: anon } });
+        if (!user.ok) return json(req, { message: 'Invalid auth token' }, 401);
+        userData = await user.json().catch(() => ({}));
+    }
     let adminQueueResult: any = null;
     if (String(body?.action || '').startsWith('admin-')) {
         if (!await isAdmin(String(userData?.id || ''))) return json(req, { message: 'Admin access required' }, 403);
@@ -273,10 +287,10 @@ Deno.serve(async (req) => {
         })));
     }
     const control = await readPolygonControl();
-    const claimResponse = control.paused ? null : await rest('rpc/claim_market_low_jobs', { method: 'POST', body: JSON.stringify({ max_jobs: 1 }) });
+    const claimResponse = control.paused ? null : await rest('rpc/claim_market_low_jobs', { method: 'POST', body: JSON.stringify({ max_jobs: cronWorker ? 5 : 1 }) });
     const claimed = claimResponse?.ok ? await claimResponse.json() : [];
     const polygonKey = Deno.env.get('POLYGON_API_KEY') || '';
-    const backgroundWork = Promise.all((claimed || []).slice(0, 1).map(async (job: any) => {
+    const backgroundWork = Promise.all((claimed || []).slice(0, cronWorker ? 5 : 1).map(async (job: any) => {
         const item = { symbol: String(job.symbol), date: String(job.trade_date) };
         try {
         let marketResults = await readPolygonArchive(item.symbol, item.date);
