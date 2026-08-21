@@ -142,6 +142,7 @@ window.renderTraderDNAGlance = renderTraderDNAGlance;
 let manualSyncInProgress = false;
 let manualSyncIntervalId = null;
 const MANUAL_SYNC_INTERVAL_MS = 5 * 60 * 1000;
+const AUTO_MANUAL_SYNC_DISABLED = true;
 
 async function runManualSyncStep(name, fn, options = {}) {
     const optional = options.optional !== false;
@@ -211,6 +212,7 @@ async function manualSyncAll(trigger = null, options = {}) {
 
 function startManualSyncScheduler() {
     stopManualSyncScheduler();
+    if (AUTO_MANUAL_SYNC_DISABLED) return;
     const runScheduledSync = () => {
         if (!state.USER_DOC_NAME) return;
         void manualSyncAll(null, { quiet: true }).catch((error) => {
