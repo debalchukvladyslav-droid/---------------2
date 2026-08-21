@@ -39,6 +39,12 @@ function minuteInNewYork(value: string) {
     return Number.isFinite(hour) && Number.isFinite(minute) ? hour * 60 + minute : null;
 }
 
+function fiveMinutePriceQuery(item: { symbol: string; date: string }, targetMinute: number) {
+    const candidates: number[] = [];
+    for (let minute = targetMinute; minute <= 720; minute += 5) candidates.push(minute);
+    return `market_time_price_cache?symbol=eq.${item.symbol}&trade_date=eq.${item.date}&target_minute=in.(${candidates.join(',')})&order=target_minute.asc&limit=1&select=target_minute,close_price,price_at`;
+}
+
 async function rest(path: string, init: RequestInit = {}) {
     const url = Deno.env.get('SUPABASE_URL')!;
     const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -58,7 +64,7 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const requestedTargetMinute = Number(body?.targetMinute);
-    const targetMinute = Number.isInteger(requestedTargetMinute) && requestedTargetMinute >= 540 && requestedTargetMinute <= 720
+    const targetMinute = Number.isInteger(requestedTargetMinute) && requestedTargetMinute >= 540 && requestedTargetMinute <= 720 && requestedTargetMinute % 5 === 0
         ? requestedTargetMinute
         : null;
     const items = Array.isArray(body?.items) ? body.items.slice(0, MAX_ITEMS) : [];
@@ -76,7 +82,7 @@ Deno.serve(async (req) => {
         const cachedMinute = cached?.[0] ? minuteInNewYork(cached[0].low_at) : null;
         let timePrice: any = null;
         if (targetMinute != null) {
-            const priceQuery = `market_time_price_cache?symbol=eq.${item.symbol}&trade_date=eq.${item.date}&target_minute=gte.${targetMinute}&target_minute=lte.720&order=target_minute.asc&limit=1&select=target_minute,close_price,price_at`;
+            const priceQuery = fiveMinutePriceQuery(item, targetMinute);
             const priceRes = await rest(priceQuery);
             const prices = priceRes.ok ? await priceRes.json() : [];
             timePrice = prices?.[0] || null;
@@ -138,7 +144,7 @@ Deno.serve(async (req) => {
             method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify(cacheRows),
         });
         const priceRows = [...barsByMinute.entries()]
-            .filter(([minute, bar]) => minute >= 540 && minute <= 720 && Number(bar?.c) > 0)
+            .filter(([minute, bar]) => minute >= 540 && minute <= 720 && minute % 5 === 0 && Number(bar?.c) > 0)
             .map(([minute, bar]) => ({
                 symbol: item.symbol, trade_date: item.date, target_minute: minute,
                 close_price: Number(bar.c), price_at: new Date(Number(bar.t)).toISOString(),
@@ -150,7 +156,7 @@ Deno.serve(async (req) => {
         await rest(`market_low_jobs?symbol=eq.${item.symbol}&trade_date=eq.${item.date}`, {
             method: 'PATCH', body: JSON.stringify({ status: 'ready', updated_at: new Date().toISOString(), last_error: '' }),
         });
-        console.log(`[Polygon queue] ready ${item.symbol} ${item.date}; cached ${cacheRows.length} entry-minute lows`);
+        console.log(`[Polygon queue] ready ${item.symbol} ${item.date}; cached ${cacheRows.length} entry-minute lows and ${priceRows.length} five-minute prices`);
         } catch (error) {
             const message = String(error?.message || error).slice(0, 500);
             await rest(`market_low_jobs?symbol=eq.${item.symbol}&trade_date=eq.${item.date}`, {
@@ -164,7 +170,7 @@ Deno.serve(async (req) => {
         const cachedRes = await rest(query); const cached = cachedRes.ok ? await cachedRes.json() : [];
         let timePrice: any = null;
         if (targetMinute != null) {
-            const priceQuery = `market_time_price_cache?symbol=eq.${item.symbol}&trade_date=eq.${item.date}&target_minute=gte.${targetMinute}&target_minute=lte.720&order=target_minute.asc&limit=1&select=target_minute,close_price,price_at`;
+            const priceQuery = fiveMinutePriceQuery(item, targetMinute);
             const priceRes = await rest(priceQuery); const prices = priceRes.ok ? await priceRes.json() : [];
             timePrice = prices?.[0] || null;
         }

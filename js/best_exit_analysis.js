@@ -65,7 +65,7 @@ function bestWindowSummary(rows = []) {
 function exitTimeChart(rows = []) {
     const series = buildLowTimeFrequencySeries(rows, { minMinute: lowChartFromTen ? 600 : 570 });
     const heading = `<div><strong>Коли акції найчастіше роблять low</strong><span>Частка low у кожному 10-хвилинному інтервалі, NY</span></div>`;
-    const filter = `<label class="best-exit-time-filter"><input type="checkbox" data-low-chart-from-ten ${lowChartFromTen ? 'checked' : ''}><span>З 10:00</span></label>`;
+    const filter = `<div class="best-exit-time-chart__filters"><label class="best-exit-time-filter"><input type="checkbox" data-low-chart-from-ten ${lowChartFromTen ? 'checked' : ''}><span>З 10:00</span></label>${marketStopFilterControl()}</div>`;
     if (!series.length) return `<section class="best-exit-time-chart"><div class="best-exit-time-chart__head">${heading}${filter}</div><div class="stats-empty-note">Для цього діапазону ще немає часу low від Polygon.</div></section>`;
     const width = 680;
     const height = 190;
@@ -183,7 +183,6 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
         <div class="best-exit-run-status">
             <div class="best-exit-run-status__head">
                 <div><strong>Перевірка Polygon</strong><span>Пройдено ${completedTrades} із ${totalTrades} · залишилось ${remainingTrades}</span></div>
-                ${marketStopFilterControl()}
                 <button type="button" class="btn-secondary best-exit-check-all" ${analysisRunning ? 'disabled' : ''}>${analysisRunning ? 'Перевіряємо…' : 'Старт / перевірити все'}</button>
             </div>
             <div class="best-exit-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progressPercent}"><i style="width:${progressPercent}%"></i></div>
@@ -191,7 +190,7 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
         ${exitTimeChart(summary.rows)}
         <div class="best-exit-time-simulator">
             <div><strong>Результат при виході у вибраний час</strong><span>Gross через entry × shares, час NY</span></div>
-            <label><span>Час виходу</span><input type="time" min="09:00" max="12:00" step="60" value="${minuteToClock(selectedExitMinute)}" data-best-exit-target-time></label>
+            <label><span>Час виходу</span><input type="time" min="09:00" max="12:00" step="300" value="${minuteToClock(selectedExitMinute)}" data-best-exit-target-time></label>
         </div>
         <div class="best-exit-table-wrap${bestExitRowsExpanded ? ' is-expanded' : ''}">
             <table class="best-exit-table">
@@ -226,7 +225,7 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
     container.querySelector('[data-best-exit-target-time]')?.addEventListener('change', (event) => {
         const [hour, minute] = String(event.currentTarget.value || '').split(':').map(Number);
         const nextMinute = hour * 60 + minute;
-        if (!Number.isInteger(nextMinute) || nextMinute < 540 || nextMinute > 720) {
+        if (!Number.isInteger(nextMinute) || nextMinute < 540 || nextMinute > 720 || nextMinute % 5 !== 0) {
             event.currentTarget.value = minuteToClock(selectedExitMinute);
             return;
         }
