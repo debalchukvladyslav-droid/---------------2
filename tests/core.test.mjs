@@ -951,7 +951,7 @@ test('datagrid rows prefer current sheetRows and keep sheet-only rows out of rea
     assert.equal(latest.spreadsheetId, 'sheet-2');
 });
 
-test('datagrid sheet rows hide dates older than current and previous month when rendered by app', () => {
+test('datagrid keeps recent main rows and restores older months from cumulative archive', () => {
     const result = collectDatagridRows({
         sheetRows: {
             'sheet-1': {
@@ -976,7 +976,7 @@ test('datagrid sheet rows hide dates older than current and previous month when 
     }, 'sheet-1', new Date(2026, 5, 17));
 
     assert.equal(result.source, 'sheet');
-    assert.deepEqual(result.rows.map((row) => row.trade.symbol), ['MAY', 'JUN']);
+    assert.deepEqual(result.rows.map((row) => row.trade.symbol), ['ARCHIVE', 'MAY', 'JUN']);
 });
 
 test('datagrid rows fall back to real Trades when no sheetRows exist', () => {
@@ -1037,8 +1037,8 @@ test('cumulative sheet import stores invisible rows and enriches only existing T
     assert.equal(cumulativeSheetRows['archive-1']['2026-01-11'][0].symbol, 'TSLA');
 
     const grid = collectDatagridRows({ journal, cumulativeSheetRows });
-    assert.equal(grid.source, 'trades');
-    assert.deepEqual(grid.rows.map((row) => row.trade.symbol), ['AAPL']);
+    assert.equal(grid.source, 'sheet');
+    assert.deepEqual(grid.rows.map((row) => row.trade.symbol), ['AAPL', 'TSLA']);
 });
 
 test('main sheet context wins over cumulative overlap', () => {

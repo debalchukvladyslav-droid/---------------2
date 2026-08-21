@@ -37,8 +37,8 @@ export function pickSheetRowsSource(sheetRows = {}, preferredSpreadsheetId = '')
     return spreadsheetId ? { spreadsheetId, byDay: store[spreadsheetId] } : null;
 }
 
-function flattenSheetRows(byDay = {}, referenceDate = null) {
-    const visibleSince = sheetVisibleSinceDate(referenceDate, 2);
+function flattenSheetRows(byDay = {}, referenceDate = null, { archive = false } = {}) {
+    const visibleSince = archive ? '' : sheetVisibleSinceDate(referenceDate, 2);
     const flat = [];
     Object.keys(byDay)
         .filter(isDayKey)
@@ -97,11 +97,32 @@ function flattenRealTrades(journal = {}) {
 
 export function collectDatagridRows(appData = {}, preferredSpreadsheetId = '', referenceDate = null) {
     const sheetSource = pickSheetRowsSource(appData.sheetRows, preferredSpreadsheetId);
-    if (sheetSource) {
+    const archiveStore = appData.cumulativeSheetRows && typeof appData.cumulativeSheetRows === 'object'
+        ? appData.cumulativeSheetRows
+        : {};
+    const rawArchiveRows = Object.keys(archiveStore)
+        .filter((spreadsheetId) => sheetSourceHasRows(archiveStore[spreadsheetId]))
+        .flatMap((spreadsheetId) => flattenSheetRows(archiveStore[spreadsheetId], null, { archive: true }));
+    const archiveRows = [...new Map(rawArchiveRows.map((row) => {
+        const trade = row.trade || {};
+        const key = [row.dateStr, trade.symbol, trade.opened, trade.entry, trade.exit, trade.qty, trade.type].join('|');
+        return [key, row];
+    })).values()];
+    if (sheetSource || archiveRows.length) {
+        const currentRows = sheetSource ? flattenSheetRows(sheetSource.byDay, referenceDate) : [];
+        const currentSince = sheetVisibleSinceDate(referenceDate, 2);
+        const oldArchiveRows = currentSince
+            ? archiveRows.filter((row) => row.dateStr < currentSince)
+            : archiveRows;
+        const rows = [...oldArchiveRows, ...currentRows].sort((a, b) => {
+            const dc = a.dateStr.localeCompare(b.dateStr);
+            if (dc !== 0) return dc;
+            return String(timeFromOpened(a.trade.opened)).localeCompare(String(timeFromOpened(b.trade.opened)));
+        });
         return {
             source: 'sheet',
-            spreadsheetId: sheetSource.spreadsheetId,
-            rows: flattenSheetRows(sheetSource.byDay, referenceDate),
+            spreadsheetId: sheetSource?.spreadsheetId || Object.keys(archiveStore).find((id) => sheetSourceHasRows(archiveStore[id])) || '',
+            rows,
         };
     }
     return {
