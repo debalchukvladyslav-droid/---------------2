@@ -1,11 +1,12 @@
 import { supabase, SUPABASE_URL } from './supabase.js';
-import { attachBestExitResult, bestExitWindowNY, buildLowTimeFrequencySeries, collectTimedShortTrades, summarizeBestExits } from './best_exit_core.js';
-import { readPolygonResult, writePolygonResults } from './polygon_result_cache.js';
+import { attachBestExitResult, bestExitWindowNY, buildLowTimeFrequencySeries, calculateShortExitComparison, collectTimedShortTrades, summarizeBestExits } from './best_exit_core.js';
+import { readPolygonResult, readPolygonTimePrice, writePolygonResults, writePolygonTimePrices } from './polygon_result_cache.js';
 
 const resultCache = new Map();
 let renderRequest = 0;
 const AUTO_ANALYZE_LIMIT = 40;
 const BATCH_SIZE = 5;
+const MAX_ITEMS_PER_PRICE_REQUEST = 200;
 let bestExitRowsExpanded = false;
 let lowChartFromTen = false;
 let silentRefreshTimer = null;
@@ -14,6 +15,7 @@ let activeAnalysisRequestId = 0;
 let analysisRunning = false;
 let marketOpenStopsOnly = false;
 let activeAnalysisContext = null;
+let selectedExitMinute = 600;
 const REFRESH_AFTER_PROGRESS_MS = 3000;
 const REFRESH_WHEN_WAITING_MS = 65000;
 
@@ -37,10 +39,18 @@ function cachedMarketResult(trade) {
     return resultCache.get(key) || null;
 }
 
+function cachedTimePrice(trade) {
+    return readPolygonTimePrice({ symbol: trade.symbol, date: trade.date, targetMinute: selectedExitMinute });
+}
+
 function money(value) {
     return Number.isFinite(Number(value))
         ? `${Number(value).toLocaleString('uk-UA', { maximumFractionDigits: 0 })}$`
         : '—';
+}
+
+function minuteToClock(minute) {
+    return `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
 }
 
 function bestWindowSummary(rows = []) {
@@ -89,7 +99,7 @@ async function fetchBatch(items) {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ items, targetMinute: selectedExitMinute }),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload?.message || `Market data: ${response.status}`);
@@ -97,7 +107,9 @@ async function fetchBatch(items) {
     const returnedKeys = new Set((payload?.results || []).map((row) => `${row.symbol}|${row.date}|${row.entryMinute}`));
     (payload?.results || []).forEach((row) => console.info(`[Polygon] ${row.symbol} · ${row.date}: Low $${Number(row.low).toFixed(2)} · ${row.lowTime} · ${row.cached ? 'кеш' : 'отримано'}`));
     items.filter((item) => !returnedKeys.has(`${item.symbol}|${item.date}|${item.entryMinute}`)).forEach((item) => console.info(`[Polygon] ${item.symbol} · ${item.date}: очікує в черзі або дані недоступні`));
-    return Array.isArray(payload.results) ? payload.results : [];
+    const rows = Array.isArray(payload.results) ? payload.results : [];
+    writePolygonTimePrices(rows);
+    return rows;
 }
 
 async function loadMarketResults(trades, onProgress = null) {
@@ -119,10 +131,22 @@ async function loadMarketResults(trades, onProgress = null) {
         completed = trades.length - countMissingMarketResults(trades);
         onProgress?.(completed, trades.length);
     }
-    return trades.map((trade) => attachBestExitResult(
-        trade,
-        cachedMarketResult(trade),
-    )).filter(Boolean);
+    const missingTimePrices = trades.filter((trade) => !cachedTimePrice(trade));
+    if (missingTimePrices.length) {
+        const priceItems = missingTimePrices.slice(0, MAX_ITEMS_PER_PRICE_REQUEST).map(({ symbol, date, entryMinute }) => ({ symbol, date, entryMinute }));
+        const priceResults = await fetchBatch(priceItems);
+        writePolygonResults(priceResults);
+        completed = trades.length - countMissingMarketResults(trades);
+        onProgress?.(completed, trades.length);
+    }
+    return trades.map((trade) => {
+        const row = attachBestExitResult(trade, cachedMarketResult(trade));
+        if (!row) return null;
+        const timePrice = cachedTimePrice(trade);
+        const selectedPrice = Number(timePrice?.priceAtTime);
+        const comparison = calculateShortExitComparison({ entryPrice: row.entryPrice, actualExitPrice: row.actualExitPrice, selectedPrice, qty: row.qty });
+        return { ...row, selectedPrice: selectedPrice > 0 ? selectedPrice : null, selectedPriceMinute: timePrice?.priceMinute ?? null, actualGross: comparison?.actualGross ?? null, selectedGross: comparison?.selectedGross ?? null, selectedGrossDiff: comparison?.difference ?? null };
+    }).filter(Boolean);
 }
 
 function renderSummary(container, summary, unavailable = 0, logToConsole = true) {
@@ -165,12 +189,16 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
             <div class="best-exit-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progressPercent}"><i style="width:${progressPercent}%"></i></div>
         </div>
         ${exitTimeChart(summary.rows)}
+        <div class="best-exit-time-simulator">
+            <div><strong>Результат при виході у вибраний час</strong><span>Gross через entry × shares, час NY</span></div>
+            <label><span>Час виходу</span><input type="time" min="09:00" max="12:00" step="60" value="${minuteToClock(selectedExitMinute)}" data-best-exit-target-time></label>
+        </div>
         <div class="best-exit-table-wrap${bestExitRowsExpanded ? ' is-expanded' : ''}">
             <table class="best-exit-table">
-                <thead><tr><th>Дата</th><th>Тікер</th><th>Вихід</th><th>Low</th><th>Забрано руху</th><th>Найкращий 10-хв діапазон (NY)</th><th>Макс. P&amp;L</th><th>Не забрано</th></tr></thead>
+                <thead><tr><th>Дата</th><th>Тікер</th><th>Вихід</th><th>Low</th><th>Забрано руху</th><th>Найкращий 10-хв діапазон (NY)</th><th>Макс. P&amp;L</th><th>Не забрано</th><th>Ціна @ ${minuteToClock(selectedExitMinute)}</th><th>Gross @ час</th><th>Δ до факту</th></tr></thead>
                 <tbody>${topRows.map((row) => `<tr>
                     <td>${row.date}</td><td><button type="button" class="best-exit-trade-link" data-best-exit-date="${escapeHtml(row.date)}" data-best-exit-index="${Number(row.tradeIndex)}" data-best-exit-identity="${escapeHtml(JSON.stringify(row.tradeIdentity || {}))}" title="Відкрити ${escapeHtml(row.symbol)} у журналі">${escapeHtml(row.symbol)}</button></td><td>${row.actualExitPrice.toFixed(2)}</td><td>${row.low.toFixed(2)}</td><td>${row.capturePct == null ? '—' : `${row.capturePct.toFixed(0)}%`}</td>
-                    <td><strong>${bestExitWindowNY(row.lowTime) || '—'}</strong></td><td>${money(row.bestPnl)}</td><td>${money(row.extraPnl)}</td>
+                    <td><strong>${bestExitWindowNY(row.lowTime) || '—'}</strong></td><td>${money(row.bestPnl)}</td><td>${money(row.extraPnl)}</td><td>${row.selectedPrice == null ? '…' : row.selectedPrice.toFixed(2)}</td><td>${money(row.selectedGross)}</td><td class="${Number(row.selectedGrossDiff) >= 0 ? 'positive' : 'negative'}">${row.selectedGrossDiff == null ? '—' : money(row.selectedGrossDiff)}</td>
                 </tr>`).join('')}</tbody>
             </table>
         </div>
@@ -195,6 +223,16 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
         void runAnalysis(container, activeAnalysisTrades, activeAnalysisRequestId);
     });
     attachMarketStopFilter(container);
+    container.querySelector('[data-best-exit-target-time]')?.addEventListener('change', (event) => {
+        const [hour, minute] = String(event.currentTarget.value || '').split(':').map(Number);
+        const nextMinute = hour * 60 + minute;
+        if (!Number.isInteger(nextMinute) || nextMinute < 540 || nextMinute > 720) {
+            event.currentTarget.value = minuteToClock(selectedExitMinute);
+            return;
+        }
+        selectedExitMinute = nextMinute;
+        if (activeAnalysisContext) void renderBestExitAnalysis(activeAnalysisContext);
+    });
     const tableWrap = container.querySelector('.best-exit-table-wrap');
     if (tableWrap && bestExitRowsExpanded) tableWrap.scrollTop = previousScrollTop;
     container.querySelector('.best-exit-expand')?.addEventListener('click', () => {
@@ -204,7 +242,7 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
 }
 
 function countMissingMarketResults(trades) {
-    return trades.reduce((count, trade) => count + (cachedMarketResult(trade) ? 0 : 1), 0);
+    return trades.reduce((count, trade) => count + (cachedMarketResult(trade) && cachedTimePrice(trade) ? 0 : 1), 0);
 }
 
 function scheduleSilentRefresh(container, trades, requestId, delay = REFRESH_AFTER_PROGRESS_MS) {
@@ -287,7 +325,7 @@ export async function renderBestExitAnalysis({ journal = {}, periodDates = new S
         attachMarketStopFilter(container);
         return;
     }
-    const uncached = trades.filter((trade) => !cachedMarketResult(trade)).length;
+    const uncached = countMissingMarketResults(trades);
     if (uncached > AUTO_ANALYZE_LIMIT) {
         const completed = trades.length - uncached;
         const percent = trades.length ? Math.round(completed / trades.length * 100) : 0;

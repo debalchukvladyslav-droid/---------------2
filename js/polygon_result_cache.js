@@ -1,6 +1,8 @@
 const STORAGE_KEY = 'traderjournal:polygon-results:v1';
+const TIME_PRICE_STORAGE_KEY = 'traderjournal:polygon-time-prices:v1';
 const MAX_ROWS = 5000;
 let memoryStore = null;
+let timePriceMemoryStore = null;
 
 function resultKey(value = {}) {
     const symbol = String(value.symbol || '').trim().toUpperCase();
@@ -57,4 +59,41 @@ export function writePolygonResults(rows = []) {
 
 export function polygonResultCacheKey(value = {}) {
     return resultKey(value);
+}
+
+function timePriceKey(value = {}) {
+    const symbol = String(value.symbol || '').trim().toUpperCase();
+    const date = String(value.date || '');
+    const targetMinute = Number(value.targetMinute);
+    if (!/^[A-Z]{1,10}$/.test(symbol) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isInteger(targetMinute)) return '';
+    return `${symbol}|${date}|${targetMinute}`;
+}
+
+function readTimePriceStore() {
+    if (timePriceMemoryStore) return timePriceMemoryStore;
+    try {
+        const parsed = JSON.parse(globalThis.localStorage?.getItem(TIME_PRICE_STORAGE_KEY) || '{}');
+        timePriceMemoryStore = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch (_) { timePriceMemoryStore = {}; }
+    return timePriceMemoryStore;
+}
+
+export function readPolygonTimePrice(value = {}) {
+    const row = readTimePriceStore()[timePriceKey(value)];
+    return row && Number(row.priceAtTime) > 0 ? row : null;
+}
+
+export function writePolygonTimePrices(rows = []) {
+    if (!Array.isArray(rows) || !rows.length) return;
+    try {
+        const store = readTimePriceStore();
+        const now = Date.now();
+        rows.forEach((row) => {
+            const key = timePriceKey(row);
+            if (!key || !(Number(row.priceAtTime) > 0)) return;
+            store[key] = { symbol: String(row.symbol).toUpperCase(), date: String(row.date), targetMinute: Number(row.targetMinute), priceMinute: Number(row.priceMinute), priceAtTime: Number(row.priceAtTime), priceTime: String(row.priceTime || ''), savedAt: now };
+        });
+        timePriceMemoryStore = Object.fromEntries(Object.entries(store).sort((a, b) => Number(b[1]?.savedAt || 0) - Number(a[1]?.savedAt || 0)).slice(0, MAX_ROWS));
+        globalThis.localStorage?.setItem(TIME_PRICE_STORAGE_KEY, JSON.stringify(timePriceMemoryStore));
+    } catch (_) {}
 }

@@ -57,6 +57,10 @@ Deno.serve(async (req) => {
     if (!user.ok) return json(req, { message: 'Invalid auth token' }, 401);
 
     const body = await req.json().catch(() => ({}));
+    const requestedTargetMinute = Number(body?.targetMinute);
+    const targetMinute = Number.isInteger(requestedTargetMinute) && requestedTargetMinute >= 540 && requestedTargetMinute <= 720
+        ? requestedTargetMinute
+        : null;
     const items = Array.isArray(body?.items) ? body.items.slice(0, MAX_ITEMS) : [];
     if (!items.length || body?.items?.length > MAX_ITEMS) return json(req, { message: `items must contain 1-${MAX_ITEMS} rows` }, 400);
     const normalized = items.map((item: any) => ({
@@ -70,8 +74,15 @@ Deno.serve(async (req) => {
         const cachedRes = await rest(query);
         const cached = cachedRes.ok ? await cachedRes.json() : [];
         const cachedMinute = cached?.[0] ? minuteInNewYork(cached[0].low_at) : null;
-        if (cached?.[0] && cachedMinute != null && cachedMinute >= 570 && cachedMinute < 720) {
-            return { item, result: { symbol: item.symbol, date: item.date, entryMinute: item.entryMinute, low: Number(cached[0].low_price), lowTime: cached[0].low_at, cached: true } };
+        let timePrice: any = null;
+        if (targetMinute != null) {
+            const priceQuery = `market_time_price_cache?symbol=eq.${item.symbol}&trade_date=eq.${item.date}&target_minute=gte.${targetMinute}&target_minute=lte.720&order=target_minute.asc&limit=1&select=target_minute,close_price,price_at`;
+            const priceRes = await rest(priceQuery);
+            const prices = priceRes.ok ? await priceRes.json() : [];
+            timePrice = prices?.[0] || null;
+        }
+        if (cached?.[0] && cachedMinute != null && cachedMinute >= 570 && cachedMinute < 720 && (targetMinute == null || timePrice)) {
+            return { item, result: { symbol: item.symbol, date: item.date, entryMinute: item.entryMinute, low: Number(cached[0].low_price), lowTime: cached[0].low_at, cached: true, ...(timePrice ? { targetMinute, priceMinute: Number(timePrice.target_minute), priceAtTime: Number(timePrice.close_price), priceTime: timePrice.price_at } : {}) } };
         }
         return { item, result: null };
     }));
@@ -84,6 +95,11 @@ Deno.serve(async (req) => {
             method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
             body: JSON.stringify(uniqueMissing.map((item) => ({ symbol: item.symbol, trade_date: item.date }))),
         });
+        if (targetMinute != null) {
+            await Promise.all(uniqueMissing.map((item) => rest(`market_low_jobs?symbol=eq.${item.symbol}&trade_date=eq.${item.date}&status=eq.ready`, {
+                method: 'PATCH', body: JSON.stringify({ status: 'pending', next_attempt_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
+            })));
+        }
     }
     const claimResponse = await rest('rpc/claim_market_low_jobs', { method: 'POST', body: JSON.stringify({ max_jobs: 5 }) });
     const claimed = claimResponse.ok ? await claimResponse.json() : [];
@@ -92,7 +108,7 @@ Deno.serve(async (req) => {
         const item = { symbol: String(job.symbol), date: String(job.trade_date) };
         try {
         const offset = nyOffset(item.date);
-        const from = new Date(`${item.date}T09:30:00${offset}`).getTime();
+        const from = new Date(`${item.date}T09:00:00${offset}`).getTime();
         const to = new Date(`${item.date}T12:00:00${offset}`).getTime();
         const params = new URLSearchParams({ adjusted: 'false', sort: 'asc', limit: '1000', apiKey: polygonKey });
         const marketRes = await fetch(`https://api.polygon.io/v2/aggs/ticker/${item.symbol}/range/1/minute/${from}/${to}?${params}`, { signal: AbortSignal.timeout(12000) });
@@ -121,6 +137,16 @@ Deno.serve(async (req) => {
         await rest('market_best_exit_cache?on_conflict=symbol,trade_date,entry_minute', {
             method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify(cacheRows),
         });
+        const priceRows = [...barsByMinute.entries()]
+            .filter(([minute, bar]) => minute >= 540 && minute <= 720 && Number(bar?.c) > 0)
+            .map(([minute, bar]) => ({
+                symbol: item.symbol, trade_date: item.date, target_minute: minute,
+                close_price: Number(bar.c), price_at: new Date(Number(bar.t)).toISOString(),
+                provider: 'polygon', updated_at: new Date().toISOString(),
+            }));
+        if (priceRows.length) await rest('market_time_price_cache?on_conflict=symbol,trade_date,target_minute', {
+            method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify(priceRows),
+        });
         await rest(`market_low_jobs?symbol=eq.${item.symbol}&trade_date=eq.${item.date}`, {
             method: 'PATCH', body: JSON.stringify({ status: 'ready', updated_at: new Date().toISOString(), last_error: '' }),
         });
@@ -136,7 +162,13 @@ Deno.serve(async (req) => {
     for (const item of missing) {
         const query = `market_best_exit_cache?symbol=eq.${item.symbol}&trade_date=eq.${item.date}&entry_minute=eq.${item.entryMinute}&select=symbol,trade_date,entry_minute,low_price,low_at`;
         const cachedRes = await rest(query); const cached = cachedRes.ok ? await cachedRes.json() : [];
-        if (cached?.[0]) results.push({ symbol: item.symbol, date: item.date, entryMinute: item.entryMinute, low: Number(cached[0].low_price), lowTime: cached[0].low_at, cached: false });
+        let timePrice: any = null;
+        if (targetMinute != null) {
+            const priceQuery = `market_time_price_cache?symbol=eq.${item.symbol}&trade_date=eq.${item.date}&target_minute=gte.${targetMinute}&target_minute=lte.720&order=target_minute.asc&limit=1&select=target_minute,close_price,price_at`;
+            const priceRes = await rest(priceQuery); const prices = priceRes.ok ? await priceRes.json() : [];
+            timePrice = prices?.[0] || null;
+        }
+        if (cached?.[0] && (targetMinute == null || timePrice)) results.push({ symbol: item.symbol, date: item.date, entryMinute: item.entryMinute, low: Number(cached[0].low_price), lowTime: cached[0].low_at, cached: false, ...(timePrice ? { targetMinute, priceMinute: Number(timePrice.target_minute), priceAtTime: Number(timePrice.close_price), priceTime: timePrice.price_at } : {}) });
     }
     return json(req, { results, queued: Math.max(0, uniqueMissing.length - results.length), processed: (claimed || []).length });
 });

@@ -197,6 +197,17 @@ export function attachBestExitResult(trade, market = {}) {
     };
 }
 
+export function calculateShortExitComparison({ entryPrice, actualExitPrice, selectedPrice, qty } = {}) {
+    const entry = Number(entryPrice);
+    const actualExit = Number(actualExitPrice);
+    const selectedExit = Number(selectedPrice);
+    const shares = Math.abs(Number(qty));
+    if (!(entry > 0) || !(actualExit > 0) || !(selectedExit > 0) || !(shares > 0)) return null;
+    const actualGross = Number(((entry - actualExit) * shares).toFixed(2));
+    const selectedGross = Number(((entry - selectedExit) * shares).toFixed(2));
+    return { actualGross, selectedGross, difference: Number((selectedGross - actualGross).toFixed(2)) };
+}
+
 export function summarizeBestExits(rows = []) {
     const valid = rows.filter(Boolean);
     const numeric = (key) => valid.map((row) => Number(row[key])).filter(Number.isFinite);

@@ -5,6 +5,7 @@ import {
     bestExitWindowNY,
     buildExitTimeCaptureSeries,
     buildLowTimeFrequencySeries,
+    calculateShortExitComparison,
     collectTimedShortTrades,
     isExcludedStopTakeExit,
     isMarketOpenStopTrade,
@@ -97,6 +98,15 @@ test('calculates best short exit and aggregate opportunity', () => {
     assert.equal(summary.bestPnl, 200);
     assert.equal(summary.extraPnl, 100);
     assert.equal(summary.avgCapturePct, 50);
+});
+
+test('calculates hypothetical short Gross from entry, selected price and shares', () => {
+    assert.deepEqual(calculateShortExitComparison({ entryPrice: 10, actualExitPrice: 9.4, selectedPrice: 8.9, qty: 500 }), {
+        actualGross: 300,
+        selectedGross: 550,
+        difference: 250,
+    });
+    assert.equal(calculateShortExitComparison({ entryPrice: 10, actualExitPrice: 9, selectedPrice: 8, qty: null }), null);
 });
 
 test('groups captured movement by ten-minute actual exit windows', () => {

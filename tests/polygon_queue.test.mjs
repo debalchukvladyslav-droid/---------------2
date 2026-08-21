@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { readPolygonResult, writePolygonResults } from '../js/polygon_result_cache.js';
+import { readPolygonResult, readPolygonTimePrice, writePolygonResults, writePolygonTimePrices } from '../js/polygon_result_cache.js';
 
 test('Polygon results survive reload and are keyed by ticker, date and entry minute', () => {
     const values = new Map();
@@ -19,6 +19,12 @@ test('Polygon results survive reload and are keyed by ticker, date and entry min
     assert.equal(typeof restored.savedAt, 'number');
     assert.equal(readPolygonResult({ symbol: 'AAPL', date: '2026-08-19', entryMinute: 586 }), null);
     delete globalThis.localStorage;
+});
+
+test('Polygon selected-time prices are cached independently for every minute', () => {
+    writePolygonTimePrices([{ symbol: 'AAPL', date: '2026-08-19', targetMinute: 600, priceMinute: 600, priceAtTime: 210.5, priceTime: '2026-08-19T14:00:00Z' }]);
+    assert.equal(readPolygonTimePrice({ symbol: 'aapl', date: '2026-08-19', targetMinute: 600 })?.priceAtTime, 210.5);
+    assert.equal(readPolygonTimePrice({ symbol: 'AAPL', date: '2026-08-19', targetMinute: 601 }), null);
 });
 
 test('Polygon queue is global, private and atomically capped at five calls per minute', async () => {
