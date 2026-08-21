@@ -118,6 +118,9 @@ test('admin can pause Polygon globally and enqueue only Trades missing from the 
     assert.match(edge, /body\.action === 'admin-pause'/);
     assert.match(edge, /authorization, x-client-info, apikey, content-type/);
     assert.match(edge, /body\.action === 'admin-enqueue-all'/);
+    assert.match(edge, /const control = await writePolygonControl\(false\)/);
+    assert.match(edge, /Number\(value\?\.version\) === 2/);
+    assert.match(edge, /body\.items = \[\{ symbol: queued\.kickItem\.symbol/);
     assert.match(edge, /const missing = \[\.\.\.unique\.entries\(\)\]\.filter/);
     assert.match(edge, /control\.paused \? null : await rest\('rpc\/claim_market_low_jobs'/);
     assert.match(admin, /Зупинити Polygon/);

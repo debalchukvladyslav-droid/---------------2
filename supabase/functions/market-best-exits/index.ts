@@ -120,7 +120,7 @@ async function readPolygonControl() {
     });
     if (!response.ok) return { paused: false };
     const value = await response.json().catch(() => ({}));
-    return { paused: value?.paused === true, updatedAt: String(value?.updatedAt || '') };
+    return { paused: Number(value?.version) === 2 && value?.paused === true, updatedAt: String(value?.updatedAt || '') };
 }
 
 async function writePolygonControl(paused: boolean) {
@@ -130,7 +130,7 @@ async function writePolygonControl(paused: boolean) {
     const response = await fetch(`${url}/storage/v1/object/${POLYGON_ARCHIVE_BUCKET}/${path}`, {
         method: 'POST',
         headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'x-upsert': 'true' },
-        body: JSON.stringify({ paused, updatedAt: new Date().toISOString() }),
+        body: JSON.stringify({ version: 2, paused, updatedAt: new Date().toISOString() }),
     });
     if (!response.ok) throw new Error(`Polygon control write ${response.status}`);
     return { paused, updatedAt: new Date().toISOString() };
@@ -168,7 +168,7 @@ async function enqueueAllJournalTrades() {
         });
         if (!queued.ok) throw new Error(`Queue write ${queued.status}`);
     }
-    return { total: unique.size, archived: unique.size - missing.length, queued: missing.length };
+    return { total: unique.size, archived: unique.size - missing.length, queued: missing.length, kickItem: missing[0] || null };
 }
 
 async function readDatabaseGraph(symbol: string, date: string) {
@@ -196,6 +196,7 @@ Deno.serve(async (req) => {
     const userData = await user.json().catch(() => ({}));
 
     const body = await req.json().catch(() => ({}));
+    let adminQueueResult: any = null;
     if (String(body?.action || '').startsWith('admin-')) {
         if (!await isAdmin(String(userData?.id || ''))) return json(req, { message: 'Admin access required' }, 403);
         if (body.action === 'admin-status') {
@@ -205,9 +206,21 @@ Deno.serve(async (req) => {
             const counts = (rows || []).reduce((acc: Record<string, number>, row: any) => { acc[row.status] = (acc[row.status] || 0) + 1; return acc; }, {});
             return json(req, { ...control, counts });
         }
-        if (body.action === 'admin-pause') return json(req, await writePolygonControl(body.paused === true));
-        if (body.action === 'admin-enqueue-all') return json(req, await enqueueAllJournalTrades());
-        return json(req, { message: 'Unknown admin action' }, 400);
+        if (body.action === 'admin-pause') {
+            const control = await writePolygonControl(body.paused === true);
+            console.log(`[Polygon admin] ${control.paused ? 'paused' : 'resumed'} by ${userData.id}`);
+            return json(req, control);
+        }
+        if (body.action === 'admin-enqueue-all') {
+            const queued = await enqueueAllJournalTrades();
+            const control = await writePolygonControl(false);
+            console.log(`[Polygon admin] enqueue all by ${userData.id}: total ${queued.total}, archived ${queued.archived}, queued ${queued.queued}; resumed`);
+            if (!queued.kickItem) return json(req, { ...queued, ...control });
+            adminQueueResult = { ...queued, ...control, kickItem: undefined };
+            body.action = '';
+            body.items = [{ symbol: queued.kickItem.symbol, date: queued.kickItem.trade_date, entryMinute: 570 }];
+        }
+        if (body.action) return json(req, { message: 'Unknown admin action' }, 400);
     }
     const requestedTargetMinute = Number(body?.targetMinute);
     const targetMinute = Number.isInteger(requestedTargetMinute) && requestedTargetMinute >= 540 && requestedTargetMinute <= 720 && requestedTargetMinute % 5 === 0
@@ -359,5 +372,5 @@ Deno.serve(async (req) => {
         const stopScenario = await readStopScenario(item, targetMinute);
         if (cached?.[0] && (targetMinute == null || (timePrice && stopScenario.available))) results.push({ symbol: item.symbol, date: item.date, entryMinute: item.entryMinute, low: Number(cached[0].low_price), lowTime: cached[0].low_at, cached: false, ...(timePrice ? { targetMinute, priceMinute: Number(timePrice.target_minute), priceAtTime: Number(timePrice.close_price), priceTime: timePrice.price_at, ...stopScenario.result } : {}) });
     }
-    return json(req, { results, queued: Math.max(0, uniqueMissing.length - results.length), processed: (claimed || []).length, polygonPaused: control.paused });
+    return json(req, { ...(adminQueueResult || {}), results, queued: adminQueueResult?.queued ?? Math.max(0, uniqueMissing.length - results.length), processed: (claimed || []).length, polygonPaused: control.paused });
 });

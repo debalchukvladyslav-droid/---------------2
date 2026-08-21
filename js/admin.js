@@ -119,8 +119,8 @@ async function renderPolygonAdminPanel() {
         }));
         panel.querySelector('[data-polygon-enqueue]')?.addEventListener('click', (event) => run(event.currentTarget, async () => {
             const queued = await invokePolygonAdmin('admin-enqueue-all');
-            showToast(`Polygon: у чергу додано ${Number(queued.queued) || 0}`);
-            if (result) result.textContent = `Trades: ${Number(queued.total) || 0} · вже були: ${Number(queued.archived) || 0} · додано: ${Number(queued.queued) || 0}`;
+            showToast(`Polygon запущено: у чергу додано ${Number(queued.queued) || 0}`);
+            if (result) result.textContent = `Polygon запущено · Trades: ${Number(queued.total) || 0} · вже були: ${Number(queued.archived) || 0} · додано: ${Number(queued.queued) || 0}`;
             setTimeout(() => renderPolygonAdminPanel(), 1800);
         }));
         panel.querySelector('[data-polygon-refresh]')?.addEventListener('click', () => renderPolygonAdminPanel());
