@@ -9,6 +9,9 @@ const BATCH_SIZE = 5;
 let bestExitRowsExpanded = false;
 let lowChartFromTen = false;
 let silentRefreshTimer = null;
+let activeAnalysisTrades = [];
+let activeAnalysisRequestId = 0;
+let analysisRunning = false;
 const REFRESH_AFTER_PROGRESS_MS = 3000;
 const REFRESH_WHEN_WAITING_MS = 65000;
 
@@ -100,7 +103,7 @@ async function loadMarketResults(trades, onProgress = null) {
             if (!bestExitWindowNY(row?.lowTime)) return;
             resultCache.set(`${row.symbol}|${row.date}|${row.entryMinute}`, row);
         });
-        completed += chunk.length;
+        completed = trades.length - countMissingMarketResults(trades);
         onProgress?.(completed, trades.length);
     }
     return trades.map((trade) => attachBestExitResult(
@@ -121,6 +124,10 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
         : [...sortedRows.slice(0, 3), ...sortedRows.slice(-3)];
     const topRows = bestExitRowsExpanded ? sortedRows : compactRows;
     const commonWindow = bestWindowSummary(summary.rows);
+    const totalTrades = activeAnalysisTrades.length;
+    const remainingTrades = countMissingMarketResults(activeAnalysisTrades);
+    const completedTrades = Math.max(0, totalTrades - remainingTrades);
+    const progressPercent = totalTrades ? Math.round(completedTrades / totalTrades * 100) : 100;
     if (logToConsole) {
         console.groupCollapsed(`[Polygon analysis] кращий вихід: ${summary.count} угод, забрано ${summary.avgCapturePct == null ? '—' : `${summary.avgCapturePct.toFixed(1)}%`} руху`);
         console.table(summary.rows.map((row) => ({ дата: row.date, тікер: row.symbol, вхід: row.entryPrice, фактичний_вихід: row.actualExitPrice, low: row.low, час_low: row.lowTime, причина_виходу: row.exitReason || 'не вказано', забрано_руху_pct: row.capturePct == null ? null : Number(row.capturePct.toFixed(1)), не_забрано_$: row.extraPnl == null ? null : Number(row.extraPnl.toFixed(2)) })));
@@ -136,6 +143,13 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
             <div><span>Найчастіший найкращий час</span><strong>${commonWindow ? `${commonWindow[0]} NY` : '—'}</strong></div>
         </div>
         ${unavailable ? `<p class="stats-chart-note">Без market data: ${unavailable}. Перевірте тариф Polygon для historical minute aggregates.</p>` : ''}
+        <div class="best-exit-run-status">
+            <div class="best-exit-run-status__head">
+                <div><strong>Перевірка Polygon</strong><span>Пройдено ${completedTrades} із ${totalTrades} · залишилось ${remainingTrades}</span></div>
+                <button type="button" class="btn-secondary best-exit-check-all" ${analysisRunning ? 'disabled' : ''}>${analysisRunning ? 'Перевіряємо…' : 'Старт / перевірити все'}</button>
+            </div>
+            <div class="best-exit-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progressPercent}"><i style="width:${progressPercent}%"></i></div>
+        </div>
         ${exitTimeChart(summary.rows)}
         <div class="best-exit-table-wrap${bestExitRowsExpanded ? ' is-expanded' : ''}">
             <table class="best-exit-table">
@@ -162,6 +176,10 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
         lowChartFromTen = !!event.currentTarget.checked;
         renderSummary(container, summary, unavailable, false);
     });
+    container.querySelector('.best-exit-check-all')?.addEventListener('click', () => {
+        if (analysisRunning || activeAnalysisRequestId !== renderRequest) return;
+        void runAnalysis(container, activeAnalysisTrades, activeAnalysisRequestId);
+    });
     const tableWrap = container.querySelector('.best-exit-table-wrap');
     if (tableWrap && bestExitRowsExpanded) tableWrap.scrollTop = previousScrollTop;
     container.querySelector('.best-exit-expand')?.addEventListener('click', () => {
@@ -179,6 +197,10 @@ function scheduleSilentRefresh(container, trades, requestId, delay = REFRESH_AFT
     if (requestId !== renderRequest || !container?.isConnected || !countMissingMarketResults(trades)) return;
     silentRefreshTimer = setTimeout(async () => {
         if (requestId !== renderRequest || !container?.isConnected) return;
+        if (analysisRunning) {
+            scheduleSilentRefresh(container, trades, requestId, REFRESH_AFTER_PROGRESS_MS);
+            return;
+        }
         const before = countMissingMarketResults(trades);
         try {
             const rows = await loadMarketResults(trades);
@@ -203,20 +225,25 @@ function escapeHtml(value) {
 }
 
 async function runAnalysis(container, trades, requestId) {
+    if (analysisRunning) return;
+    analysisRunning = true;
     const updateProgress = (done, total) => {
         if (requestId !== renderRequest) return;
         const percent = total ? Math.round(done / total * 100) : 0;
         container.innerHTML = `
             <div class="best-exit-loading"><span></span> Оброблено ${done} із ${total} угод (${percent}%)</div>
-            <div class="best-exit-progress"><i style="width:${percent}%"></i></div>
+            <div class="best-exit-loading-counts">Пройдено ${done} · залишилось ${Math.max(0, total - done)}</div>
+            <div class="best-exit-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><i style="width:${percent}%"></i></div>
             <p class="stats-chart-note">Можна перейти на іншу сторінку. Повторний запуск продовжить із кешованих результатів.</p>`;
     };
     try {
         const rows = await loadMarketResults(trades, updateProgress);
-        if (requestId !== renderRequest) return;
+        if (requestId !== renderRequest) { analysisRunning = false; return; }
+        analysisRunning = false;
         renderSummary(container, summarizeBestExits(rows), trades.length - rows.length);
         scheduleSilentRefresh(container, trades, requestId);
     } catch (error) {
+        analysisRunning = false;
         if (requestId !== renderRequest) return;
         container.innerHTML = `
             <div class="stats-empty-note">Завантаження зупинилося: ${escapeHtml(error?.message || error)}</div>
@@ -236,17 +263,24 @@ export async function renderBestExitAnalysis({ journal = {}, periodDates = new S
         return;
     }
     const trades = collectTimedShortTrades(journal, periodDates);
+    activeAnalysisTrades = trades;
+    activeAnalysisRequestId = requestId;
+    analysisRunning = false;
     if (!trades.length) {
         container.innerHTML = '<div class="stats-empty-note">У вибраному періоді немає закритих short-угод із коректними цінами входу/виходу після виключення Stop і Take.</div>';
         return;
     }
     const uncached = trades.filter((trade) => !cachedMarketResult(trade)).length;
     if (uncached > AUTO_ANALYZE_LIMIT) {
+        const completed = trades.length - uncached;
+        const percent = trades.length ? Math.round(completed / trades.length * 100) : 0;
         container.innerHTML = `
             <div class="best-exit-start">
                 <div><strong>${trades.length} угод у періоді</strong><span>${uncached} ще потребують market data</span></div>
-                <button type="button" class="btn-primary best-exit-start-btn">Запустити пакетний аналіз</button>
+                <button type="button" class="btn-primary best-exit-start-btn">Старт / перевірити все</button>
             </div>
+            <div class="best-exit-loading-counts">Пройдено ${completed} · залишилось ${uncached}</div>
+            <div class="best-exit-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><i style="width:${percent}%"></i></div>
             <p class="stats-chart-note">Дані завантажуються короткими пакетами по ${BATCH_SIZE} угод і зберігаються в Supabase. Повторний запуск не починається спочатку.</p>`;
         container.querySelector('.best-exit-start-btn')?.addEventListener('click', () => runAnalysis(container, trades, requestId));
         return;
