@@ -107,3 +107,21 @@ test('Polygon full charts are archived in private Supabase Storage before callin
     assert.match(edge, /writePolygonArchive\(item\.symbol, item\.date, marketResults\)/);
     assert.match(edge, /source: \$\{marketSource\}/);
 });
+
+test('admin can pause Polygon globally and enqueue only Trades missing from the archive', async () => {
+    const [edge, admin, view, archiveIndex] = await Promise.all([
+        readFile(new URL('../supabase/functions/market-best-exits/index.ts', import.meta.url), 'utf8'),
+        readFile(new URL('../js/admin.js', import.meta.url), 'utf8'),
+        readFile(new URL('../partials/views/admin-panel.html', import.meta.url), 'utf8'),
+        readFile(new URL('../supabase/migrations/20260821151000_polygon_archive_admin_index.sql', import.meta.url), 'utf8'),
+    ]);
+    assert.match(edge, /body\.action === 'admin-pause'/);
+    assert.match(edge, /body\.action === 'admin-enqueue-all'/);
+    assert.match(edge, /const missing = \[\.\.\.unique\.entries\(\)\]\.filter/);
+    assert.match(edge, /control\.paused \? null : await rest\('rpc\/claim_market_low_jobs'/);
+    assert.match(admin, /Зупинити Polygon/);
+    assert.match(admin, /Завантажити всі Trades/);
+    assert.match(view, /admin-polygon-panel/);
+    assert.match(archiveIndex, /revoke all.*public, anon, authenticated/is);
+    assert.match(archiveIndex, /grant execute.*service_role/is);
+});

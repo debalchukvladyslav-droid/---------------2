@@ -18,10 +18,12 @@ export async function renderAdminPanel() {
     const refreshUsersBtn = document.getElementById('admin-refresh-users-btn');
     const sessionReviewTestBtn = document.getElementById('admin-session-review-test-btn');
     const botsPanel = document.getElementById('admin-service-bots-panel');
+    const polygonPanel = document.getElementById('admin-polygon-panel');
     const fullAdmin = state.myRole === 'admin';
     if (sessionReviewTestBtn) sessionReviewTestBtn.hidden = !fullAdmin;
     const dataManager = fullAdmin || state.IS_MENTOR_MODE;
     if (botsPanel) botsPanel.hidden = !fullAdmin;
+    if (polygonPanel) polygonPanel.hidden = !fullAdmin;
     if (!dataManager) {
         if (refreshUsersBtn) refreshUsersBtn.style.display = 'none';
         if (botsPanel) botsPanel.innerHTML = '';
@@ -61,8 +63,70 @@ export async function renderAdminPanel() {
 
     container.innerHTML = '';
     if (fullAdmin) await renderRegistrationRequests(container);
+    if (fullAdmin) await renderPolygonAdminPanel();
     if (fullAdmin) renderServiceBotsPanel(profiles || []);
     visibleProfiles.forEach((p) => container.appendChild(buildUserCard(p, teamChoices, { fullAdmin, dataManager })));
+}
+
+async function invokePolygonAdmin(action, extra = {}) {
+    const { data, error } = await supabase.functions.invoke('market-best-exits', { body: { action, ...extra } });
+    if (error) throw error;
+    if (data?.message) throw new Error(data.message);
+    return data || {};
+}
+
+async function renderPolygonAdminPanel() {
+    const panel = document.getElementById('admin-polygon-panel');
+    if (!panel) return;
+    panel.hidden = false;
+    panel.innerHTML = '<p class="admin-loading">Перевірка Polygon…</p>';
+    try {
+        const status = await invokePolygonAdmin('admin-status');
+        const paused = status.paused === true;
+        const pending = Number(status.counts?.pending) || 0;
+        const processing = Number(status.counts?.processing) || 0;
+        const ready = Number(status.counts?.ready) || 0;
+        const failed = Number(status.counts?.failed) || 0;
+        panel.innerHTML = `
+            <div class="admin-service-bots-head">
+                <div>
+                    <h4 class="admin-section-title">Polygon · архів графіків</h4>
+                    <p class="admin-section-subtitle">Уже збережені ticker + date повторно не завантажуються. Пауза блокує тільки нові запити до Polygon, кеш Supabase залишається доступним.</p>
+                </div>
+                <span class="admin-polygon-state ${paused ? 'is-paused' : 'is-active'}">${paused ? 'Зупинено' : 'Працює'}</span>
+            </div>
+            <div class="admin-polygon-counts">
+                <span>У черзі <strong>${pending}</strong></span><span>Обробляється <strong>${processing}</strong></span><span>Готово <strong>${ready}</strong></span><span>Помилки <strong>${failed}</strong></span>
+            </div>
+            <div class="admin-polygon-actions">
+                <button type="button" class="${paused ? 'btn-admin-action' : 'btn-admin-danger'}" data-polygon-pause>${paused ? 'Продовжити Polygon' : 'Зупинити Polygon'}</button>
+                <button type="button" class="btn-admin-action" data-polygon-enqueue>Завантажити всі Trades</button>
+                <button type="button" class="btn-admin-action" data-polygon-refresh>Оновити статус</button>
+            </div>
+            <p class="admin-polygon-result" data-polygon-result></p>`;
+        const result = panel.querySelector('[data-polygon-result]');
+        const run = async (button, task) => {
+            panel.querySelectorAll('button').forEach((item) => { item.disabled = true; });
+            if (result) result.textContent = 'Виконується…';
+            try { await task(); }
+            catch (error) { showToast(`Polygon: ${error?.message || error}`); if (result) result.textContent = `Помилка: ${error?.message || error}`; }
+            finally { if (button?.isConnected) button.disabled = false; }
+        };
+        panel.querySelector('[data-polygon-pause]')?.addEventListener('click', (event) => run(event.currentTarget, async () => {
+            await invokePolygonAdmin('admin-pause', { paused: !paused });
+            showToast(paused ? 'Polygon продовжено' : 'Нові запити Polygon зупинено');
+            await renderPolygonAdminPanel();
+        }));
+        panel.querySelector('[data-polygon-enqueue]')?.addEventListener('click', (event) => run(event.currentTarget, async () => {
+            const queued = await invokePolygonAdmin('admin-enqueue-all');
+            showToast(`Polygon: у чергу додано ${Number(queued.queued) || 0}`);
+            if (result) result.textContent = `Trades: ${Number(queued.total) || 0} · вже були: ${Number(queued.archived) || 0} · додано: ${Number(queued.queued) || 0}`;
+            setTimeout(() => renderPolygonAdminPanel(), 1800);
+        }));
+        panel.querySelector('[data-polygon-refresh]')?.addEventListener('click', () => renderPolygonAdminPanel());
+    } catch (error) {
+        panel.innerHTML = `<p class="admin-error">Polygon: ${escapeHtml(error?.message || error)}</p>`;
+    }
 }
 
 async function adminApiFetch(path, options = {}) {

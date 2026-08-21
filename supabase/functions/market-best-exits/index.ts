@@ -5,6 +5,7 @@ const MAX_ITEMS = 200;
 const INTRADAY_CACHE_VERSION = 2;
 const POLYGON_ARCHIVE_BUCKET = 'polygon-cache';
 const POLYGON_ARCHIVE_VERSION = 1;
+const POLYGON_CONTROL_PATH = '_control/state.json';
 
 function cors(req: Request) {
     const allowed = new Set([DEFAULT_ORIGIN, 'http://localhost:8787', 'http://127.0.0.1:8787', ...(Deno.env.get('APP_ALLOWED_ORIGINS') || '').split(',')]);
@@ -110,6 +111,66 @@ async function writePolygonArchive(symbol: string, date: string, results: any[])
     if (!response.ok) throw new Error(`Polygon archive write ${response.status}`);
 }
 
+async function readPolygonControl() {
+    const url = Deno.env.get('SUPABASE_URL')!;
+    const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const path = POLYGON_CONTROL_PATH.split('/').map(encodeURIComponent).join('/');
+    const response = await fetch(`${url}/storage/v1/object/authenticated/${POLYGON_ARCHIVE_BUCKET}/${path}`, {
+        headers: { apikey: key, Authorization: `Bearer ${key}` },
+    });
+    if (!response.ok) return { paused: false };
+    const value = await response.json().catch(() => ({}));
+    return { paused: value?.paused === true, updatedAt: String(value?.updatedAt || '') };
+}
+
+async function writePolygonControl(paused: boolean) {
+    const url = Deno.env.get('SUPABASE_URL')!;
+    const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const path = POLYGON_CONTROL_PATH.split('/').map(encodeURIComponent).join('/');
+    const response = await fetch(`${url}/storage/v1/object/${POLYGON_ARCHIVE_BUCKET}/${path}`, {
+        method: 'POST',
+        headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'x-upsert': 'true' },
+        body: JSON.stringify({ paused, updatedAt: new Date().toISOString() }),
+    });
+    if (!response.ok) throw new Error(`Polygon control write ${response.status}`);
+    return { paused, updatedAt: new Date().toISOString() };
+}
+
+async function isAdmin(userId: string) {
+    const response = await rest(`profiles?id=eq.${userId}&select=role&limit=1`);
+    const rows = response.ok ? await response.json() : [];
+    return rows?.[0]?.role === 'admin';
+}
+
+async function enqueueAllJournalTrades() {
+    const daysResponse = await rest('journal_days?select=trade_date,daily_metrics&order=trade_date.asc&limit=10000');
+    if (!daysResponse.ok) throw new Error(`Journal read ${daysResponse.status}`);
+    const days = await daysResponse.json();
+    const unique = new Map<string, { symbol: string; trade_date: string }>();
+    for (const day of days || []) {
+        const trades = Array.isArray(day?.daily_metrics?.trades) ? day.daily_metrics.trades : [];
+        for (const trade of trades) {
+            const symbol = String(trade?.symbol || trade?.ticker || '').trim().toUpperCase();
+            const date = String(trade?.date || trade?.tradeDate || day.trade_date || '');
+            if (/^[A-Z]{1,10}$/.test(symbol) && /^\d{4}-\d{2}-\d{2}$/.test(date)) unique.set(`${symbol}/${date}.json`, { symbol, trade_date: date });
+        }
+    }
+    const archiveResponse = await rest('rpc/list_polygon_archive_keys', { method: 'POST', body: '{}' });
+    if (!archiveResponse.ok) throw new Error(`Archive index ${archiveResponse.status}`);
+    const archivedRows = await archiveResponse.json();
+    const archived = new Set((archivedRows || []).map((row: any) => String(row?.object_name || row || '')));
+    const missing = [...unique.entries()].filter(([path]) => !archived.has(path)).map(([, item]) => item);
+    for (let offset = 0; offset < missing.length; offset += 250) {
+        const now = new Date().toISOString();
+        const rows = missing.slice(offset, offset + 250).map((item) => ({ ...item, status: 'pending', next_attempt_at: '1970-01-01T00:00:00.000Z', attempted_at: null, updated_at: now, last_error: '' }));
+        const queued = await rest('market_low_jobs?on_conflict=symbol,trade_date', {
+            method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(rows),
+        });
+        if (!queued.ok) throw new Error(`Queue write ${queued.status}`);
+    }
+    return { total: unique.size, archived: unique.size - missing.length, queued: missing.length };
+}
+
 async function readDatabaseGraph(symbol: string, date: string) {
     const statusResponse = await rest(`market_intraday_cache_status?symbol=eq.${symbol}&trade_date=eq.${date}&select=bar_count&limit=1`);
     const statusRows = statusResponse.ok ? await statusResponse.json() : [];
@@ -132,8 +193,22 @@ Deno.serve(async (req) => {
     const anon = Deno.env.get('SUPABASE_ANON_KEY') || '';
     const user = await fetch(`${Deno.env.get('SUPABASE_URL')}/auth/v1/user`, { headers: { Authorization: auth || '', apikey: anon } });
     if (!user.ok) return json(req, { message: 'Invalid auth token' }, 401);
+    const userData = await user.json().catch(() => ({}));
 
     const body = await req.json().catch(() => ({}));
+    if (String(body?.action || '').startsWith('admin-')) {
+        if (!await isAdmin(String(userData?.id || ''))) return json(req, { message: 'Admin access required' }, 403);
+        if (body.action === 'admin-status') {
+            const control = await readPolygonControl();
+            const countsResponse = await rest('market_low_jobs?select=status');
+            const rows = countsResponse.ok ? await countsResponse.json() : [];
+            const counts = (rows || []).reduce((acc: Record<string, number>, row: any) => { acc[row.status] = (acc[row.status] || 0) + 1; return acc; }, {});
+            return json(req, { ...control, counts });
+        }
+        if (body.action === 'admin-pause') return json(req, await writePolygonControl(body.paused === true));
+        if (body.action === 'admin-enqueue-all') return json(req, await enqueueAllJournalTrades());
+        return json(req, { message: 'Unknown admin action' }, 400);
+    }
     const requestedTargetMinute = Number(body?.targetMinute);
     const targetMinute = Number.isInteger(requestedTargetMinute) && requestedTargetMinute >= 540 && requestedTargetMinute <= 720 && requestedTargetMinute % 5 === 0
         ? requestedTargetMinute
@@ -182,8 +257,9 @@ Deno.serve(async (req) => {
             method: 'PATCH', body: JSON.stringify({ status: 'pending', next_attempt_at: '1970-01-01T00:00:00.000Z', updated_at: new Date().toISOString() }),
         })));
     }
-    const claimResponse = await rest('rpc/claim_market_low_jobs', { method: 'POST', body: JSON.stringify({ max_jobs: 1 }) });
-    const claimed = claimResponse.ok ? await claimResponse.json() : [];
+    const control = await readPolygonControl();
+    const claimResponse = control.paused ? null : await rest('rpc/claim_market_low_jobs', { method: 'POST', body: JSON.stringify({ max_jobs: 1 }) });
+    const claimed = claimResponse?.ok ? await claimResponse.json() : [];
     const polygonKey = Deno.env.get('POLYGON_API_KEY') || '';
     const backgroundWork = Promise.all((claimed || []).slice(0, 1).map(async (job: any) => {
         const item = { symbol: String(job.symbol), date: String(job.trade_date) };
@@ -283,5 +359,5 @@ Deno.serve(async (req) => {
         const stopScenario = await readStopScenario(item, targetMinute);
         if (cached?.[0] && (targetMinute == null || (timePrice && stopScenario.available))) results.push({ symbol: item.symbol, date: item.date, entryMinute: item.entryMinute, low: Number(cached[0].low_price), lowTime: cached[0].low_at, cached: false, ...(timePrice ? { targetMinute, priceMinute: Number(timePrice.target_minute), priceAtTime: Number(timePrice.close_price), priceTime: timePrice.price_at, ...stopScenario.result } : {}) });
     }
-    return json(req, { results, queued: Math.max(0, uniqueMissing.length - results.length), processed: (claimed || []).length });
+    return json(req, { results, queued: Math.max(0, uniqueMissing.length - results.length), processed: (claimed || []).length, polygonPaused: control.paused });
 });
