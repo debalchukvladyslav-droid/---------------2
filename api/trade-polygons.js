@@ -116,8 +116,16 @@ export default async function handler(req, res) {
         if (!TICKER_RE.test(ticker)) return sendJson(res, 400, { ok: false, error: 'Невірний тікер' });
         if (!/^\d{4}-\d{2}-\d{2}$/.test(tradeDate)) return sendJson(res, 400, { ok: false, error: 'Невірна дата' });
 
-        const yahoo = await fetchYahooMetrics(ticker, tradeDate);
-        const floatData = await fetchFinvizFloat(ticker);
+        const [yahooResult, floatResult] = await Promise.allSettled([
+            fetchYahooMetrics(ticker, tradeDate),
+            fetchFinvizFloat(ticker),
+        ]);
+        const yahoo = yahooResult.status === 'fulfilled' ? yahooResult.value : {
+            atr: null, avg_vol: null, vol: null, vol_play: null, as_of_date: null, basis: 'unavailable',
+        };
+        const floatData = floatResult.status === 'fulfilled' ? floatResult.value : {
+            shs_float: null, shs_float_display: '', shs_float_raw: '',
+        };
         const requestedVolPre = req.body?.volPreByMinute && typeof req.body.volPreByMinute === 'object'
             ? Object.fromEntries(Object.entries(req.body.volPreByMinute).filter(([minute, value]) => /^\d{3,4}$/.test(minute) && Number.isFinite(Number(value)) && Number(value) >= 0).map(([minute, value]) => [minute, Math.round(Number(value))]))
             : {};
@@ -126,6 +134,10 @@ export default async function handler(req, res) {
             ...floatData,
             vol_pre_by_minute: requestedVolPre,
             source: 'yahoo+finviz',
+            source_errors: {
+                ...(yahooResult.status === 'rejected' ? { yahoo: yahooResult.reason?.message || String(yahooResult.reason) } : {}),
+                ...(floatResult.status === 'rejected' ? { finviz: floatResult.reason?.message || String(floatResult.reason) } : {}),
+            },
             updated_at: new Date().toISOString(),
         };
         const result = await supabaseRest('rpc/upsert_trade_polygon_metrics', {
@@ -138,7 +150,7 @@ export default async function handler(req, res) {
             }),
         });
         return sendJson(res, 200, {
-            ok: true, ticker, date: tradeDate, matches: Number(result) || 0, metrics,
+            ok: true, partial: yahooResult.status === 'rejected' || floatResult.status === 'rejected', ticker, date: tradeDate, matches: Number(result) || 0, metrics,
         });
     } catch (error) {
         const timeout = error?.name === 'TimeoutError' || error?.name === 'AbortError';

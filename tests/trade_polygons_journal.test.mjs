@@ -48,6 +48,8 @@ test('website fetch is manual and RPC writes criteria into journal trade', async
     assert.match(api, /verifySupabaseUser/);
     assert.match(api, /query1\.finance\.yahoo\.com/);
     assert.match(api, /finviz\.com\/quote\.ashx/);
+    assert.match(api, /Promise\.allSettled/);
+    assert.match(api, /partial:/);
     assert.doesNotMatch(api, /TRADE_POLYGONS_API_KEY/);
     assert.match(migration, /tradePolygons/);
     assert.match(migration, /marketCriteria/);
@@ -59,6 +61,7 @@ test('website fetch is manual and RPC writes criteria into journal trade', async
     assert.match(view, /fetch\('\/api\/trade-polygons'/);
     assert.match(view, /value === null \|\| value === undefined \|\| value === ''/);
     assert.match(view, /shs_float_display \|\| polygonCriteria\.shs_float_raw/);
+    assert.match(view, /hasMetric\(polygonCriteria\.atr\)/);
 });
 
 test('admin bulk criteria loader is separate from Polygon and skips existing pairs', async () => {

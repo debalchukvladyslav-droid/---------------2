@@ -4,10 +4,10 @@ const DEFINITIONS = [
     { key: 'avg_vol', label: 'Avg Vol 14', ranges: [[0, .7e6, '<0.7M'], [.7e6, 1.5e6, '0.7–1.5M'], [1.5e6, 3e6, '1.5–3M'], [3e6, 5e6, '3–5M'], [5e6, 10e6, '5–10M'], [10e6, Infinity, '>10M']] },
     { key: 'vol', label: 'Vol попереднього дня', ranges: [[0, .5e6, '<0.5M'], [.5e6, 1e6, '0.5–1M'], [1e6, 3e6, '1–3M'], [3e6, 5e6, '3–5M'], [5e6, Infinity, '>5M']] },
     { key: 'vol_play', label: 'VolPlay', ranges: [[0, 1, '<1x'], [1, 3, '1–3x'], [3, 5, '3–5x'], [5, 10, '5–10x'], [10, Infinity, '>10x']] },
-    { key: 'vol_pre_lt1', sourceKey: 'vol_pre', label: 'VolPre · центовки < $1', priceBand: 'lt1', ranges: [[0, .5e6, '<0.5M'], [.5e6, 1e6, '0.5–1M'], [1e6, 3e6, '1–3M'], [3e6, 5e6, '3–5M'], [5e6, Infinity, '>5M']] },
-    { key: 'vol_pre_1_5', sourceKey: 'vol_pre', label: 'VolPre · ціна $1–5', priceBand: '1_5', ranges: [[0, .5e6, '<0.5M'], [.5e6, 1e6, '0.5–1M'], [1e6, 3e6, '1–3M'], [3e6, 5e6, '3–5M'], [5e6, Infinity, '>5M']] },
-    { key: 'vol_pre_5_10', sourceKey: 'vol_pre', label: 'VolPre · ціна $5–10', priceBand: '5_10', ranges: [[0, .5e6, '<0.5M'], [.5e6, 1e6, '0.5–1M'], [1e6, 3e6, '1–3M'], [3e6, 5e6, '3–5M'], [5e6, Infinity, '>5M']] },
-    { key: 'vol_pre_gt10', sourceKey: 'vol_pre', label: 'VolPre · ціна > $10', priceBand: 'gt10', ranges: [[0, .5e6, '<0.5M'], [.5e6, 1e6, '0.5–1M'], [1e6, 3e6, '1–3M'], [3e6, 5e6, '3–5M'], [5e6, Infinity, '>5M']] },
+    { key: 'vol_pre_lt1', sourceKey: 'vol_pre', label: 'VolPre · центовки < $1', priceBand: 'lt1', ranges: [[0, 1e6, '<1M'], [1e6, 3e6, '1–3M'], [3e6, 6e6, '3–6M'], [6e6, 10e6, '6–10M'], [10e6, Infinity, '>10M']] },
+    { key: 'vol_pre_1_5', sourceKey: 'vol_pre', label: 'VolPre · ціна $1–5', priceBand: '1_5', ranges: [[0, 1e6, '<1M'], [1e6, 3e6, '1–3M'], [3e6, 6e6, '3–6M'], [6e6, 10e6, '6–10M'], [10e6, Infinity, '>10M']] },
+    { key: 'vol_pre_5_10', sourceKey: 'vol_pre', label: 'VolPre · ціна $5–10', priceBand: '5_10', ranges: [[0, 1e6, '<1M'], [1e6, 3e6, '1–3M'], [3e6, 6e6, '3–6M'], [6e6, 10e6, '6–10M'], [10e6, Infinity, '>10M']] },
+    { key: 'vol_pre_gt10', sourceKey: 'vol_pre', label: 'VolPre · ціна > $10', priceBand: 'gt10', ranges: [[0, 1e6, '<1M'], [1e6, 3e6, '1–3M'], [3e6, 6e6, '3–6M'], [6e6, 10e6, '6–10M'], [10e6, Infinity, '>10M']] },
 ];
 
 function finite(value) {

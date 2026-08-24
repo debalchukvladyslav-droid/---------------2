@@ -59,8 +59,8 @@ test('VolPre at entry is split into the four requested entry-price groups', () =
         { symbol: 'HIGH', entry: 12, opened: '09:30', gross: 40, marketCriteria: { vol_pre_by_minute: { 570: 6000000 } } },
     ];
     const groups = buildMarketCriteriaGroups({ '2026-08-01': { trades } });
-    assert.equal(groups.find((group) => group.key === 'vol_pre_lt1').buckets[0].label, '<0.5M');
-    assert.equal(groups.find((group) => group.key === 'vol_pre_1_5').buckets[0].label, '0.5–1M');
+    assert.equal(groups.find((group) => group.key === 'vol_pre_lt1').buckets[0].label, '<1M');
+    assert.equal(groups.find((group) => group.key === 'vol_pre_1_5').buckets[0].label, '<1M');
     assert.equal(groups.find((group) => group.key === 'vol_pre_5_10').buckets[0].label, '1–3M');
-    assert.equal(groups.find((group) => group.key === 'vol_pre_gt10').buckets[0].label, '>5M');
+    assert.equal(groups.find((group) => group.key === 'vol_pre_gt10').buckets[0].label, '6–10M');
 });
