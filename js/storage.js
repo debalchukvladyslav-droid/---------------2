@@ -2,14 +2,14 @@
 import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { normalizeAppData, normalizeDayEntry, getDefaultAppData, normalizeTradeTypesList } from './data_utils.js';
-import { loadPlaybook } from './playbook.js';
 import { clearStatsCache } from './stats.js';
 import { ensureSupabaseStorageUser, uploadToSupabaseStorage, deleteFromSupabaseStorage, getSupabaseStorageUrl } from './supabase_storage.js';
-import { loadScreenshotRegistry, mergeScreenshotRegistry } from './screenshot_registry.js';
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 import { createCompressedBackup } from './backups.js';
 
 let tradeEmbeddingQueue = Promise.resolve();
+let tradeEmbeddingTimer = null;
+let pendingEmbeddingDays = [];
 
 async function syncTradeEmbeddings(savedDays) {
     const ids = [...new Set((savedDays || []).map((row) => row?.id).filter(Boolean))];
@@ -21,13 +21,20 @@ async function syncTradeEmbeddings(savedDays) {
             body: { journal_day_ids: [ids[i]] },
         });
         if (error) throw error;
+        if (i < ids.length - 1) await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 }
 
 function enqueueTradeEmbeddingSync(savedDays) {
-    tradeEmbeddingQueue = tradeEmbeddingQueue
-        .catch(() => undefined)
-        .then(() => syncTradeEmbeddings(savedDays));
+    pendingEmbeddingDays.push(...(savedDays || []));
+    clearTimeout(tradeEmbeddingTimer);
+    tradeEmbeddingTimer = setTimeout(() => {
+        const unique = [...new Map(pendingEmbeddingDays.map((row) => [row?.id, row])).values()].filter((row) => row?.id);
+        pendingEmbeddingDays = [];
+        tradeEmbeddingQueue = tradeEmbeddingQueue
+            .catch(() => undefined)
+            .then(() => syncTradeEmbeddings(unique));
+    }, 30000);
     return tradeEmbeddingQueue;
 }
 
@@ -477,7 +484,7 @@ async function _doSave(opts = {}) {
         const entries = sourceEntries
             .filter(([dateStr, entry]) => /^\d{4}-\d{2}-\d{2}$/.test(dateStr) && entry?.__detailsLoaded !== false);
 
-        if (entries.length) {
+        if (forceFull && entries.length) {
             await createCompressedBackup({ reason: forceFull ? 'full-save' : 'sync', requireServer: true });
         }
 
@@ -579,11 +586,11 @@ export async function loadMonth(nick, mk, userId = null) {
     }
 }
 
-export async function loadDayDetails(dateStr, userId = null) {
+export async function loadDayDetails(dateStr, userId = null, options = {}) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
 
     const existing = state.appData.journal[dateStr];
-    if (existing?.__detailsLoaded) return existing;
+    if (!options.force && existing?.__detailsLoaded) return existing;
 
     const targetUserId = getCurrentViewedUserId(userId) || await resolveViewedUserId(state.CURRENT_VIEWED_USER);
     if (!targetUserId) {
@@ -790,23 +797,7 @@ export async function initializeApp() {
             isViewingOwnProfile ? loadSettings() : Promise.resolve(),
             loadMonth(nick, currentMk, viewedUserId),
             loadMonth(nick, prevMk, viewedUserId),
-            isViewingOwnProfile ? loadPlaybook() : Promise.resolve(),
         ]);
-
-        // Critical dashboard data: keep heavy trade views lazy, but make the
-        // home curve/recent trades complete immediately after login.
-        await loadTradeDays(nick, viewedUserId);
-
-        // Restore only after journal days are present, so screenshots that are
-        // already assigned to a day are not also shown as unassigned.
-        const registryUserId = viewedUserId || state.myUserId;
-        if (isViewingOwnProfile && registryUserId) {
-            try {
-                mergeScreenshotRegistry(state.appData, await loadScreenshotRegistry(registryUserId));
-            } catch (registryError) {
-                console.warn('[Storage] screenshot registry unavailable; apply database/06_screenshot_registry.sql', registryError);
-            }
-        }
 
         if (state.selectedDateStr) {
             const selMk = monthKey(state.selectedDateStr);
@@ -846,7 +837,6 @@ export async function initializeApp() {
         if (window.renderSettingsSliders) window.renderSettingsSliders();
         if (window.renderDaylossSettings) window.renderDaylossSettings();
         if (window.renderMyTradeTypes) window.renderMyTradeTypes();
-        if (window.loadImages) window.loadImages();
         if (window.renderView) await window.renderView();
         if (window.selectDate) window.selectDate(state.selectedDateStr);
         if (window.applyAccessRights) window.applyAccessRights();

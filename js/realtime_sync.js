@@ -1,6 +1,6 @@
 import { supabase } from './supabase.js';
 import { state } from './state.js';
-import { loadTradeDays } from './storage.js';
+import { loadDayDetails } from './storage.js';
 import { createRealtimeEventGate, classifyRealtimeEvent } from './realtime_sync_core.js';
 
 let channel = null;
@@ -10,9 +10,12 @@ let initialized = false;
 let subscriptionTask = Promise.resolve();
 const accept = createRealtimeEventGate();
 
-async function refresh(kind) {
+async function refresh(kind, payload = null) {
     if (kind === 'journal') {
-        await loadTradeDays(state.CURRENT_VIEWED_USER, state.myUserId, { force: true }).catch(() => {});
+        const tradeDate = payload?.new?.trade_date || payload?.old?.trade_date || '';
+        if (/^\d{4}-\d{2}-\d{2}$/.test(tradeDate)) {
+            await loadDayDetails(tradeDate, state.myUserId, { force: true }).catch(() => {});
+        }
         window.renderTradesDatagrid?.();
         window.renderTraderDNAGlance?.();
         window.renderDashboardAI?.();
@@ -29,7 +32,7 @@ function receive(payload, userId) {
     const kind = classifyRealtimeEvent(payload, userId);
     if (kind === 'ignore') return;
     clearTimeout(timer);
-    timer = setTimeout(() => refresh(kind), 80);
+    timer = setTimeout(() => refresh(kind, payload), 250);
 }
 
 async function replaceSubscription(userId) {

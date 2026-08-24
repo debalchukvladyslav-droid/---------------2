@@ -1341,8 +1341,6 @@ async function bootApp(user) {
         const errEl = document.getElementById('auth-error');
         if (errEl) errEl.style.display = 'none';
 
-        await loadTeams();
-        await loadMentorStatusForAccount();
         await initializeApp();
         initGrandmasterDashboard();
         initTerminalShortcuts();
@@ -1365,17 +1363,7 @@ async function bootApp(user) {
         if (window.renderSettingsSituations) window.renderSettingsSituations();
         if (window.applyAccessRights) window.applyAccessRights();
         syncMainTabFromRoute();
-        if (window.loadAIChatHistory) window.loadAIChatHistory();
-        initAILearningCenter();
-        if (window.renderDashboardNews) void window.renderDashboardNews();
-        void renderDashboardAI();
-        void loadLatestCoachInsight();
-        if (window.renderMarketSentiment) void window.renderMarketSentiment();
-        void renderJournalScore();
-        cleanupUnusedAIRequests();
-
         applyPersistedBackground();
-        loadBackgroundGallery();
     } catch (e) {
         console.error('[INIT] Помилка ініціалізації:', e);
     } finally {
@@ -1383,11 +1371,17 @@ async function bootApp(user) {
         hideLoadingToast();
     }
 
-    setupOCRDrawing();
-    startLiveSync();
-    await tryRestoreDriveToken();
-    if (window.updateDriveUI) window.updateDriveUI();
-    startDriveAutoSync();
+    setTimeout(async () => {
+        if (!state.USER_DOC_NAME) return;
+        await loadTeams().catch((error) => console.warn('[Deferred init] teams:', error?.message || error));
+        await loadMentorStatusForAccount().catch((error) => console.warn('[Deferred init] mentor:', error?.message || error));
+        startLiveSync();
+        await tryRestoreDriveToken().catch((error) => console.warn('[Deferred init] Drive token:', error?.message || error));
+        if (window.updateDriveUI) window.updateDriveUI();
+        startDriveAutoSync();
+        setupOCRDrawing();
+        cleanupUnusedAIRequests();
+    }, 5000);
     startManualSyncScheduler();
     initOnboarding({ user, saveSettings, switchMainTab });
     setTimeout(() => window._checkSessionModal?.(), 1500);
