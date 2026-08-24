@@ -3,7 +3,7 @@ import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { copyTextToClipboard, showToast } from './utils.js';
 import { loadTeams } from './teams.js';
-import { exportProfileData, resetProfileData, restoreProfileData } from './storage.js';
+import { exportProfileData, resetProfileData, restoreProfileData, loadTradeDays } from './storage.js';
 import { listServerBackupsForUser, readCompressedBackupEntry } from './backups.js';
 
 const ROLES = ['trader', 'mentor', 'admin'];
@@ -64,17 +64,90 @@ export async function renderAdminPanel() {
     container.innerHTML = '';
     if (fullAdmin) await renderRegistrationRequests(container);
     if (fullAdmin && polygonPanel) {
-        polygonPanel.innerHTML = `
-            <div class="admin-service-bots-head">
-                <div>
-                    <h4 class="admin-section-title">Polygon · локальний кеш графіків</h4>
-                    <p class="admin-section-subtitle">Аналіз запускається тільки вручну у вкладці аналітики. Повні хвилинні графіки зберігаються у браузері в IndexedDB, тому вже завантажені ticker + date повторно не запитуються й не записуються в Supabase.</p>
-                </div>
-                <span class="admin-polygon-state is-active">Локально</span>
-            </div>`;
+        renderMarketCriteriaAdminPanel(polygonPanel);
     }
     if (fullAdmin) renderServiceBotsPanel(profiles || []);
     visibleProfiles.forEach((p) => container.appendChild(buildUserCard(p, teamChoices, { fullAdmin, dataManager })));
+}
+
+function criteriaPairsFromJournal(journal = {}) {
+    const pairs = new Map();
+    for (const [date, day] of Object.entries(journal || {})) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+        for (const trade of Array.isArray(day?.trades) ? day.trades : []) {
+            const ticker = String(trade?.symbol || trade?.ticker || '').trim().toUpperCase();
+            if (!ticker) continue;
+            const existing = trade?.marketCriteria || day?.tradePolygons?.[ticker];
+            const key = `${date}|${ticker}`;
+            if (!pairs.has(key)) pairs.set(key, { date, ticker, loaded: !!existing });
+            else if (existing) pairs.get(key).loaded = true;
+        }
+    }
+    return [...pairs.values()];
+}
+
+function renderMarketCriteriaAdminPanel(panel) {
+    panel.innerHTML = `
+        <div class="admin-service-bots-head">
+            <div>
+                <h4 class="admin-section-title">Критерії паперів</h4>
+                <p class="admin-section-subtitle">Окремо від Polygon: за ticker + date завантажуються ATR, об’єми, VolPlay і Float. Уже заповнені пари пропускаються.</p>
+            </div>
+            <span class="admin-polygon-state is-active">Окремий модуль</span>
+        </div>
+        <div class="admin-polygon-actions"><button type="button" class="btn-admin-action" data-load-all-criteria>Завантажити всі критерії</button></div>
+        <p class="admin-polygon-result" data-criteria-result>Процес почнеться лише після натискання.</p>`;
+    const button = panel.querySelector('[data-load-all-criteria]');
+    const result = panel.querySelector('[data-criteria-result]');
+    button?.addEventListener('click', async () => {
+        if (button.disabled) return;
+        button.disabled = true;
+        try {
+            result.textContent = 'Завантажую список угод…';
+            await loadTradeDays(state.CURRENT_VIEWED_USER, state.myUserId);
+            const all = criteriaPairsFromJournal(state.appData.journal);
+            const pending = all.filter((pair) => !pair.loaded);
+            if (!pending.length) {
+                result.textContent = `Готово: усі ${all.length} ticker + date вже мають критерії.`;
+                return;
+            }
+            const { data: { session } = {} } = await supabase.auth.getSession();
+            if (!session?.access_token) throw new Error('Потрібно увійти в акаунт');
+            let done = 0;
+            let failed = 0;
+            for (const pair of pending) {
+                result.textContent = `Критерії ${pair.ticker} · ${pair.date}: ${done + failed + 1} із ${pending.length}`;
+                try {
+                    const response = await fetch('/api/trade-polygons', {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ticker: pair.ticker, date: pair.date }),
+                    });
+                    const payload = await response.json().catch(() => ({}));
+                    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+                    const day = state.appData.journal[pair.date];
+                    if (day) {
+                        day.tradePolygons = { ...(day.tradePolygons || {}), [pair.ticker]: payload.metrics };
+                        (day.trades || []).forEach((trade) => {
+                            if (String(trade?.symbol || trade?.ticker || '').trim().toUpperCase() === pair.ticker) trade.marketCriteria = payload.metrics;
+                        });
+                    }
+                    done += 1;
+                } catch (error) {
+                    failed += 1;
+                    console.warn('[Market criteria bulk]', pair.ticker, pair.date, error);
+                }
+                if (done + failed < pending.length) await new Promise((resolve) => setTimeout(resolve, 1200));
+            }
+            result.textContent = `Готово: завантажено ${done}, помилок ${failed}, раніше були ${all.length - pending.length}.`;
+            showToast(`Критерії: завантажено ${done}`);
+        } catch (error) {
+            result.textContent = `Помилка: ${error?.message || error}`;
+            showToast(result.textContent);
+        } finally {
+            button.disabled = false;
+        }
+    });
 }
 
 async function invokePolygonAdmin(action, extra = {}) {

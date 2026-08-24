@@ -9,6 +9,7 @@ import { buildTradeTypeInsightRows } from './trade_type_analysis.js';
 import { getEffectiveDayPnl } from './trade_filters.js';
 import { buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets, buildSummaryByDateWeekdayPnl, combineStatsSheetRows } from './stats_sheet_metrics.js';
 import { renderBestExitAnalysis } from './best_exit_analysis.js';
+import { buildMarketCriteriaGroups } from './market_criteria_analysis.js';
 
 // ─── STATS CACHE ───────────────────────────────────────────────────────────────────────────────
 // Module-level Map survives filter switches and profile switches within the
@@ -3082,6 +3083,27 @@ function renderStatsTradeTypeInsights({ journal, filters, tradeTypes, settings =
     }).join('');
 }
 
+function renderMarketCriteriaAnalysis(journal, dates, tradeType = '') {
+    const root = document.getElementById('stats-market-criteria-content');
+    if (!root) return;
+    const groups = buildMarketCriteriaGroups(journal, dates, tradeType);
+    if (!groups.length) {
+        root.innerHTML = '<div class="stats-empty-note">Ще немає угод із завантаженими критеріями. Адміністратор може завантажити їх у панелі адміністратора.</div>';
+        return;
+    }
+    const money = (value) => `${value >= 0 ? '+' : '−'}$${Math.abs(value).toFixed(2)}`;
+    root.innerHTML = groups.map((group) => `
+        <section class="stats-criteria-group">
+            <h4>${escapeHtml(group.label)}</h4>
+            <div class="stats-criteria-table">
+                <div class="stats-criteria-row is-head"><span>Діапазон</span><span>Угод</span><span>Gross</span><span>Win rate</span><span>Profit factor</span></div>
+                ${group.buckets.map((row) => `<div class="stats-criteria-row ${row.pnl >= 0 ? 'is-profit' : 'is-loss'}">
+                    <strong>${escapeHtml(row.label)}</strong><span>${row.trades}</span><span>${money(row.pnl)}</span><span>${row.winRate.toFixed(1)}%</span><span>${row.profitFactor === Infinity ? '∞' : row.profitFactor.toFixed(2)}</span>
+                </div>`).join('')}
+            </div>
+        </section>`).join('');
+}
+
 export function renderStatsTab() {
     if (typeof Chart === 'undefined') {
         ensureChartJs()
@@ -3254,6 +3276,7 @@ export function renderStatsTab() {
             ? (document.getElementById('stats-period-trigger-label')?.textContent || 'Вибраний період')
             : 'За весь час',
     });
+    renderMarketCriteriaAnalysis(statsJournal, new Set(filteredEntries.map((entry) => entry.dateStr)), ttFilter || '');
     const longHorizon = !!equityAnalysis.longHorizon;
     const worstDrawdownAbs = Math.abs(equityAnalysis.worstDrawdown);
     const peakEquity = Math.max(...equityAnalysis.rows.map(row => row.equity), 0);

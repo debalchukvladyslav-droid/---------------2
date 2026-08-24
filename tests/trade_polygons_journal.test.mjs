@@ -60,3 +60,12 @@ test('website fetch is manual and RPC writes criteria into journal trade', async
     assert.match(view, /value === null \|\| value === undefined \|\| value === ''/);
     assert.match(view, /shs_float_display \|\| polygonCriteria\.shs_float_raw/);
 });
+
+test('admin bulk criteria loader is separate from Polygon and skips existing pairs', async () => {
+    const admin = await readFile(new URL('../js/admin.js', import.meta.url), 'utf8');
+    assert.match(admin, /Завантажити всі критерії/);
+    assert.match(admin, /criteriaPairsFromJournal/);
+    assert.match(admin, /filter\(\(pair\) => !pair\.loaded\)/);
+    assert.match(admin, /fetch\('\/api\/trade-polygons'/);
+    assert.doesNotMatch(admin.match(/function renderMarketCriteriaAdminPanel[\s\S]*?\n}\n/)?.[0] || '', /market-best-exits|polygon-aggs/);
+});
