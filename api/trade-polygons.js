@@ -73,7 +73,7 @@ export function parseFinvizFloat(html) {
     const value = parseCompactNumber(raw);
     return {
         shs_float: value,
-        shs_float_display: Number.isFinite(value) ? value.toLocaleString('uk-UA') : '',
+        shs_float_display: raw,
         shs_float_raw: raw,
     };
 }

@@ -550,6 +550,7 @@ function renderTradeInfoBar(trades) {
     if (sheetException) items.push({ label: 'Виключення', value: sheetException, color: 'var(--loss)' });
     if (polygonCriteria) {
         const compact = (value) => {
+            if (value === null || value === undefined || value === '') return '—';
             const number = Number(value);
             if (!Number.isFinite(number)) return '—';
             if (number >= 1_000_000_000) return `${(number / 1_000_000_000).toFixed(2)}B`;
@@ -562,7 +563,7 @@ function renderTradeInfoBar(trades) {
             { label: 'Avg Vol 14 · до входу', value: compact(polygonCriteria.avg_vol), color: 'var(--text-main)' },
             { label: 'Vol · попер. день', value: compact(polygonCriteria.vol), color: 'var(--text-main)' },
             { label: 'VolPlay · попер. день', value: `${Number(polygonCriteria.vol_play).toFixed(2)}x`, color: 'var(--gold)' },
-            { label: 'Float', value: polygonCriteria.shs_float_display || compact(polygonCriteria.shs_float), color: 'var(--text-main)' },
+            { label: 'Float', value: polygonCriteria.shs_float_display || polygonCriteria.shs_float_raw || compact(polygonCriteria.shs_float), color: 'var(--text-main)' },
             ...(polygonCriteria.as_of_date ? [{ label: 'Дані станом на', value: polygonCriteria.as_of_date, color: 'var(--text-muted)' }] : []),
         );
     }

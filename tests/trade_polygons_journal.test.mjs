@@ -29,7 +29,7 @@ test('Yahoo criteria use only the completed session before the trade date', () =
 test('Finviz Shs Float is parsed from its snapshot table', () => {
     assert.deepEqual(
         parseFinvizFloat('<table><tr><td>Shs Float</td><td><b>8.50M</b></td></tr></table>'),
-        { shs_float: 8_500_000, shs_float_display: '8 500 000', shs_float_raw: '8.50M' },
+        { shs_float: 8_500_000, shs_float_display: '8.50M', shs_float_raw: '8.50M' },
     );
 });
 
@@ -53,4 +53,6 @@ test('website fetch is manual and RPC writes criteria into journal trade', async
     assert.match(storage, /tradePolygons/);
     assert.match(view, /Критерії паперу/);
     assert.match(view, /fetch\('\/api\/trade-polygons'/);
+    assert.match(view, /value === null \|\| value === undefined \|\| value === ''/);
+    assert.match(view, /shs_float_display \|\| polygonCriteria\.shs_float_raw/);
 });
