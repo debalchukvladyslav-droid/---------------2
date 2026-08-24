@@ -29,7 +29,7 @@ test('Yahoo criteria use only the completed session before the trade date', () =
 test('Finviz Shs Float is parsed from its snapshot table', () => {
     assert.deepEqual(
         parseFinvizFloat('<table><tr><td>Shs Float</td><td><b>8.50M</b></td></tr></table>'),
-        { shs_float: 8_500_000, shs_float_display: '8.50M' },
+        { shs_float: 8_500_000, shs_float_display: '8 500 000', shs_float_raw: '8.50M' },
     );
 });
 

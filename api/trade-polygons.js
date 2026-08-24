@@ -68,9 +68,14 @@ function parseCompactNumber(text) {
 
 export function parseFinvizFloat(html) {
     const match = String(html || '').match(/>\s*Shs Float\s*<\/td>\s*<td[^>]*>([\s\S]*?)<\/td>/i);
-    if (!match) return { shs_float: null, shs_float_display: '' };
-    const display = match[1].replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ').trim();
-    return { shs_float: parseCompactNumber(display), shs_float_display: display.slice(0, 40) };
+    if (!match) return { shs_float: null, shs_float_display: '', shs_float_raw: '' };
+    const raw = match[1].replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ').trim().slice(0, 40);
+    const value = parseCompactNumber(raw);
+    return {
+        shs_float: value,
+        shs_float_display: Number.isFinite(value) ? value.toLocaleString('uk-UA') : '',
+        shs_float_raw: raw,
+    };
 }
 
 async function fetchYahooMetrics(ticker, targetDate) {
@@ -90,7 +95,7 @@ async function fetchFinvizFloat(ticker) {
         headers: { 'User-Agent': USER_AGENT, Accept: 'text/html,application/xhtml+xml' },
         signal: AbortSignal.timeout(12000),
     });
-    if (!response.ok) return { shs_float: null, shs_float_display: '' };
+    if (!response.ok) return { shs_float: null, shs_float_display: '', shs_float_raw: '' };
     return parseFinvizFloat(await response.text());
 }
 
