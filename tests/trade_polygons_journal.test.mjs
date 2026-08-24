@@ -31,9 +31,10 @@ test('Finviz Shs Float is parsed from its snapshot table', () => {
 });
 
 test('website fetch is manual and RPC writes criteria into journal trade', async () => {
-    const [api, migration, storage, view] = await Promise.all([
+    const [api, migration, fixMigration, storage, view] = await Promise.all([
         readFile(new URL('../api/trade-polygons.js', import.meta.url), 'utf8'),
         readFile(new URL('../supabase/migrations/20260824173000_trade_polygon_journal_metrics.sql', import.meta.url), 'utf8'),
+        readFile(new URL('../supabase/migrations/20260824174500_fix_trade_polygon_journal_without_updated_at.sql', import.meta.url), 'utf8'),
         readFile(new URL('../js/storage.js', import.meta.url), 'utf8'),
         readFile(new URL('../js/trades_view2.js', import.meta.url), 'utf8'),
     ]);
@@ -44,6 +45,8 @@ test('website fetch is manual and RPC writes criteria into journal trade', async
     assert.match(migration, /tradePolygons/);
     assert.match(migration, /marketCriteria/);
     assert.match(migration, /REVOKE ALL.*PUBLIC, anon, authenticated/is);
+    assert.doesNotMatch(fixMigration, /SET daily_metrics[\s\S]*updated_at\s*=/i);
+    assert.match(fixMigration, /GRANT EXECUTE.*service_role/i);
     assert.match(storage, /tradePolygons/);
     assert.match(view, /Критерії паперу/);
     assert.match(view, /fetch\('\/api\/trade-polygons'/);
