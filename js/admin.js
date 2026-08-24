@@ -63,7 +63,16 @@ export async function renderAdminPanel() {
 
     container.innerHTML = '';
     if (fullAdmin) await renderRegistrationRequests(container);
-    if (fullAdmin) await renderPolygonAdminPanel();
+    if (fullAdmin && polygonPanel) {
+        polygonPanel.innerHTML = `
+            <div class="admin-service-bots-head">
+                <div>
+                    <h4 class="admin-section-title">Polygon · локальний кеш графіків</h4>
+                    <p class="admin-section-subtitle">Аналіз запускається тільки вручну у вкладці аналітики. Повні хвилинні графіки зберігаються у браузері в IndexedDB, тому вже завантажені ticker + date повторно не запитуються й не записуються в Supabase.</p>
+                </div>
+                <span class="admin-polygon-state is-active">Локально</span>
+            </div>`;
+    }
     if (fullAdmin) renderServiceBotsPanel(profiles || []);
     visibleProfiles.forEach((p) => container.appendChild(buildUserCard(p, teamChoices, { fullAdmin, dataManager })));
 }
