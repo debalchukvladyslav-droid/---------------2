@@ -38,3 +38,15 @@ test('exact boundaries move into the next configured criteria range', () => {
     assert.equal(groups.find((group) => group.key === 'vol').buckets[0].label, '0.5–1M');
     assert.equal(groups.find((group) => group.key === 'vol_play').buckets[0].label, '1–3x');
 });
+
+test('missing Shs Float is kept as a separate result group', () => {
+    const groups = buildMarketCriteriaGroups({ '2026-08-01': { trades: [
+        { symbol: 'NONE', gross: -25, marketCriteria: { atr: .4, shs_float: null } },
+        { symbol: 'DASH', gross: 10, marketCriteria: { atr: .4, shs_float: '-' } },
+    ] } });
+    const missing = groups.find((group) => group.key === 'shs_float').buckets
+        .find((bucket) => bucket.label === '— (немає даних)');
+    assert.equal(missing.trades, 2);
+    assert.equal(missing.pnl, -15);
+    assert.equal(missing.profitFactor, 0.4);
+});
