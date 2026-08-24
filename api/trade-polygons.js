@@ -32,8 +32,11 @@ export function calculateYahooMetrics(chart, targetDate) {
         volume: Number(quote.volume?.[index]),
     })).filter((row) => [row.high, row.low, row.close, row.volume].every(Number.isFinite));
 
-    const targetIndex = rows.findIndex((row) => row.date === targetDate);
-    if (targetIndex < 0) throw new Error(`Для ${targetDate} немає торгової сесії`);
+    // Критерії входу не повинні бачити результат поточного дня. Беремо останню
+    // повністю завершену торгову сесію строго перед датою угоди.
+    let targetIndex = -1;
+    rows.forEach((row, index) => { if (row.date < targetDate) targetIndex = index; });
+    if (targetIndex < 0) throw new Error(`Немає завершеної сесії перед ${targetDate}`);
     if (targetIndex < 14) throw new Error('Недостатньо історії для ATR 14');
 
     const sessions = rows.slice(targetIndex - 13, targetIndex + 1);
@@ -50,6 +53,8 @@ export function calculateYahooMetrics(chart, targetDate) {
         avg_vol: Math.round(avgVol),
         vol: Math.round(vol),
         vol_play: Number((vol / avgVol).toFixed(4)),
+        as_of_date: rows[targetIndex].date,
+        basis: 'previous-session',
     };
 }
 

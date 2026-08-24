@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { calculateYahooMetrics, parseFinvizFloat } from '../api/trade-polygons.js';
 
-test('Yahoo daily rows calculate target-inclusive Avg Vol, VolPlay and ATR 14', () => {
+test('Yahoo criteria use only the completed session before the trade date', () => {
     const timestamp = [];
     const high = [];
     const low = [];
     const close = [];
     const volume = [];
-    for (let index = 0; index < 15; index++) {
+    for (let index = 0; index < 16; index++) {
         timestamp.push(Date.UTC(2026, 7, 3 + index, 16) / 1000);
         high.push(11 + index);
         low.push(9 + index);
@@ -19,8 +19,11 @@ test('Yahoo daily rows calculate target-inclusive Avg Vol, VolPlay and ATR 14', 
     const metrics = calculateYahooMetrics({ chart: { result: [{
         timestamp,
         indicators: { quote: [{ high, low, close, volume }] },
-    }] } }, '2026-08-17');
-    assert.deepEqual(metrics, { atr: 2, avg_vol: 1750, vol: 2400, vol_play: 1.3714 });
+    }] } }, '2026-08-18');
+    assert.deepEqual(metrics, {
+        atr: 2, avg_vol: 1750, vol: 2400, vol_play: 1.3714,
+        as_of_date: '2026-08-17', basis: 'previous-session',
+    });
 });
 
 test('Finviz Shs Float is parsed from its snapshot table', () => {

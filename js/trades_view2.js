@@ -558,11 +558,12 @@ function renderTradeInfoBar(trades) {
             return String(Math.round(number));
         };
         items.push(
-            { label: 'ATR 14', value: Number(polygonCriteria.atr).toFixed(2), color: 'var(--accent)' },
-            { label: 'Avg Vol 14', value: compact(polygonCriteria.avg_vol), color: 'var(--text-main)' },
-            { label: 'Vol', value: compact(polygonCriteria.vol), color: 'var(--text-main)' },
-            { label: 'VolPlay', value: `${Number(polygonCriteria.vol_play).toFixed(2)}x`, color: 'var(--gold)' },
+            { label: 'ATR 14 · до входу', value: Number(polygonCriteria.atr).toFixed(2), color: 'var(--accent)' },
+            { label: 'Avg Vol 14 · до входу', value: compact(polygonCriteria.avg_vol), color: 'var(--text-main)' },
+            { label: 'Vol · попер. день', value: compact(polygonCriteria.vol), color: 'var(--text-main)' },
+            { label: 'VolPlay · попер. день', value: `${Number(polygonCriteria.vol_play).toFixed(2)}x`, color: 'var(--gold)' },
             { label: 'Float', value: polygonCriteria.shs_float_display || compact(polygonCriteria.shs_float), color: 'var(--text-main)' },
+            ...(polygonCriteria.as_of_date ? [{ label: 'Дані станом на', value: polygonCriteria.as_of_date, color: 'var(--text-muted)' }] : []),
         );
     }
     if (trade?.symbol && _activeTrade?.dateStr) {
