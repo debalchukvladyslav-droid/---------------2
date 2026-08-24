@@ -3,7 +3,7 @@ import { state } from './state.js';
 import { supabase, SUPABASE_URL } from './supabase.js';
 import { buildTradeContext, analyzeTradeStory, renderStoryOverlay } from './trade_story.js';
 import { sleep } from './ai.js';
-import { saveJournalData, markJournalDayDirty, loadTradeDays } from './storage.js';
+import { saveJournalData, markJournalDayDirty, loadTradeDays, loadDayDetails } from './storage.js';
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 import { findScreenshotsForTicker, openScreenshotForTrade } from './gallery.js';
 import { ensureLightweightCharts } from './vendor_loader.js';
@@ -522,6 +522,9 @@ function renderTradeInfoBar(trades) {
     const isProfit   = totalNet >= 0;
 
     const trade = trades[0];
+    const polygonCriteria = trade?.marketCriteria
+        || state.appData.journal?.[_activeTrade?.dateStr || '']?.tradePolygons?.[String(trade?.symbol || '').toUpperCase()]
+        || null;
     const duration = (() => {
         if (!trade?.opened || !trade?.closed) return null;
         const a = parseTradeTs(trade.opened, _activeTrade?.dateStr || '');
@@ -545,6 +548,31 @@ function renderTradeInfoBar(trades) {
     if (stopPrice != null && stopPrice !== '') items.push({ label: 'Стоп', value: String(stopPrice), color: 'var(--gold)' });
     if (sheet.exit) items.push({ label: 'Вихід', value: String(sheet.exit), color: 'var(--text-main)' });
     if (sheetException) items.push({ label: 'Виключення', value: sheetException, color: 'var(--loss)' });
+    if (polygonCriteria) {
+        const compact = (value) => {
+            const number = Number(value);
+            if (!Number.isFinite(number)) return '—';
+            if (number >= 1_000_000_000) return `${(number / 1_000_000_000).toFixed(2)}B`;
+            if (number >= 1_000_000) return `${(number / 1_000_000).toFixed(2)}M`;
+            if (number >= 1_000) return `${(number / 1_000).toFixed(1)}K`;
+            return String(Math.round(number));
+        };
+        items.push(
+            { label: 'ATR 14', value: Number(polygonCriteria.atr).toFixed(2), color: 'var(--accent)' },
+            { label: 'Avg Vol 14', value: compact(polygonCriteria.avg_vol), color: 'var(--text-main)' },
+            { label: 'Vol', value: compact(polygonCriteria.vol), color: 'var(--text-main)' },
+            { label: 'VolPlay', value: `${Number(polygonCriteria.vol_play).toFixed(2)}x`, color: 'var(--gold)' },
+            { label: 'Float', value: polygonCriteria.shs_float_display || compact(polygonCriteria.shs_float), color: 'var(--text-main)' },
+        );
+    }
+    if (trade?.symbol && _activeTrade?.dateStr) {
+        items.push({
+            label: 'Критерії паперу',
+            value: polygonCriteria ? 'Оновити' : 'Завантажити',
+            color: 'var(--accent)',
+            action: 'load-market-criteria',
+        });
+    }
 
     if (trades.some((item) => isMarketOpenStopTrade(item, _activeTrade?.dateStr || ''))) {
         items.push({ label: 'Група', value: 'Стопи на маркеті', color: 'var(--loss)' });
@@ -554,7 +582,7 @@ function renderTradeInfoBar(trades) {
     bar.style.display = 'flex';
     bar.style.cssText = 'display:flex;flex-shrink:0;gap:8px;padding:8px 15px;background:var(--bg-panel);border-bottom:1px solid var(--border);flex-wrap:wrap;align-items:center;';
 
-    items.forEach(({ label, value, color, big }) => {
+    items.forEach(({ label, value, color, big, action }) => {
         const card = document.createElement('div');
         card.style.cssText = `display:flex;flex-direction:column;align-items:center;justify-content:center;padding:${big ? '6px 16px' : '5px 12px'};background:var(--bg-main);border:1px solid var(--border);border-radius:8px;min-width:${big ? '90px' : '70px'};gap:2px;`;
         if (big) card.style.borderColor = isProfit ? 'rgba(16,185,129,0.4)' : 'rgba(239,68,68,0.4)';
@@ -566,6 +594,53 @@ function renderTradeInfoBar(trades) {
         lbl.textContent = label;
         card.appendChild(val);
         card.appendChild(lbl);
+        if (action === 'load-market-criteria') {
+            card.setAttribute('role', 'button');
+            card.tabIndex = 0;
+            card.title = 'Отримати ATR, об’єми та Float для цього тікера і дня';
+            card.style.cursor = 'pointer';
+            card.style.borderColor = 'color-mix(in srgb, var(--accent) 45%, var(--border))';
+            const activate = async () => {
+                if (card.getAttribute('aria-busy') === 'true') return;
+                card.setAttribute('aria-busy', 'true');
+                const original = val.textContent;
+                val.textContent = 'Завантаження…';
+                try {
+                    const { data: { session } = {} } = await supabase.auth.getSession();
+                    if (!session?.access_token) throw new Error('Потрібно увійти в акаунт');
+                    const response = await fetch('/api/trade-polygons', {
+                        method: 'POST',
+                        headers: {
+                            Authorization: `Bearer ${session.access_token}`,
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ ticker: trade.symbol, date: _activeTrade.dateStr }),
+                    });
+                    const result = await response.json().catch(() => ({}));
+                    if (!response.ok || !result.ok) throw new Error(result.error || `HTTP ${response.status}`);
+
+                    const dateStr = _activeTrade.dateStr;
+                    const tradeIndex = _activeTrade.tradeIndex;
+                    const day = await loadDayDetails(dateStr, state.myUserId, { force: true });
+                    const refreshedTrade = day?.trades?.[tradeIndex];
+                    if (refreshedTrade) renderTradeInfoBar([refreshedTrade]);
+                } catch (error) {
+                    console.error('[Trade criteria]', error);
+                    val.textContent = 'Повторити';
+                    card.title = error?.message || String(error);
+                } finally {
+                    card.removeAttribute('aria-busy');
+                    if (val.textContent === 'Завантаження…') val.textContent = original;
+                }
+            };
+            card.addEventListener('click', activate);
+            card.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    activate();
+                }
+            });
+        }
         bar.appendChild(card);
     });
 

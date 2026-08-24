@@ -15,6 +15,9 @@ async function refresh(kind, payload = null) {
         const tradeDate = payload?.new?.trade_date || payload?.old?.trade_date || '';
         if (/^\d{4}-\d{2}-\d{2}$/.test(tradeDate)) {
             await loadDayDetails(tradeDate, state.myUserId, { force: true }).catch(() => {});
+            if (document.getElementById('view-trades')?.classList.contains('active')) {
+                window.populateSymbolSelect?.(tradeDate);
+            }
         }
         window.renderTradesDatagrid?.();
         window.renderTraderDNAGlance?.();

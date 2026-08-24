@@ -193,6 +193,7 @@ function dayEntryToJournalRow(userId, tradeDate, entry) {
             sessionReviewDone: day.sessionReviewDone ?? false,
             sessionReviewCompletedAt: day.sessionReviewCompletedAt ?? '',
             trades: Array.isArray(day.trades) ? day.trades : [],
+            tradePolygons: day.tradePolygons && typeof day.tradePolygons === 'object' ? day.tradePolygons : {},
             review_requests: day.review_requests && typeof day.review_requests === 'object' ? day.review_requests : {},
         }
     };
@@ -236,6 +237,7 @@ function journalRowToDayEntry(row) {
         sessionReviewDone: metrics.sessionReviewDone,
         sessionReviewCompletedAt: metrics.sessionReviewCompletedAt,
         trades: metrics.trades || [],
+        tradePolygons: metrics.tradePolygons && typeof metrics.tradePolygons === 'object' ? metrics.tradePolygons : {},
         review_requests: metrics.review_requests && typeof metrics.review_requests === 'object' ? metrics.review_requests : {},
     });
 }
@@ -266,6 +268,7 @@ function journalRowToMonthEntry(row) {
             ppro: metrics.ppro,
             pproSource: metrics.pproSource,
             trades: metrics.trades || [],
+            tradePolygons: metrics.tradePolygons && typeof metrics.tradePolygons === 'object' ? metrics.tradePolygons : {},
         }),
         id: row?.id ?? null,
         user_id: row?.user_id ?? null,
