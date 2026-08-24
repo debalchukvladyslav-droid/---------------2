@@ -67,7 +67,9 @@ function parseCompactNumber(text) {
 }
 
 export function parseFinvizFloat(html) {
-    const match = String(html || '').match(/>\s*Shs Float\s*<\/td>\s*<td[^>]*>([\s\S]*?)<\/td>/i);
+    const source = String(html || '');
+    const match = source.match(/>\s*Shs Float\s*<\/(?:div|a|span)>[\s\S]{0,240}?<\/td>\s*<td[^>]*>([\s\S]*?)<\/td>/i)
+        || source.match(/>\s*Shs Float\s*<\/td>\s*<td[^>]*>([\s\S]*?)<\/td>/i);
     if (!match) return { shs_float: null, shs_float_display: '', shs_float_raw: '' };
     const raw = match[1].replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ').trim().slice(0, 40);
     const value = parseCompactNumber(raw);

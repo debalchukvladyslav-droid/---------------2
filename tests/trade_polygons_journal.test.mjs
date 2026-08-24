@@ -31,6 +31,10 @@ test('Finviz Shs Float is parsed from its snapshot table', () => {
         parseFinvizFloat('<table><tr><td>Shs Float</td><td><b>8.50M</b></td></tr></table>'),
         { shs_float: 8_500_000, shs_float_display: '8.50M', shs_float_raw: '8.50M' },
     );
+    assert.deepEqual(
+        parseFinvizFloat('<td class="snapshot-td2"><div class="snapshot-td-label">Shs Float</div></td><td class="snapshot-td2"><div class="snapshot-td-content"><b>7.97M</b></div></td>'),
+        { shs_float: 7_970_000, shs_float_display: '7.97M', shs_float_raw: '7.97M' },
+    );
 });
 
 test('website fetch is manual and RPC writes criteria into journal trade', async () => {
