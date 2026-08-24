@@ -50,3 +50,17 @@ test('missing Shs Float is kept as a separate result group', () => {
     assert.equal(missing.pnl, -15);
     assert.equal(missing.profitFactor, 0.4);
 });
+
+test('VolPre at entry is split into the four requested entry-price groups', () => {
+    const trades = [
+        { symbol: 'PENNY', entry: .8, opened: '2026-08-01 09:15:00', gross: 20, marketCriteria: { vol_pre_by_minute: { 555: 400000 } } },
+        { symbol: 'LOW', entry: 3, opened: '09:20', gross: 30, marketCriteria: { vol_pre_by_minute: { 560: 800000 } } },
+        { symbol: 'MID', entry: 7, opened: '09:25', gross: -10, marketCriteria: { vol_pre_by_minute: { 565: 2000000 } } },
+        { symbol: 'HIGH', entry: 12, opened: '09:30', gross: 40, marketCriteria: { vol_pre_by_minute: { 570: 6000000 } } },
+    ];
+    const groups = buildMarketCriteriaGroups({ '2026-08-01': { trades } });
+    assert.equal(groups.find((group) => group.key === 'vol_pre_lt1').buckets[0].label, '<0.5M');
+    assert.equal(groups.find((group) => group.key === 'vol_pre_1_5').buckets[0].label, '0.5–1M');
+    assert.equal(groups.find((group) => group.key === 'vol_pre_5_10').buckets[0].label, '1–3M');
+    assert.equal(groups.find((group) => group.key === 'vol_pre_gt10').buckets[0].label, '>5M');
+});

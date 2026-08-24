@@ -558,12 +558,16 @@ function renderTradeInfoBar(trades) {
             if (number >= 1_000) return `${(number / 1_000).toFixed(1)}K`;
             return String(Math.round(number));
         };
+        const openedMatch = /\b(\d{1,2}):(\d{2})(?::\d{2})?\b/.exec(String(trade?.opened || trade?.entryTime || trade?.time || ''));
+        const openedMinute = openedMatch ? Number(openedMatch[1]) * 60 + Number(openedMatch[2]) : null;
+        const volPre = openedMinute == null ? null : polygonCriteria.vol_pre_by_minute?.[String(openedMinute)];
         items.push(
             { label: 'ATR 14 · до входу', value: Number(polygonCriteria.atr).toFixed(2), color: 'var(--accent)' },
             { label: 'Avg Vol 14 · до входу', value: compact(polygonCriteria.avg_vol), color: 'var(--text-main)' },
             { label: 'Vol · попер. день', value: compact(polygonCriteria.vol), color: 'var(--text-main)' },
             { label: 'VolPlay · попер. день', value: `${Number(polygonCriteria.vol_play).toFixed(2)}x`, color: 'var(--gold)' },
             { label: 'Float', value: polygonCriteria.shs_float_display || polygonCriteria.shs_float_raw || compact(polygonCriteria.shs_float), color: 'var(--text-main)' },
+            ...(Number.isFinite(Number(volPre)) ? [{ label: 'VolPre · на момент входу', value: compact(volPre), color: 'var(--accent)' }] : []),
             ...(polygonCriteria.as_of_date ? [{ label: 'Дані станом на', value: polygonCriteria.as_of_date, color: 'var(--text-muted)' }] : []),
         );
     }
@@ -616,7 +620,11 @@ function renderTradeInfoBar(trades) {
                             Authorization: `Bearer ${session.access_token}`,
                             'Content-Type': 'application/json',
                         },
-                        body: JSON.stringify({ ticker: trade.symbol, date: _activeTrade.dateStr }),
+                        body: JSON.stringify({
+                            ticker: trade.symbol,
+                            date: _activeTrade.dateStr,
+                            volPreByMinute: polygonCriteria?.vol_pre_by_minute || {},
+                        }),
                     });
                     const result = await response.json().catch(() => ({}));
                     if (!response.ok || !result.ok) throw new Error(result.error || `HTTP ${response.status}`);

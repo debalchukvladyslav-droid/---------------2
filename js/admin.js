@@ -1,10 +1,11 @@
 // === js/admin.js ===
-import { supabase } from './supabase.js';
+import { supabase, SUPABASE_URL } from './supabase.js';
 import { state } from './state.js';
 import { copyTextToClipboard, showToast } from './utils.js';
 import { loadTeams } from './teams.js';
 import { exportProfileData, resetProfileData, restoreProfileData, loadTradeDays } from './storage.js';
 import { listServerBackupsForUser, readCompressedBackupEntry } from './backups.js';
+import { calculatePreMarketVolume, getOrLoadPolygonDay } from './polygon_intraday_cache.js';
 
 const ROLES = ['trader', 'mentor', 'admin'];
 const DEFAULT_TEAM = 'Без куща';
@@ -79,11 +80,39 @@ function criteriaPairsFromJournal(journal = {}) {
             if (!ticker) continue;
             const existing = trade?.marketCriteria || day?.tradePolygons?.[ticker];
             const key = `${date}|${ticker}`;
-            if (!pairs.has(key)) pairs.set(key, { date, ticker, loaded: !!existing });
-            else if (existing) pairs.get(key).loaded = true;
+            const minuteMatch = /\b(\d{1,2}):(\d{2})(?::\d{2})?\b/.exec(String(trade?.opened || trade?.entryTime || trade?.time || ''));
+            const entryMinute = minuteMatch ? Number(minuteMatch[1]) * 60 + Number(minuteMatch[2]) : null;
+            if (!pairs.has(key)) pairs.set(key, { date, ticker, existing, entryMinutes: new Set() });
+            const pair = pairs.get(key);
+            if (existing) pair.existing = existing;
+            if (Number.isInteger(entryMinute) && entryMinute >= 240 && entryMinute <= 720) pair.entryMinutes.add(entryMinute);
         }
     }
-    return [...pairs.values()];
+    return [...pairs.values()].map((pair) => ({
+        ...pair,
+        entryMinutes: [...pair.entryMinutes],
+        loaded: !!pair.existing && [...pair.entryMinutes].every((minute) => Number.isFinite(Number(pair.existing?.vol_pre_by_minute?.[String(minute)]))),
+    }));
+}
+
+async function loadCriteriaDayBars(pair, token) {
+    if (!pair.entryMinutes.length) return [];
+    const offsetLabel = new Date(`${pair.date}T12:00:00Z`).toLocaleString('en-US', { timeZone: 'America/New_York', timeZoneName: 'short', hour: '2-digit' });
+    const offset = offsetLabel.includes('EDT') ? '-04:00' : '-05:00';
+    const fromMs = new Date(`${pair.date}T04:00:00${offset}`).getTime();
+    const toMs = new Date(`${pair.date}T12:01:00${offset}`).getTime();
+    const edgeUrl = `${String(SUPABASE_URL).replace(/\/$/, '')}/functions/v1/polygon-aggs`;
+    const loaded = await getOrLoadPolygonDay(pair.ticker, pair.date, async () => {
+        const response = await fetch(edgeUrl, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ symbol: pair.ticker, fromMs, toMs }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload?.message || `Market data HTTP ${response.status}`);
+        return Array.isArray(payload?.results) ? payload.results : [];
+    });
+    return loaded.bars;
 }
 
 function renderMarketCriteriaAdminPanel(panel) {
@@ -118,10 +147,12 @@ function renderMarketCriteriaAdminPanel(panel) {
             for (const pair of pending) {
                 result.textContent = `Критерії ${pair.ticker} · ${pair.date}: ${done + failed + 1} із ${pending.length}`;
                 try {
+                    const bars = await loadCriteriaDayBars(pair, session.access_token);
+                    const volPreByMinute = Object.fromEntries(pair.entryMinutes.map((minute) => [String(minute), calculatePreMarketVolume(bars, minute)]).filter(([, value]) => value !== null));
                     const response = await fetch('/api/trade-polygons', {
                         method: 'POST',
                         headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ticker: pair.ticker, date: pair.date }),
+                        body: JSON.stringify({ ticker: pair.ticker, date: pair.date, volPreByMinute }),
                     });
                     const payload = await response.json().catch(() => ({}));
                     if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);

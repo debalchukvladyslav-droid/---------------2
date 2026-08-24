@@ -118,9 +118,13 @@ export default async function handler(req, res) {
 
         const yahoo = await fetchYahooMetrics(ticker, tradeDate);
         const floatData = await fetchFinvizFloat(ticker);
+        const requestedVolPre = req.body?.volPreByMinute && typeof req.body.volPreByMinute === 'object'
+            ? Object.fromEntries(Object.entries(req.body.volPreByMinute).filter(([minute, value]) => /^\d{3,4}$/.test(minute) && Number.isFinite(Number(value)) && Number(value) >= 0).map(([minute, value]) => [minute, Math.round(Number(value))]))
+            : {};
         const metrics = {
             ...yahoo,
             ...floatData,
+            vol_pre_by_minute: requestedVolPre,
             source: 'yahoo+finviz',
             updated_at: new Date().toISOString(),
         };

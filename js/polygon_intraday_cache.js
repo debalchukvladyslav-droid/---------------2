@@ -89,6 +89,21 @@ function minuteNY(timestamp) {
     return Number(parts.find((part) => part.type === 'hour')?.value) * 60 + Number(parts.find((part) => part.type === 'minute')?.value);
 }
 
+export function calculatePreMarketVolume(bars, entryMinute) {
+    const end = Number(entryMinute);
+    if (!Number.isInteger(end) || end < 240 || end > 720) return null;
+    let total = 0;
+    let found = false;
+    for (const bar of bars || []) {
+        const minute = minuteNY(bar?.t);
+        const volume = Number(bar?.v);
+        if (minute < 240 || minute > end || !Number.isFinite(volume) || volume < 0) continue;
+        total += volume;
+        found = true;
+    }
+    return found ? Math.round(total) : null;
+}
+
 export function analyzePolygonDay(bars, item, targetMinute = null) {
     const byMinute = new Map((bars || []).map((bar) => [minuteNY(bar.t), bar]));
     const eligible = [...byMinute.entries()].filter(([minute, bar]) => minute >= Math.max(570, Number(item.entryMinute) || 570) && minute < 720 && Number(bar?.l) > 0);
