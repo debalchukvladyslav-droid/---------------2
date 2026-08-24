@@ -53,7 +53,7 @@ export function writePolygonResults(rows = []) {
         memoryStore = compact;
         globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(compact));
     } catch (_) {
-        // Supabase remains the authoritative cache when local storage is unavailable.
+        // Без localStorage результат лишається тільки в пам'яті поточної вкладки.
     }
 }
 

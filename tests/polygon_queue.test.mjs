@@ -97,7 +97,7 @@ test('selected exit time never falls forward to a later candle and stale calcula
     assert.match(source, /signal,/);
 });
 
-test('Polygon full charts are archived in private Supabase Storage before calling Polygon again', async () => {
+test('legacy Polygon archive remains available but active analysis is stateless', async () => {
     const [edge, migration] = await Promise.all([
         readFile(new URL('../supabase/functions/market-best-exits/index.ts', import.meta.url), 'utf8'),
         readFile(new URL('../supabase/migrations/20260821143000_polygon_storage_archive.sql', import.meta.url), 'utf8'),
@@ -109,6 +109,8 @@ test('Polygon full charts are archived in private Supabase Storage before callin
     assert.match(edge, /readDatabaseGraph\(item\.symbol, item\.date\)/);
     assert.match(edge, /if \(!marketResults\)/);
     assert.match(edge, /writePolygonArchive\(item\.symbol, item\.date, marketResults\)/);
+    assert.match(edge, /const STATELESS_POLYGON = true/);
+    assert.match(edge, /storage: 'browser-only'/);
     assert.match(edge, /source: \$\{marketSource\}/);
 });
 

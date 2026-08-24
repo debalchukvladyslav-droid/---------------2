@@ -7,7 +7,7 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 const MAX_REQUEST_BYTES = 16 * 1024;
 const MAX_RANGE_MS = 7 * 24 * 60 * 60 * 1000;
 const MIN_TIMESTAMP_MS = Date.UTC(2020, 0, 1);
-const POLYGON_DISABLED = true;
+const POLYGON_DISABLED = false;
 const DEFAULT_ALLOWED_ORIGINS = new Set([
     'https://traderjournal-six.vercel.app',
     'http://127.0.0.1:8787',

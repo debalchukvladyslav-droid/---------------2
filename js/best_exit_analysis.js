@@ -20,7 +20,7 @@ let selectedExitMinute = 600;
 let analysisAbortController = null;
 const REFRESH_AFTER_PROGRESS_MS = 3000;
 const REFRESH_WHEN_WAITING_MS = 65000;
-const TIME_EXIT_ANALYSIS_DISABLED = true;
+const TIME_EXIT_ANALYSIS_DISABLED = false;
 
 function marketStopFilterControl() {
     return `<label class="best-exit-market-filter"><input type="checkbox" data-market-open-stops ${marketOpenStopsOnly ? 'checked' : ''}><span>Стопи на маркеті</span></label>`;
@@ -100,7 +100,7 @@ function exitTimeChart(rows = []) {
     </section>`;
 }
 
-const POLYGON_DISABLED = true;
+const POLYGON_DISABLED = false;
 
 async function fetchBatch(items, targetMinute, signal = null) {
     if (POLYGON_DISABLED) throw new Error('Polygon тимчасово вимкнено адміністратором.');

@@ -33,7 +33,7 @@ let _tradeDates = [];
 let _tradeDateCalendarGlobalBound = false;
 const _storyObservers = new Set();
 const marketSessionLowCache = new Map();
-const POLYGON_DISABLED = true;
+const POLYGON_DISABLED = false;
 
 async function loadMarketSessionLow(symbol, dateStr) {
     if (POLYGON_DISABLED) return null;

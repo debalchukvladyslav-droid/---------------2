@@ -6,7 +6,8 @@ const INTRADAY_CACHE_VERSION = 2;
 const POLYGON_ARCHIVE_BUCKET = 'polygon-cache';
 const POLYGON_ARCHIVE_VERSION = 1;
 const POLYGON_CONTROL_PATH = '_control/state.json';
-const POLYGON_DISABLED = true;
+const POLYGON_DISABLED = false;
+const STATELESS_POLYGON = true;
 
 function cors(req: Request) {
     const allowed = new Set([DEFAULT_ORIGIN, 'http://localhost:8787', 'http://127.0.0.1:8787', ...(Deno.env.get('APP_ALLOWED_ORIGINS') || '').split(',')]);
@@ -189,6 +190,92 @@ async function readDatabaseGraph(symbol: string, date: string) {
     })).filter((bar: any) => Number.isFinite(bar.t) && bar.o > 0 && bar.h > 0 && bar.l > 0 && bar.c > 0);
 }
 
+function polygonMinuteMap(results: any[]) {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false,
+    });
+    const bars = new Map<number, any>();
+    for (const bar of results || []) {
+        const [hour, minute] = formatter.format(new Date(Number(bar?.t))).split(':').map(Number);
+        if (Number.isFinite(hour) && Number.isFinite(minute)) bars.set(hour * 60 + minute, bar);
+    }
+    return bars;
+}
+
+async function fetchPolygonDay(symbol: string, date: string, polygonKey: string) {
+    const offset = nyOffset(date);
+    const from = new Date(`${date}T04:00:00${offset}`).getTime();
+    const to = new Date(`${date}T20:00:00${offset}`).getTime();
+    const params = new URLSearchParams({ adjusted: 'false', sort: 'asc', limit: '1000', apiKey: polygonKey });
+    const response = await fetch(`https://api.polygon.io/v2/aggs/ticker/${symbol}/range/1/minute/${from}/${to}?${params}`, {
+        signal: AbortSignal.timeout(12000),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !Array.isArray(payload?.results)) {
+        throw new Error(payload?.error || payload?.message || `Polygon ${response.status}`);
+    }
+    return payload.results;
+}
+
+async function runStatelessPolygon(items: any[], targetMinute: number | null) {
+    const polygonKey = Deno.env.get('POLYGON_API_KEY') || '';
+    if (!polygonKey) throw new Error('POLYGON_API_KEY не налаштований');
+    const byDay = new Map<string, any[]>();
+    const unique = [...new Map(items.map((item) => [`${item.symbol}|${item.date}`, item])).values()];
+
+    // Послідовні запити бережуть ліміт Polygon і не створюють піків навантаження.
+    for (const item of unique) {
+        console.log(`[Polygon stateless] переглядається ${item.symbol} · ${item.date}`);
+        byDay.set(`${item.symbol}|${item.date}`, await fetchPolygonDay(item.symbol, item.date, polygonKey));
+    }
+
+    return items.map((item) => {
+        const bars = polygonMinuteMap(byDay.get(`${item.symbol}|${item.date}`) || []);
+        const eligible = [...bars.entries()]
+            .filter(([minute, bar]) => minute >= Math.max(570, item.entryMinute) && minute < 720 && Number(bar?.l) > 0);
+        if (!eligible.length) return null;
+        const lowEntry = eligible.reduce((best, current) => Number(current[1].l) < Number(best[1].l) ? current : best);
+        const output: any = {
+            symbol: item.symbol,
+            date: item.date,
+            entryMinute: item.entryMinute,
+            low: Number(lowEntry[1].l),
+            lowTime: new Date(Number(lowEntry[1].t)).toISOString(),
+            cached: false,
+        };
+        if (targetMinute != null) {
+            output.targetMinute = targetMinute;
+            output.stopPrice = item.stopPrice;
+            output.stopEntryMinute = item.stopEntryMinute;
+            if (targetMinute < item.stopEntryMinute) {
+                output.notOpened = true;
+                output.stopHit = false;
+                return output;
+            }
+            const stopBar = item.stopPrice > 0
+                ? [...bars.entries()].find(([minute, bar]) => minute >= item.stopEntryMinute && minute <= targetMinute && Number(bar?.h) >= item.stopPrice)
+                : null;
+            if (stopBar) {
+                output.stopHit = true;
+                output.stopMinute = stopBar[0];
+                output.stopTime = new Date(Number(stopBar[1].t)).toISOString();
+                output.priceMinute = targetMinute;
+                output.priceAtTime = item.stopPrice;
+                output.priceTime = output.stopTime;
+                return output;
+            }
+            const targetBar = bars.get(targetMinute);
+            if (targetBar && Number(targetBar.c) > 0) {
+                output.stopHit = false;
+                output.priceMinute = targetMinute;
+                output.priceAtTime = Number(targetBar.c);
+                output.priceTime = new Date(Number(targetBar.t)).toISOString();
+            }
+        }
+        return output;
+    }).filter(Boolean);
+}
+
 Deno.serve(async (req) => {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(req) });
     if (POLYGON_DISABLED) return json(req, { message: 'Polygon тимчасово вимкнено адміністратором.', results: [] }, 503);
@@ -253,6 +340,15 @@ Deno.serve(async (req) => {
         stopEntryMinute: Math.max(540, Math.min(720, Number(item?.stopEntryMinute) || Number(item?.entryMinute) || 570)),
         stopPrice: Number(item?.stopPrice) > 0 ? Number(item.stopPrice) : null,
     })).filter((item: any) => /^[A-Z]{1,10}$/.test(item.symbol) && /^\d{4}-\d{2}-\d{2}$/.test(item.date) && item.entryMinute < 720);
+
+    if (STATELESS_POLYGON) {
+        try {
+            const results = await runStatelessPolygon(normalized, targetMinute);
+            return json(req, { results, queued: 0, processed: normalized.length, storage: 'browser-only' });
+        } catch (error) {
+            return json(req, { message: String(error?.message || error), results: [] }, 502);
+        }
+    }
 
     const cachedChecks = await Promise.all(normalized.map(async (item) => {
         const query = `market_best_exit_cache?symbol=eq.${item.symbol}&trade_date=eq.${item.date}&entry_minute=eq.${item.entryMinute}&select=symbol,trade_date,entry_minute,low_price,low_at`;
