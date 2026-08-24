@@ -9,6 +9,7 @@ import { findScreenshotsForTicker, openScreenshotForTrade } from './gallery.js';
 import { ensureLightweightCharts } from './vendor_loader.js';
 import { findTradeIndexByIdentity, isPureGoogleSheetTrade, visibleTradeRowsForDate } from './trade_filters.js';
 import { isMarketOpenStopTrade } from './best_exit_core.js';
+import { getOrLoadPolygonDay } from './polygon_intraday_cache.js';
 
 function sanitizeHTML(str) {
     const div = document.createElement('div');
@@ -42,17 +43,16 @@ async function loadMarketSessionLow(symbol, dateStr) {
     const key = `${normalizedSymbol}|${dateStr}`;
     if (marketSessionLowCache.has(key)) return marketSessionLowCache.get(key);
     const request = (async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.access_token) return null;
-        const response = await fetch(`${String(SUPABASE_URL).replace(/\/$/, '')}/functions/v1/market-best-exits`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-            body: JSON.stringify({ items: [{ symbol: normalizedSymbol, date: dateStr, entryMinute: 570 }] }),
-            signal: AbortSignal.timeout(15000),
-        });
-        const payload = await response.json().catch(() => ({}));
-        const row = Array.isArray(payload?.results) ? payload.results[0] : null;
-        return response.ok && Number(row?.low) > 0 ? Number(row.low) : null;
+        const offset = getNYOffset(dateStr);
+        const fromMs = new Date(`${dateStr}T04:00:00${offset}`).getTime();
+        const toMs = new Date(`${dateStr}T20:00:00${offset}`).getTime();
+        const candles = await fetchPolygon(normalizedSymbol, fromMs, toMs, dateStr);
+        const lows = candles.filter((candle) => {
+            const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date(candle.time * 1000));
+            const minute = Number(parts.find((part) => part.type === 'hour')?.value) * 60 + Number(parts.find((part) => part.type === 'minute')?.value);
+            return minute >= 570 && minute < 720 && Number(candle.low) > 0;
+        }).map((candle) => Number(candle.low));
+        return lows.length ? Math.min(...lows) : null;
     })().catch(() => null);
     marketSessionLowCache.set(key, request);
     const result = await request;
@@ -988,7 +988,7 @@ function mapPolygonResults(data) {
     }));
 }
 
-async function fetchPolygon(symbol, fromMs, toMs) {
+async function fetchPolygon(symbol, fromMs, toMs, cacheDate = '') {
     if (POLYGON_DISABLED) throw new Error('Polygon тимчасово вимкнено адміністратором.');
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
@@ -998,28 +998,24 @@ async function fetchPolygon(symbol, fromMs, toMs) {
         );
     }
     const edgeUrl = `${String(SUPABASE_URL).replace(/\/$/, '')}/functions/v1/polygon-aggs`;
-    const res = await fetch(edgeUrl, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ symbol, fromMs, toMs }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-        const message = data?.message || '';
-        if (res.status === 403 && (data?.code === 'POLYGON_PLAN_TIMEFRAME' || /plan doesn't include this data timeframe/i.test(message))) {
-            const error = new Error('Поточний тариф Polygon не включає хвилинні дані за цей період.');
-            error.code = 'POLYGON_PLAN_TIMEFRAME';
-            throw error;
+    const load = async () => {
+        const res = await fetch(edgeUrl, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ symbol, fromMs, toMs }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            const message = data?.message || '';
+            if (res.status === 403 && (data?.code === 'POLYGON_PLAN_TIMEFRAME' || /plan doesn't include this data timeframe/i.test(message))) {
+                const error = new Error('Поточний тариф Polygon не включає хвилинні дані за цей період.'); error.code = 'POLYGON_PLAN_TIMEFRAME'; throw error;
+            }
+            if (res.status === 429) throw new Error('Polygon: перевищено ліміт запитів для цього ключа. Спробуйте ще раз трохи пізніше.');
+            throw new Error(message || `Polygon: помилка сервера ${res.status}. Перевірте POLYGON_API_KEY і деплой polygon-aggs.`);
         }
-        if (res.status === 429) {
-            throw new Error('Polygon: перевищено ліміт запитів для цього ключа. Спробуйте ще раз трохи пізніше.');
-        }
-        throw new Error(message || `Polygon: помилка сервера ${res.status}. Перевірте POLYGON_API_KEY і деплой polygon-aggs.`);
-    }
-    return mapPolygonResults(data);
+        return Array.isArray(data?.results) ? data.results : [];
+    };
+    const raw = cacheDate ? (await getOrLoadPolygonDay(symbol, cacheDate, load)).bars : await load();
+    return mapPolygonResults({ results: raw });
 }
 
 async function fetchYahooCandles(symbol, dateStr) {
@@ -1034,19 +1030,21 @@ async function fetchYahooCandles(symbol, dateStr) {
     const prevDay = prevTradingDate(dateStr);
     const prevOff = getNYOffset(prevDay);
 
-    // Постмаркет попереднього дня: 16:00–23:59
-    const prevFrom = Math.floor(new Date(`${prevDay}T16:00:00${prevOff}`).getTime() / 1000) * 1000;
+    // Повний день кешуємо один раз; для графіка нижче залишаємо лише постмаркет.
+    const prevFrom = Math.floor(new Date(`${prevDay}T04:00:00${prevOff}`).getTime() / 1000) * 1000;
     const prevTo   = Math.floor(new Date(`${prevDay}T23:59:00${prevOff}`).getTime() / 1000) * 1000;
     // Поточний день: 04:00–23:59
     const curFrom  = Math.floor(new Date(`${dateStr}T04:00:00${offset}`).getTime() / 1000) * 1000;
     const curTo    = Math.floor(new Date(`${dateStr}T23:59:00${offset}`).getTime() / 1000) * 1000;
 
-    const curCandles = await fetchPolygon(symbol, curFrom, curTo);
+    const curCandles = await fetchPolygon(symbol, curFrom, curTo, dateStr);
     if (!curCandles.length) throw new Error('Немає даних від Polygon');
 
     let prevCandles = [];
     try {
-        prevCandles = await fetchPolygon(symbol, prevFrom, prevTo);
+        const fullPrevDay = await fetchPolygon(symbol, prevFrom, prevTo, prevDay);
+        const postmarketStart = Math.floor(new Date(`${prevDay}T16:00:00${prevOff}`).getTime() / 1000);
+        prevCandles = fullPrevDay.filter((candle) => candle.time >= postmarketStart);
     } catch (error) {
         console.warn('[Polygon] previous session candles skipped:', error);
     }

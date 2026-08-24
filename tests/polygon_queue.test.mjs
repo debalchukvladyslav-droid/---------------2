@@ -2,6 +2,37 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { readPolygonResult, readPolygonTimePrice, writePolygonResults, writePolygonTimePrices } from '../js/polygon_result_cache.js';
+import { analyzePolygonDay, getOrLoadPolygonDay } from '../js/polygon_intraday_cache.js';
+
+test('full Polygon day is loaded once and reused from the browser cache', async () => {
+    let calls = 0;
+    const loader = async () => {
+        calls++;
+        return [{ t: Date.parse('2026-08-19T13:30:00Z'), o: 10, h: 10.2, l: 9.8, c: 10.1, v: 100 }];
+    };
+    const [first, duplicate] = await Promise.all([
+        getOrLoadPolygonDay('CACHEX', '2026-08-19', loader),
+        getOrLoadPolygonDay('CACHEX', '2026-08-19', loader),
+    ]);
+    const restored = await getOrLoadPolygonDay('CACHEX', '2026-08-19', loader);
+    assert.equal(calls, 1);
+    assert.equal(first.bars.length, 1);
+    assert.equal(duplicate.bars.length, 1);
+    assert.equal(restored.cached, true);
+});
+
+test('best exit, selected time and stop are calculated from one cached full chart', () => {
+    const bars = [
+        { t: Date.parse('2026-08-19T13:30:00Z'), o: 10, h: 10.1, l: 9.8, c: 9.9, v: 100 },
+        { t: Date.parse('2026-08-19T14:00:00Z'), o: 9.9, h: 10.6, l: 9.5, c: 9.6, v: 120 },
+        { t: Date.parse('2026-08-19T15:00:00Z'), o: 9.6, h: 9.7, l: 9.1, c: 9.2, v: 140 },
+    ];
+    const result = analyzePolygonDay(bars, { symbol: 'AAPL', date: '2026-08-19', entryMinute: 570, stopEntryMinute: 570, stopPrice: 10.5 }, 600);
+    assert.equal(result.low, 9.1);
+    assert.equal(result.stopHit, true);
+    assert.equal(result.stopMinute, 600);
+    assert.equal(result.priceAtTime, 10.5);
+});
 
 test('Polygon results survive reload and are keyed by ticker, date and entry minute', () => {
     const values = new Map();
@@ -80,9 +111,12 @@ test('best-exit tickers open their exact journal trade and Polygon logs every ti
     assert.match(source, /REFRESH_WHEN_WAITING_MS = 65000/);
     assert.match(source, /renderSummary\(container, summarizeBestExits\(rows\), after, false\)/);
     assert.match(source, /\[Polygon\] переглядається/);
+    assert.doesNotMatch(source, /functions\/v1\/market-best-exits/);
+    assert.match(source, /functions\/v1\/polygon-aggs/);
     assert.match(source, /очікує в черзі або дані недоступні/);
     assert.match(tradesView, /await window\.switchMainTab\('trades'\)/);
     assert.match(tradesView, /findTradeIndexByIdentity/);
+    assert.doesNotMatch(tradesView, /functions\/v1\/market-best-exits/);
 });
 
 test('selected exit time never falls forward to a later candle and stale calculations are cancelled', async () => {
@@ -93,7 +127,9 @@ test('selected exit time never falls forward to a later candle and stale calcula
     assert.match(edge, /target_minute=eq\.\$\{targetMinute\}/);
     assert.doesNotMatch(edge, /for \(let minute = targetMinute; minute <= 720/);
     assert.match(source, /analysisAbortController\?\.abort\(\)/);
-    assert.match(source, /JSON\.stringify\(\{ items, targetMinute \}\)/);
+    assert.match(source, /getOrLoadPolygonDay\(item\.symbol, item\.date/);
+    assert.match(source, /analyzePolygonDay\(/);
+    assert.match(source, /JSON\.stringify\(\{ symbol: item\.symbol, fromMs, toMs \}\)/);
     assert.match(source, /signal,/);
 });
 
