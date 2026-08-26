@@ -542,6 +542,7 @@ const TAB_TITLES = {
     learn: 'Навчання',
     settings: 'Налаштування',
     admin: 'Адмін-панель',
+    testing: 'Тестування',
 };
 
 const NAV_TITLES = {
@@ -561,6 +562,7 @@ const NAV_TITLES = {
     learn: 'Навчання',
     settings: 'Налаштування',
     admin: 'Адмін-панель',
+    testing: 'Тестування',
 };
 
 const TAB_ROUTES = {
@@ -580,6 +582,7 @@ const TAB_ROUTES = {
     learn: '/learn',
     settings: '/settings',
     admin: '/admin',
+    testing: '/testing',
 };
 
 const TAB_DISPOSERS = {
@@ -606,6 +609,7 @@ const TAB_LOADING_TITLES = {
     learn: 'Готуємо навчання',
     settings: 'Готуємо налаштування',
     admin: 'Готуємо адмін-панель',
+    testing: 'Готуємо тестування',
 };
 let mainTabSwitchToken = 0;
 
@@ -735,6 +739,7 @@ async function runMainTabWork(tab) {
     if (tab === 'playbook' && window.renderPlaybook) tasks.push(Promise.resolve(window.renderPlaybook()));
     if (tab === 'learn' && window.renderLearnCache) tasks.push(Promise.resolve(window.renderLearnCache()));
     if (tab === 'admin' && window.renderAdminPanel) tasks.push(Promise.resolve(window.renderAdminPanel()));
+    if (tab === 'testing' && window.renderTestingPanel) tasks.push(Promise.resolve(window.renderTestingPanel()));
     if (tab === 'mentor-review' && window.refreshMentorReviewQueue) tasks.push(Promise.resolve(window.refreshMentorReviewQueue()));
 
     await Promise.allSettled(tasks);
@@ -798,6 +803,7 @@ const ROUTE_TABS = {
     '/learn': 'learn',
     '/settings': 'settings',
     '/admin': 'admin',
+    '/testing': 'testing',
 };
 
 function normalizeRoutePath(pathname = '/') {
@@ -822,6 +828,7 @@ function updateRouteForTab(tab, mode = 'push') {
 }
 
 export async function switchMainTab(tab, options = {}) {
+    if (tab === 'testing' && state.myRole !== 'admin') tab = 'dash';
     if (tab === 'debrief' && state.myRole !== 'admin') {
         tab = 'dash';
     }
@@ -861,7 +868,7 @@ export async function switchMainTab(tab, options = {}) {
         b.classList.toggle('active', b.dataset.tab === tab);
     });
     // Якщо активна вкладка в more menu — підсвічуємо кнопку Ще
-    const moreTabIds = ['trades', 'datagrid', 'table', 'calendar', 'stop-errors', /* 'playbook', */ 'learn', 'settings', 'mentor-review', 'admin'];
+    const moreTabIds = ['trades', 'datagrid', 'table', 'calendar', 'stop-errors', /* 'playbook', */ 'learn', 'settings', 'mentor-review', 'admin', 'testing'];
     const moreBtn = document.querySelector('.mobile-nav-more-btn');
     if (moreBtn) moreBtn.classList.toggle('more-open', moreTabIds.includes(tab));
 

@@ -20,13 +20,11 @@ export async function renderAdminPanel() {
     const sessionReviewTestBtn = document.getElementById('admin-session-review-test-btn');
     const botsPanel = document.getElementById('admin-service-bots-panel');
     const polygonPanel = document.getElementById('admin-polygon-panel');
-    const testingPanel = document.getElementById('admin-testing-panel');
     const fullAdmin = state.myRole === 'admin';
     if (sessionReviewTestBtn) sessionReviewTestBtn.hidden = !fullAdmin;
     const dataManager = fullAdmin || state.IS_MENTOR_MODE;
     if (botsPanel) botsPanel.hidden = !fullAdmin;
     if (polygonPanel) polygonPanel.hidden = !fullAdmin;
-    if (testingPanel) testingPanel.hidden = !fullAdmin;
     if (!dataManager) {
         if (refreshUsersBtn) refreshUsersBtn.style.display = 'none';
         if (botsPanel) botsPanel.innerHTML = '';
@@ -69,12 +67,13 @@ export async function renderAdminPanel() {
     if (fullAdmin && polygonPanel) {
         renderMarketCriteriaAdminPanel(polygonPanel);
     }
-    if (fullAdmin && testingPanel) renderAdminTestingPanel(testingPanel);
     if (fullAdmin) renderServiceBotsPanel(profiles || []);
     visibleProfiles.forEach((p) => container.appendChild(buildUserCard(p, teamChoices, { fullAdmin, dataManager })));
 }
 
-function renderAdminTestingPanel(panel) {
+export function renderTestingPanel() {
+    const panel = document.getElementById('testing-tools-panel');
+    if (!panel || state.myRole !== 'admin') return;
     panel.hidden = false;
     panel.innerHTML = `
         <div class="admin-service-bots-head">

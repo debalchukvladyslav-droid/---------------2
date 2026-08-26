@@ -555,10 +555,13 @@ test('PPRO-only pnl remains effective day profit', () => {
     assert.equal(getEffectiveDayPnl(combinedBrokerDay), 932.93);
 });
 
-test('calendar shows manual values as Gross and imported file values as Net', () => {
-    assert.deepEqual(getCalendarDayResult({ gross_pnl: '125,50', pnl: 90 }), { value: 125.5, kind: 'gross' });
+test('day totals prefer Net and fall back to Gross only when Net is empty', () => {
+    assert.equal(getEffectiveDayPnl({ pnl: 90, gross_pnl: '125,50' }), 90);
+    assert.equal(getEffectiveDayPnl({ pnl: 0, gross_pnl: '125,50' }), 0);
+    assert.equal(getEffectiveDayPnl({ pnl: null, gross_pnl: '125,50' }), 125.5);
+    assert.deepEqual(getCalendarDayResult({ gross_pnl: '125,50', pnl: 90 }), { value: 90, kind: 'net' });
     assert.deepEqual(getCalendarDayResult({ pnl: -42, gross_pnl: -30, fondexxSource: 'summary-by-date' }), { value: -42, kind: 'net' });
-    assert.deepEqual(getCalendarDayResult({ pnl: 18, gross_pnl: null }), { value: 18, kind: 'gross' });
+    assert.deepEqual(getCalendarDayResult({ pnl: null, gross_pnl: 18 }), { value: 18, kind: 'gross' });
 });
 
 test('day normalization preserves PPRO source marker', () => {
@@ -885,18 +888,17 @@ test('main Google Sheet writes grouped metrics and Gross without replacing net c
     assert.ok(touched.includes('2026-04-03'));
 });
 
-test('disabled day trade-type sync preserves manual groups during sheet resync', () => {
+test('disabled global trade-type sync preserves manual groups during sheet resync', () => {
     const journal = {
         '2026-04-03': {
             ...normalizeDayEntry({}),
-            sheetTradeTypesSyncEnabled: false,
             tradeTypesData: { 'РЎРёРЅСЏ': { pnl: 77, kf: 2 } },
             sheetTradeTypesSource: 'sheet-1',
         },
     };
     mergeGoogleSheetTradesIntoJournal(journal, {
         '2026-04-03': [{ symbol: 'AAPL', net: -20, sheet: { source: 'google', sheetNet: -20, tradeType: 'СЃРёРЅСЏ%' } }],
-    }, 'sheet-1', { mode: 'main', sheetRowsStore: {} });
+    }, 'sheet-1', { mode: 'main', sheetRowsStore: {}, tradeTypesSyncEnabled: false });
     assert.deepEqual(journal['2026-04-03'].tradeTypesData, { 'РЎРёРЅСЏ': { pnl: 77, kf: 2 } });
 });
 

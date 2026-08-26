@@ -977,6 +977,9 @@ export function applyAccessRights() {
     const showAdminTab = state.myRole === 'admin' || state.IS_MENTOR_MODE;
     if (adminNav) adminNav.classList.toggle('initially-hidden', !showAdminTab);
     if (adminMobile) adminMobile.classList.toggle('initially-hidden', !showAdminTab);
+    document.querySelectorAll('.testing-nav-item, .testing-tab-mobile').forEach((item) => {
+        item.classList.toggle('initially-hidden', state.myRole !== 'admin');
+    });
     document.querySelectorAll('.trader-dna-nav-item').forEach((item) => {
         item.classList.toggle('initially-hidden', state.myRole !== 'admin');
     });

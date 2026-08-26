@@ -1413,6 +1413,7 @@ async function executeSyncWithCfg(cfg, options = {}) {
             syncDayTotals: (dateStr) => syncFondexxFromTradesForDay(dateStr),
             markTouched: (dateStr) => markJournalDayDirty(dateStr),
             warnInvalidDate: (dateStr) => console.warn('[Google Sheets] Пропущено невалідну дату (не пишемо в журнал):', dateStr),
+            tradeTypesSyncEnabled: state.appData?.settings?.sheetTradeTypesSyncEnabled !== false,
         });
         if (cumulative) {
             const archiveSchedule = getCumulativeArchiveSchedule();
@@ -1905,7 +1906,7 @@ function refreshAfterSheetMatchUpdate() {
     if (window.selectDate) window.selectDate(state.selectedDateStr);
 }
 
-async function rematchStoredMainSheetRows(spreadsheetId) {
+export async function rematchStoredMainSheetRows(spreadsheetId) {
     const store = state.appData?.sheetRows && typeof state.appData.sheetRows === 'object'
         ? state.appData.sheetRows
         : null;
@@ -1920,6 +1921,7 @@ async function rematchStoredMainSheetRows(spreadsheetId) {
         syncDayTotals: (dateStr) => syncFondexxFromTradesForDay(dateStr),
         markTouched: (dateStr) => markJournalDayDirty(dateStr),
         warnInvalidDate: (dateStr) => console.warn('[Google Sheets] skipped invalid stored sheet date during local rematch:', dateStr),
+        tradeTypesSyncEnabled: state.appData?.settings?.sheetTradeTypesSyncEnabled !== false,
     });
     await deleteJournalDatesFromSupabase(mergeResult.deletedDates);
     await saveJournalData();

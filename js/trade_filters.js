@@ -76,7 +76,9 @@ export function isSheetOnlyPnl(day = {}) {
 
 export function getEffectiveDayPnl(day = {}) {
     if (isSheetOnlyPnl(day)) return null;
-    return parseDecimalInput(day.pnl);
+    const net = parseDecimalInput(day.pnl);
+    if (net !== null) return net;
+    return parseDecimalInput(day.gross_pnl);
 }
 
 export function hasImportedNetPnl(day = {}) {
@@ -89,13 +91,13 @@ export function hasImportedNetPnl(day = {}) {
 }
 
 export function getCalendarDayResult(day = {}) {
-    if (hasImportedNetPnl(day)) {
-        return { value: parseDecimalInput(day.pnl), kind: 'net' };
-    }
+    if (isSheetOnlyPnl(day)) return { value: null, kind: 'none' };
+
+    const net = parseDecimalInput(day.pnl);
+    if (net !== null) return { value: net, kind: 'net' };
 
     const gross = parseDecimalInput(day.gross_pnl);
     if (gross !== null) return { value: gross, kind: 'gross' };
 
-    // Старі ручні записи зберігалися у pnl. У календарі трактуємо їх як Gross.
-    return { value: parseDecimalInput(day.pnl), kind: 'gross' };
+    return { value: null, kind: 'none' };
 }

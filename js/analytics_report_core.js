@@ -50,8 +50,11 @@ function finite(value) {
 
 function dayPnl(day = {}) {
     if (day.pnl !== null && day.pnl !== undefined && day.pnl !== '') return finite(day.pnl);
+    if (day.gross_pnl !== null && day.gross_pnl !== undefined && day.gross_pnl !== '') return finite(day.gross_pnl);
     if (day.ppro?.net) return finite(day.ppro.net);
     if (day.fondexx?.net) return finite(day.fondexx.net);
+    if (day.ppro?.gross) return finite(day.ppro.gross);
+    if (day.fondexx?.gross) return finite(day.fondexx.gross);
     return 0;
 }
 

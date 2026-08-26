@@ -24,7 +24,7 @@ import { setupOCRDrawing, loadLatestImageForOCR, saveVisualOCRSettings, editTick
 import { importFondexxReport, importPPROReport, importFondexxTrades, importFondexxSummaryByDate } from './parsers.js';
 import { renderPlaybook, addPlaybookSetup, editPlaybookSetup, savePlaybookSetup, deletePlaybookSetup, getPlaybookContext, getPlaybookForSituation, loadPlaybook } from './playbook.js';
 import { loadLearnContent, renderLearnCache } from './learn.js';
-import { renderAdminPanel } from './admin.js';
+import { renderAdminPanel, renderTestingPanel } from './admin.js';
 import { initSidebarAccount, refreshSidebarAccount } from './sidebar_account.js';
 import { initMentorReviewUI, refreshMentorReviewQueue, setMentorReviewNavBadges } from './mentor_review.js';
 
@@ -355,6 +355,7 @@ window.getPlaybookContext = getPlaybookContext;
 window.loadLearnContent = loadLearnContent;
 window.renderLearnCache = renderLearnCache;
 window.renderAdminPanel = renderAdminPanel;
+window.renderTestingPanel = renderTestingPanel;
 
 window.renderSessionPlaybook = function() {
     const container = document.getElementById('session-playbook-checks');
@@ -1335,6 +1336,9 @@ async function bootApp(user) {
         document.querySelectorAll('.trader-dna-nav-item').forEach((item) => {
             item.classList.toggle('initially-hidden', state.myRole !== 'admin');
         });
+        document.querySelectorAll('.testing-nav-item, .testing-tab-mobile').forEach((item) => {
+            item.classList.toggle('initially-hidden', state.myRole !== 'admin');
+        });
         initNotifications();
 
         document.getElementById('auth-overlay').style.display = 'none';
@@ -1413,7 +1417,7 @@ function showLoginScreen() {
     document.querySelectorAll('.mentor-review-nav-item').forEach((el) => {
         el.classList.add('initially-hidden');
     });
-    document.querySelectorAll('.admin-nav-item, .admin-tab-mobile, .trader-dna-nav-item').forEach((el) => {
+    document.querySelectorAll('.admin-nav-item, .admin-tab-mobile, .testing-nav-item, .testing-tab-mobile, .trader-dna-nav-item').forEach((el) => {
         el.classList.add('initially-hidden');
     });
     setMentorReviewNavBadges(0);

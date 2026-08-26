@@ -101,7 +101,7 @@ function restoreAuthoritativeDayPnl(day) {
         : null;
 }
 
-function syncMainSheetMetricsToCalendar(journal, outByDay, spreadsheetId, markTouched, previouslyManagedDates = new Set()) {
+function syncMainSheetMetricsToCalendar(journal, outByDay, spreadsheetId, markTouched, previouslyManagedDates = new Set(), tradeTypesSyncEnabled = true) {
     const syncedDates = [];
     const deletedDates = [];
 
@@ -121,7 +121,7 @@ function syncMainSheetMetricsToCalendar(journal, outByDay, spreadsheetId, markTo
             delete day.sheetGrossSource;
             delete day.sheetGrossValue;
         }
-        const syncTradeTypes = day.sheetTradeTypesSyncEnabled !== false;
+        const syncTradeTypes = tradeTypesSyncEnabled;
         if (syncTradeTypes && (day.sheetTradeTypesSource === spreadsheetId || sheetOnlyDay || wasPreviouslyManaged)) {
             const data = day.tradeTypesData && typeof day.tradeTypesData === 'object' ? { ...day.tradeTypesData } : {};
             DEFAULT_TRADE_TYPES.forEach((type) => delete data[type]);
@@ -147,7 +147,7 @@ function syncMainSheetMetricsToCalendar(journal, outByDay, spreadsheetId, markTo
                 && Number.isFinite(Number(sheet.sheetNet));
         });
         const existingDay = journal[dateStr];
-        const syncTradeTypes = existingDay?.sheetTradeTypesSyncEnabled !== false;
+        const syncTradeTypes = tradeTypesSyncEnabled;
         const tradeTypesData = syncTradeTypes ? buildAutoTradeTypesData(executedRows) : {};
         if (!pnlRows.length && !Object.keys(tradeTypesData).length) return;
 
@@ -196,6 +196,7 @@ export function mergeGoogleSheetTradesIntoJournal(journal = {}, outByDay = {}, s
     const warnInvalidDate = typeof options.warnInvalidDate === 'function' ? options.warnInvalidDate : () => {};
     const mode = options.mode === 'cumulative' ? 'cumulative' : 'main';
     const isCumulative = mode === 'cumulative';
+    const tradeTypesSyncEnabled = options.tradeTypesSyncEnabled !== false;
     const deletedDates = [];
     const touchedDates = new Set();
     const sheetRowsStore = options.sheetRowsStore && typeof options.sheetRowsStore === 'object'
@@ -291,7 +292,7 @@ export function mergeGoogleSheetTradesIntoJournal(journal = {}, outByDay = {}, s
         const sheetMetrics = syncMainSheetMetricsToCalendar(journal, outByDay, spreadsheetId, (dateStr, day) => {
             touchedDates.add(dateStr);
             markTouched(dateStr, day);
-        }, previouslyManagedDates);
+        }, previouslyManagedDates, tradeTypesSyncEnabled);
         syncedPnlDates = sheetMetrics.syncedDates;
         sheetMetrics.deletedDates.forEach((dateStr) => {
             touchedDates.delete(dateStr);

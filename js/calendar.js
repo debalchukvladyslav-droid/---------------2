@@ -492,10 +492,10 @@ function fillSelectedDateUI(dateStr) {
     const ttContainer = document.getElementById('trade-types-container');
     if (ttContainer && state.appData?.tradeTypes) {
         const savedTT = dayData.tradeTypesData || {};
-        const syncEnabled = dayData.sheetTradeTypesSyncEnabled !== false;
+        const syncEnabled = state.appData?.settings?.sheetTradeTypesSyncEnabled !== false;
         let ttHtml = `
             <div class="trade-types-sync-row">
-                <div><strong>Синхронізація з таблицею</strong><small>${syncEnabled ? 'Типи оновлюються з основної таблиці' : 'Значення залишаються ручними'}</small></div>
+                <div><strong>Синхронізація з таблицею</strong><small>${syncEnabled ? 'Типи оновлюються з основної таблиці для всіх днів' : 'Значення залишаються ручними для всіх днів'}</small></div>
                 <label class="trade-types-sync-switch" title="Синхронізувати Синя / Зелена / Фіолетова / Візуально з таблицею">
                     <input type="checkbox" id="trade-types-sheet-sync" ${syncEnabled ? 'checked' : ''}>
                     <span></span>
@@ -529,16 +529,19 @@ function fillSelectedDateUI(dateStr) {
                     return;
                 }
             }
-            const currentDay = state.appData.journal[dateStr] || dayData;
-            currentDay.sheetTradeTypesSyncEnabled = enabled;
-            state.appData.journal[dateStr] = currentDay;
-            markJournalDayDirty(dateStr);
+            state.appData.settings = state.appData.settings || {};
+            state.appData.settings.sheetTradeTypesSyncEnabled = enabled;
             const text = ttContainer.querySelector('.trade-types-sync-row small');
-            if (text) text.textContent = enabled ? 'Типи оновлюються з основної таблиці' : 'Значення залишаються ручними';
+            if (text) text.textContent = enabled ? 'Типи оновлюються з основної таблиці для всіх днів' : 'Значення залишаються ручними для всіх днів';
             try {
                 const storage = await import('./storage.js');
-                await storage.saveJournalData();
-                showToast(enabled ? 'Синхронізацію типів увімкнено' : 'Синхронізацію типів вимкнено');
+                await storage.saveSettings();
+                if (enabled) {
+                    const sheetModule = await import('./sheet_table.js');
+                    const spreadsheetId = sheetModule.getEffectiveSpreadsheetId?.('main');
+                    if (spreadsheetId) await sheetModule.rematchStoredMainSheetRows?.(spreadsheetId);
+                }
+                showToast(enabled ? 'Синхронізацію типів увімкнено для всіх днів' : 'Синхронізацію типів вимкнено для всіх днів');
             } catch (error) {
                 showToast(`Не вдалося зберегти перемикач: ${error?.message || error}`);
             }
@@ -1000,9 +1003,8 @@ export async function renderView() {
                 pnlDisplay = roundedPnl >= 0 ? `+${roundedPnl}$` : `${roundedPnl}$`; 
                 
                 cell.classList.add(roundedPnl >= 0 ? 'green' : 'red'); 
-                const importedNet = hasImportedNetPnl(data) ? getEffectiveDayPnl(data) : null;
-                if (importedNet !== null) {
-                    totalPnl += parseFloat(importedNet.toFixed(2));
+                if (effectivePnl !== null) {
+                    totalPnl += parseFloat(effectivePnl.toFixed(2));
                     totalComm += parseStoredDecimalOrZero(data.commissions);
                     totalLocates += parseStoredDecimalOrZero(data.locates);
                 }

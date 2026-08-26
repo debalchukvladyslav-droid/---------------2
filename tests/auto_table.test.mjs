@@ -13,13 +13,17 @@ test('first import checks all three preset spreadsheets by exact profile last na
     assert.match(source, /await saveSheetMapping\(\)/);
 });
 
-test('admin testing panel exposes a force-run Auto table button only in admin rendering', async () => {
-    const [admin, partial] = await Promise.all([
+test('admin-only Testing tab beside Admin exposes a force-run Auto table button', async () => {
+    const [admin, testingView, sidebar, ui] = await Promise.all([
         readFile(new URL('../js/admin.js', import.meta.url), 'utf8'),
-        readFile(new URL('../partials/views/admin-panel.html', import.meta.url), 'utf8'),
+        readFile(new URL('../partials/views/testing-view.html', import.meta.url), 'utf8'),
+        readFile(new URL('../partials/layout/app-sidebar.html', import.meta.url), 'utf8'),
+        readFile(new URL('../js/ui.js', import.meta.url), 'utf8'),
     ]);
-    assert.match(partial, /id="admin-testing-panel"[^>]*hidden/);
-    assert.match(admin, /if \(testingPanel\) testingPanel\.hidden = !fullAdmin/);
+    assert.match(testingView, /id="view-testing"/);
+    assert.match(sidebar, /admin-nav-item[\s\S]*testing-nav-item/);
+    assert.match(admin, /state\.myRole !== 'admin'/);
+    assert.match(ui, /tab === 'testing' && state\.myRole !== 'admin'/);
     assert.match(admin, /Автотаблиця/);
     assert.match(admin, /autoConnectTraderSheet\(\{ force: true \}\)/);
 });

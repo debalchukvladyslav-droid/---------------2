@@ -38,7 +38,8 @@ export const state = {
             defaultDayloss: -100,
             monthlyDayloss: {},
             glassEnabled: true,
-            dashboardLayout: null
+            dashboardLayout: null,
+            sheetTradeTypesSyncEnabled: true
         }, 
         tickers: {},
         unassignedImages: [],
