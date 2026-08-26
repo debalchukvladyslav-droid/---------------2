@@ -1,6 +1,5 @@
 import { state } from './state.js';
 import { callGemini, getGeminiKeys } from './ai.js';
-import { loadTradeDays } from './storage.js';
 import { safeExternalUrl, sanitizeHTML } from './sanitize.js';
 import { fetchWithSession } from './authenticated_fetch.js';
 
@@ -120,11 +119,6 @@ function getLastTradeDayNewsContext(limit = 8) {
 }
 
 async function fetchDashboardNews(force = false) {
-    await loadTradeDays();
-    if (document.getElementById('view-dash')?.classList.contains('active') && window.renderView) {
-        window.renderView();
-    }
-
     const newsContext = getLastTradeDayNewsContext();
     const tickers = newsContext.tickers;
     const cacheKey = getPersistentCacheKey(newsContext);

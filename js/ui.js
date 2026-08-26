@@ -709,6 +709,8 @@ async function runMainTabWork(tab) {
     if (tab === 'datagrid' && window.renderTradesDatagrid) tasks.push(Promise.resolve(window.renderTradesDatagrid()));
     if (tab === 'dash') {
         tasks.push(Promise.resolve(refreshDashMiniEquityChartTheme()));
+        if (window.renderDashboardNews) tasks.push(Promise.resolve(window.renderDashboardNews()));
+        if (window.renderMarketSentiment) tasks.push(Promise.resolve(window.renderMarketSentiment()));
     }
     if (tab === 'screens') {
         if (window.setupOCRDrawing) window.setupOCRDrawing();

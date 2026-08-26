@@ -31,7 +31,7 @@ export async function renderJournalScore() {
     const value = document.getElementById('journal-score-value');
     const label = document.getElementById('journal-score-label');
     const ring = document.getElementById('journal-score-ring');
-    if (value) value.textContent = result.score == null ? '—' : String(result.score);
+    if (value) value.textContent = String(result.score ?? 0);
     if (label) label.textContent = result.label;
     const hue = Math.round(Math.max(0, Math.min(10, result.score || 0)) * 12);
     if (ring) {
@@ -41,12 +41,12 @@ export async function renderJournalScore() {
     chip.style.setProperty('--journal-score-color', `hsl(${hue} 78% 46%)`);
     const days = document.getElementById('journal-score-days');
     const gaps = document.getElementById('journal-score-gaps');
-    if (days) days.textContent = result.activeDays ? `${result.activeDays} дн. поточного місяця` : 'Поточний місяць';
+    if (days) days.textContent = `${result.activeDays || 0}/${result.workDays || 0} робочих днів`;
     if (gaps) gaps.innerHTML = (result.gaps || []).length
         ? result.gaps.map(item => `<div class="journal-score-gap"><span>${item.label}</span><strong>${item.done}/${item.total}</strong><i><b style="width:${Math.round((item.done / item.total) * 100)}%"></b></i></div>`).join('')
         : '<div class="journal-score-all-good">Усі основні звички ведуться регулярно.</div>';
     chip.title = `Індекс ведення журналу. ${result.details}`;
-    chip.classList.toggle('has-score', result.score != null);
+    chip.classList.toggle('has-score', true);
 }
 
 function bindJournalScorePopover() {

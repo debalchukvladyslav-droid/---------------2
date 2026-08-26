@@ -1,3 +1,5 @@
+import { getNyseDaySchedule } from './nyse_calendar.js';
+
 function hasText(value) { return String(value ?? '').trim().length > 0; }
 function hasValues(value) { return value && typeof value === 'object' && Object.values(value).some((item) => hasText(item) || Number(item)); }
 function screenshotsCount(day) { const groups = day?.screenshots && typeof day.screenshots === 'object' ? Object.values(day.screenshots) : []; return groups.reduce((sum, items) => sum + (Array.isArray(items) ? items.length : 0), 0); }
@@ -18,6 +20,20 @@ function hasPnl(day) {
 }
 function monthKey(now) { const date = now instanceof Date ? now : new Date(now || Date.now()); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`; }
 function weekKey(dateStr) { const date = new Date(`${dateStr}T12:00:00Z`); const monday = new Date(date); const day = monday.getUTCDay() || 7; monday.setUTCDate(monday.getUTCDate() - day + 1); return monday.toISOString().slice(0, 10); }
+function monthWorkDates(now) {
+    const date = now instanceof Date ? now : new Date(now || Date.now());
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const result = [];
+    for (let day = 1, last = new Date(year, month + 1, 0).getDate(); day <= last; day += 1) {
+        const current = new Date(year, month, day);
+        if (current.getDay() === 0 || current.getDay() === 6) continue;
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        if (getNyseDaySchedule(dateStr)?.type === 'closed') continue;
+        result.push(dateStr);
+    }
+    return result;
+}
 
 export function isJournalActivityDay(day) {
     if (!day || typeof day !== 'object') return false;
@@ -32,35 +48,38 @@ function dailyCore(day) {
 
 export function calculateJournalScore({ journal = {}, reviews = [], learnCache = null, learningDates = [], now = new Date() } = {}) {
     const prefix = `${monthKey(now)}-`;
-    const monthEntries = Object.entries(journal).filter(([date, day]) => date.startsWith(prefix) && isJournalActivityDay(day));
+    const workDates = monthWorkDates(now);
+    const workDateSet = new Set(workDates);
+    const monthEntries = Object.entries(journal).filter(([date, day]) => date.startsWith(prefix) && workDateSet.has(date) && isJournalActivityDay(day));
     const activeDates = new Set(monthEntries.map(([date]) => date));
-    if (!activeDates.size) return { score: null, label: 'Немає даних', activeDays: 0, details: 'Оцінка рахується лише за поточний місяць.', gaps: [{ label: 'Запишіть PnL і думку першого торгового дня', done: 0, total: 1 }] };
+    const workDays = workDates.length;
 
     const habits = {
-        pnl: { label: 'PnL дня', done: 0, total: activeDates.size, weight: 5 },
-        thought: { label: 'Думка або висновок дня', done: 0, total: activeDates.size, weight: 5 },
-        sessionStart: { label: 'Початок сесії', done: 0, total: activeDates.size, weight: 3 },
-        sessionEnd: { label: 'Завершення сесії', done: 0, total: activeDates.size, weight: 3 },
-        screenshots: { label: 'Розбір скріншотів', done: 0, total: activeDates.size, weight: 2 },
+        pnl: { label: 'PnL дня', done: 0, total: workDays, weight: 5 },
+        thought: { label: 'Думка або висновок дня', done: 0, total: workDays, weight: 5 },
+        sessionStart: { label: 'Початок сесії', done: 0, total: workDays, weight: 3 },
+        sessionEnd: { label: 'Завершення сесії', done: 0, total: workDays, weight: 3 },
+        screenshots: { label: 'Розбір скріншотів', done: 0, total: workDays, weight: 2 },
     };
     let dailyPoints = 0;
     monthEntries.forEach(([, day]) => { const result = dailyCore(day); dailyPoints += result.points; Object.keys(result.checks).forEach((key) => { if (result.checks[key]) habits[key].done += 1; }); });
-    const dailyScore = dailyPoints / activeDates.size;
+    const dailyScore = activeDates.size ? dailyPoints / activeDates.size : 0;
 
     const relevantReviews = reviews.filter((review) => review?.active && String(review.trade_date || '').startsWith(prefix));
     const completedReviews = relevantReviews.filter((review) => review.final_status === 'normal' || review.final_status === 'bad').length;
     const stopScore = relevantReviews.length ? completedReviews / relevantReviews.length : 1;
     if (relevantReviews.length) habits.stops = { label: 'Розбір стопів', done: completedReviews, total: relevantReviews.length, weight: 2 };
 
-    const activeWeeks = new Set([...activeDates].map(weekKey));
+    const todayKey = (now instanceof Date ? now : new Date(now || Date.now())).toISOString().slice(0, 10);
+    const activeWeeks = new Set(workDates.filter((date) => date <= todayKey).map(weekKey));
     const recordedLearningDates = new Set([...(Array.isArray(learningDates) ? learningDates : []), learnCache?.date].filter((date) => String(date || '').startsWith(prefix)));
     const learnedWeeks = new Set([...recordedLearningDates].map(weekKey));
     const learningDone = [...activeWeeks].filter((week) => learnedWeeks.has(week)).length;
     const learningScore = activeWeeks.size ? learningDone / activeWeeks.size : 0;
     habits.learning = { label: 'Навчання раз на тиждень', done: learningDone, total: activeWeeks.size, weight: 1 };
 
-    const score = Math.max(0, Math.min(10, Math.round((dailyScore + stopScore + learningScore) * 10) / 10));
+    const score = activeDates.size ? Math.max(0, Math.min(10, Math.round((dailyScore + stopScore + learningScore) * 10) / 10)) : 0;
     const label = score >= 8.5 ? 'Системно' : score >= 7 ? 'Добре' : score >= 5 ? 'Набирає ритм' : 'Потрібна увага';
     const gaps = Object.values(habits).map((item) => ({ ...item, ratio: item.total ? item.done / item.total : 1 })).filter((item) => item.ratio < .8).sort((a, b) => b.weight - a.weight || a.ratio - b.ratio).slice(0, 6);
-    return { score, label, activeDays: activeDates.size, gaps, details: 'Поточний місяць. PnL і думка — 5 балів; початок і завершення сесії — 2; скріншоти — 1; стопи — до 1; навчання раз на тиждень — до 1.' };
+    return { score, label, activeDays: activeDates.size, workDays, gaps, details: 'Поточний місяць. Прогрес показано відносно всіх робочих днів місяця. PnL і думка — 5 балів; початок і завершення сесії — 2; скріншоти — 1; стопи — до 1; навчання раз на тиждень — до 1.' };
 }

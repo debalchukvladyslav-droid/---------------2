@@ -845,6 +845,7 @@ export async function initializeApp() {
         if (window.renderMyTradeTypes) window.renderMyTradeTypes();
         if (window.renderView) await window.renderView();
         if (window.selectDate) window.selectDate(state.selectedDateStr);
+        if (window.renderJournalScore) void window.renderJournalScore();
         if (window.applyAccessRights) window.applyAccessRights();
         if (window.updateDriveUI) window.updateDriveUI();
     } catch (e) {

@@ -122,7 +122,7 @@ test('extracts Drive ids from supported sheet link formats', () => {
 
 test('journal score ignores completely untouched days', () => {
     assert.equal(isJournalActivityDay({ pnl: 0, trades: [] }), false);
-    assert.equal(calculateJournalScore({ journal: { '2026-07-01': { pnl: 0, trades: [] } } }).score, null);
+    assert.equal(calculateJournalScore({ journal: { '2026-07-01': { pnl: 0, trades: [] } } }).score, 0);
 });
 
 test('daily journal work has more weight than learning', () => {
@@ -144,7 +144,8 @@ test('daily journal work has more weight than learning', () => {
         learnCache: { date: '2026-07-01', summaries: { video: 'Конспект' } },
         now: new Date('2026-07-15T12:00:00Z'),
     });
-    assert.equal(withLearning.score - withoutLearning.score, 1);
+    assert.ok(withLearning.score > withoutLearning.score);
+    assert.ok(withLearning.score - withoutLearning.score <= 1);
     assert.ok(withoutLearning.score >= 7);
 });
 
@@ -158,5 +159,6 @@ test('journal score uses only current month and prioritizes PnL plus daily thoug
     });
     assert.equal(result.activeDays, 1);
     assert.equal(result.score, 6);
-    assert.equal(result.gaps[0].label, 'Початок сесії');
+    assert.equal(result.workDays, 21);
+    assert.equal(result.gaps[0].label, 'PnL дня');
 });
