@@ -67,6 +67,23 @@ export function sanitizeNumberOrNull(value) {
     return parseDecimalInput(value);
 }
 
+export function getTradeResult(trade) {
+    const hasNet = trade?.net !== '' && trade?.net !== null && trade?.net !== undefined;
+    const net = hasNet ? Number(trade.net) : NaN;
+    if (Number.isFinite(net)) return net;
+    const grossRaw = trade?.gross ?? trade?.grossPnl;
+    const gross = grossRaw === '' || grossRaw === null || grossRaw === undefined ? NaN : Number(grossRaw);
+    return Number.isFinite(gross) ? gross : null;
+}
+
+export function normalizeTradeResult(trade) {
+    if (!trade || typeof trade !== 'object') return trade;
+    const hasNet = trade.net !== '' && trade.net !== null && trade.net !== undefined && Number.isFinite(Number(trade.net));
+    if (hasNet) return trade;
+    const result = getTradeResult(trade);
+    return result === null ? trade : { ...trade, net: result };
+}
+
 export function normalizeTradeSource(source) {
     const safeSource = source && typeof source === 'object' ? source : {};
     return {
@@ -168,8 +185,8 @@ export function buildAutoTradeTypesData(trades = []) {
         const group = classifyTradeTypeGroup(trade);
         if (!group || !totals[group]) return;
 
-        const net = Number(trade?.net);
-        if (Number.isFinite(net)) {
+        const net = getTradeResult(trade);
+        if (net !== null) {
             totals[group].pnl += net;
             hasAny = true;
         }
@@ -223,6 +240,7 @@ export function normalizeDayEntry(entry) {
         ? deriveDayKfFromTrades(Array.isArray(safeEntry.trades) ? safeEntry.trades : [])
         : null;
 
+    const normalizedTrades = Array.isArray(safeEntry.trades) ? safeEntry.trades.map(normalizeTradeResult) : [];
     return applyAutoTradeTypesData({
         ...defaults,
         ...safeEntry,
@@ -252,6 +270,8 @@ export function normalizeDayEntry(entry) {
         pproSource: typeof safeEntry.pproSource === 'string' ? safeEntry.pproSource : '',
         tradeTypesData:
             safeEntry.tradeTypesData && typeof safeEntry.tradeTypesData === 'object' ? { ...safeEntry.tradeTypesData } : {},
+        sheetTradeTypesSyncEnabled: safeEntry.sheetTradeTypesSyncEnabled !== false,
+        trades: normalizedTrades,
         review_requests:
             safeEntry.review_requests && typeof safeEntry.review_requests === 'object' ? { ...safeEntry.review_requests } : {},
     });

@@ -27,6 +27,13 @@ test('criteria analysis ignores trades without metrics or Gross result', () => {
     assert.deepEqual(groups, []);
 });
 
+test('criteria PnL prefers Net when both Net and Gross exist', () => {
+    const groups = buildMarketCriteriaGroups({ '2026-08-01': { trades: [
+        { symbol: 'NET', net: -20, gross: 100, marketCriteria: { atr: .4 } },
+    ] } });
+    assert.equal(groups.find((group) => group.key === 'atr').buckets[0].pnl, -20);
+});
+
 test('exact boundaries move into the next configured criteria range', () => {
     const groups = buildMarketCriteriaGroups({ '2026-08-01': { trades: [{
         symbol: 'EDGE', gross: 10,

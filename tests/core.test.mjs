@@ -27,7 +27,7 @@ const {
     isMentorViewingOtherJournalState,
     isViewingOtherProfileState,
 } = await import('../js/access_control.js');
-const { buildAutoTradeTypesData, deriveDayKfFromTrades, isNotTakenTrade, normalizeAppData, normalizeDayEntry } = await import('../js/data_utils.js');
+const { buildAutoTradeTypesData, DEFAULT_TRADE_TYPES, deriveDayKfFromTrades, getTradeResult, isNotTakenTrade, normalizeAppData, normalizeDayEntry } = await import('../js/data_utils.js');
 const { ecnFeeColumnIndex, parsePPROReportDate, parsePPROTotalReportRows, parseSheetDateCellToIso, parseSheetDateCellsToIsoSequence } = await import('../js/parser_utils.js');
 const { sanitizeHTML, safeExternalUrl, sanitizeRichHTML } = await import('../js/sanitize.js');
 const { mergeGoogleSheetTradesIntoJournal } = await import('../js/sheet_journal_merge.js');
@@ -421,6 +421,24 @@ test('auto trade type metrics group imported trades by default categories', () =
         'Фіолетова': { pnl: 3, kf: 0.3 },
         'Візуально': { pnl: 2, kf: 0.2 },
     });
+});
+
+test('trade result prefers Net and falls back to Gross only when Net is absent', () => {
+    assert.equal(getTradeResult({ net: 25, gross: 100 }), 25);
+    assert.equal(getTradeResult({ net: 0, gross: 100 }), 0);
+    assert.equal(getTradeResult({ net: null, gross: 100 }), 100);
+    assert.equal(getTradeResult({ gross: -40 }), -40);
+    const normalized = normalizeDayEntry({ trades: [{ symbol: 'A', gross: 75 }, { symbol: 'B', net: -10, gross: 90 }] });
+    assert.equal(normalized.trades[0].net, 75);
+    assert.equal(normalized.trades[1].net, -10);
+});
+
+test('auto trade type metrics use Net before Gross and Gross as fallback', () => {
+    const auto = buildAutoTradeTypesData([
+        { net: 10, gross: 500, sheet: { tradeType: DEFAULT_TRADE_TYPES[0] } },
+        { gross: -4, sheet: { tradeType: DEFAULT_TRADE_TYPES[0] } },
+    ]);
+    assert.equal(auto[DEFAULT_TRADE_TYPES[0]].pnl, 6);
 });
 
 test('daily KФ is derived from explicit trade R values without double-counting sheet rows', () => {
@@ -865,6 +883,21 @@ test('main Google Sheet writes grouped metrics and Gross without replacing net c
     assert.equal(journal['2026-04-03'].sheetGrossSource, 'sheet-1');
     assert.deepEqual(result.syncedPnlDates, ['2026-04-03']);
     assert.ok(touched.includes('2026-04-03'));
+});
+
+test('disabled day trade-type sync preserves manual groups during sheet resync', () => {
+    const journal = {
+        '2026-04-03': {
+            ...normalizeDayEntry({}),
+            sheetTradeTypesSyncEnabled: false,
+            tradeTypesData: { 'РЎРёРЅСЏ': { pnl: 77, kf: 2 } },
+            sheetTradeTypesSource: 'sheet-1',
+        },
+    };
+    mergeGoogleSheetTradesIntoJournal(journal, {
+        '2026-04-03': [{ symbol: 'AAPL', net: -20, sheet: { source: 'google', sheetNet: -20, tradeType: 'СЃРёРЅСЏ%' } }],
+    }, 'sheet-1', { mode: 'main', sheetRowsStore: {} });
+    assert.deepEqual(journal['2026-04-03'].tradeTypesData, { 'РЎРёРЅСЏ': { pnl: 77, kf: 2 } });
 });
 
 test('sheet resync removes deleted rows and restores Summary by Date net PnL', () => {

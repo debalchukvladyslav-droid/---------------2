@@ -121,7 +121,8 @@ function syncMainSheetMetricsToCalendar(journal, outByDay, spreadsheetId, markTo
             delete day.sheetGrossSource;
             delete day.sheetGrossValue;
         }
-        if (day.sheetTradeTypesSource === spreadsheetId || sheetOnlyDay || wasPreviouslyManaged) {
+        const syncTradeTypes = day.sheetTradeTypesSyncEnabled !== false;
+        if (syncTradeTypes && (day.sheetTradeTypesSource === spreadsheetId || sheetOnlyDay || wasPreviouslyManaged)) {
             const data = day.tradeTypesData && typeof day.tradeTypesData === 'object' ? { ...day.tradeTypesData } : {};
             DEFAULT_TRADE_TYPES.forEach((type) => delete data[type]);
             day.tradeTypesData = data;
@@ -145,7 +146,9 @@ function syncMainSheetMetricsToCalendar(journal, outByDay, spreadsheetId, markTo
             return sheet.sheetNet !== undefined && sheet.sheetNet !== null && sheet.sheetNet !== ''
                 && Number.isFinite(Number(sheet.sheetNet));
         });
-        const tradeTypesData = buildAutoTradeTypesData(executedRows);
+        const existingDay = journal[dateStr];
+        const syncTradeTypes = existingDay?.sheetTradeTypesSyncEnabled !== false;
+        const tradeTypesData = syncTradeTypes ? buildAutoTradeTypesData(executedRows) : {};
         if (!pnlRows.length && !Object.keys(tradeTypesData).length) return;
 
         const existed = journal[dateStr] && typeof journal[dateStr] === 'object';

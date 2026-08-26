@@ -492,7 +492,15 @@ function fillSelectedDateUI(dateStr) {
     const ttContainer = document.getElementById('trade-types-container');
     if (ttContainer && state.appData?.tradeTypes) {
         const savedTT = dayData.tradeTypesData || {};
-        let ttHtml = '';
+        const syncEnabled = dayData.sheetTradeTypesSyncEnabled !== false;
+        let ttHtml = `
+            <div class="trade-types-sync-row">
+                <div><strong>Синхронізація з таблицею</strong><small>${syncEnabled ? 'Типи оновлюються з основної таблиці' : 'Значення залишаються ручними'}</small></div>
+                <label class="trade-types-sync-switch" title="Синхронізувати Синя / Зелена / Фіолетова / Візуально з таблицею">
+                    <input type="checkbox" id="trade-types-sheet-sync" ${syncEnabled ? 'checked' : ''}>
+                    <span></span>
+                </label>
+            </div>`;
         state.appData.tradeTypes.forEach(tt => {
             const rawPnl = savedTT[tt]?.pnl;
             const rawKf = savedTT[tt]?.kf;
@@ -509,6 +517,32 @@ function fillSelectedDateUI(dateStr) {
                 </div>`;
         });
         ttContainer.innerHTML = ttHtml;
+        const syncToggle = document.getElementById('trade-types-sheet-sync');
+        syncToggle?.addEventListener('change', async (event) => {
+            const enabled = event.currentTarget.checked;
+            if (enabled) {
+                const sheetModule = await import('./sheet_table.js');
+                if (!sheetModule.getEffectiveSpreadsheetId?.('main')) {
+                    event.currentTarget.checked = false;
+                    showToast('Спочатку підключіть основну таблицю.');
+                    window.switchMainTab?.('table');
+                    return;
+                }
+            }
+            const currentDay = state.appData.journal[dateStr] || dayData;
+            currentDay.sheetTradeTypesSyncEnabled = enabled;
+            state.appData.journal[dateStr] = currentDay;
+            markJournalDayDirty(dateStr);
+            const text = ttContainer.querySelector('.trade-types-sync-row small');
+            if (text) text.textContent = enabled ? 'Типи оновлюються з основної таблиці' : 'Значення залишаються ручними';
+            try {
+                const storage = await import('./storage.js');
+                await storage.saveJournalData();
+                showToast(enabled ? 'Синхронізацію типів увімкнено' : 'Синхронізацію типів вимкнено');
+            } catch (error) {
+                showToast(`Не вдалося зберегти перемикач: ${error?.message || error}`);
+            }
+        });
     }
 
     if (window.refreshReviewRequestButtons) window.refreshReviewRequestButtons();
@@ -614,7 +648,8 @@ export function saveEntry() {
         errors: errors,
         checkedParams: checklist,
         sliders: sliders,
-        tradeTypesData: ttData
+        tradeTypesData: ttData,
+        sheetTradeTypesSyncEnabled: oldData.sheetTradeTypesSyncEnabled !== false,
     };
 
     dayData.screenshots = oldData.screenshots || { good: [], normal: [], bad: [], error: [] };

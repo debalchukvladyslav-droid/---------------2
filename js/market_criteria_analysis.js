@@ -16,7 +16,9 @@ function finite(value) {
     return Number.isFinite(number) ? number : null;
 }
 
-function tradeGross(trade) {
+function tradeResult(trade) {
+    const net = finite(trade?.net);
+    if (net !== null) return net;
     const sheet = trade?.sheet && typeof trade.sheet === 'object' ? trade.sheet : {};
     return finite(trade?.gross ?? trade?.grossPnl ?? sheet.gross);
 }
@@ -55,7 +57,7 @@ export function buildMarketCriteriaGroups(journal = {}, allowedDates = null, tra
         for (const trade of Array.isArray(day?.trades) ? day.trades : []) {
             const type = String(trade?.type ?? trade?.sheet?.tradeType ?? '').trim();
             if (tradeType && type !== tradeType) continue;
-            const pnl = tradeGross(trade);
+            const pnl = tradeResult(trade);
             const metrics = trade?.marketCriteria || day?.tradePolygons?.[String(trade?.symbol || trade?.ticker || '').toUpperCase()];
             if (pnl === null || !metrics) continue;
             groups.forEach((group) => {
