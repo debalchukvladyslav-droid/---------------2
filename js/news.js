@@ -10,6 +10,19 @@ let _newsCache = { key: '', ts: 0, payload: null };
 let _newsPromise = null;
 let _visibleNewsItems = [];
 
+async function callNewsAI(key, payload) {
+    let lastError;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+            return await callGemini(key, payload);
+        } catch (error) {
+            lastError = error;
+            if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 1200));
+        }
+    }
+    throw lastError || new Error('AI news translation failed');
+}
+
 function setTickerHTML(html) {
     const ticker = document.getElementById('news-ticker-text');
     if (!ticker) return;
@@ -38,7 +51,7 @@ function loadPersistentNewsCache(context) {
         if (!raw) return null;
         const payload = JSON.parse(raw);
         if (!payload || !Array.isArray(payload.items)) return null;
-        if (payload.items.some((item) => item?.title && !item?.titleUk)) return null;
+        if (payload.items.some((item) => !cleanNewsDisplayTitle(item?.titleUk))) return null;
         return payload;
     } catch {
         return null;
@@ -182,7 +195,7 @@ async function translateNewsPayload(payload) {
 
     try {
         const key = getGeminiKeys()[0];
-        if (!key) return payload;
+        if (!key) throw new Error('AI translation unavailable');
 
         const source = items.map((item, index) => ({
             index,
@@ -192,18 +205,20 @@ async function translateNewsPayload(payload) {
             title: String(item.title || '').slice(0, 240),
             summary: String(item.summary || '').slice(0, 420),
         }));
-        const text = await callGemini(key, {
+        const text = await callNewsAI(key, {
             systemInstruction: {
                 parts: [{
                     text: [
                         'Ти редактор трейдингової live-стрічки.',
                         'Для кожної новини зроби короткий український рядок до 125 символів.',
                         'Мова відповіді: тільки українська. Англійською можна залишати лише тикери, назви компаній, FDA/SEC та сталі абревіатури.',
-                        'Для general: передай суть ринку без зайвих деталей.',
+                        'Для general: передай суть новини без зайвих деталей.',
                         'Для tickers: це catalyst tape навколо пампу/угоди. Пиши причину руху, а не факт що акція росте.',
                         'Шукай конкретику: фаза дослідження, FDA, trial data, offering, earnings, guidance, downgrade, merger, contract, lawsuit.',
                         'Збережи тикери, час, назви компаній, цифри і фази. Не вигадуй фактів, яких немає у title/summary.',
                         'Ніколи не пиши "новина без каталізатора", "без каталізатора", "без точного catalyst" або схожі службові фрази. Якщо каталізатор неясний, стисло перекажи реальний заголовок.',
+                        'Не починай рядки словами «Ринок:», «Подія:», «Технології:» або іншими службовими категоріями.',
+                        'Кожен рядок має бути природною завершеною українською новиною, а не англійським заголовком з українським префіксом.',
                         'Відповідай тільки JSON масивом рядків у тому самому порядку.',
                     ].join(' '),
                 }],
@@ -213,31 +228,43 @@ async function translateNewsPayload(payload) {
 
         const match = text.match(/\[[\s\S]*\]/);
         const translated = match ? JSON.parse(match[0]) : [];
-        if (!Array.isArray(translated) || translated.length !== items.length) return withFallbackUkrainianTitles(payload);
+        if (!Array.isArray(translated) || translated.length !== items.length) throw new Error('AI returned an incomplete news translation');
+
+        const invalidIndexes = translated
+            .map((value, index) => cleanNewsDisplayTitle(value) ? -1 : index)
+            .filter((index) => index >= 0);
+        if (invalidIndexes.length) {
+            const repairSource = invalidIndexes.map((index) => source[index]);
+            const repairText = await callNewsAI(key, {
+                systemInstruction: { parts: [{ text: 'Переклади кожну новину природною українською. Не залишай англійських речень і не додавай префікс «Ринок:». Збережи назви компаній, тікери та цифри. Поверни лише JSON масив рядків у тому самому порядку.' }] },
+                contents: [{ parts: [{ text: JSON.stringify(repairSource) }] }],
+            });
+            const repairMatch = repairText.match(/\[[\s\S]*\]/);
+            const repaired = repairMatch ? JSON.parse(repairMatch[0]) : [];
+            if (Array.isArray(repaired) && repaired.length === invalidIndexes.length) {
+                invalidIndexes.forEach((sourceIndex, repairIndex) => { translated[sourceIndex] = repaired[repairIndex]; });
+            }
+        }
+
+        if (translated.some((value) => !cleanNewsDisplayTitle(value))) throw new Error('AI translation quality check failed');
 
         return {
             ...payload,
             items: payload.items.map((item, index) => ({
                 ...item,
-                titleUk: cleanNewsDisplayTitle(translated[index]) || buildUkrainianFallbackLine(item),
+                titleUk: cleanNewsDisplayTitle(translated[index]),
             })),
         };
     } catch (error) {
-        console.warn('[News] translate skipped:', error);
-        return withFallbackUkrainianTitles(payload);
+        console.warn('[News] quality translation failed:', error);
+        return {
+            ...payload,
+            items: (payload.items || [])
+                .filter((item) => cleanNewsDisplayTitle(item?.titleUk))
+                .map((item) => ({ ...item, titleUk: cleanNewsDisplayTitle(item.titleUk) })),
+            translationPending: true,
+        };
     }
-}
-
-function withFallbackUkrainianTitles(payload) {
-    return {
-        ...payload,
-        items: Array.isArray(payload?.items)
-            ? payload.items.map((item) => ({
-                ...item,
-                titleUk: cleanNewsDisplayTitle(item.titleUk) || buildUkrainianFallbackLine(item),
-            }))
-            : [],
-    };
 }
 
 function cleanNewsDisplayTitle(value) {
@@ -248,10 +275,18 @@ function cleanNewsDisplayTitle(value) {
         .replace(/^без\s+(точного\s+)?(каталізатора|каталiзатора|catalyst)\s*:?\s*/i, '')
         .replace(/^no\s+(clear\s+)?catalyst\s*:?\s*/i, '')
         .replace(/^news\s+without\s+(a\s+)?catalyst\s*:?\s*/i, '')
+        .replace(/^ринок\s*:\s*(?:[^:]{1,40}:\s*)?/i, '')
         .trim();
 
-    if (!title || isLowValueCatalystTitle(title) || isLikelyUntranslatedEnglish(title)) return '';
+    if (!title || isLowValueCatalystTitle(title) || isLikelyUntranslatedEnglish(title) || !isQualityUkrainian(title)) return '';
     return title.slice(0, 140);
+}
+
+function isQualityUkrainian(value) {
+    const text = String(value || '');
+    const cyrillic = (text.match(/[А-Яа-яІіЇїЄєҐґ]/g) || []).length;
+    const latin = (text.match(/[A-Za-z]/g) || []).length;
+    return cyrillic >= 8 && cyrillic >= Math.min(24, latin * 0.45);
 }
 
 function hasCyrillic(text) {
@@ -278,76 +313,6 @@ function isLowValueCatalystTitle(title) {
         /news\s+without\s+(a\s+)?catalyst/i.test(text);
 }
 
-function compactNewsText(value, maxLen = 118) {
-    return String(value || '')
-        .replace(/\s+/g, ' ')
-        .replace(/^[\s"'“”'`-]+|[\s"'“”'`-]+$/g, '')
-        .trim()
-        .slice(0, maxLen);
-}
-
-function readableSourceTitle(item) {
-    const title = compactNewsText(item?.title, 120);
-    if (title) return title;
-    return compactNewsText(item?.summary, 120);
-}
-
-function fallbackWithHeadline(prefix, label, item, source) {
-    const headline = readableSourceTitle(item);
-    if (headline) return `${prefix}${label}: ${headline}${source}`;
-    return `${prefix}${label}${source}`;
-}
-
-function buildUkrainianFallbackLine(item) {
-    const section = item?.section || 'general';
-    const related = Array.isArray(item?.related) ? item.related.filter(Boolean) : [];
-    const ticker = related[0] || '';
-    const source = item?.source ? ` (${item.source})` : '';
-    const text = `${item?.title || ''} ${item?.summary || ''}`.toLowerCase();
-
-    if (section === 'general') {
-        if (/fed|fomc|rate|inflation|cpi|pce|jobs|payroll/.test(text)) return fallbackWithHeadline('Ринок: ', 'макро/ФРС', item, source);
-        if (/oil|crude|energy|gold|yield|treasury|dollar/.test(text)) return fallbackWithHeadline('Ринок: ', 'сировина/дохідності/долар', item, source);
-        if (/earnings|guidance|revenue|profit/.test(text)) return fallbackWithHeadline('Ринок: ', 'звітність', item, source);
-        if (/ai|chip|semiconductor|nvidia|tech|software/.test(text)) return fallbackWithHeadline('Ринок: ', 'технології', item, source);
-        if (/bank|credit|loan|financial|yield|treasury/.test(text)) return fallbackWithHeadline('Ринок: ', 'фінсектор/ставки', item, source);
-        return fallbackWithHeadline('Ринок: ', 'подія', item, source);
-    }
-
-    const prefix = ticker ? `${ticker}: ` : '';
-    if (/phase\s*(1|2|3|i|ii|iii)|clinical trial|trial data|endpoint|patients|study|data readout/.test(text)) {
-        return fallbackWithHeadline(prefix, 'клінічні дані / фаза', item, source);
-    }
-    if (/fda|approval|clearance|pdufa|regulatory|drug|therapy/.test(text)) {
-        return fallbackWithHeadline(prefix, 'FDA / регуляторика', item, source);
-    }
-    if (/offering|public offering|registered direct|private placement|atm|warrant|dilution|convertible/.test(text)) {
-        return fallbackWithHeadline(prefix, 'offering / розмивання', item, source);
-    }
-    if (/earnings|revenue|guidance|forecast|outlook|eps|sales|profit|loss|quarter|q[1-4]/.test(text)) {
-        return fallbackWithHeadline(prefix, 'звіт / guidance', item, source);
-    }
-    if (/merger|acquisition|buyout|takeover|strategic alternatives|asset sale/.test(text)) {
-        return fallbackWithHeadline(prefix, 'M&A / стратегічні варіанти', item, source);
-    }
-    if (/upgrade|downgrade|price target|initiates|analyst|rating/.test(text)) {
-        return fallbackWithHeadline(prefix, 'аналітик / price target', item, source);
-    }
-    if (/contract|partnership|collaboration|agreement|license|supply|order/.test(text)) {
-        return fallbackWithHeadline(prefix, 'контракт / партнерство', item, source);
-    }
-    if (/sec|investigation|lawsuit|class action|delisting|nasdaq notice|compliance/.test(text)) {
-        return fallbackWithHeadline(prefix, 'SEC / суд / лістинг', item, source);
-    }
-    if (/launch|product|patent|presentation|conference|webcast/.test(text)) {
-        return fallbackWithHeadline(prefix, 'продукт / патент / презентація', item, source);
-    }
-    if (/shares|stock|surge|jump|rise|fall|drop|volatile|volume/.test(text)) {
-        return fallbackWithHeadline(prefix, 'акція в русі', item, source);
-    }
-    return fallbackWithHeadline(prefix, 'корпоративна подія', item, source);
-}
-
 function formatNewsTime(timestamp) {
     if (!timestamp) return '';
     const date = new Date(timestamp * 1000);
@@ -371,7 +336,7 @@ function renderLiveNewsModalList(items = _visibleNewsItems) {
         const time = formatNewsTime(item.datetime);
         const source = item.source ? sanitizeHTML(item.source) : '';
         const meta = [source, time].filter(Boolean).join(' • ');
-        const title = sanitizeHTML(cleanNewsDisplayTitle(item.titleUk) || buildUkrainianFallbackLine(item));
+        const title = sanitizeHTML(cleanNewsDisplayTitle(item.titleUk));
         const summaryText = hasCyrillic(item.summary) ? String(item.summary).slice(0, 260) : '';
         const summary = summaryText ? `<p>${sanitizeHTML(summaryText)}</p>` : '';
         const url = safeExternalUrl(item.url);
@@ -443,7 +408,7 @@ function renderTickerNews(payload) {
             ? `[${sanitizeHTML(item.related.slice(0, 3).join(','))}] `
             : '';
         const time = formatNewsTime(item.datetime);
-        const title = sanitizeHTML(cleanNewsDisplayTitle(item.titleUk) || buildUkrainianFallbackLine(item));
+        const title = sanitizeHTML(cleanNewsDisplayTitle(item.titleUk));
         const suffix = time ? ` (${sanitizeHTML(time)})` : '';
         return `${label}<a href="${sanitizeHTML(safeExternalUrl(item.url))}" target="_blank" rel="noopener noreferrer">${related}${title}${suffix}</a>`;
     }).join('<span class="news-ticker-sep">•</span>');
