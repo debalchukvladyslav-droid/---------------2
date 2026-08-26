@@ -3,7 +3,7 @@ import { state } from './state.js';
 import { saveJournalData, saveToLocal, markJournalDayDirty } from './storage.js';
 import { getImgUrl, getStorageUrl } from './gallery.js';
 import { getGeminiKeys, callGemini, callGeminiViaProxy, callGeminiJSON, sleep } from './ai/client.js';
-import { sanitizeHTML, sanitizeRichHTML } from './sanitize.js';
+import { sanitizeHTML, sanitizeRichHTML, renderMarkdown } from './sanitize.js';
 import { buildTradeTypeAIContext, buildDayTradeTypeAIContext } from './trade_type_analysis.js';
 import { isNotTakenTrade } from './data_utils.js';
 import { prepareImageInlineData } from './ai/image.js';
@@ -24,14 +24,7 @@ const AI_QUICK_PROMPTS = {
 };
 
 function formatAIResponse(text) {
-    return sanitizeAIHtml(sanitizeHTML(text)
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/^### (.*$)/gm, '<h4>$1</h4>')
-        .replace(/^## (.*$)/gm, '<h3>$1</h3>')
-        .replace(/^- (.*$)/gm, '<li>$1</li>')
-        .replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>')
-        .replace(/\n/g, '<br>'));
+    return renderMarkdown(text);
 }
 
 function setDataChatBusy(isBusy) {
@@ -152,7 +145,7 @@ export function renderAIAdviceUI() {
     let aiBox = document.getElementById('ai-response');
     let data = state.appData.journal[state.selectedDateStr] || {};
     if (data.ai_advice && data.ai_advice.trim() !== '') {
-        aiBox.style.display = 'block'; aiBox.innerHTML = `<strong>🧠 Ментор:</strong><br>${sanitizeHTML(data.ai_advice).replace(/\n/g, '<br>')}`;
+        aiBox.style.display = 'block'; aiBox.innerHTML = `<strong>🧠 Ментор:</strong><br>${renderMarkdown(data.ai_advice)}`;
     } else { aiBox.style.display = 'none'; aiBox.innerHTML = ''; }
 }
 
@@ -247,7 +240,7 @@ export async function analyzeTagPatterns() {
         chatBox.removeChild(typingDiv);
         const aiMsgDiv = document.createElement('div');
         aiMsgDiv.className = 'chat-msg ai-msg';
-        aiMsgDiv.innerHTML = `<strong>🏷️ Аналіз тегів:</strong><br>${sanitizeAIHtml(sanitizeHTML(aiText).replace(/\n/g, '<br>'))}`;
+        aiMsgDiv.innerHTML = `<strong>🏷️ Аналіз тегів:</strong><br>${renderMarkdown(aiText)}`;
         chatBox.appendChild(aiMsgDiv);
     } catch(e) {
         chatBox.removeChild(typingDiv);
@@ -324,7 +317,7 @@ ${window.getPlaybookContext ? window.getPlaybookContext() : ''}
         } catch (verificationError) {
             console.warn('[AI Vision] second-pass verification unavailable; showing first pass', verificationError?.message || verificationError);
         }
-        let formattedHTML = sanitizeAIHtml(sanitizeHTML(text).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>').replace(/\n/g, '<br>'));
+        let formattedHTML = renderMarkdown(text);
         box.innerHTML = `<strong>👁️ AI Аналіз сетапу:</strong><br><br>${formattedHTML}`;
     } catch(e) { box.innerHTML = `<span style="color: red;">Помилка аналізу: ${sanitizeHTML(e.message)}</span>`; }
 }
@@ -336,7 +329,7 @@ export function appendSOSMessage(text, isAI) {
     msgDiv.className = `chat-msg ${isAI ? 'ai-msg' : 'user-msg'}`;
     if (isAI) {
         // amazonq-ignore-next-line
-        msgDiv.innerHTML = `<strong>🚨 РМ:</strong><br>${sanitizeHTML(text)}`;
+        msgDiv.innerHTML = `<strong>🚨 РМ:</strong><br>${renderMarkdown(text)}`;
     } else {
         msgDiv.textContent = text;
     }
@@ -365,7 +358,7 @@ export function appendDataChatMessage(text, isAI) {
     if (isAI) {
         msgDiv.style.borderLeftColor = 'var(--accent)';
         msgDiv.style.background = 'color-mix(in srgb, var(--accent) 10%, transparent)';
-        msgDiv.innerHTML = `<strong>📊 AI Аналітик:</strong><br>${sanitizeAIHtml(text)}`;
+        msgDiv.innerHTML = `<strong>📊 AI Аналітик:</strong><br>${renderMarkdown(text)}`;
     } else {
         msgDiv.textContent = text;
     }

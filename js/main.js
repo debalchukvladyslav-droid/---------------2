@@ -17,6 +17,7 @@ import { renderErrorsList, addNewErrorType, deleteErrorType, renderChecklistDisp
 import { openZoom, openZoomGallery, closeZoom, openOriginal, zoomStep, loadMoreUnassigned, assignImage, removeAssignedImage, deleteFileFromPC, loadImages, renderAssignedScreens, disposeScreensView, openScreenshotForTrade, getStorageUrl } from './gallery.js';
 import { initStopReview, refreshStopReview } from './stop_review.js';
 import { renderJournalScore } from './journal_score.js';
+import { renderMarkdown } from './sanitize.js';
 import { getAIAdvice, analyzeChart, analyzeTagPatterns, openSOSModal, closeSOSModal, sendSOSMessage, sendDataChatMessage, renderAIAdviceUI, loadAIChatHistory, switchAITab, bookmarkAIChat, renderSavedAIChats, deleteSavedAI, applyAIQuickPrompt } from './ai.js';
 import { cleanupUnusedAIRequests } from './ai/client.js';
 import { loadLatestCoachInsight, requestSessionCoachAnalysis } from './proactive_coach.js';
@@ -498,11 +499,7 @@ window.checkSessionModalReadiness = async function() {
         });
         resultEl.style.background = 'rgba(139,92,246,0.08)';
         resultEl.style.border = '1px solid var(--accent)';
-        resultEl.textContent = '';
-        res.split('\n').forEach((line, i, arr) => {
-            resultEl.appendChild(document.createTextNode(line));
-            if (i < arr.length - 1) resultEl.appendChild(document.createElement('br'));
-        });
+        resultEl.innerHTML = renderMarkdown(res);
     } catch(e) {
         resultEl.textContent = '⚠️ Помилка: ' + e.message;
     }
@@ -825,11 +822,7 @@ window.checkSessionReadiness = async function() {
         });
         resultEl.style.background = 'rgba(139,92,246,0.08)';
         resultEl.style.border = '1px solid var(--accent)';
-        resultEl.textContent = '';
-        res.split('\n').forEach((line, i, arr) => {
-            resultEl.appendChild(document.createTextNode(line));
-            if (i < arr.length - 1) resultEl.appendChild(document.createElement('br'));
-        });
+        resultEl.innerHTML = renderMarkdown(res);
         if (!state.appData.journal[state.selectedDateStr]) state.appData.journal[state.selectedDateStr] = {};
         state.appData.journal[state.selectedDateStr].sessionAiResult = res;
         markJournalDayDirty(state.selectedDateStr);

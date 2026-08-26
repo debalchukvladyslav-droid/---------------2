@@ -29,6 +29,14 @@ function linkedScreenshotPaths(url, paths, screenMeta = {}) {
     return paths.filter(path => String(screenMeta?.[path]?.driveId || '') === driveId);
 }
 
+function screenshotMatchesSymbol(path, symbol, appData = {}) {
+    if (symbolOf(appData?.tickers?.[path]) === symbol) return true;
+    const tags = Array.isArray(appData?.screenTags?.[path]) ? appData.screenTags[path] : [];
+    if (tags.some((tag) => symbolOf(tag) === symbol)) return true;
+    const filename = symbolOf(String(path || '').split(/[\\/]/).pop());
+    return filename.includes(symbol);
+}
+
 export function buildStopReviewCandidates(appData = {}, from = '', to = '') {
     const groups = new Map();
     const journal = appData?.journal || {};
@@ -62,7 +70,7 @@ export function buildStopReviewCandidates(appData = {}, from = '', to = '') {
                     trade_refs: [],
                     screenshot_paths: [...new Set([
                         ...directPaths,
-                        ...allPaths.filter(path => symbolOf(appData?.tickers?.[path]) === symbol),
+                        ...allPaths.filter(path => screenshotMatchesSymbol(path, symbol, appData)),
                     ])],
                 });
             }

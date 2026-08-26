@@ -38,24 +38,6 @@ function normalizeSymbol(value) {
     return String(value || '').trim().toUpperCase();
 }
 
-function tradeRef(trade, index) {
-    const sheet = trade?.sheet && typeof trade.sheet === 'object' ? trade.sheet : {};
-    return {
-        sheetRow: Number.isInteger(Number(sheet.sheetRow)) ? Number(sheet.sheetRow) : index,
-        spreadsheetId: String(sheet.spreadsheetId || ''),
-        net: Number(trade?.net) || 0,
-        type: String(trade?.type || sheet.tradeType || ''),
-        stop: trade?.stop ?? sheet.stopPrice ?? null,
-        exitReason: String(sheet.exit || ''),
-    };
-}
-
-function dayScreenshotPaths(day, symbol, tickers = {}) {
-    const screens = day?.screenshots && typeof day.screenshots === 'object' ? day.screenshots : {};
-    const all = ['good', 'normal', 'bad', 'error'].flatMap(key => Array.isArray(screens[key]) ? screens[key] : []);
-    return [...new Set(all.filter(path => normalizeSymbol(tickers[path]) === symbol))];
-}
-
 export function collectStopCandidates(appData = {}, from = '', to = '') {
     return buildStopReviewCandidates(appData, from, to);
 }

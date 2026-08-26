@@ -68,6 +68,30 @@ test('does not use Trades as a stop source when the sheet has no matching row', 
     assert.deepEqual(rows, []);
 });
 
+test('does not use Trades as a stop source when table rows are absent', () => {
+    const rows = buildStopReviewCandidates({
+        journal: {
+            '2026-07-12': {
+                trades: [{ symbol: 'AMD', net: -50, sheet: { exit: 'стоп' } }],
+                screenshots: { bad: ['screenshots/AMD-stop.png'] },
+            },
+        },
+        tickers: { 'screenshots/AMD-stop.png': 'AMD' },
+    });
+    assert.deepEqual(rows, []);
+});
+
+test('matches same-day stop screenshots by ticker tag or filename', () => {
+    const rows = buildStopReviewCandidates({
+        sheetRows: { sheetA: { '2026-07-14': [{ symbol: 'MULN', sheet: { exit: 'стоп' } }] } },
+        journal: {
+            '2026-07-14': { screenshots: { good: ['screenshots/chart-one.png'], bad: ['screenshots/MULN-entry.png'] } },
+        },
+        screenTags: { 'screenshots/chart-one.png': ['MULN'] },
+    });
+    assert.deepEqual(rows[0].screenshot_paths, ['screenshots/chart-one.png', 'screenshots/MULN-entry.png']);
+});
+
 test('links a sheet ticker hyperlink to a synced Drive screenshot without OCR', () => {
     const driveId = '1AbC_example-file-id';
     const path = 'screenshots/user/chart.png';

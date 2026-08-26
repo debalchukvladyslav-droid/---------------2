@@ -1,6 +1,7 @@
 // === Міні-крива кумулятивного PnL за останні записані торгові дні ===
 import { state } from './state.js';
 import { ensureChartJs } from './vendor_loader.js';
+import { getEffectiveDayPnl } from './trade_filters.js';
 
 let _miniChart = null;
 let _lastMiniChartArgs = null;
@@ -251,7 +252,7 @@ function buildAllTimeEquityMap(journal) {
     let peak = 0;
 
     rows.forEach((dateStr) => {
-        const pnl = parseFloat(journal[dateStr]?.pnl);
+        const pnl = getEffectiveDayPnl(journal[dateStr]);
         if (!Number.isFinite(pnl)) return;
         equity += pnl;
         peak = Math.max(peak, equity);
@@ -303,7 +304,7 @@ export function updateDashMiniEquityChart(year, monthIndex) {
     const journal = state.appData?.journal || {};
 
     const days = Object.keys(journal)
-        .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && Number.isFinite(parseFloat(journal[d]?.pnl)))
+        .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && Number.isFinite(getEffectiveDayPnl(journal[d])))
         .sort()
         .slice(-15);
 
@@ -317,7 +318,7 @@ export function updateDashMiniEquityChart(year, monthIndex) {
     let currentPullback = 0;
 
     days.forEach((d) => {
-        const pnl = parseFloat(journal[d]?.pnl);
+        const pnl = getEffectiveDayPnl(journal[d]);
         if (!Number.isFinite(pnl)) return;
         cum += pnl;
         const pullback = allTimeEquity[d]?.pullback ?? 0;

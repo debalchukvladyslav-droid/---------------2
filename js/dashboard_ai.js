@@ -3,6 +3,7 @@ import { callGemini, getGeminiKeys } from './ai.js';
 import { buildTradeTypeAIContext } from './trade_type_analysis.js';
 import { saveSettings } from './storage.js';
 import { getDashboardTeamMomentum } from './stats.js';
+import { renderMarkdown } from './sanitize.js';
 
 const CACHE_MS = 6 * 60 * 60 * 1000;
 const DASHBOARD_MENTOR_ENABLED = false;
@@ -364,7 +365,10 @@ function renderMentorConversation() {
     }
     history.slice(-60).forEach((message) => {
         const row = document.createElement('div'); row.className = `dashboard-mentor-message is-${message.role === 'user' ? 'user' : 'mentor'}`;
-        const text = document.createElement('p'); text.textContent = message.text || ''; row.appendChild(text);
+        const text = document.createElement('div'); text.className = 'dashboard-mentor-message-text';
+        if (message.role === 'user') text.textContent = message.text || '';
+        else text.innerHTML = renderMarkdown(message.text || '');
+        row.appendChild(text);
         if (message.action && message.actionLabel) {
             const action = document.createElement('button'); action.type = 'button'; action.dataset.tab = message.action; action.className = 'dashboard-ai-point__action'; action.textContent = `${message.actionLabel} →`; row.appendChild(action);
         }
