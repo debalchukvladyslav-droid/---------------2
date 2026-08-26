@@ -6,28 +6,42 @@ export async function renderJournalScore() {
     const chip = document.getElementById('journal-score-chip');
     if (!chip) return;
     let reviews = [];
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const monthStart = `${year}-${month}-01`;
+    const monthEnd = `${year}-${month}-${String(new Date(year, now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
     const userId = state.currentViewedUserId || state.myUserId;
     if (userId) {
         const { data, error } = await supabase
             .from('stop_reviews')
             .select('trade_date,active,initial_status,final_status')
-            .eq('user_id', userId);
+            .eq('user_id', userId)
+            .gte('trade_date', monthStart)
+            .lte('trade_date', monthEnd);
         if (!error) reviews = data || [];
     }
     const result = calculateJournalScore({
         journal: state.appData?.journal || {},
         reviews,
         learnCache: state.appData?.learnCache,
+        learningDates: state.appData?.settings?.learningHistory || [],
+        now,
     });
     const value = document.getElementById('journal-score-value');
     const label = document.getElementById('journal-score-label');
     const ring = document.getElementById('journal-score-ring');
     if (value) value.textContent = result.score == null ? '—' : String(result.score);
     if (label) label.textContent = result.label;
-    if (ring) ring.style.setProperty('--journal-score', `${(result.score || 0) * 10}%`);
+    const hue = Math.round(Math.max(0, Math.min(10, result.score || 0)) * 12);
+    if (ring) {
+        ring.style.setProperty('--journal-score', `${(result.score || 0) * 10}%`);
+        ring.style.setProperty('--journal-score-color', `hsl(${hue} 78% 46%)`);
+    }
+    chip.style.setProperty('--journal-score-color', `hsl(${hue} 78% 46%)`);
     const days = document.getElementById('journal-score-days');
     const gaps = document.getElementById('journal-score-gaps');
-    if (days) days.textContent = result.activeDays ? `${result.activeDays} активних дн.` : '';
+    if (days) days.textContent = result.activeDays ? `${result.activeDays} дн. поточного місяця` : 'Поточний місяць';
     if (gaps) gaps.innerHTML = (result.gaps || []).length
         ? result.gaps.map(item => `<div class="journal-score-gap"><span>${item.label}</span><strong>${item.done}/${item.total}</strong><i><b style="width:${Math.round((item.done / item.total) * 100)}%"></b></i></div>`).join('')
         : '<div class="journal-score-all-good">Усі основні звички ведуться регулярно.</div>';

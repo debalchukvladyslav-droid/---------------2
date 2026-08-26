@@ -419,6 +419,11 @@ window.summarizeVideo = async function summarizeVideo(vid, title, desc) {
         if (!state.appData.learnCache) state.appData.learnCache = {};
         if (!state.appData.learnCache.summaries) state.appData.learnCache.summaries = {};
         state.appData.learnCache.summaries[vid] = text;
+        state.appData.settings = state.appData.settings || {};
+        const learningHistory = Array.isArray(state.appData.settings.learningHistory) ? state.appData.settings.learningHistory : [];
+        const today = getTodayStr();
+        state.appData.settings.learningHistory = [...new Set([...learningHistory, today])].slice(-104);
+        window.dispatchEvent(new CustomEvent('journal:score-refresh'));
         import('./storage.js').then(m => m.saveToLocal());
     } catch (e) {
         box.textContent = `Помилка: ${e.message}`;

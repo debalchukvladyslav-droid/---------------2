@@ -143,6 +143,7 @@ body {
 
 .journal-score-chip {
     --journal-score: 0%;
+    --journal-score-color: var(--loss);
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -162,7 +163,7 @@ body {
     height: 34px;
     flex: 0 0 34px;
     border-radius: 50%;
-    background: conic-gradient(var(--accent) var(--journal-score), color-mix(in srgb, var(--text-muted) 18%, transparent) 0);
+    background: conic-gradient(var(--journal-score-color) var(--journal-score), color-mix(in srgb, var(--text-muted) 18%, transparent) 0);
     position: relative;
 }
 
@@ -201,7 +202,7 @@ body {
 }
 
 .journal-score-chip.has-score {
-    border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+    border-color: color-mix(in srgb, var(--journal-score-color) 48%, var(--border));
 }
 
 .journal-score-wrap {
@@ -219,8 +220,8 @@ body {
 
 .header-right .journal-score-chip:hover,
 .header-right .journal-score-chip[aria-expanded="true"] {
-    border-color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
+    border-color: var(--journal-score-color);
+    background: color-mix(in srgb, var(--journal-score-color) 8%, var(--bg-card));
 }
 
 .journal-score-popover {
@@ -291,7 +292,7 @@ body {
     display: block;
     height: 100%;
     border-radius: inherit;
-    background: var(--accent);
+    background: var(--journal-score-color);
 }
 
 .journal-score-hint {

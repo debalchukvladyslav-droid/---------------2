@@ -114,11 +114,25 @@ test('daily journal work has more weight than learning', () => {
             screenshots: { good: ['one.png'] },
         },
     };
-    const withoutLearning = calculateJournalScore({ journal });
+    const withoutLearning = calculateJournalScore({ journal, now: new Date('2026-07-15T12:00:00Z') });
     const withLearning = calculateJournalScore({
         journal,
         learnCache: { date: '2026-07-01', summaries: { video: 'Конспект' } },
+        now: new Date('2026-07-15T12:00:00Z'),
     });
     assert.equal(withLearning.score - withoutLearning.score, 1);
     assert.ok(withoutLearning.score >= 7);
+});
+
+test('journal score uses only current month and prioritizes PnL plus daily thought', () => {
+    const result = calculateJournalScore({
+        now: new Date('2026-08-20T12:00:00Z'),
+        journal: {
+            '2026-07-31': { pnl: 500, notes: 'Старий місяць', sessionGoal: 'План', sessionDone: true },
+            '2026-08-04': { gross_pnl: 120, notes: 'Головний висновок дня' },
+        },
+    });
+    assert.equal(result.activeDays, 1);
+    assert.equal(result.score, 6);
+    assert.equal(result.gaps[0].label, 'Початок сесії');
 });
