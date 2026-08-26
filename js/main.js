@@ -228,6 +228,18 @@ function stopManualSyncScheduler() {
     manualSyncIntervalId = null;
 }
 
+function runStartupManualSync(userId) {
+    // The primary profile and two calendar months are already visible at this point.
+    // Run exactly the same path as the header sync button, once per app boot.
+    setTimeout(() => {
+        if (!state.USER_DOC_NAME || state.myUserId !== userId) return;
+        const button = document.getElementById('manual-sync-btn');
+        void manualSyncAll(button).catch((error) => {
+            console.warn('[Startup sync]', error?.message || error);
+        });
+    }, 800);
+}
+
 window.manualSyncAll = manualSyncAll;
 window.refreshSidebarAccount = refreshSidebarAccount;
 window.refreshMentorReviewQueue = refreshMentorReviewQueue;
@@ -1373,6 +1385,7 @@ async function bootApp(user) {
         cleanupUnusedAIRequests();
     }, 5000);
     startManualSyncScheduler();
+    runStartupManualSync(user.id || null);
     initOnboarding({ user, saveSettings, switchMainTab });
     setTimeout(() => window._checkSessionModal?.(), 1500);
     setTimeout(() => window._checkSessionReview?.(), 1800);
