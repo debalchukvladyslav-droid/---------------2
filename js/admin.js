@@ -20,11 +20,13 @@ export async function renderAdminPanel() {
     const sessionReviewTestBtn = document.getElementById('admin-session-review-test-btn');
     const botsPanel = document.getElementById('admin-service-bots-panel');
     const polygonPanel = document.getElementById('admin-polygon-panel');
+    const testingPanel = document.getElementById('admin-testing-panel');
     const fullAdmin = state.myRole === 'admin';
     if (sessionReviewTestBtn) sessionReviewTestBtn.hidden = !fullAdmin;
     const dataManager = fullAdmin || state.IS_MENTOR_MODE;
     if (botsPanel) botsPanel.hidden = !fullAdmin;
     if (polygonPanel) polygonPanel.hidden = !fullAdmin;
+    if (testingPanel) testingPanel.hidden = !fullAdmin;
     if (!dataManager) {
         if (refreshUsersBtn) refreshUsersBtn.style.display = 'none';
         if (botsPanel) botsPanel.innerHTML = '';
@@ -67,8 +69,40 @@ export async function renderAdminPanel() {
     if (fullAdmin && polygonPanel) {
         renderMarketCriteriaAdminPanel(polygonPanel);
     }
+    if (fullAdmin && testingPanel) renderAdminTestingPanel(testingPanel);
     if (fullAdmin) renderServiceBotsPanel(profiles || []);
     visibleProfiles.forEach((p) => container.appendChild(buildUserCard(p, teamChoices, { fullAdmin, dataManager })));
+}
+
+function renderAdminTestingPanel(panel) {
+    panel.hidden = false;
+    panel.innerHTML = `
+        <div class="admin-service-bots-head">
+            <div><h4 class="admin-section-title">Тестування</h4><p class="admin-section-subtitle">Ручний запуск функцій першого налаштування без скидання профілю.</p></div>
+            <span class="admin-polygon-state is-active">Лише адмін</span>
+        </div>
+        <div class="admin-polygon-actions"><button type="button" class="btn-admin-action" data-test-auto-table>Автотаблиця</button></div>
+        <p class="admin-polygon-result" data-test-auto-table-result>Шукає точне прізвище у трьох таблицях і запускає автомапінг.</p>`;
+    const button = panel.querySelector('[data-test-auto-table]');
+    const result = panel.querySelector('[data-test-auto-table-result]');
+    button?.addEventListener('click', async () => {
+        if (button.disabled) return;
+        button.disabled = true;
+        result.textContent = 'Перевіряємо три таблиці…';
+        try {
+            const module = await import('./google_sheet_connector.js');
+            const test = await module.autoConnectTraderSheet({ force: true });
+            result.textContent = test?.ok
+                ? `Готово: таблиця «${test.spreadsheetTitle || test.spreadsheetId}», лист «${test.sheetTitle}», полів ${test.mapped || 0}.`
+                : `Не знайдено: ${test?.message || test?.reason || 'невідома причина'}`;
+            showToast(test?.ok ? 'Автотаблиця налаштована' : result.textContent);
+        } catch (error) {
+            result.textContent = `Помилка: ${error?.message || error}`;
+            showToast(result.textContent);
+        } finally {
+            button.disabled = false;
+        }
+    });
 }
 
 function criteriaPairsFromJournal(journal = {}) {

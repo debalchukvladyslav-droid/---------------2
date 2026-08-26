@@ -21,6 +21,8 @@ import {
     getDefaultSpreadsheetTitle,
     getEffectiveSpreadsheetId,
     setGoogleSheetConnectedFlag,
+    autoMapSheetColumns,
+    saveSheetMapping,
 } from './sheet_table.js';
 import { ensureGoogleApi, ensureGoogleIdentity } from './vendor_loader.js';
 import { state } from './state.js';
@@ -58,6 +60,12 @@ const SCOPES_VERSION_KEY = 'sheet_google_scopes_v';
 const SELECTED_SHEET_TITLE_KEY = 'sheet_selected_sheet_title';
 const SHEET_PREVIEW_MAX_ROWS = 60;
 const SHEET_PREVIEW_MAX_COLS = 52;
+const AUTO_TABLE_SPREADSHEET_IDS = [
+    '1A4sPWQTryHs4QofoM1p0oCaYDWcDM_OPwp3fOQEX4Co',
+    '1hw8HRN5w1AhXxrCccMD3dkKHRP86psdRWbKqzG4JXF4',
+    '1A91BIhJONSlJNo8RYwL-KUPLupaNMtAtWXQ-kgwEG24',
+];
+let autoTablePromise = null;
 
 let tokenClient = null;
 let accessToken = null;
@@ -105,6 +113,10 @@ function normalizeSheetTitle(value = '') {
         .trim()
         .toLowerCase()
         .replace(/[\s._-]+/g, '');
+}
+
+function normalizeExactSheetTitle(value = '') {
+    return String(value || '').trim().toLocaleLowerCase('uk-UA').replace(/\s+/g, ' ');
 }
 
 async function resolveViewedProfile() {
@@ -182,6 +194,53 @@ async function fetchSheetsService(params) {
         throw error;
     }
     return data;
+}
+
+export async function autoConnectTraderSheet(options = {}) {
+    const force = options?.force === true;
+    const markerKey = `tj_auto_table_v1:${state.myUserId || cleanDocNick(state.USER_DOC_NAME) || 'anonymous'}`;
+    if (!force && localStorage.getItem(markerKey)) return { ok: true, skipped: true, reason: 'already-checked' };
+    if (autoTablePromise) return autoTablePromise;
+
+    autoTablePromise = (async () => {
+        const profile = await resolveViewedProfile();
+        const lastName = String(profile?.last_name || '').trim();
+        if (!lastName) return { ok: false, reason: 'last-name-missing', message: 'У профілі не заповнено прізвище.' };
+        const wanted = normalizeExactSheetTitle(lastName);
+        const lookupErrors = [];
+
+        for (const spreadsheetId of AUTO_TABLE_SPREADSHEET_IDS) {
+            let metadata;
+            try {
+                metadata = await fetchSheetsService({ action: 'metadata', spreadsheetId });
+            } catch (error) {
+                lookupErrors.push(`${spreadsheetId}: ${error?.message || error}`);
+                continue;
+            }
+            const sheets = (metadata.sheets || []).filter((sheet) => sheet?.title).sort((a, b) => Number(a.index || 0) - Number(b.index || 0));
+            const matched = sheets.find((sheet) => normalizeExactSheetTitle(sheet.title) === wanted);
+            if (!matched) continue;
+
+            setSpreadsheetSheets(sheets, matched.title);
+            rememberSpreadsheet(spreadsheetId, metadata.title || spreadsheetId);
+            await fetchSpreadsheetData(spreadsheetId, matched.title);
+            const mapping = autoMapSheetColumns({ silent: true });
+            if (!mapping?.ok) {
+                localStorage.setItem(markerKey, JSON.stringify({ spreadsheetId, sheetTitle: matched.title, mappingFailed: true, at: new Date().toISOString() }));
+                return { ok: false, reason: mapping?.reason || 'mapping-failed', spreadsheetId, sheetTitle: matched.title, message: 'Лист знайдено, але автомапінг не зміг визначити колонки.' };
+            }
+            await saveSheetMapping();
+            localStorage.setItem(markerKey, JSON.stringify({ spreadsheetId, sheetTitle: matched.title, at: new Date().toISOString() }));
+            return { ok: true, spreadsheetId, spreadsheetTitle: metadata.title || '', sheetTitle: matched.title, mapped: mapping.applied || 0 };
+        }
+
+        if (lookupErrors.length === AUTO_TABLE_SPREADSHEET_IDS.length) {
+            throw new Error(`Не вдалося перевірити жодну з трьох таблиць: ${lookupErrors.join('; ')}`);
+        }
+        localStorage.setItem(markerKey, JSON.stringify({ notFound: true, lastName, at: new Date().toISOString() }));
+        return { ok: false, reason: 'sheet-not-found', lookupErrors, message: `Лист «${lastName}» не знайдено у трьох таблицях.` };
+    })().finally(() => { autoTablePromise = null; });
+    return autoTablePromise;
 }
 
 function indexToColumnLetter(index) {

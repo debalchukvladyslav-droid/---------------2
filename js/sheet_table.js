@@ -1784,6 +1784,15 @@ export function initSheetTableView(options = {}) {
     }
 
     const isImportTabActive = !!el('view-table')?.classList.contains('active');
+    if (isImportTabActive) {
+        void import('./google_sheet_connector.js')
+            .then(async (module) => {
+                const result = await module.autoConnectTraderSheet?.();
+                if (result?.ok && !result.skipped) showToast(`Автотаблиця: знайдено лист «${result.sheetTitle}», мапінг збережено.`);
+                else if (result && !result.ok && result.reason !== 'last-name-missing') console.info('[Auto table]', result.message || result.reason);
+            })
+            .catch((error) => console.warn('[Auto table] first-run check deferred:', error?.message || error));
+    }
     if (!isGoogleSheetPanelOpen() && !options?.forceGoogleRestore) {
         return;
     }
