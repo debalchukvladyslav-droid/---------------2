@@ -476,6 +476,17 @@ function renderMappingStatus() {
     });
 
     host.replaceChildren(fragment);
+
+    const mappedRequired = REQUIRED_MAPPING_KEYS.filter((field) => !!smartFieldChipValue(field)).length;
+    const ready = mappedRequired === REQUIRED_MAPPING_KEYS.length;
+    const readiness = el('sheet-mapping-readiness');
+    const readinessText = el('sheet-mapping-readiness-text');
+    if (readiness) readiness.classList.toggle('is-ready', ready);
+    if (readinessText) {
+        readinessText.textContent = ready
+            ? 'Основні колонки знайдено'
+            : `Потрібно знайти: ${REQUIRED_MAPPING_KEYS.length - mappedRequired}`;
+    }
 }
 
 function getCurrentSpreadsheetId() {

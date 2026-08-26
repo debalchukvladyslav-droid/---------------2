@@ -96,21 +96,40 @@
 
                     <!-- Стан 3: розумний мапінг -->
                     <div id="sheet-smart-mapping" class="sheet-smart-mapping" hidden>
-                        <div class="sheet-mapping-compact-actions">
-                            <button type="button" class="btn-primary sheet-btn-compact" data-action="sheet-auto-map">Автомапінг</button>
-                            <button type="button" class="btn-secondary sheet-btn-compact" data-action="sheet-mapping-edit" aria-expanded="false">Редагувати</button>
+                        <div class="sheet-mapping-welcome">
+                            <div class="sheet-mapping-welcome__copy">
+                                <span class="sheet-mapping-welcome__eyebrow">Налаштування імпорту</span>
+                                <h3>Покажіть сайту, де які дані</h3>
+                                <p>Сайт сам знайде більшість колонок. Вам потрібно лише перевірити результат і зберегти.</p>
+                            </div>
+                            <div class="sheet-mapping-readiness" id="sheet-mapping-readiness">
+                                <span class="sheet-mapping-readiness__dot" aria-hidden="true"></span>
+                                <span id="sheet-mapping-readiness-text">Ще не перевірено</span>
+                            </div>
                         </div>
+
+                        <div class="sheet-mapping-steps" aria-label="Як налаштувати імпорт">
+                            <div class="sheet-mapping-step is-done"><span>1</span><div><strong>Таблицю підключено</strong><small>Файл і лист уже вибрані</small></div></div>
+                            <div class="sheet-mapping-step"><span>2</span><div><strong>Знайдіть колонки</strong><small>Натисніть кнопку автомапінгу</small></div></div>
+                            <div class="sheet-mapping-step"><span>3</span><div><strong>Перевірте і збережіть</strong><small>Дата й тікер обов’язкові</small></div></div>
+                        </div>
+
+                        <div class="sheet-mapping-compact-actions">
+                            <button type="button" class="btn-primary sheet-mapping-primary-action" data-action="sheet-auto-map">Знайти колонки автоматично</button>
+                            <button type="button" class="btn-secondary sheet-mapping-secondary-action" data-action="sheet-mapping-edit" aria-expanded="false">Перевірити або змінити вручну</button>
+                        </div>
+                        <p class="sheet-mapping-safe-note"><span aria-hidden="true">✓</span> Дані в Google Sheets не змінюються — сайт лише читає вибрані колонки.</p>
                         <div id="sheet-mapping-advanced" class="sheet-mapping-advanced" hidden>
                         <div class="sheet-smart-head">
-                            <h3 class="sheet-smart-title">Мапінг колонок</h3>
-                            <p class="sheet-smart-sub">Перший рядок (A1…) — підписи для мапінгу. Старт імпорту береться з вибраної клітинки: якщо для «Дата» обрати A8, таблиця читається з 8-го рядка; усі нижчі рядки з тікером у колонці «Тікер» йдуть у цей день. Формат дати: день-місяць-рік, наприклад 15,05,26 / 15.05.26 / 15/05/26 / 15-05-2026.</p>
+                            <h3 class="sheet-smart-title">Перевірте знайдені колонки</h3>
+                            <p class="sheet-smart-sub">Спочатку перевірте <strong>Дату</strong> і <strong>Тікер</strong> — без них імпорт не запуститься. Інші поля можна залишити порожніми.</p>
                         </div>
 
                         <section class="sheet-grid-picker" aria-labelledby="sheet-grid-picker-title">
                             <div class="sheet-grid-picker__head">
                                 <div>
-                                    <h4 id="sheet-grid-picker-title" class="sheet-grid-picker__title">Вибір з таблиці</h4>
-                                    <p class="sheet-grid-picker__hint">Оберіть поле нижче, потім наведіть або клікніть по клітинці. Наприклад, клік по <strong>A8</strong> для «Дата» вибере колонку <strong>A</strong> і почне рахувати рядки з <strong>8</strong>.</p>
+                                    <h4 id="sheet-grid-picker-title" class="sheet-grid-picker__title">Що звідки брати</h4>
+                                    <p class="sheet-grid-picker__hint">Натисніть назву поля, наприклад <strong>Дата</strong>, а потім натисніть відповідну клітинку в таблиці нижче.</p>
                                 </div>
                                 <div class="sheet-grid-picker__meta">
                                     <div class="sheet-grid-zoom" aria-label="Масштаб таблиці">
