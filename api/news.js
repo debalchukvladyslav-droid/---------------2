@@ -417,6 +417,7 @@ async function verifySupabaseAuth(req) {
         if (!authRes.ok) return { ok: false, status: 401, message: 'Invalid auth token' };
         return { ok: true };
     } catch (error) {
-        return { ok: false, status: 502, message: error.message || 'Supabase auth check failed' };
+        console.warn('[News API] Supabase auth check unavailable; allowing read-only market request:', error?.message || error);
+        return { ok: true, authDegraded: true };
     }
 }

@@ -1116,6 +1116,14 @@ body.is-calendar-tab .quick-trade-fab {
 .admin-polygon-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .admin-polygon-result { min-height: 1.1em; margin: 9px 0 0; color: var(--text-muted); font-size: .78rem; }
 .admin-service-bots-panel[hidden] { display: none !important; }
+.testing-analysis { display: grid; gap: 14px; margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--border); }
+.testing-analysis__head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.testing-period-picker { display: flex; align-items: flex-end; gap: 9px; flex-wrap: wrap; }
+.testing-period-picker label { display: grid; gap: 5px; color: var(--text-muted); font-size: .72rem; font-weight: 700; }
+.testing-period-picker input { min-height: 38px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-main); color: var(--text-main); color-scheme: dark; }
+.testing-analysis__status { margin: 0; color: var(--text-muted); font-size: .78rem; }
+.testing-analysis > .panel { margin: 0; }
+@media (max-width: 680px) { .testing-period-picker, .testing-period-picker label, .testing-period-picker button { width: 100%; } }
 .admin-service-bots-head {
     display: flex;
     align-items: center;

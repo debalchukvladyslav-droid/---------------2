@@ -57,7 +57,6 @@ import { renderDashboardAI, refreshDashboardAI, toggleDashboardAIHistory, rotate
 import { analyzeLossPatterns, renderLossPatternAnalysis } from './loss_pattern_analysis.js';
 import { continueAILearning, evaluateAILearning, initAILearningCenter, renderAILearningCenter, runAILearning, runAIPaperDecision, startNewAILearning, toggleAILearningDay, reviewAILearningExample } from './ai_learning.js';
 import { closeCumulativeWeekly, openCumulativeWeekly, saveCumulativeDayloss, toggleCumulativeDayloss } from './cumulative_weekly_ui.js';
-import { initGrandmasterDashboard, renderGrandmasterDashboard, renderTraderDNAGlance } from './grandmaster_dashboard.js';
 import { initTerminalShortcuts } from './terminal_shortcuts.js';
 import { initExcelExport } from './excel_export.js';
 import { initTeamReport, renderTeamReport } from './team_report.js';
@@ -136,8 +135,6 @@ window.sendDashboardMentorMessage = sendDashboardMentorMessage;
 window.switchDashboardMentorTab = switchDashboardMentorTab;
 window.analyzeLossPatterns = analyzeLossPatterns;
 window.renderLossPatternAnalysis = renderLossPatternAnalysis;
-window.renderGrandmasterDashboard = renderGrandmasterDashboard;
-window.renderTraderDNAGlance = renderTraderDNAGlance;
 
 let manualSyncInProgress = false;
 let manualSyncIntervalId = null;
@@ -1333,9 +1330,6 @@ async function bootApp(user) {
     startInitTimeout();
     try {
         await ensureAppShellLoaded();
-        document.querySelectorAll('.trader-dna-nav-item').forEach((item) => {
-            item.classList.toggle('initially-hidden', state.myRole !== 'admin');
-        });
         document.querySelectorAll('.testing-nav-item, .testing-tab-mobile').forEach((item) => {
             item.classList.toggle('initially-hidden', state.myRole !== 'admin');
         });
@@ -1346,7 +1340,6 @@ async function bootApp(user) {
         if (errEl) errEl.style.display = 'none';
 
         await initializeApp();
-        initGrandmasterDashboard();
         initTerminalShortcuts();
 
         if (canAccessMentorReviewQueue()) {
@@ -1417,7 +1410,7 @@ function showLoginScreen() {
     document.querySelectorAll('.mentor-review-nav-item').forEach((el) => {
         el.classList.add('initially-hidden');
     });
-    document.querySelectorAll('.admin-nav-item, .admin-tab-mobile, .testing-nav-item, .testing-tab-mobile, .trader-dna-nav-item').forEach((el) => {
+    document.querySelectorAll('.admin-nav-item, .admin-tab-mobile, .testing-nav-item, .testing-tab-mobile').forEach((el) => {
         el.classList.add('initially-hidden');
     });
     setMentorReviewNavBadges(0);

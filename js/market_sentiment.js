@@ -1,4 +1,4 @@
-import { supabase } from './supabase.js';
+import { fetchWithSession } from './authenticated_fetch.js';
 
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const CACHE_KEY = 'pj:market-sentiment:fear-greed:v1';
@@ -7,17 +7,6 @@ const CNN_FEAR_GREED_PAGE = 'https://www.cnn.com/markets/fear-and-greed';
 
 let memoryCache = { ts: 0, payload: null };
 let pendingRequest = null;
-
-async function getAccessToken() {
-    try {
-        const { data, error } = await supabase.auth.getSession();
-        if (error) throw error;
-        return data?.session?.access_token || '';
-    } catch (error) {
-        console.warn('[MarketSentiment] auth token unavailable:', error);
-        return '';
-    }
-}
 
 function loadPersistentCache() {
     try {
@@ -56,13 +45,9 @@ async function fetchMarketSentiment(force = false) {
         }
     }
 
-    const token = await getAccessToken();
-    if (!token) throw new Error('Active session required');
-
-    const headers = { Authorization: `Bearer ${token}` };
-    let response = await fetch('/api/fear-greed', { headers });
+    let response = await fetchWithSession('/api/fear-greed');
     if (response.status === 404 && location.hostname !== '127.0.0.1' && location.hostname !== 'localhost') {
-        response = await fetch(PROXY_FALLBACK, { headers });
+        response = await fetchWithSession(PROXY_FALLBACK);
     }
 
     const data = await response.json().catch(() => ({}));

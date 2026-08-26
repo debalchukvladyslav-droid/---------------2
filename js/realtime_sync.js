@@ -20,7 +20,6 @@ async function refresh(kind, payload = null) {
             }
         }
         window.renderTradesDatagrid?.();
-        window.renderTraderDNAGlance?.();
         window.renderDashboardAI?.();
     } else {
         window.renderGrandmasterDashboard?.();

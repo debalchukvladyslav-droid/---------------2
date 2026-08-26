@@ -1,8 +1,8 @@
 import { state } from './state.js';
-import { supabase } from './supabase.js';
 import { callGemini, getGeminiKeys } from './ai.js';
 import { loadTradeDays } from './storage.js';
 import { safeExternalUrl, sanitizeHTML } from './sanitize.js';
+import { fetchWithSession } from './authenticated_fetch.js';
 
 const CLIENT_CACHE_TTL_MS = 2 * 60 * 1000;
 const NEWS_CACHE_VERSION = 'uk-v6';
@@ -119,17 +119,6 @@ function getLastTradeDayNewsContext(limit = 8) {
     return { date: latestDate, tickers, fromTs, toTs };
 }
 
-async function getAccessToken() {
-    try {
-        const { data, error } = await supabase.auth.getSession();
-        if (error) throw error;
-        return data?.session?.access_token || '';
-    } catch (error) {
-        console.warn('[News] auth token unavailable:', error);
-        return '';
-    }
-}
-
 async function fetchDashboardNews(force = false) {
     await loadTradeDays();
     if (document.getElementById('view-dash')?.classList.contains('active') && window.renderView) {
@@ -151,9 +140,6 @@ async function fetchDashboardNews(force = false) {
         }
     }
 
-    const token = await getAccessToken();
-    if (!token) throw new Error('Потрібна активна сесія');
-
     const qs = new URLSearchParams();
     if (tickers.length) qs.set('tickers', tickers.join(','));
     if (newsContext.fromTs && newsContext.toTs) {
@@ -161,15 +147,14 @@ async function fetchDashboardNews(force = false) {
         qs.set('toTs', String(newsContext.toTs));
     }
     const requestPath = `/api/news?${qs.toString()}`;
-    const headers = { Authorization: `Bearer ${token}` };
     const isLocalHost = location.hostname === '127.0.0.1' || location.hostname === 'localhost';
     if (isLocalHost) {
         throw new Error('News API недоступний на localhost (CORS). Відкрийте застосунок на production-домені.');
     }
 
-    let response = await fetch(requestPath, { headers });
+    let response = await fetchWithSession(requestPath);
     if (response.status === 404) {
-        response = await fetch(`${NEWS_PROXY_FALLBACK}?${qs.toString()}`, { headers });
+        response = await fetchWithSession(`${NEWS_PROXY_FALLBACK}?${qs.toString()}`);
     }
 
     // Backend degraded mode: avoid repeated failing requests on server 5xx.

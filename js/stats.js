@@ -8,7 +8,6 @@ import { ensureChartJs } from './vendor_loader.js';
 import { buildTradeTypeInsightRows } from './trade_type_analysis.js';
 import { getEffectiveDayPnl } from './trade_filters.js';
 import { buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets, buildSummaryByDateWeekdayPnl, combineStatsSheetRows } from './stats_sheet_metrics.js';
-import { renderBestExitAnalysis } from './best_exit_analysis.js';
 import { buildMarketCriteriaGroups } from './market_criteria_analysis.js';
 
 // ─── STATS CACHE ───────────────────────────────────────────────────────────────────────────────
@@ -3083,7 +3082,7 @@ function renderStatsTradeTypeInsights({ journal, filters, tradeTypes, settings =
     }).join('');
 }
 
-function renderMarketCriteriaAnalysis(journal, dates, tradeType = '') {
+export function renderMarketCriteriaAnalysis(journal, dates, tradeType = '') {
     const root = document.getElementById('stats-market-criteria-content');
     if (!root) return;
     const groups = buildMarketCriteriaGroups(journal, dates, tradeType);
@@ -3268,15 +3267,6 @@ export function renderStatsTab() {
     const bestExitDates = hasExplicitBestExitPeriod
         ? new Set(filteredEntries.map((entry) => entry.dateStr))
         : null;
-    void renderBestExitAnalysis({
-        journal: bestExitJournal,
-        periodDates: bestExitDates,
-        sourceType: state.statsSourceSelection?.type || 'current',
-        periodLabel: hasExplicitBestExitPeriod
-            ? (document.getElementById('stats-period-trigger-label')?.textContent || 'Вибраний період')
-            : 'За весь час',
-    });
-    renderMarketCriteriaAnalysis(statsJournal, new Set(filteredEntries.map((entry) => entry.dateStr)), ttFilter || '');
     const longHorizon = !!equityAnalysis.longHorizon;
     const worstDrawdownAbs = Math.abs(equityAnalysis.worstDrawdown);
     const peakEquity = Math.max(...equityAnalysis.rows.map(row => row.equity), 0);

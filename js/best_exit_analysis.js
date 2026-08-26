@@ -269,7 +269,7 @@ function renderSummary(container, summary, unavailable = 0, logToConsole = true)
         void window.openTradesAtDayIndex?.(date, tradeIndex, identity);
     }));
     container.querySelector('[data-best-exit-period-open]')?.addEventListener('click', () => {
-        const trigger = document.getElementById('stats-period-trigger');
+        const trigger = document.getElementById('testing-analysis-period') || document.getElementById('stats-period-trigger');
         trigger?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         setTimeout(() => trigger?.click(), 220);
     });
