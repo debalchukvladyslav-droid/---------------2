@@ -7,7 +7,7 @@ import { reviewReasonsForDay } from './review_signals.js';
 import { updateDashMiniEquityChart } from './dash_mini_chart.js';
 import { hideGlobalLoader, setElementLoading, showGlobalLoader } from './loading.js';
 import { findScreenshotsForTicker, getStorageUrl, openScreenshotForTrade } from './gallery.js';
-import { getCalendarDayResult, getEffectiveDayPnl, hasImportedNetPnl, isSheetOnlyPnl, visibleTradeRows } from './trade_filters.js';
+import { getCalendarDayResult, getEffectiveDayPnl, isSheetOnlyPnl, visibleTradeRows } from './trade_filters.js';
 import { pickSheetRowsSource } from './datagrid_rows.js';
 import { getNyseDaySchedule } from './nyse_calendar.js';
 
@@ -426,8 +426,8 @@ function fillSelectedDateUI(dateStr) {
 
     const dayData = state.appData.journal[dateStr] || {};
     const sheetOnlyPnl = isSheetOnlyPnl(dayData);
-    const importedNet = hasImportedNetPnl(dayData) ? getEffectiveDayPnl(dayData) : null;
-    document.getElementById('trade-pnl').value = importedNet !== null ? importedNet.toFixed(2) : '';
+    const netPnl = parseDecimalInput(dayData.pnl);
+    document.getElementById('trade-pnl').value = netPnl !== null ? netPnl.toFixed(2) : '';
     document.getElementById('trade-gross').value = formatStoredDecimal(dayData.gross_pnl);
     document.getElementById('trade-comm').value = !sheetOnlyPnl ? formatStoredDecimal(dayData.commissions) : '';
     document.getElementById('trade-locates').value = !sheetOnlyPnl ? formatStoredDecimal(dayData.locates) : '';
@@ -633,6 +633,7 @@ export function saveEntry() {
     });
 
     let kfValMain = document.getElementById('trade-kf').value;
+    const pnlValRaw = document.getElementById('trade-pnl').value;
     const grossValRaw = document.getElementById('trade-gross').value;
     const commValRaw = document.getElementById('trade-comm').value;
     const locValRaw = document.getElementById('trade-locates').value;
@@ -641,7 +642,7 @@ export function saveEntry() {
     let oldData = state.appData.journal[state.selectedDateStr] || {};
     let dayData = {
         ...oldData,
-        pnl: hasImportedNetPnl(oldData) ? (oldData.pnl ?? null) : null,
+        pnl: parseDecimalInput(pnlValRaw),
         gross_pnl: parseDecimalInput(grossValRaw),
         commissions: parseDecimalInput(commValRaw),
         locates: parseDecimalInput(locValRaw),
