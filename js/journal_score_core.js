@@ -42,7 +42,7 @@ export function isJournalActivityDay(day) {
 }
 
 function dailyCore(day) {
-    const checks = { pnl: hasPnl(day), thought: hasText(day.notes) || hasText(day.nextSessionImprovement), sessionStart: hasText(day.sessionGoal) || hasText(day.sessionPlan) || hasText(day.sessionReadiness), sessionEnd: day.sessionDone === true || day.sessionReviewDone === true || hasText(day.nextSessionImprovement), screenshots: screenshotsCount(day) > 0 };
+    const checks = { pnl: hasPnl(day), thought: hasText(day.notes) || hasText(day.nextSessionImprovement) };
     return { checks };
 }
 
@@ -56,32 +56,14 @@ export function calculateJournalScore({ journal = {}, reviews = [], learnCache =
     const monthEntries = Object.entries(journal).filter(([date, day]) => date.startsWith(prefix) && workDateSet.has(date) && isJournalActivityDay(day));
     const workDays = workDates.length;
 
-    const habits = {
-        core: { label: 'PnL + думка дня', done: 0, total: workDays, weight: 10 },
-        pnl: { label: 'PnL дня', done: 0, total: workDays, weight: 5 },
-        thought: { label: 'Думка або висновок дня', done: 0, total: workDays, weight: 5 },
-        sessionStart: { label: 'Початок сесії', done: 0, total: workDays, weight: 3 },
-        sessionEnd: { label: 'Завершення сесії', done: 0, total: workDays, weight: 3 },
-        screenshots: { label: 'Розбір скріншотів', done: 0, total: workDays, weight: 2 },
-    };
+    const core = { label: 'PnL + думка дня', done: 0, total: workDays, weight: 10 };
     monthEntries.forEach(([, day]) => {
         const result = dailyCore(day);
-        Object.keys(result.checks).forEach((key) => { if (result.checks[key]) habits[key].done += 1; });
-        if (result.checks.pnl && result.checks.thought) habits.core.done += 1;
+        if (result.checks.pnl && result.checks.thought) core.done += 1;
     });
 
-    const relevantReviews = reviews.filter((review) => review?.active && String(review.trade_date || '').startsWith(prefix));
-    const completedReviews = relevantReviews.filter((review) => review.final_status === 'normal' || review.final_status === 'bad').length;
-    if (relevantReviews.length) habits.stops = { label: 'Розбір стопів', done: completedReviews, total: relevantReviews.length, weight: 2 };
-
-    const activeWeeks = new Set(workDates.filter((date) => date <= todayKey).map(weekKey));
-    const recordedLearningDates = new Set([...(Array.isArray(learningDates) ? learningDates : []), learnCache?.date].filter((date) => String(date || '').startsWith(prefix)));
-    const learnedWeeks = new Set([...recordedLearningDates].map(weekKey));
-    const learningDone = [...activeWeeks].filter((week) => learnedWeeks.has(week)).length;
-    habits.learning = { label: 'Навчання раз на тиждень', done: learningDone, total: activeWeeks.size, weight: 1 };
-
-    const score = workDays ? Math.max(0, Math.min(10, Math.round((habits.core.done / workDays) * 100) / 10)) : 0;
+    const score = workDays ? Math.max(0, Math.min(10, Math.round((core.done / workDays) * 100) / 10)) : 0;
     const label = score >= 8.5 ? 'Системно' : score >= 7 ? 'Добре' : score >= 5 ? 'Набирає ритм' : 'Потрібна увага';
-    const gaps = Object.values(habits).map((item) => ({ ...item, ratio: item.total ? item.done / item.total : 1 })).filter((item) => item.ratio < .8).sort((a, b) => b.weight - a.weight || a.ratio - b.ratio).slice(0, 6);
-    return { score, label, activeDays: habits.core.done, workDays, absentDays: absentDates.size, gaps, details: 'Поточний місяць до сьогодні включно. Оцінка — це частка вже минулих робочих днів, у яких одночасно записані PnL і думка дня. Майбутні та позначені як відсутність дні не входять у план.' };
+    const gaps = [{ ...core, ratio: core.total ? core.done / core.total : 1 }];
+    return { score, label, activeDays: core.done, workDays, absentDays: absentDates.size, gaps, details: 'Поточний місяць до сьогодні включно. Оцінка — це частка вже минулих робочих днів, у яких одночасно записані PnL і думка дня. Майбутні та позначені як відсутність дні не входять у план.' };
 }

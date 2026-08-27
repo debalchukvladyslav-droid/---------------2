@@ -31,6 +31,7 @@ export async function renderJournalScore() {
     const value = document.getElementById('journal-score-value');
     const label = document.getElementById('journal-score-label');
     const ring = document.getElementById('journal-score-ring');
+    const popover = document.getElementById('journal-score-popover');
     if (value) value.textContent = String(result.score ?? 0);
     if (label) label.textContent = result.label;
     const hue = Math.round(Math.max(0, Math.min(10, result.score || 0)) * 12);
@@ -39,6 +40,7 @@ export async function renderJournalScore() {
         ring.style.setProperty('--journal-score-color', `hsl(${hue} 78% 46%)`);
     }
     chip.style.setProperty('--journal-score-color', `hsl(${hue} 78% 46%)`);
+    if (popover) popover.style.setProperty('--journal-score-color', `hsl(${hue} 78% 46%)`);
     const days = document.getElementById('journal-score-days');
     const gaps = document.getElementById('journal-score-gaps');
     if (days) days.textContent = `${result.activeDays || 0}/${result.workDays || 0} днів із PnL + думкою`;
