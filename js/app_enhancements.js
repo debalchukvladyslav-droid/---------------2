@@ -290,6 +290,15 @@ function activateAction(action, trigger, event = null) {
         'screens-distribution-toggle': () => window.toggleScreensDistribution?.(),
         'screens-settings-toggle': () => window.toggleScreensSettings?.(),
         'screens-settings-open': () => window.toggleScreensSettings?.(true),
+        'drive-instruction-toggle': () => {
+            const panel = document.getElementById('drive-folder-instruction');
+            if (!panel) return;
+            const expanded = trigger?.getAttribute('aria-expanded') !== 'true';
+            panel.hidden = !expanded;
+            trigger?.setAttribute('aria-expanded', String(expanded));
+            if (trigger) trigger.textContent = expanded ? 'Сховати інструкцію' : 'Показати інструкцію';
+            if (expanded) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        },
         'leader-screens': () => window.viewLeaderScreens?.(),
         'tag-search-run': () => window.runTagSearch?.(),
         'tag-search-clear': () => window.clearTagSearch?.(),

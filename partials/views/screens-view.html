@@ -61,6 +61,27 @@
                             <section class="screens-settings-card">
                                 <h3 class="settings-title">Google Drive</h3>
                                 <p class="muted-copy">Сервісний акаунт автоматично читає скріншоти з папки без входу користувача в Google.</p>
+                                <button class="btn-secondary btn-auto drive-instruction-trigger" type="button" data-action="drive-instruction-toggle" aria-expanded="false" aria-controls="drive-folder-instruction">Показати інструкцію</button>
+                                <div class="drive-folder-instruction" id="drive-folder-instruction" hidden>
+                                    <div class="drive-instruction-head">
+                                        <div>
+                                            <strong>Як підключити папку</strong>
+                                            <p>Три короткі кроки. Натисніть на зображення, щоб відкрити його повністю.</p>
+                                        </div>
+                                    </div>
+                                    <article class="drive-instruction-step">
+                                        <div><span>1</span><strong>Відкрийте доступ</strong><p>У папці Google Drive натисніть її назву → «Поділитися» → «Відкрити доступ».</p></div>
+                                        <a href="icons/drive-instructions/01-open-access.jpg" target="_blank" rel="noopener"><img src="icons/drive-instructions/01-open-access.jpg" alt="Як відкрити налаштування доступу до папки Google Drive" loading="lazy"></a>
+                                    </article>
+                                    <article class="drive-instruction-step">
+                                        <div><span>2</span><strong>Додайте сервісний акаунт</strong><p>Скопіюйте пошту нижче, додайте її до папки та виберіть роль «Редактор».</p></div>
+                                        <a href="icons/drive-instructions/02-add-editor.jpg" target="_blank" rel="noopener"><img src="icons/drive-instructions/02-add-editor.jpg" alt="Як додати сервісний акаунт з роллю Редактор" loading="lazy"></a>
+                                    </article>
+                                    <article class="drive-instruction-step">
+                                        <div><span>3</span><strong>Вставте посилання</strong><p>Скопіюйте повне посилання папки з адресного рядка або лише ID після «/folders/».</p></div>
+                                        <a href="icons/drive-instructions/03-folder-id.jpg" target="_blank" rel="noopener"><img src="icons/drive-instructions/03-folder-id.jpg" alt="Де знайти ID папки Google Drive" loading="lazy"></a>
+                                    </article>
+                                </div>
                                 <div class="settings-row initially-hidden">
                                     <button class="btn-secondary btn-auto" id="drive-connect-btn" data-action="drive-connect">Підключити Google Drive</button>
                                     <button class="btn-secondary btn-auto drive-disconnect-btn initially-hidden" id="drive-disconnect-btn" data-action="drive-disconnect">Вийти</button>
@@ -70,7 +91,7 @@
                                     <div class="drive-service-head">
                                         <div>
                                             <div class="drive-service-title">Синхронізація без входу в Google</div>
-                                            <p class="muted-copy-sm">Додайте цю пошту у доступ до папки Drive як Viewer, вставте посилання або ID папки, потім натисніть синхронізацію.</p>
+                                            <p class="muted-copy-sm">Додайте цю пошту у доступ до папки Drive як Редактор, вставте посилання або ID папки, потім натисніть синхронізацію.</p>
                                         </div>
                                         <button class="btn-primary btn-auto" data-action="drive-service-sync">Синхронізувати</button>
                                     </div>

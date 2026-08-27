@@ -3440,6 +3440,77 @@ body[data-theme="light"] .settings-dayloss-row input[type="month"] {
     background: color-mix(in srgb, var(--bg-main) 45%, transparent);
 }
 
+.drive-instruction-trigger {
+    margin-top: 10px;
+}
+
+.drive-folder-instruction {
+    display: grid;
+    gap: 10px;
+    margin-top: 10px;
+    padding: 12px;
+    border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--accent) 5%, var(--bg-main));
+}
+
+.drive-folder-instruction[hidden] {
+    display: none;
+}
+
+.drive-instruction-head p,
+.drive-instruction-step p {
+    margin: 4px 0 0;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    line-height: 1.45;
+}
+
+.drive-instruction-step {
+    display: grid;
+    grid-template-columns: minmax(150px, 0.7fr) minmax(240px, 1.3fr);
+    gap: 12px;
+    align-items: center;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: color-mix(in srgb, var(--card-bg) 88%, transparent);
+}
+
+.drive-instruction-step span {
+    display: inline-grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    margin-right: 7px;
+    border-radius: 50%;
+    color: white;
+    background: var(--accent);
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.drive-instruction-step a {
+    display: block;
+    overflow: hidden;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+}
+
+.drive-instruction-step img {
+    display: block;
+    width: 100%;
+    max-height: 190px;
+    object-fit: contain;
+    background: #fff;
+}
+
+@media (max-width: 700px) {
+    .drive-instruction-step {
+        grid-template-columns: 1fr;
+    }
+}
+
 .drive-service-head {
     display: flex;
     align-items: flex-start;
