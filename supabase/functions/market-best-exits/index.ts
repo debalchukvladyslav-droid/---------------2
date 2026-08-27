@@ -318,7 +318,7 @@ async function runStatelessPolygon(items: any[], targetMinute: number | null) {
     }).filter(Boolean);
 }
 
-Deno.serve(async (req) => {
+async function handleMarketBestExits(req: Request) {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(req) });
     if (POLYGON_DISABLED) return json(req, { message: 'Polygon тимчасово вимкнено адміністратором.', results: [] }, 503);
     if (req.method !== 'POST') return json(req, { message: 'Method not allowed' }, 405);
@@ -349,8 +349,9 @@ Deno.serve(async (req) => {
         if (body.action === 'admin-status') {
             const control = await readPolygonControl();
             const countsResponse = await rest('market_low_jobs?select=status');
-            const rows = countsResponse.ok ? await countsResponse.json() : [];
-            const counts = (rows || []).reduce((acc: Record<string, number>, row: any) => { acc[row.status] = (acc[row.status] || 0) + 1; return acc; }, {});
+            const rowsPayload = countsResponse.ok ? await countsResponse.json().catch(() => []) : [];
+            const rows = Array.isArray(rowsPayload) ? rowsPayload : [];
+            const counts = rows.reduce((acc: Record<string, number>, row: any) => { acc[row.status] = (acc[row.status] || 0) + 1; return acc; }, {});
             return json(req, { ...control, counts });
         }
         if (body.action === 'admin-pause') {
@@ -538,4 +539,14 @@ Deno.serve(async (req) => {
         if (cached?.[0] && (targetMinute == null || (timePrice && stopScenario.available))) results.push({ symbol: item.symbol, date: item.date, entryMinute: item.entryMinute, low: Number(cached[0].low_price), lowTime: cached[0].low_at, cached: false, ...(timePrice ? { targetMinute, priceMinute: Number(timePrice.target_minute), priceAtTime: Number(timePrice.close_price), priceTime: timePrice.price_at, ...stopScenario.result } : {}) });
     }
     return json(req, { ...(adminQueueResult || {}), results, queued: adminQueueResult?.queued ?? Math.max(0, uniqueMissing.length - results.length), processed: (claimed || []).length, polygonPaused: control.paused });
+}
+
+Deno.serve(async (req) => {
+    try {
+        return await handleMarketBestExits(req);
+    } catch (error) {
+        const message = String(error?.message || error || 'Unknown server error').slice(0, 1000);
+        console.error('[market-best-exits] unhandled error', error);
+        return json(req, { message, code: 'UNHANDLED_EDGE_ERROR' }, 500);
+    }
 });
