@@ -81,11 +81,9 @@ function visitSheetRows(sheetRows, options, visitor) {
     return seen.size;
 }
 
-export function buildSummaryByDateWeekdayPnl(entries = [], tradeTypeFilter = null) {
+export function buildCalendarWeekdayPnl(entries = [], tradeTypeFilter = null) {
     const totals = [0, 0, 0, 0, 0];
-    if (tradeTypeFilter) return totals;
     entries.forEach((entry) => {
-        if (entry?.data?.fondexxSource !== 'summary-by-date') return;
         const day = entry?.dateObj instanceof Date ? entry.dateObj.getDay() : new Date(`${entry?.dateStr}T12:00:00`).getDay();
         const pnl = Number(entry?.pnl);
         if (day >= 1 && day <= 5 && Number.isFinite(pnl)) totals[day - 1] += pnl;
@@ -153,17 +151,41 @@ function iterMatchedSheetTrades(entries = [], tradeTypeFilter = null, visitor = 
 }
 
 export function buildHourlyKfBuckets(entries = [], tradeTypeFilter = null, options = {}) {
-    const buckets = new Map([4, 5, 6, 7, 8, 9].map(hour => [hour, { hour, pnl: 0, kf: 0, trades: 0, pnlRows: 0, kfRows: 0 }]));
+    const hours = Array.from({ length: 9 }, (_, index) => index + 4);
+    const buckets = new Map(hours.map(hour => [hour, { hour, pnl: 0, kf: 0, trades: 0, pnlRows: 0, kfRows: 0 }]));
     const entriesByDate = new Map(entries.map((entry) => [entry?.dateStr, entry]));
+    const usedTradeIndexesByDate = new Map();
     let usedRawSheetRows = false;
 
     visitSheetRows(options.sheetRows || {}, options, (row, sheet, dateStr) => {
             if (!entriesByDate.has(dateStr)) return;
             const entry = entriesByDate.get(dateStr);
             const trades = Array.isArray(entry?.data?.trades) ? entry.data.trades : [];
-                if (tradeTypeFilter && classifyTradeTypeGroup(row) !== tradeTypeFilter) return;
-                const matchIndex = Number(sheet.matchedTradeIndex);
-                if (!Number.isInteger(matchIndex) || matchIndex < 0 || matchIndex >= trades.length) return;
+                const rowSymbol = String(row?.symbol || row?.ticker || sheet?.symbol || sheet?.ticker || '').trim().toUpperCase();
+                const usedIndexes = usedTradeIndexesByDate.get(dateStr) || new Set();
+                let matchIndex = Number(sheet.matchedTradeIndex);
+                const indexedTrade = Number.isInteger(matchIndex) && matchIndex >= 0 && matchIndex < trades.length ? trades[matchIndex] : null;
+                const indexedSymbol = String(indexedTrade?.symbol || indexedTrade?.ticker || '').trim().toUpperCase();
+                if (!indexedTrade || usedIndexes.has(matchIndex) || (rowSymbol && indexedSymbol !== rowSymbol)) {
+                    const candidates = trades
+                        .map((trade, index) => ({ trade, index }))
+                        .filter(({ trade, index }) => {
+                            if (usedIndexes.has(index) || isPureGoogleSheetTrade(trade)) return false;
+                            const tradeSymbol = String(trade?.symbol || trade?.ticker || '').trim().toUpperCase();
+                            return rowSymbol && tradeSymbol === rowSymbol;
+                        });
+                    const sheetPnl = parseSheetNumber(sheet.sheetNet ?? row?.net);
+                    candidates.sort((a, b) => {
+                        if (sheetPnl == null) return a.index - b.index;
+                        const aPnl = parseSheetNumber(a.trade?.net ?? a.trade?.gross_pnl ?? a.trade?.gross);
+                        const bPnl = parseSheetNumber(b.trade?.net ?? b.trade?.gross_pnl ?? b.trade?.gross);
+                        const aDistance = aPnl == null ? Number.POSITIVE_INFINITY : Math.abs(aPnl - sheetPnl);
+                        const bDistance = bPnl == null ? Number.POSITIVE_INFINITY : Math.abs(bPnl - sheetPnl);
+                        return aDistance - bDistance || a.index - b.index;
+                    });
+                    matchIndex = candidates[0]?.index;
+                }
+                if (!Number.isInteger(matchIndex)) return;
                 const matchedTrade = trades[matchIndex];
                 if (!matchedTrade || isPureGoogleSheetTrade(matchedTrade)) return;
                 if (tradeTypeFilter && classifyTradeTypeGroup(matchedTrade) !== tradeTypeFilter) return;
@@ -176,6 +198,8 @@ export function buildHourlyKfBuckets(entries = [], tradeTypeFilter = null, optio
                 if (kf != null) { bucket.kf += kf; bucket.kfRows += 1; }
                 if (pnl != null) { bucket.pnl += pnl; bucket.pnlRows += 1; }
                 bucket.trades += 1;
+                usedIndexes.add(matchIndex);
+                usedTradeIndexesByDate.set(dateStr, usedIndexes);
                 usedRawSheetRows = true;
     });
 
@@ -198,7 +222,7 @@ export function buildHourlyKfBuckets(entries = [], tradeTypeFilter = null, optio
         });
     }
 
-    return [4, 5, 6, 7, 8, 9]
+    return hours
         .filter(hour => hour >= 6 || buckets.get(hour).trades > 0)
         .map(hour => ({
             ...buckets.get(hour),

@@ -39,7 +39,7 @@ const { findTradeIndexByIdentity, getCalendarDayResult, getEffectiveDayPnl, isPu
 const { normalizeBrokerTradeType } = await import('../js/trade_import_utils.js');
 const { duplicateSheetMappingConfig, getCumulativeArchiveSchedule } = await import('../js/sheet_import_modes.js');
 const { detectExactSheetAutoMapping, migrateLegacyClassificationMapping, normalizeExactSheetHeader, relocateSheetDataStartRow } = await import('../js/sheet_auto_mapping.js');
-const { buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets, buildSummaryByDateWeekdayPnl, combineStatsSheetRows, parseSheetProfitRisk } = await import('../js/stats_sheet_metrics.js');
+const { buildCalendarWeekdayPnl, buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets, combineStatsSheetRows, parseSheetProfitRisk } = await import('../js/stats_sheet_metrics.js');
 const { parseDecimalInput } = await import('../js/utils.js');
 const { getZonedClockParts, isEndOfSessionReviewTime } = await import('../js/session_schedule.js');
 const { buildServiceBotSnapshot, hashServiceBotApiKey, hasServiceBotPermission, parseServiceBotRange } = await import('../lib/service_bots.js');
@@ -582,13 +582,13 @@ test('sheet profit risk parser accepts dot, comma, and R suffix values', () => {
     assert.equal(parseSheetProfitRisk('no pnl'), null);
 });
 
-test('weekday PnL uses only Fondexx Summary by date rows', () => {
+test('weekday PnL uses every calendar day regardless of its import source', () => {
     const rows = [
         { dateStr: '2026-07-27', dateObj: new Date(2026, 6, 27), pnl: 100, data: { fondexxSource: 'summary-by-date' } },
         { dateStr: '2026-07-28', dateObj: new Date(2026, 6, 28), pnl: -25, data: { fondexxSource: 'summary-by-date' } },
         { dateStr: '2026-07-29', dateObj: new Date(2026, 6, 29), pnl: 999, data: { fondexxSource: 'trades-report' } },
     ];
-    assert.deepEqual(buildSummaryByDateWeekdayPnl(rows), [100, -25, 0, 0, 0]);
+    assert.deepEqual(buildCalendarWeekdayPnl(rows), [100, -25, 999, 0, 0]);
 });
 
 test('entry price buckets use raw Sheet rows even when no Trades import exists', () => {
@@ -661,6 +661,19 @@ test('hourly results aggregate main and cumulative Sheet sources', () => {
     const rows = buildHourlyKfBuckets(entries, null, { sheetRows });
     assert.deepEqual(rows.find((row) => row.hour === 8), { hour: 8, pnl: -5, kf: -0.25, trades: 1, pnlRows: 1, kfRows: 1, label: '08' });
     assert.deepEqual(rows.find((row) => row.hour === 9), { hour: 9, pnl: 20, kf: 1, trades: 1, pnlRows: 1, kfRows: 1, label: '09' });
+});
+
+test('hourly results recover a stale Sheet index by date and ticker and include entries after 10', () => {
+    const entries = [{ dateStr: '2026-04-02', data: { trades: [
+        { symbol: 'OLD', opened: '2026-04-02 09:35:00', net: 50 },
+        { symbol: 'LUCY', opened: '2026-04-02 10:25:00', net: -30 },
+    ] } }];
+    const sheetRows = { main: { '2026-04-02': [
+        { symbol: 'LUCY', sheet: { sheetRow: 8, matchedTradeIndex: 0, sheetNet: -42, profitRisk: '-1.2R' } },
+    ] } };
+
+    const hourTen = buildHourlyKfBuckets(entries, null, { sheetRows }).find((row) => row.hour === 10);
+    assert.deepEqual(hourTen, { hour: 10, pnl: -42, kf: -1.2, trades: 1, pnlRows: 1, kfRows: 1, label: '10' });
 });
 
 test('main and cumulative rows remain separate when they use the same spreadsheet id', () => {

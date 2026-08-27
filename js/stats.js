@@ -7,7 +7,7 @@ import { escapeHtml, parseDecimalInput } from './utils.js';
 import { ensureChartJs } from './vendor_loader.js';
 import { buildTradeTypeInsightRows } from './trade_type_analysis.js';
 import { getEffectiveDayPnl } from './trade_filters.js';
-import { buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets, buildSummaryByDateWeekdayPnl, combineStatsSheetRows } from './stats_sheet_metrics.js';
+import { buildCalendarWeekdayPnl, buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets, combineStatsSheetRows } from './stats_sheet_metrics.js';
 import { buildMarketCriteriaGroups } from './market_criteria_analysis.js';
 
 // ─── STATS CACHE ───────────────────────────────────────────────────────────────────────────────
@@ -2378,7 +2378,7 @@ function buildComparePaneSummary(entries, settings = {}, tradeTypeFilter = null,
     let grossProfit = 0, grossLoss = 0;
     let bestDay = 0, worstDay = 0;
     let totalComm = 0, totalLocates = 0;
-    let dayTotals = buildSummaryByDateWeekdayPnl(entries, tradeTypeFilter);
+    let dayTotals = buildCalendarWeekdayPnl(entries, tradeTypeFilter);
     let periodCumData = [];
     let periodLabels = [];
     let periodSum = 0;
@@ -3147,7 +3147,7 @@ export function renderStatsTab() {
     let winDays = 0, lossDays = 0, beDays = 0;
     let grossProfit = 0, grossLoss = 0;
     let bestDay = 0, worstDay = 0;
-    let dayTotals = buildSummaryByDateWeekdayPnl(filteredEntries, ttFilter);
+    let dayTotals = buildCalendarWeekdayPnl(filteredEntries, ttFilter);
     let totalComm = 0, totalLocates = 0;
     
     let periodLabels = []; let periodCumData = []; let periodSum = 0;
