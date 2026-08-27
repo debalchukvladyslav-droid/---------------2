@@ -42,7 +42,12 @@ export function isJournalActivityDay(day) {
 }
 
 function dailyCore(day) {
-    const checks = { pnl: hasPnl(day), thought: hasText(day.notes) || hasText(day.nextSessionImprovement) };
+    const checks = {
+        pnl: hasPnl(day),
+        thought: hasText(day.notes) || hasText(day.nextSessionImprovement),
+        sessionStart: hasText(day.sessionGoal) || hasText(day.sessionPlan) || hasText(day.sessionReadiness),
+        sessionEnd: day.sessionDone === true || day.sessionReviewDone === true || hasText(day.nextSessionImprovement),
+    };
     return { checks };
 }
 
@@ -57,13 +62,29 @@ export function calculateJournalScore({ journal = {}, reviews = [], learnCache =
     const workDays = workDates.length;
 
     const core = { label: 'PnL + думка дня', done: 0, total: workDays, weight: 10 };
+    const session = { label: 'Початок + завершення сесії', done: 0, total: workDays, weight: 6 };
     monthEntries.forEach(([, day]) => {
         const result = dailyCore(day);
         if (result.checks.pnl && result.checks.thought) core.done += 1;
+        if (result.checks.sessionStart) session.done += 0.5;
+        if (result.checks.sessionEnd) session.done += 0.5;
     });
 
-    const score = workDays ? Math.max(0, Math.min(10, Math.round((core.done / workDays) * 100) / 10)) : 0;
+    const coreRatio = workDays ? core.done / workDays : 0;
+    const sessionRatio = workDays ? session.done / workDays : 0;
+    const relevantReviews = reviews.filter((review) => {
+        const date = String(review?.trade_date || '');
+        return review?.active && date.startsWith(prefix) && date <= todayKey && workDateSet.has(date);
+    });
+    const completedReviews = relevantReviews.filter((review) => review.final_status === 'normal' || review.final_status === 'bad').length;
+    const stops = { label: 'Розбір стопів', done: completedReviews, total: relevantReviews.length, weight: 1 };
+    const stopsRatio = stops.total ? stops.done / stops.total : 0;
+    const score = workDays ? Math.max(0, Math.min(10, Math.round((coreRatio * 6 + sessionRatio * 3 + stopsRatio) * 10) / 10)) : 0;
     const label = score >= 8.5 ? 'Системно' : score >= 7 ? 'Добре' : score >= 5 ? 'Набирає ритм' : 'Потрібна увага';
-    const gaps = [{ ...core, ratio: core.total ? core.done / core.total : 1 }];
-    return { score, label, activeDays: core.done, workDays, absentDays: absentDates.size, gaps, details: 'Поточний місяць до сьогодні включно. Оцінка — це частка вже минулих робочих днів, у яких одночасно записані PnL і думка дня. Майбутні та позначені як відсутність дні не входять у план.' };
+    const gaps = [
+        { ...core, ratio: core.total ? core.done / core.total : 1 },
+        { ...session, ratio: session.total ? session.done / session.total : 1 },
+        { ...stops, ratio: stopsRatio },
+    ];
+    return { score, label, activeDays: core.done, workDays, absentDays: absentDates.size, gaps, details: 'Поточний місяць до сьогодні включно. PnL + думка дня дають 60% оцінки. Сесія дає 30%: початок і завершення мають по половині денного бала. Розбір усіх стопів дає 10%. Майбутні та позначені як відсутність дні не входять у план.' };
 }

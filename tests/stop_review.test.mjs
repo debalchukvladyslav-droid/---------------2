@@ -146,7 +146,7 @@ test('journal score depends only on working days with both PnL and a daily thoug
     });
     assert.equal(withLearning.score, withoutLearning.score);
     assert.equal(withoutLearning.activeDays, 1);
-    assert.equal(withoutLearning.score, 1);
+    assert.equal(withoutLearning.score, 0.9);
 });
 
 test('journal score uses only current month and prioritizes PnL plus daily thought', () => {
@@ -158,7 +158,7 @@ test('journal score uses only current month and prioritizes PnL plus daily thoug
         },
     });
     assert.equal(result.activeDays, 1);
-    assert.equal(result.score, 0.7);
+    assert.equal(result.score, 0.4);
     assert.equal(result.workDays, 14);
     assert.equal(result.gaps[0].label, 'PnL + думка дня');
 });
@@ -174,5 +174,47 @@ test('an absent trader day is removed from journal working-day target', () => {
     assert.equal(result.activeDays, 1);
     assert.equal(result.workDays, 13);
     assert.equal(result.absentDays, 1);
-    assert.equal(result.score, 0.8);
+    assert.equal(result.score, 0.5);
+});
+
+test('session group combines start and end as half a point each with lower score weight', () => {
+    const startOnly = calculateJournalScore({
+        now: new Date('2026-08-03T12:00:00Z'),
+        journal: { '2026-08-03': { gross_pnl: 10, notes: 'Підсумок', sessionGoal: 'За планом' } },
+    });
+    assert.equal(startOnly.workDays, 1);
+    assert.equal(startOnly.score, 7.5);
+    assert.equal(startOnly.gaps[1].done, 0.5);
+    assert.equal(startOnly.gaps[1].total, 1);
+
+    const complete = calculateJournalScore({
+        now: new Date('2026-08-03T12:00:00Z'),
+        journal: { '2026-08-03': { gross_pnl: 10, notes: 'Підсумок', sessionGoal: 'За планом', sessionDone: true } },
+    });
+    assert.equal(complete.score, 9);
+    assert.equal(complete.gaps[1].done, 1);
+});
+
+test('completed stop reviews contribute ten percent of the total journal score', () => {
+    const journal = { '2026-08-03': { gross_pnl: 10, notes: 'Підсумок', sessionGoal: 'За планом', sessionDone: true } };
+    const half = calculateJournalScore({
+        now: new Date('2026-08-03T12:00:00Z'),
+        journal,
+        reviews: [
+            { trade_date: '2026-08-03', active: true, final_status: 'normal' },
+            { trade_date: '2026-08-03', active: true, final_status: 'pending' },
+        ],
+    });
+    assert.equal(half.score, 9.5);
+    assert.deepEqual({ done: half.gaps[2].done, total: half.gaps[2].total }, { done: 1, total: 2 });
+
+    const complete = calculateJournalScore({
+        now: new Date('2026-08-03T12:00:00Z'),
+        journal,
+        reviews: [
+            { trade_date: '2026-08-03', active: true, final_status: 'normal' },
+            { trade_date: '2026-08-03', active: true, final_status: 'bad' },
+        ],
+    });
+    assert.equal(complete.score, 10);
 });
