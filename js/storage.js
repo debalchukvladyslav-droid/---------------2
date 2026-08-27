@@ -837,7 +837,7 @@ export async function initializeApp() {
 
         if (themeRadio) themeRadio.checked = true;
         if (fontRadio) fontRadio.checked = true;
-        if (daylossInput) daylossInput.value = s.defaultDayloss || -100;
+        if (daylossInput) daylossInput.value = s.defaultDayloss || -1000;
         if (daylossMonthInput) daylossMonthInput.value = state.selectedDateStr?.slice(0, 7) || new Date().toISOString().slice(0, 7);
 
         if (s.theme === 'custom' && s.customTheme) {

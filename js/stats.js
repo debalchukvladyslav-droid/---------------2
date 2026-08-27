@@ -1,7 +1,7 @@
 // === js/stats.js ===
 import { supabase } from './supabase.js';
 import { state } from './state.js';
-import { applyAutoTradeTypesData, DEFAULT_TRADE_TYPES, normalizeAppData, getDefaultAppData, normalizeTradeTypesList } from './data_utils.js';
+import { applyAutoTradeTypesData, DEFAULT_TRADE_TYPES, normalizeAppData, getDefaultAppData, normalizeTradeTypesList, resolveMonthlyDayloss } from './data_utils.js';
 import { loadMonth, loadAllMonths, getCurrentViewedUserId, resolveViewedUserId } from './storage.js';
 import { escapeHtml, parseDecimalInput } from './utils.js';
 import { ensureChartJs } from './vendor_loader.js';
@@ -204,12 +204,7 @@ export async function getDashboardTeamMomentum(limit = 3) {
 function getStatsDaylossForDate(settings = {}, dateStr = '') {
     const safeSettings = settings && typeof settings === 'object' ? settings : {};
     const monthKey = /^\d{4}-\d{2}/.test(String(dateStr || '')) ? String(dateStr).slice(0, 7) : '';
-    const monthlyRaw = monthKey && safeSettings.monthlyDayloss && typeof safeSettings.monthlyDayloss === 'object'
-        ? Number(safeSettings.monthlyDayloss[monthKey])
-        : NaN;
-    const fallbackRaw = Number(safeSettings.defaultDayloss ?? safeSettings.daylossLimit ?? -100);
-    const raw = Number.isFinite(monthlyRaw) ? monthlyRaw : fallbackRaw;
-    return Math.abs(Number.isFinite(raw) && raw !== 0 ? raw : -100);
+    return Math.abs(resolveMonthlyDayloss(safeSettings, monthKey));
 }
 
 function getStatsBreakevenBand(settings = {}, dateStr = '') {

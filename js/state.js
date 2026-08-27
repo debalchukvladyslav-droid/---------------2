@@ -35,7 +35,7 @@ export const state = {
             playbookSituations: [],
             ocrPos: 'left', 
             ocrRect: {top: 0, left: 0, width: 250, height: 80}, 
-            defaultDayloss: -100,
+            defaultDayloss: -1000,
             monthlyDayloss: {},
             glassEnabled: true,
             dashboardLayout: null,

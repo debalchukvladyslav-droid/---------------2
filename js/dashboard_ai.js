@@ -4,6 +4,7 @@ import { buildTradeTypeAIContext } from './trade_type_analysis.js';
 import { saveSettings } from './storage.js';
 import { getDashboardTeamMomentum } from './stats.js';
 import { renderMarkdown } from './sanitize.js';
+import { resolveMonthlyDayloss } from './data_utils.js';
 
 const CACHE_MS = 6 * 60 * 60 * 1000;
 const DASHBOARD_MENTOR_ENABLED = false;
@@ -60,7 +61,7 @@ function snapshot(days) {
     const commonError = [...errors.entries()].sort((a, b) => b[1] - a[1])[0] || null;
     const month = latest?.date?.slice(0, 7) || '';
     const settings = state.appData?.settings || {};
-    const limit = Number(settings.monthlyDayloss?.[month] ?? settings.defaultDayloss ?? -100);
+    const limit = Number(resolveMonthlyDayloss(settings, month));
     const allDays = Object.entries(state.appData?.journal || {})
         .filter(([date, day]) => /^\d{4}-\d{2}-\d{2}$/.test(date) && pnlOf(day) !== null)
         .map(([date, day]) => ({ date, day, pnl: pnlOf(day) }))

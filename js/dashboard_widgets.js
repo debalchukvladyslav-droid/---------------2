@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { saveSettings } from './storage.js';
 import { getEffectiveDayPnl, visibleTradeRows } from './trade_filters.js';
-import { deriveDayKfFromTrades } from './data_utils.js';
+import { deriveDayKfFromTrades, resolveMonthlyDayloss } from './data_utils.js';
 import { supabase } from './supabase.js';
 import { buildExceptionKfRows, buildHourlyKfBuckets, combineStatsSheetRows } from './stats_sheet_metrics.js';
 import { escapeHtml } from './utils.js';
@@ -62,7 +62,7 @@ function renderPremarketCommandCenter() {
     const ny = getNewYorkParts();
     const phase = deriveSessionPhase(ny);
     const readiness = buildReadiness(state.appData?.journal?.[ny.dateKey] || {});
-    const limit = Math.abs(Number(state.appData?.settings?.monthlyDayloss?.[ny.dateKey.slice(0, 7)] ?? state.appData?.settings?.defaultDayloss) || 0);
+    const limit = Math.abs(resolveMonthlyDayloss(state.appData?.settings, ny.dateKey.slice(0, 7)));
     root.dataset.phase = phase.tone; root.dataset.readiness = readiness.tone;
     byId('premarket-phase').textContent = phase.label;
     byId('premarket-clock').textContent = `${String(ny.hour).padStart(2, '0')}:${String(ny.minute).padStart(2, '0')} ET`;
@@ -180,7 +180,7 @@ function renderGenerated(id, host) {
         host.querySelector('select').value = String(days);
         requestAnimationFrame(() => renderMiniEquityChart(id));
     } else if (id === 'today') {
-        const limit = Math.abs(Number(state.appData?.settings?.monthlyDayloss?.[dateKey().slice(0, 7)] ?? state.appData?.settings?.defaultDayloss) || 0);
+        const limit = Math.abs(resolveMonthlyDayloss(state.appData?.settings, dateKey().slice(0, 7)));
         host.innerHTML = metricMarkup('Стан сьогодні', today?.pnl == null ? 'Ще немає запису' : money(today.pnl), today ? `${today.trades.length} угод · ${today.kf == null ? 'КФ не записано' : kfText(today.kf)} · ліміт $${limit.toFixed(0)}` : 'Запишіть результат після сесії', today?.pnl < 0 ? 'is-loss' : 'is-profit');
     } else if (id === 'daily-kf') {
         host.innerHTML = metricMarkup('КФ сьогодні', today?.kf == null ? 'Немає даних' : kfText(today.kf), today?.kf == null ? 'Додайте КФ до угод або підсумку дня' : 'Результат у ризиках', today?.kf < 0 ? 'is-loss' : 'is-profit');

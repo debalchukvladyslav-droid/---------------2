@@ -17,7 +17,7 @@ export function getDefaultSettings() {
         sliders: [],
         ocrPos: 'left',
         ocrRect: { top: 0, left: 0, width: 250, height: 80 },
-        defaultDayloss: -100,
+        defaultDayloss: -1000,
         monthlyDayloss: {},
         cumulativeMonthlyDayloss: {},
         fondexxMonthlyAdjustments: {},
@@ -67,6 +67,18 @@ export function sanitizeStringArray(value) {
 export function sanitizeNumberOrNull(value) {
     if (value === "" || value === null || value === undefined) return null;
     return parseDecimalInput(value);
+}
+
+export function resolveMonthlyDayloss(settings = {}, monthKey = '', fallback = -1000) {
+    const monthly = settings?.monthlyDayloss && typeof settings.monthlyDayloss === 'object' ? settings.monthlyDayloss : {};
+    const exact = Number(monthly[monthKey]);
+    if (Number.isFinite(exact) && exact !== 0) return exact;
+    const previousKey = Object.keys(monthly)
+        .filter((key) => /^\d{4}-\d{2}$/.test(key) && key < monthKey && Number.isFinite(Number(monthly[key])) && Number(monthly[key]) !== 0)
+        .sort((a, b) => b.localeCompare(a))[0];
+    if (previousKey) return Number(monthly[previousKey]);
+    const defaultValue = Number(settings?.defaultDayloss);
+    return Number.isFinite(defaultValue) && defaultValue !== 0 ? defaultValue : fallback;
 }
 
 export function getTradeResult(trade) {
@@ -293,9 +305,10 @@ export function normalizeAppData(rawData) {
     const settingsSource = safeData.settings && typeof safeData.settings === 'object' ? safeData.settings : {};
     const normalizedSettings = { ...getDefaultSettings(), ...settingsSource };
 
-    if (normalizedSettings.daylossLimit !== undefined && normalizedSettings.defaultDayloss === -100) {
-        normalizedSettings.defaultDayloss = Number(normalizedSettings.daylossLimit) || -100;
-    }
+    const hadDefaultDayloss = Object.prototype.hasOwnProperty.call(settingsSource, 'defaultDayloss');
+    if (normalizedSettings.daylossLimit !== undefined && (!hadDefaultDayloss || normalizedSettings.defaultDayloss === -100)) {
+        normalizedSettings.defaultDayloss = Number(normalizedSettings.daylossLimit) || -1000;
+    } else if (!hadDefaultDayloss || normalizedSettings.defaultDayloss === -100) normalizedSettings.defaultDayloss = -1000;
     delete normalizedSettings.daylossLimit;
 
     normalizedSettings.customTheme = { ...getDefaultSettings().customTheme, ...(normalizedSettings.customTheme || {}) };

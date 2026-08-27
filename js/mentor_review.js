@@ -6,6 +6,7 @@ import { canAccessMentorReviewQueue } from './auth.js';
 import { switchUser } from './teams.js';
 import { switchMainTab } from './ui.js';
 import { selectDateFromInput } from './calendar.js';
+import { resolveMonthlyDayloss } from './data_utils.js';
 
 const DEFAULT_TEAM = 'Без куща';
 const SEEN_KEY = 'tj:mentor-review-red-seen:v2';
@@ -125,13 +126,7 @@ function profileSettings(profile) {
 function getTraderDayloss(profile, periodStart) {
     const settings = profileSettings(profile);
     const monthKey = localYmd(periodStart || new Date()).slice(0, 7);
-    const monthly = settings.monthlyDayloss && typeof settings.monthlyDayloss === 'object'
-        ? Number(settings.monthlyDayloss[monthKey])
-        : NaN;
-    const base = Number.isFinite(monthly)
-        ? monthly
-        : Number(settings.defaultDayloss ?? settings.daylossLimit ?? -100);
-    return Math.max(1, Math.abs(Number.isFinite(base) ? base : -100));
+    return Math.max(1, Math.abs(resolveMonthlyDayloss(settings, monthKey)));
 }
 
 function getScopedProfiles() {

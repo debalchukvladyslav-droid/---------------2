@@ -2,6 +2,7 @@
 import { state } from './state.js';
 import { ensureChartJs } from './vendor_loader.js';
 import { getEffectiveDayPnl } from './trade_filters.js';
+import { resolveMonthlyDayloss } from './data_utils.js';
 
 let _miniChart = null;
 let _lastMiniChartArgs = null;
@@ -236,11 +237,7 @@ function buildValueGradient(ctx, chartArea, values, alpha = 1, theme = {}) {
 
 function getMonthDayloss(year, monthIndex) {
     const mk = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
-    const monthly = state.appData?.settings?.monthlyDayloss || {};
-    const value = monthly[mk] !== undefined
-        ? Number(monthly[mk])
-        : Number(state.appData?.settings?.defaultDayloss ?? -100);
-    return Number.isFinite(value) && value !== 0 ? value : -100;
+    return resolveMonthlyDayloss(state.appData?.settings, mk);
 }
 
 function buildAllTimeEquityMap(journal) {

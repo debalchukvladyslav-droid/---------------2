@@ -10,6 +10,7 @@ import { findScreenshotsForTicker, getStorageUrl, openScreenshotForTrade } from 
 import { getCalendarDayResult, getEffectiveDayPnl, isSheetOnlyPnl, visibleTradeRows } from './trade_filters.js';
 import { pickSheetRowsSource } from './datagrid_rows.js';
 import { getNyseDaySchedule } from './nyse_calendar.js';
+import { resolveMonthlyDayloss } from './data_utils.js';
 
 let _selectDateRequestId = 0;
 
@@ -64,9 +65,7 @@ function parseStoredDecimalOrZero(value) {
 
 export function getDaylossForMonth(year, monthIndex) {
     let key = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
-    const monthly = state.appData?.settings?.monthlyDayloss ?? {};
-    const def = state.appData?.settings?.defaultDayloss ?? -100;
-    return monthly[key] !== undefined ? monthly[key] : def;
+    return resolveMonthlyDayloss(state.appData?.settings, key);
 }
 
 export async function updateAutoFlags() {

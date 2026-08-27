@@ -3,7 +3,7 @@
 // 1. ІМПОРТИ
 import { supabase } from './supabase.js';
 import { state } from './state.js';
-import { getDefaultDayEntry } from './data_utils.js';
+import { getDefaultDayEntry, resolveMonthlyDayloss } from './data_utils.js';
 import { hasImportedNetPnl } from './trade_filters.js';
 import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm, canAccessMentorReviewQueue, mentorAcceptReviewRequest, ensureAuthUserProfile, rejectBlockedProfile, rejectPendingProfile, submitRegistrationRequest, isPasswordRecoveryUrl, showPasswordRecoveryForm } from './auth.js';
 import { loadTeams, openTeamManager, createNewTeam, moveTrader, deleteTeam, renameTeam, deleteTraderProfile, renderTeamSidebar, switchUser } from './teams.js';
@@ -1102,8 +1102,7 @@ function syncDaylossInputs(monthKey = null) {
     const selectedMonth = monthKey || document.getElementById('setting-dayloss-month')?.value || getCalendarMonthKey();
     const monthInput = document.getElementById('setting-dayloss-month');
     const daylossInput = document.getElementById('setting-dayloss-limit');
-    const monthly = state.appData?.settings?.monthlyDayloss || {};
-    const value = monthly[selectedMonth] ?? state.appData?.settings?.defaultDayloss ?? -100;
+    const value = resolveMonthlyDayloss(state.appData?.settings, selectedMonth);
     if (monthInput) monthInput.value = selectedMonth;
     if (daylossInput) daylossInput.value = value;
 }
@@ -1120,7 +1119,7 @@ function renderDaylossMonthsList() {
     list.innerHTML = months.map((monthKey) => `
         <label class="settings-dayloss-month-item">
             <span>${escapeBackupHtml(formatMonthLabel(monthKey))}</span>
-            <input type="number" step="1" value="${escapeBackupHtml(monthly[monthKey] ?? '')}" placeholder="${escapeBackupHtml(state.appData?.settings?.defaultDayloss ?? -100)}" data-dayloss-month="${escapeBackupHtml(monthKey)}">
+            <input type="number" step="1" value="${escapeBackupHtml(resolveMonthlyDayloss(state.appData?.settings, monthKey))}" placeholder="-1000" data-dayloss-month="${escapeBackupHtml(monthKey)}">
         </label>
     `).join('');
 }

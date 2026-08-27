@@ -27,7 +27,7 @@ const {
     isMentorViewingOtherJournalState,
     isViewingOtherProfileState,
 } = await import('../js/access_control.js');
-const { buildAutoTradeTypesData, DEFAULT_TRADE_TYPES, deriveDayKfFromTrades, getTradeResult, isNotTakenTrade, normalizeAppData, normalizeDayEntry } = await import('../js/data_utils.js');
+const { buildAutoTradeTypesData, DEFAULT_TRADE_TYPES, deriveDayKfFromTrades, getTradeResult, isNotTakenTrade, normalizeAppData, normalizeDayEntry, resolveMonthlyDayloss: resolveJournalMonthlyDayloss } = await import('../js/data_utils.js');
 const { ecnFeeColumnIndex, parsePPROReportDate, parsePPROTotalReportRows, parseSheetDateCellToIso, parseSheetDateCellsToIsoSequence } = await import('../js/parser_utils.js');
 const { sanitizeHTML, safeExternalUrl, sanitizeRichHTML } = await import('../js/sanitize.js');
 const { mergeGoogleSheetTradesIntoJournal } = await import('../js/sheet_journal_merge.js');
@@ -46,6 +46,13 @@ const { buildServiceBotSnapshot, hashServiceBotApiKey, hasServiceBotPermission, 
 const { calculateCumulativeWeek, collectWeekStarts, getWeekRange, getWeekStartIso, parseCumulativeNumber, resolveMonthlyDayloss } = await import('../js/cumulative_weekly.js');
 const { getNyseDaySchedule } = await import('../js/nyse_calendar.js');
 const { mergedJournalDayForReview, reviewReasonsForDay } = await import('../js/review_signals.js');
+
+test('journal dayloss inherits the latest previous month and defaults to 1000', () => {
+    assert.equal(resolveJournalMonthlyDayloss({ monthlyDayloss: {} }, '2026-08'), -1000);
+    assert.equal(resolveJournalMonthlyDayloss({ defaultDayloss: -1000, monthlyDayloss: { '2026-06': -700, '2026-07': -850 } }, '2026-08'), -850);
+    assert.equal(resolveJournalMonthlyDayloss({ defaultDayloss: -1000, monthlyDayloss: { '2026-07': -850, '2026-08': -900 } }, '2026-08'), -900);
+    assert.equal(normalizeAppData({ settings: { defaultDayloss: -100 } }).settings.defaultDayloss, -1000);
+});
 
 test('review completeness uses trader Gross instead of imported net PnL', () => {
     const completed = reviewReasonsForDay({ gross_pnl: 125, pnl: null, notes: 'День заповнено' });
