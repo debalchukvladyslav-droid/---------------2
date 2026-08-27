@@ -9,7 +9,7 @@ import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activat
 import { loadTeams, openTeamManager, createNewTeam, moveTrader, deleteTeam, renameTeam, deleteTraderProfile, renderTeamSidebar, switchUser } from './teams.js';
 import { saveToLocal, saveJournalData, saveSettings, markJournalDayDirty, markAllJournalDirty, initializeApp, resetRuntimeDataForAccountSwitch, exportData, importData, loadMonth, loadTradeDays, resolveViewedUserId, setCurrentViewedUserId,
          loadBackgroundGallery } from './storage.js';
-import { applyTheme, saveThemeSettings, switchTab, toggleMobileSidebar, switchMainTab, scrollMainTabs, toggleMoreTabs, toggleMobileMoreMenu, closeMobileMoreMenu, bindMainTabRoutes, syncMainTabFromRoute, refreshCurrentMainTitle } from './ui.js';
+import { applyTheme, resetCustomTheme, saveThemeSettings, switchTab, toggleMobileSidebar, switchMainTab, scrollMainTabs, toggleMoreTabs, toggleMobileMoreMenu, closeMobileMoreMenu, bindMainTabRoutes, syncMainTabFromRoute, refreshCurrentMainTitle } from './ui.js';
 import { shiftDate, selectDateFromInput, saveEntry, renderView, selectDate, updateAutoFlags, initSelectors, renderSidebarTradesList } from './calendar.js';
 import { toggleStatsDropdown, toggleTree, toggleStatsFilter, refreshStatsView, closeStatsDropdown, renderStatsSourceSelector, selectStatsSource, renderTradeTypeSelector, selectTradeTypeFilter, toggleStatsEquityMode, toggleStatsCompareMode, closeStatsCompareMode, openStatsComparisonWithTrader } from './stats.js';
 import { openAnalyticsExport, closeAnalyticsExport, analyticsExportNext, analyticsExportPrev, addAnalyticsReportPeriod, resetAnalyticsExport, saveAnalyticsExportPreset, loadAnalyticsExportPreset, generateCurrentAnalyticsPdf } from './analytics_export.js';
@@ -288,6 +288,7 @@ window.loadAnalyticsExportPreset = loadAnalyticsExportPreset;
 window.generateCurrentAnalyticsPdf = generateCurrentAnalyticsPdf;
 window.importData = importData;
 window.applyTheme = applyTheme;
+window.resetCustomTheme = resetCustomTheme;
 window.saveThemeSettings = saveThemeSettings;
 window.switchTab = switchTab;
 window.toggleMobileSidebar = toggleMobileSidebar;

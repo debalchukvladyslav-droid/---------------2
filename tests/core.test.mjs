@@ -663,17 +663,17 @@ test('hourly results aggregate main and cumulative Sheet sources', () => {
     assert.deepEqual(rows.find((row) => row.hour === 9), { hour: 9, pnl: 20, kf: 1, trades: 1, pnlRows: 1, kfRows: 1, label: '09' });
 });
 
-test('hourly results recover a stale Sheet index by date and ticker and include entries after 10', () => {
+test('hourly results recover a stale Sheet index by date and ticker', () => {
     const entries = [{ dateStr: '2026-04-02', data: { trades: [
         { symbol: 'OLD', opened: '2026-04-02 09:35:00', net: 50 },
-        { symbol: 'LUCY', opened: '2026-04-02 10:25:00', net: -30 },
+        { symbol: 'LUCY', opened: '2026-04-02 09:55:00', net: -30 },
     ] } }];
     const sheetRows = { main: { '2026-04-02': [
         { symbol: 'LUCY', sheet: { sheetRow: 8, matchedTradeIndex: 0, sheetNet: -42, profitRisk: '-1.2R' } },
     ] } };
 
-    const hourTen = buildHourlyKfBuckets(entries, null, { sheetRows }).find((row) => row.hour === 10);
-    assert.deepEqual(hourTen, { hour: 10, pnl: -42, kf: -1.2, trades: 1, pnlRows: 1, kfRows: 1, label: '10' });
+    const hourNine = buildHourlyKfBuckets(entries, null, { sheetRows }).find((row) => row.hour === 9);
+    assert.deepEqual(hourNine, { hour: 9, pnl: -42, kf: -1.2, trades: 1, pnlRows: 1, kfRows: 1, label: '09' });
 });
 
 test('main and cumulative rows remain separate when they use the same spreadsheet id', () => {

@@ -220,6 +220,7 @@ function activateAction(action, trigger, event = null) {
         'trade-type-add': () => window.addNewTradeType?.(),
         'trade-type-save': () => window.saveTradeTypes?.(),
         'theme-save': () => window.saveThemeSettings?.(),
+        'theme-custom-reset': () => window.resetCustomTheme?.(),
         'dayloss-save': () => window.saveDaylossSetting?.(),
         'dayloss-months-toggle': () => window.toggleDaylossMonthsPanel?.(),
         'dayloss-months-save': () => window.saveAllDaylossMonths?.(),

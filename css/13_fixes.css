@@ -970,6 +970,7 @@ body.is-calendar-tab .quick-trade-fab {
     border: 0;
     background: transparent;
 }
+.custom-theme-reset { margin-top: 14px; }
 .sidebar-account-actions-section .sidebar-pf-section-title {
     margin-bottom: 4px;
 }

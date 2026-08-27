@@ -328,8 +328,6 @@ export function applyTheme(forceSync = false) {
                 if (document.getElementById('ct-bg-panel')) document.getElementById('ct-bg-panel').value = ct.bgPanel || '#111625';
                 if (document.getElementById('ct-text-main')) document.getElementById('ct-text-main').value = ct.textMain || '#f3f4f6';
                 if (document.getElementById('ct-accent')) document.getElementById('ct-accent').value = ct.accent || '#3b82f6';
-                if (document.getElementById('ct-profit')) document.getElementById('ct-profit').value = ct.profit || '#10b981';
-                if (document.getElementById('ct-loss')) document.getElementById('ct-loss').value = ct.loss || '#ef4444';
                 if (document.getElementById('ct-gradient-enabled')) document.getElementById('ct-gradient-enabled').checked = !!ct.gradient;
                 if (document.getElementById('ct-gradient-color')) document.getElementById('ct-gradient-color').value = ct.gradientColor || '#7c3aed';
             }
@@ -370,8 +368,8 @@ export function applyTheme(forceSync = false) {
         const bgPanel  = document.getElementById('ct-bg-panel')?.value  || '#111625';
         const textMain = document.getElementById('ct-text-main')?.value || '#f3f4f6';
         const accent   = document.getElementById('ct-accent')?.value    || '#3b82f6';
-        const profit   = document.getElementById('ct-profit')?.value    || '#10b981';
-        const loss     = document.getElementById('ct-loss')?.value      || '#ef4444';
+        const profit   = '#10b981';
+        const loss     = '#ef4444';
         const gradientEnabled = !!document.getElementById('ct-gradient-enabled')?.checked;
         const gradientColor = document.getElementById('ct-gradient-color')?.value || '#7c3aed';
 
@@ -469,8 +467,8 @@ export function saveThemeSettings(options = {}) {
             bgPanel: document.getElementById('ct-bg-panel').value,
             textMain: document.getElementById('ct-text-main').value, 
             accent: document.getElementById('ct-accent').value,
-            profit: document.getElementById('ct-profit').value, 
-            loss: document.getElementById('ct-loss').value,
+            profit: '#10b981',
+            loss: '#ef4444',
             gradient: !!document.getElementById('ct-gradient-enabled')?.checked,
             gradientColor: document.getElementById('ct-gradient-color')?.value || '#7c3aed'
         };
@@ -611,6 +609,31 @@ let mainTabSwitchToken = 0;
 
 function nextPaint() {
     return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
+export function resetCustomTheme() {
+    const defaults = {
+        bgMain: '#0f172a', bgPanel: '#1e293b', textMain: '#f8fafc', accent: '#3b82f6',
+        profit: '#10b981', loss: '#ef4444', gradient: false, gradientColor: '#7c3aed',
+    };
+    const values = {
+        'ct-bg-main': defaults.bgMain,
+        'ct-bg-panel': defaults.bgPanel,
+        'ct-text-main': defaults.textMain,
+        'ct-accent': defaults.accent,
+        'ct-gradient-color': defaults.gradientColor,
+    };
+    Object.entries(values).forEach(([id, value]) => {
+        const input = document.getElementById(id);
+        if (input) input.value = value;
+    });
+    const gradient = document.getElementById('ct-gradient-enabled');
+    if (gradient) gradient.checked = false;
+    const customRadio = document.getElementById('theme-custom');
+    if (customRadio) customRadio.checked = true;
+    state.appData.settings.customTheme = defaults;
+    applyTheme();
+    saveThemeSettings();
 }
 
 function delay(ms) {

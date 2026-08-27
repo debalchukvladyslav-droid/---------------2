@@ -151,7 +151,7 @@ function iterMatchedSheetTrades(entries = [], tradeTypeFilter = null, visitor = 
 }
 
 export function buildHourlyKfBuckets(entries = [], tradeTypeFilter = null, options = {}) {
-    const hours = Array.from({ length: 9 }, (_, index) => index + 4);
+    const hours = Array.from({ length: 6 }, (_, index) => index + 4);
     const buckets = new Map(hours.map(hour => [hour, { hour, pnl: 0, kf: 0, trades: 0, pnlRows: 0, kfRows: 0 }]));
     const entriesByDate = new Map(entries.map((entry) => [entry?.dateStr, entry]));
     const usedTradeIndexesByDate = new Map();
