@@ -41,7 +41,7 @@ export async function renderJournalScore() {
     chip.style.setProperty('--journal-score-color', `hsl(${hue} 78% 46%)`);
     const days = document.getElementById('journal-score-days');
     const gaps = document.getElementById('journal-score-gaps');
-    if (days) days.textContent = `${result.activeDays || 0}/${result.workDays || 0} робочих днів`;
+    if (days) days.textContent = `${result.activeDays || 0}/${result.workDays || 0} днів із PnL + думкою`;
     if (gaps) gaps.innerHTML = (result.gaps || []).length
         ? result.gaps.map(item => `<div class="journal-score-gap"><span>${item.label}</span><strong>${item.done}/${item.total}</strong><i><b style="width:${Math.round((item.done / item.total) * 100)}%"></b></i></div>`).join('')
         : '<div class="journal-score-all-good">Усі основні звички ведуться регулярно.</div>';

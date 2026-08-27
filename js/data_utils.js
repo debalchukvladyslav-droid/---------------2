@@ -36,6 +36,7 @@ export function getDefaultDayEntry() {
         ppro: { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
         fondexxSource: '',
         pproSource: '',
+        traderAbsent: false,
         trades: [],
         tradeTypesData: {},
         review_requests: {},
@@ -268,6 +269,7 @@ export function normalizeDayEntry(entry) {
         ppro: normalizeTradeSource(safeEntry.ppro),
         fondexxSource: typeof safeEntry.fondexxSource === 'string' ? safeEntry.fondexxSource : '',
         pproSource: typeof safeEntry.pproSource === 'string' ? safeEntry.pproSource : '',
+        traderAbsent: safeEntry.traderAbsent === true,
         tradeTypesData:
             safeEntry.tradeTypesData && typeof safeEntry.tradeTypesData === 'object' ? { ...safeEntry.tradeTypesData } : {},
         sheetTradeTypesSyncEnabled: safeEntry.sheetTradeTypesSyncEnabled !== false,

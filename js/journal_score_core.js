@@ -42,32 +42,34 @@ export function isJournalActivityDay(day) {
 
 function dailyCore(day) {
     const checks = { pnl: hasPnl(day), thought: hasText(day.notes) || hasText(day.nextSessionImprovement), sessionStart: hasText(day.sessionGoal) || hasText(day.sessionPlan) || hasText(day.sessionReadiness), sessionEnd: day.sessionDone === true || day.sessionReviewDone === true || hasText(day.nextSessionImprovement), screenshots: screenshotsCount(day) > 0 };
-    const points = (checks.pnl ? 2.5 : 0) + (checks.thought ? 2.5 : 0) + (checks.sessionStart ? 1 : 0) + (checks.sessionEnd ? 1 : 0) + (checks.screenshots ? 1 : 0);
-    return { checks, points };
+    return { checks };
 }
 
 export function calculateJournalScore({ journal = {}, reviews = [], learnCache = null, learningDates = [], now = new Date() } = {}) {
     const prefix = `${monthKey(now)}-`;
-    const workDates = monthWorkDates(now);
+    const calendarWorkDates = monthWorkDates(now);
+    const absentDates = new Set(calendarWorkDates.filter((date) => journal?.[date]?.traderAbsent === true));
+    const workDates = calendarWorkDates.filter((date) => !absentDates.has(date));
     const workDateSet = new Set(workDates);
     const monthEntries = Object.entries(journal).filter(([date, day]) => date.startsWith(prefix) && workDateSet.has(date) && isJournalActivityDay(day));
-    const activeDates = new Set(monthEntries.map(([date]) => date));
     const workDays = workDates.length;
 
     const habits = {
+        core: { label: 'PnL + думка дня', done: 0, total: workDays, weight: 10 },
         pnl: { label: 'PnL дня', done: 0, total: workDays, weight: 5 },
         thought: { label: 'Думка або висновок дня', done: 0, total: workDays, weight: 5 },
         sessionStart: { label: 'Початок сесії', done: 0, total: workDays, weight: 3 },
         sessionEnd: { label: 'Завершення сесії', done: 0, total: workDays, weight: 3 },
         screenshots: { label: 'Розбір скріншотів', done: 0, total: workDays, weight: 2 },
     };
-    let dailyPoints = 0;
-    monthEntries.forEach(([, day]) => { const result = dailyCore(day); dailyPoints += result.points; Object.keys(result.checks).forEach((key) => { if (result.checks[key]) habits[key].done += 1; }); });
-    const dailyScore = activeDates.size ? dailyPoints / activeDates.size : 0;
+    monthEntries.forEach(([, day]) => {
+        const result = dailyCore(day);
+        Object.keys(result.checks).forEach((key) => { if (result.checks[key]) habits[key].done += 1; });
+        if (result.checks.pnl && result.checks.thought) habits.core.done += 1;
+    });
 
     const relevantReviews = reviews.filter((review) => review?.active && String(review.trade_date || '').startsWith(prefix));
     const completedReviews = relevantReviews.filter((review) => review.final_status === 'normal' || review.final_status === 'bad').length;
-    const stopScore = relevantReviews.length ? completedReviews / relevantReviews.length : 1;
     if (relevantReviews.length) habits.stops = { label: 'Розбір стопів', done: completedReviews, total: relevantReviews.length, weight: 2 };
 
     const todayKey = (now instanceof Date ? now : new Date(now || Date.now())).toISOString().slice(0, 10);
@@ -75,11 +77,10 @@ export function calculateJournalScore({ journal = {}, reviews = [], learnCache =
     const recordedLearningDates = new Set([...(Array.isArray(learningDates) ? learningDates : []), learnCache?.date].filter((date) => String(date || '').startsWith(prefix)));
     const learnedWeeks = new Set([...recordedLearningDates].map(weekKey));
     const learningDone = [...activeWeeks].filter((week) => learnedWeeks.has(week)).length;
-    const learningScore = activeWeeks.size ? learningDone / activeWeeks.size : 0;
     habits.learning = { label: 'Навчання раз на тиждень', done: learningDone, total: activeWeeks.size, weight: 1 };
 
-    const score = activeDates.size ? Math.max(0, Math.min(10, Math.round((dailyScore + stopScore + learningScore) * 10) / 10)) : 0;
+    const score = workDays ? Math.max(0, Math.min(10, Math.round((habits.core.done / workDays) * 100) / 10)) : 0;
     const label = score >= 8.5 ? 'Системно' : score >= 7 ? 'Добре' : score >= 5 ? 'Набирає ритм' : 'Потрібна увага';
     const gaps = Object.values(habits).map((item) => ({ ...item, ratio: item.total ? item.done / item.total : 1 })).filter((item) => item.ratio < .8).sort((a, b) => b.weight - a.weight || a.ratio - b.ratio).slice(0, 6);
-    return { score, label, activeDays: activeDates.size, workDays, gaps, details: 'Поточний місяць. Прогрес показано відносно всіх робочих днів місяця. PnL і думка — 5 балів; початок і завершення сесії — 2; скріншоти — 1; стопи — до 1; навчання раз на тиждень — до 1.' };
+    return { score, label, activeDays: habits.core.done, workDays, absentDays: absentDates.size, gaps, details: 'Поточний місяць. Оцінка — це частка робочих днів, у яких одночасно записані PnL і думка дня. Дні з позначкою «Був(-ла) відсутній(-я)» не входять у план.' };
 }

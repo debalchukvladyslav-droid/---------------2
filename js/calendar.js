@@ -432,6 +432,8 @@ function fillSelectedDateUI(dateStr) {
     document.getElementById('trade-comm').value = !sheetOnlyPnl ? formatStoredDecimal(dayData.commissions) : '';
     document.getElementById('trade-locates').value = !sheetOnlyPnl ? formatStoredDecimal(dayData.locates) : '';
     document.getElementById('trade-kf').value = formatStoredDecimal(dayData.kf);
+    const absentInput = document.getElementById('trade-day-absent');
+    if (absentInput) absentInput.checked = dayData.traderAbsent === true;
     document.getElementById('trade-notes').value = dayData.notes || '';
     const nextImprovement = document.getElementById('next-session-improvement');
     if (nextImprovement) nextImprovement.value = dayData.nextSessionImprovement || '';
@@ -654,6 +656,7 @@ export function saveEntry() {
         sliders: sliders,
         tradeTypesData: ttData,
         sheetTradeTypesSyncEnabled: oldData.sheetTradeTypesSyncEnabled !== false,
+        traderAbsent: document.getElementById('trade-day-absent')?.checked === true,
     };
 
     dayData.screenshots = oldData.screenshots || { good: [], normal: [], bad: [], error: [] };
@@ -767,6 +770,7 @@ function buildWeekHoverText(wkKey) {
 }
 
 function buildDayDetailBody(dateKey, data, currentMonthDayloss) {
+    if (data?.traderAbsent === true) return 'Неторговий день: трейдер був(-ла) відсутній(-я).';
     const lines = [];
     const calendarResult = getCalendarDayResult(data);
     const effectivePnl = calendarResult.value;
@@ -989,16 +993,26 @@ export async function renderView() {
         dayNum.className = 'day-number';
         dayNum.style.cssText = 'display:flex; align-items:center; justify-content:space-between;';
         dayNum.textContent = i;
-        if (marketSchedule) {
+        if (data?.traderAbsent === true) {
+            cell.classList.add('trader-absent');
+            cell.dataset.marketSchedule = 'Неторговий день: трейдер був(-ла) відсутній(-я).';
+        }
+        if (marketSchedule && data?.traderAbsent !== true) {
             const marketBadge = document.createElement('span');
             marketBadge.className = 'nyse-market-badge';
             marketBadge.textContent = marketSchedule.type === 'closed' ? 'Вихідний' : 'До 13:00';
             dayNum.appendChild(marketBadge);
+        } else if (data?.traderAbsent === true) {
+            const absentBadge = document.createElement('span');
+            absentBadge.className = 'nyse-market-badge';
+            absentBadge.textContent = 'Відсутній';
+            dayNum.appendChild(absentBadge);
         }
         const dayPnl = document.createElement('div');
 
         if (data) {
-            const effectivePnl = getCalendarDayResult(data).value;
+            const effectivePnl = data.traderAbsent === true ? null : getCalendarDayResult(data).value;
+            if (data.traderAbsent === true) pnlDisplay = 'Неторговий';
             if (effectivePnl !== null) { 
                 let roundedPnl = parseFloat(effectivePnl.toFixed(2));
                 pnlDisplay = roundedPnl >= 0 ? `+${roundedPnl}$` : `${roundedPnl}$`; 
@@ -1061,7 +1075,7 @@ export async function renderView() {
             cell.onmousemove = (e) => positionCalendarTooltip(e, tooltip);
             cell.onmouseleave = () => { tooltip.style.display = 'none'; };
         }
-        const effectivePnlForClass = data ? getCalendarDayResult(data).value : null;
+        const effectivePnlForClass = data && data.traderAbsent !== true ? getCalendarDayResult(data).value : null;
         dayPnl.className = 'day-pnl' + (effectivePnlForClass !== null ? (effectivePnlForClass >= 0 ? ' text-green' : ' text-red') : '');
         dayPnl.textContent = pnlDisplay;
         cell.appendChild(dayNum);

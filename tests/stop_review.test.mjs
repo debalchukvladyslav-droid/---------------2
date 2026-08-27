@@ -125,7 +125,7 @@ test('journal score ignores completely untouched days', () => {
     assert.equal(calculateJournalScore({ journal: { '2026-07-01': { pnl: 0, trades: [] } } }).score, 0);
 });
 
-test('daily journal work has more weight than learning', () => {
+test('journal score depends only on working days with both PnL and a daily thought', () => {
     const journal = {
         '2026-07-01': {
             notes: 'Підсумок дня',
@@ -144,9 +144,9 @@ test('daily journal work has more weight than learning', () => {
         learnCache: { date: '2026-07-01', summaries: { video: 'Конспект' } },
         now: new Date('2026-07-15T12:00:00Z'),
     });
-    assert.ok(withLearning.score > withoutLearning.score);
-    assert.ok(withLearning.score - withoutLearning.score <= 1);
-    assert.ok(withoutLearning.score >= 7);
+    assert.equal(withLearning.score, withoutLearning.score);
+    assert.equal(withoutLearning.activeDays, 1);
+    assert.equal(withoutLearning.score, 0.5);
 });
 
 test('journal score uses only current month and prioritizes PnL plus daily thought', () => {
@@ -158,7 +158,21 @@ test('journal score uses only current month and prioritizes PnL plus daily thoug
         },
     });
     assert.equal(result.activeDays, 1);
-    assert.equal(result.score, 6);
+    assert.equal(result.score, 0.5);
     assert.equal(result.workDays, 21);
-    assert.equal(result.gaps[0].label, 'PnL дня');
+    assert.equal(result.gaps[0].label, 'PnL + думка дня');
+});
+
+test('an absent trader day is removed from journal working-day target', () => {
+    const result = calculateJournalScore({
+        now: new Date('2026-08-20T12:00:00Z'),
+        journal: {
+            '2026-08-04': { gross_pnl: 120, notes: 'Головний висновок дня' },
+            '2026-08-05': { traderAbsent: true },
+        },
+    });
+    assert.equal(result.activeDays, 1);
+    assert.equal(result.workDays, 20);
+    assert.equal(result.absentDays, 1);
+    assert.equal(result.score, 0.5);
 });
