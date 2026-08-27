@@ -133,7 +133,7 @@ test('selected exit time never falls forward to a later candle and stale calcula
     assert.match(source, /signal,/);
 });
 
-test('legacy Polygon archive remains available but active analysis is stateless', async () => {
+test('Polygon archive is the active storage cache and Postgres minute rows are bypassed', async () => {
     const [edge, migration] = await Promise.all([
         readFile(new URL('../supabase/functions/market-best-exits/index.ts', import.meta.url), 'utf8'),
         readFile(new URL('../supabase/migrations/20260821143000_polygon_storage_archive.sql', import.meta.url), 'utf8'),
@@ -145,8 +145,10 @@ test('legacy Polygon archive remains available but active analysis is stateless'
     assert.match(edge, /readDatabaseGraph\(item\.symbol, item\.date\)/);
     assert.match(edge, /if \(!marketResults\)/);
     assert.match(edge, /writePolygonArchive\(item\.symbol, item\.date, marketResults\)/);
-    assert.match(edge, /const STATELESS_POLYGON = true/);
-    assert.match(edge, /storage: 'browser-only'/);
+    assert.match(edge, /const STATELESS_POLYGON = false/);
+    assert.match(edge, /const STORAGE_ONLY_ARCHIVE = true/);
+    assert.match(edge, /buildArchiveDerived\(results\)/);
+    assert.match(edge, /analyzeArchivedDay\(archivedBars/);
     assert.match(edge, /source: \$\{marketSource\}/);
 });
 
@@ -154,7 +156,7 @@ test('admin can pause Polygon globally and enqueue only Trades missing from the 
     const [edge, admin, view, archiveIndex] = await Promise.all([
         readFile(new URL('../supabase/functions/market-best-exits/index.ts', import.meta.url), 'utf8'),
         readFile(new URL('../js/admin.js', import.meta.url), 'utf8'),
-        readFile(new URL('../partials/views/admin-panel.html', import.meta.url), 'utf8'),
+        readFile(new URL('../partials/views/testing-view.html', import.meta.url), 'utf8'),
         readFile(new URL('../supabase/migrations/20260821151000_polygon_archive_admin_index.sql', import.meta.url), 'utf8'),
     ]);
     assert.match(edge, /body\.action === 'admin-pause'/);
@@ -166,8 +168,10 @@ test('admin can pause Polygon globally and enqueue only Trades missing from the 
     assert.match(edge, /const missing = \[\.\.\.unique\.entries\(\)\]\.filter/);
     assert.match(edge, /control\.paused \? null : await rest\('rpc\/claim_market_low_jobs'/);
     assert.match(admin, /Зупинити Polygon/);
-    assert.match(admin, /Завантажити всі Trades/);
-    assert.match(view, /admin-polygon-panel/);
+    assert.match(admin, /Завантажити всі полігони/);
+    assert.match(admin, /data-testing-polygon-host/);
+    assert.match(admin, /admin-process-next/);
+    assert.match(view, /testing-tools-panel/);
     assert.match(archiveIndex, /revoke all.*public, anon, authenticated/is);
     assert.match(archiveIndex, /grant execute.*service_role/is);
 });

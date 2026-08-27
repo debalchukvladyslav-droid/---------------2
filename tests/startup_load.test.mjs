@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-test('startup loads only core months and keeps heavy data lazy', async () => {
+test('startup loads core months and light dashboard feeds while keeping heavy analysis lazy', async () => {
     const [storage, main, realtime, ui] = await Promise.all([
         readFile(new URL('../js/storage.js', import.meta.url), 'utf8'),
         readFile(new URL('../js/main.js', import.meta.url), 'utf8'),
@@ -19,9 +19,11 @@ test('startup loads only core months and keeps heavy data lazy', async () => {
     assert.doesNotMatch(realtime, /loadTradeDays/);
     assert.match(realtime, /loadDayDetails\(tradeDate, state\.myUserId, \{ force: true \}\)/);
     const tabWork = ui.slice(ui.indexOf('async function runMainTabWork'), ui.indexOf('function getDashboardGreetingName'));
-    assert.doesNotMatch(tabWork, /renderDashboardNews/);
+    assert.match(tabWork, /renderDashboardNews/);
     assert.doesNotMatch(tabWork, /renderDashboardAI/);
-    assert.doesNotMatch(tabWork, /renderMarketSentiment/);
+    assert.match(tabWork, /renderMarketSentiment/);
+    assert.doesNotMatch(tabWork, /loadTradeDays/);
+    assert.doesNotMatch(tabWork, /Polygon/);
 });
 
 test('ordinary journal saves do not create backups and embeddings are gently deferred', async () => {

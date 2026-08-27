@@ -19,12 +19,10 @@ export async function renderAdminPanel() {
     const refreshUsersBtn = document.getElementById('admin-refresh-users-btn');
     const sessionReviewTestBtn = document.getElementById('admin-session-review-test-btn');
     const botsPanel = document.getElementById('admin-service-bots-panel');
-    const polygonPanel = document.getElementById('admin-polygon-panel');
     const fullAdmin = state.myRole === 'admin';
     if (sessionReviewTestBtn) sessionReviewTestBtn.hidden = !fullAdmin;
     const dataManager = fullAdmin || state.IS_MENTOR_MODE;
     if (botsPanel) botsPanel.hidden = !fullAdmin;
-    if (polygonPanel) polygonPanel.hidden = !fullAdmin;
     if (!dataManager) {
         if (refreshUsersBtn) refreshUsersBtn.style.display = 'none';
         if (botsPanel) botsPanel.innerHTML = '';
@@ -64,9 +62,6 @@ export async function renderAdminPanel() {
 
     container.innerHTML = '';
     if (fullAdmin) await renderRegistrationRequests(container);
-    if (fullAdmin && polygonPanel) {
-        renderMarketCriteriaAdminPanel(polygonPanel);
-    }
     if (fullAdmin) renderServiceBotsPanel(profiles || []);
     visibleProfiles.forEach((p) => container.appendChild(buildUserCard(p, teamChoices, { fullAdmin, dataManager })));
 }
@@ -75,6 +70,12 @@ export function renderTestingPanel() {
     const panel = document.getElementById('testing-tools-panel');
     if (!panel || state.myRole !== 'admin') return;
     panel.hidden = false;
+    if (panel.dataset.initialized === 'true') {
+        const polygonHost = panel.querySelector('[data-testing-polygon-host]');
+        if (polygonHost) void renderPolygonAdminPanel(polygonHost);
+        return;
+    }
+    panel.dataset.initialized = 'true';
     panel.innerHTML = `
         <div class="admin-service-bots-head">
             <div><h4 class="admin-section-title">Тестування</h4><p class="admin-section-subtitle">Ручний запуск функцій першого налаштування без скидання профілю.</p></div>
@@ -82,6 +83,10 @@ export function renderTestingPanel() {
         </div>
         <div class="admin-polygon-actions"><button type="button" class="btn-admin-action" data-test-auto-table>Автотаблиця</button></div>
         <p class="admin-polygon-result" data-test-auto-table-result>Шукає точне прізвище у трьох таблицях і запускає автомапінг.</p>
+        <section class="testing-loader-grid">
+            <div class="admin-polygon-panel" data-testing-criteria-host></div>
+            <div class="admin-polygon-panel" data-testing-polygon-host></div>
+        </section>
         <section class="testing-analysis" aria-labelledby="testing-analysis-title">
             <div class="testing-analysis__head">
                 <div><span class="admin-section-subtitle">Експериментальна аналітика</span><h4 id="testing-analysis-title" class="admin-section-title">Період аналізу</h4></div>
@@ -103,6 +108,8 @@ export function renderTestingPanel() {
                 <div id="stats-market-criteria-content" class="stats-market-criteria-content"><div class="stats-empty-note">Аналіз ще не запущено.</div></div>
             </article>
         </section>`;
+    renderMarketCriteriaAdminPanel(panel.querySelector('[data-testing-criteria-host]'));
+    void renderPolygonAdminPanel(panel.querySelector('[data-testing-polygon-host]'));
     const button = panel.querySelector('[data-test-auto-table]');
     const result = panel.querySelector('[data-test-auto-table-result]');
     button?.addEventListener('click', async () => {
@@ -199,6 +206,7 @@ async function loadCriteriaDayBars(pair, token) {
 }
 
 function renderMarketCriteriaAdminPanel(panel) {
+    if (!panel) return;
     panel.innerHTML = `
         <div class="admin-service-bots-head">
             <div>
@@ -208,9 +216,11 @@ function renderMarketCriteriaAdminPanel(panel) {
             <span class="admin-polygon-state is-active">Окремий модуль</span>
         </div>
         <div class="admin-polygon-actions"><button type="button" class="btn-admin-action" data-load-all-criteria>Завантажити всі критерії</button></div>
+        <progress class="testing-job-progress" data-criteria-progress value="0" max="1"></progress>
         <p class="admin-polygon-result" data-criteria-result>Процес почнеться лише після натискання.</p>`;
     const button = panel.querySelector('[data-load-all-criteria]');
     const result = panel.querySelector('[data-criteria-result]');
+    const progress = panel.querySelector('[data-criteria-progress]');
     button?.addEventListener('click', async () => {
         if (button.disabled) return;
         button.disabled = true;
@@ -219,7 +229,11 @@ function renderMarketCriteriaAdminPanel(panel) {
             await loadTradeDays(state.CURRENT_VIEWED_USER, state.myUserId);
             const all = criteriaPairsFromJournal(state.appData.journal);
             const pending = all.filter((pair) => !pair.loaded);
+            progress.max = Math.max(1, pending.length);
+            progress.value = 0;
             if (!pending.length) {
+                progress.max = 1;
+                progress.value = 1;
                 result.textContent = `Готово: усі ${all.length} ticker + date вже мають критерії.`;
                 return;
             }
@@ -251,6 +265,7 @@ function renderMarketCriteriaAdminPanel(panel) {
                     failed += 1;
                     console.warn('[Market criteria bulk]', pair.ticker, pair.date, error);
                 }
+                progress.value = done + failed;
                 if (done + failed < pending.length) await new Promise((resolve) => setTimeout(resolve, 1200));
             }
             result.textContent = `Готово: завантажено ${done}, помилок ${failed}, раніше були ${all.length - pending.length}.`;
@@ -271,8 +286,21 @@ async function invokePolygonAdmin(action, extra = {}) {
     return data || {};
 }
 
-async function renderPolygonAdminPanel() {
-    const panel = document.getElementById('admin-polygon-panel');
+let polygonStatusTimer = null;
+
+function ensurePolygonStatusTimer() {
+    if (polygonStatusTimer) return;
+    polygonStatusTimer = setInterval(async () => {
+        const host = document.querySelector('[data-testing-polygon-host]');
+        if (!host || !state.USER_DOC_NAME) return;
+        try { await invokePolygonAdmin('admin-process-next'); }
+        catch (error) { console.warn('[Polygon background queue]', error?.message || error); }
+        void renderPolygonAdminPanel(host);
+    }, 3500);
+}
+
+async function renderPolygonAdminPanel(targetPanel = null) {
+    const panel = targetPanel || document.querySelector('[data-testing-polygon-host]');
     if (!panel) return;
     panel.hidden = false;
     panel.innerHTML = '<p class="admin-loading">Перевірка Polygon…</p>';
@@ -283,6 +311,11 @@ async function renderPolygonAdminPanel() {
         const processing = Number(status.counts?.processing) || 0;
         const ready = Number(status.counts?.ready) || 0;
         const failed = Number(status.counts?.failed) || 0;
+        if (!pending && !processing && !failed && polygonStatusTimer) {
+            clearInterval(polygonStatusTimer);
+            polygonStatusTimer = null;
+        }
+        if (pending || processing || failed) ensurePolygonStatusTimer();
         panel.innerHTML = `
             <div class="admin-service-bots-head">
                 <div>
@@ -294,9 +327,11 @@ async function renderPolygonAdminPanel() {
             <div class="admin-polygon-counts">
                 <span>У черзі <strong>${pending}</strong></span><span>Обробляється <strong>${processing}</strong></span><span>Готово <strong>${ready}</strong></span><span>Помилки <strong>${failed}</strong></span>
             </div>
+            <progress class="testing-job-progress" value="${ready}" max="${Math.max(1, pending + processing + ready + failed)}"></progress>
+            <p class="admin-polygon-result">Виконано ${ready} · залишилось ${pending + processing} · помилок ${failed}</p>
             <div class="admin-polygon-actions">
                 <button type="button" class="${paused ? 'btn-admin-action' : 'btn-admin-danger'}" data-polygon-pause>${paused ? 'Продовжити Polygon' : 'Зупинити Polygon'}</button>
-                <button type="button" class="btn-admin-action" data-polygon-enqueue>Завантажити всі Trades</button>
+                <button type="button" class="btn-admin-action" data-polygon-enqueue>Завантажити всі полігони</button>
                 <button type="button" class="btn-admin-action" data-polygon-refresh>Оновити статус</button>
             </div>
             <p class="admin-polygon-result" data-polygon-result></p>`;
@@ -311,15 +346,16 @@ async function renderPolygonAdminPanel() {
         panel.querySelector('[data-polygon-pause]')?.addEventListener('click', (event) => run(event.currentTarget, async () => {
             await invokePolygonAdmin('admin-pause', { paused: !paused });
             showToast(paused ? 'Polygon продовжено' : 'Нові запити Polygon зупинено');
-            await renderPolygonAdminPanel();
+            await renderPolygonAdminPanel(panel);
         }));
         panel.querySelector('[data-polygon-enqueue]')?.addEventListener('click', (event) => run(event.currentTarget, async () => {
             const queued = await invokePolygonAdmin('admin-enqueue-all');
             showToast(`Polygon запущено: у чергу додано ${Number(queued.queued) || 0}`);
             if (result) result.textContent = `Polygon запущено · Trades: ${Number(queued.total) || 0} · вже були: ${Number(queued.archived) || 0} · додано: ${Number(queued.queued) || 0}`;
-            setTimeout(() => renderPolygonAdminPanel(), 1800);
+            ensurePolygonStatusTimer();
+            setTimeout(() => renderPolygonAdminPanel(panel), 1200);
         }));
-        panel.querySelector('[data-polygon-refresh]')?.addEventListener('click', () => renderPolygonAdminPanel());
+        panel.querySelector('[data-polygon-refresh]')?.addEventListener('click', () => renderPolygonAdminPanel(panel));
     } catch (error) {
         panel.innerHTML = `<p class="admin-error">Polygon: ${escapeHtml(error?.message || error)}</p>`;
     }

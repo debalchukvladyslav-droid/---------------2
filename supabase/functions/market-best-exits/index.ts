@@ -7,7 +7,8 @@ const POLYGON_ARCHIVE_BUCKET = 'polygon-cache';
 const POLYGON_ARCHIVE_VERSION = 1;
 const POLYGON_CONTROL_PATH = '_control/state.json';
 const POLYGON_DISABLED = false;
-const STATELESS_POLYGON = true;
+const STATELESS_POLYGON = false;
+const STORAGE_ONLY_ARCHIVE = true;
 
 function cors(req: Request) {
     const allowed = new Set([DEFAULT_ORIGIN, 'http://localhost:8787', 'http://127.0.0.1:8787', ...(Deno.env.get('APP_ALLOWED_ORIGINS') || '').split(',')]);
@@ -110,9 +111,33 @@ async function writePolygonArchive(symbol: string, date: string, results: any[])
             apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json',
             'x-upsert': 'true', 'Cache-Control': 'max-age=31536000',
         },
-        body: JSON.stringify({ version: POLYGON_ARCHIVE_VERSION, symbol, date, provider: 'polygon', savedAt: new Date().toISOString(), results }),
+        body: JSON.stringify({ version: POLYGON_ARCHIVE_VERSION, symbol, date, provider: 'polygon', savedAt: new Date().toISOString(), results, derived: buildArchiveDerived(results) }),
     });
     if (!response.ok) throw new Error(`Polygon archive write ${response.status}`);
+}
+
+function buildArchiveDerived(results: any[]) {
+    const bars = polygonMinuteMap(results);
+    let cumulativeVolume = 0;
+    let runningMarketLow: number | null = null;
+    const fiveMinute: any[] = [];
+    for (let minute = 240; minute <= 720; minute += 1) {
+        const bar = bars.get(minute);
+        if (bar) cumulativeVolume += Math.max(0, Number(bar.v) || 0);
+        if (minute >= 570 && bar && Number(bar.l) > 0) runningMarketLow = runningMarketLow == null ? Number(bar.l) : Math.min(runningMarketLow, Number(bar.l));
+        if (minute % 5 !== 0) continue;
+        const slice = Array.from({ length: 5 }, (_, index) => bars.get(minute - 4 + index)).filter(Boolean);
+        if (!slice.length) continue;
+        fiveMinute.push({
+            minute, open: Number(slice[0].o), high: Math.max(...slice.map((item) => Number(item.h))),
+            low: Math.min(...slice.map((item) => Number(item.l))), close: Number(slice.at(-1).c),
+            volume: slice.reduce((sum, item) => sum + (Number(item.v) || 0), 0),
+            cumulativeVolume, marketLow: runningMarketLow,
+        });
+    }
+    const marketRows = fiveMinute.filter((row) => row.minute >= 570 && row.minute <= 720 && row.marketLow != null);
+    const marketLow = marketRows.length ? marketRows.reduce((best, row) => row.marketLow < best.marketLow ? row : best) : null;
+    return { intervalMinutes: 5, fiveMinute, marketLow: marketLow ? { price: marketLow.marketLow, minute: marketLow.minute } : null };
 }
 
 async function readPolygonControl() {
@@ -200,6 +225,23 @@ function polygonMinuteMap(results: any[]) {
         if (Number.isFinite(hour) && Number.isFinite(minute)) bars.set(hour * 60 + minute, bar);
     }
     return bars;
+}
+
+function analyzeArchivedDay(results: any[], item: any, targetMinute: number | null) {
+    const bars = polygonMinuteMap(results);
+    const eligible = [...bars.entries()].filter(([minute, bar]) => minute >= Math.max(570, item.entryMinute) && minute < 720 && Number(bar?.l) > 0);
+    if (!eligible.length) return null;
+    const lowEntry = eligible.reduce((best, current) => Number(current[1].l) < Number(best[1].l) ? current : best);
+    const output: any = { symbol: item.symbol, date: item.date, entryMinute: item.entryMinute, low: Number(lowEntry[1].l), lowTime: new Date(Number(lowEntry[1].t)).toISOString(), cached: true };
+    if (targetMinute == null) return output;
+    output.targetMinute = targetMinute;
+    output.stopPrice = item.stopPrice;
+    output.stopEntryMinute = item.stopEntryMinute;
+    if (targetMinute < item.stopEntryMinute) return { ...output, notOpened: true, stopHit: false };
+    const stop = item.stopPrice > 0 ? [...bars.entries()].find(([minute, bar]) => minute >= item.stopEntryMinute && minute <= targetMinute && Number(bar?.h) >= item.stopPrice) : null;
+    if (stop) return { ...output, stopHit: true, stopMinute: stop[0], stopTime: new Date(Number(stop[1].t)).toISOString(), priceMinute: targetMinute, priceAtTime: item.stopPrice, priceTime: new Date(Number(stop[1].t)).toISOString() };
+    const target = bars.get(targetMinute);
+    return target && Number(target.c) > 0 ? { ...output, stopHit: false, priceMinute: targetMinute, priceAtTime: Number(target.c), priceTime: new Date(Number(target.t)).toISOString() } : output;
 }
 
 async function fetchPolygonDay(symbol: string, date: string, polygonKey: string) {
@@ -325,6 +367,13 @@ Deno.serve(async (req) => {
             body.action = '';
             body.items = [{ symbol: queued.kickItem.symbol, date: queued.kickItem.trade_date, entryMinute: 570 }];
         }
+        if (body.action === 'admin-process-next') {
+            const nextResponse = await rest(`market_low_jobs?status=in.(pending,failed)&next_attempt_at=lte.${encodeURIComponent(new Date().toISOString())}&order=updated_at.asc&limit=1&select=symbol,trade_date`);
+            const nextRows = nextResponse.ok ? await nextResponse.json() : [];
+            if (!nextRows.length) return json(req, { processed: 0, queued: 0 });
+            body.action = '';
+            body.items = [{ symbol: nextRows[0].symbol, date: nextRows[0].trade_date, entryMinute: 570 }];
+        }
         if (body.action) return json(req, { message: 'Unknown admin action' }, 400);
     }
     const requestedTargetMinute = Number(body?.targetMinute);
@@ -351,6 +400,8 @@ Deno.serve(async (req) => {
     }
 
     const cachedChecks = await Promise.all(normalized.map(async (item) => {
+        const archivedBars = await readPolygonArchive(item.symbol, item.date).catch(() => null);
+        if (archivedBars?.length) return { item, result: analyzeArchivedDay(archivedBars, item, targetMinute) };
         const query = `market_best_exit_cache?symbol=eq.${item.symbol}&trade_date=eq.${item.date}&entry_minute=eq.${item.entryMinute}&select=symbol,trade_date,entry_minute,low_price,low_at`;
         const cachedRes = await rest(query);
         const cached = cachedRes.ok ? await cachedRes.json() : [];
@@ -429,7 +480,7 @@ Deno.serve(async (req) => {
                 provider: 'polygon', updated_at: new Date().toISOString(),
             });
         }
-        const lowCacheSaved = await rest('market_best_exit_cache?on_conflict=symbol,trade_date,entry_minute', {
+        const lowCacheSaved = STORAGE_ONLY_ARCHIVE ? { ok: true } : await rest('market_best_exit_cache?on_conflict=symbol,trade_date,entry_minute', {
             method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify(cacheRows),
         });
         if (!lowCacheSaved.ok) throw new Error(`Low cache write ${lowCacheSaved.status}`);
@@ -446,14 +497,14 @@ Deno.serve(async (req) => {
                 transactions: Number.isInteger(Number(bar.n)) ? Number(bar.n) : null,
                 provider: 'polygon', updated_at: new Date().toISOString(),
             }));
-        for (let offset = 0; offset < priceRows.length; offset += 150) {
+        for (let offset = 0; !STORAGE_ONLY_ARCHIVE && offset < priceRows.length; offset += 150) {
             const chunk = priceRows.slice(offset, offset + 150);
             const saved = await rest('market_time_price_cache?on_conflict=symbol,trade_date,target_minute', {
                 method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify(chunk),
             });
             if (!saved.ok) throw new Error(`Intraday cache write ${saved.status}`);
         }
-        const statusSaved = await rest('market_intraday_cache_status?on_conflict=symbol,trade_date', {
+        const statusSaved = STORAGE_ONLY_ARCHIVE ? { ok: true } : await rest('market_intraday_cache_status?on_conflict=symbol,trade_date', {
             method: 'POST', headers: { Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify({
                 symbol: item.symbol, trade_date: item.date, from_minute: 240, to_minute: 1200,
                 bar_count: priceRows.length, cache_version: INTRADAY_CACHE_VERSION,

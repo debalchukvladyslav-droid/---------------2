@@ -70,5 +70,6 @@ test('admin bulk criteria loader is separate from Polygon and skips existing pai
     assert.match(admin, /criteriaPairsFromJournal/);
     assert.match(admin, /filter\(\(pair\) => !pair\.loaded\)/);
     assert.match(admin, /fetch\('\/api\/trade-polygons'/);
+    assert.match(admin, /data-testing-criteria-host/);
     assert.doesNotMatch(admin.match(/function renderMarketCriteriaAdminPanel[\s\S]*?\n}\n/)?.[0] || '', /market-best-exits|polygon-aggs/);
 });
