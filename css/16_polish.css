@@ -3536,6 +3536,30 @@ body[data-theme="light"] .settings-dayloss-row input[type="month"] {
     overflow-wrap: anywhere;
 }
 
+.drive-service-field-label {
+    display: block;
+    margin-top: 12px;
+    color: var(--text-main);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.drive-service-credential-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.drive-service-credential-row .drive-service-email {
+    flex: 1;
+    min-width: 0;
+}
+
+.drive-service-credential-row .technical-email-copy-btn {
+    flex: 0 0 auto;
+    margin-top: 10px;
+}
+
 .technical-email-copy-btn {
     width: auto;
     min-width: 30px;

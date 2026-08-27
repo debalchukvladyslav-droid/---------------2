@@ -82,11 +82,6 @@
                                         <a href="icons/drive-instructions/03-folder-id.jpg" target="_blank" rel="noopener"><img src="icons/drive-instructions/03-folder-id.jpg" alt="Де знайти ID папки Google Drive" loading="lazy"></a>
                                     </article>
                                 </div>
-                                <div class="settings-row initially-hidden">
-                                    <button class="btn-secondary btn-auto" id="drive-connect-btn" data-action="drive-connect">Підключити Google Drive</button>
-                                    <button class="btn-secondary btn-auto drive-disconnect-btn initially-hidden" id="drive-disconnect-btn" data-action="drive-disconnect">Вийти</button>
-                                    <span id="drive-folder-info" class="drive-folder-info"></span>
-                                </div>
                                 <div class="drive-service-box">
                                     <div class="drive-service-head">
                                         <div>
@@ -95,8 +90,12 @@
                                         </div>
                                         <button class="btn-primary btn-auto" data-action="drive-service-sync">Синхронізувати</button>
                                     </div>
-                                    <div class="drive-service-email" id="drive-service-email">service account email не налаштований</div>
-                                    <input class="drive-service-input" id="drive-service-folder-input" type="text" placeholder="Google Drive folder link або ID папки">
+                                    <div class="drive-service-field-label">1. Скопіюйте пошту для доступу до папки</div>
+                                    <div class="drive-service-credential-row">
+                                        <div class="drive-service-email" id="drive-service-email">service account email не налаштований</div>
+                                    </div>
+                                    <label class="drive-service-field-label" for="drive-service-folder-input">2. Вставте посилання або ID папки</label>
+                                    <input class="drive-service-input" id="drive-service-folder-input" type="text" placeholder="Наприклад: https://drive.google.com/drive/folders/...">
                                     <div class="drive-service-status muted-status" id="drive-service-status"></div>
                                 </div>
                             </section>

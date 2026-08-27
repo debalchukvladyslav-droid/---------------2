@@ -655,7 +655,6 @@ export function updateDriveUI() {
     const disconnectBtn = document.getElementById('drive-disconnect-btn');
     const serviceEmailEl = document.getElementById('drive-service-email');
     const serviceFolderInput = document.getElementById('drive-service-folder-input');
-    if (!btn) return;
     if (serviceEmailEl) setCopyableText(serviceEmailEl, SERVICE_ACCOUNT_EMAIL, 'service account email не налаштований');
 
     const folderId = state.appData.settings.driveFolderId;
@@ -663,17 +662,21 @@ export function updateDriveUI() {
     if (serviceFolderInput && folderId && !serviceFolderInput.value) serviceFolderInput.value = folderId;
 
     if (folderId) {
-        btn.textContent = '🔄 Змінити папку';
-        btn.style.background = 'rgba(16,185,129,0.15)';
-        btn.style.borderColor = 'var(--profit)';
-        btn.style.color = 'var(--profit)';
+        if (btn) {
+            btn.textContent = '🔄 Змінити папку';
+            btn.style.background = 'rgba(16,185,129,0.15)';
+            btn.style.borderColor = 'var(--profit)';
+            btn.style.color = 'var(--profit)';
+        }
         if (info) info.textContent = `📁 ${folderName || folderId}`;
         if (disconnectBtn) disconnectBtn.classList.remove('initially-hidden');
     } else {
-        btn.textContent = '🔗 Підключити Google Drive';
-        btn.style.background = '';
-        btn.style.borderColor = '';
-        btn.style.color = '';
+        if (btn) {
+            btn.textContent = '🔗 Підключити Google Drive';
+            btn.style.background = '';
+            btn.style.borderColor = '';
+            btn.style.color = '';
+        }
         if (info) info.textContent = '';
         if (disconnectBtn) disconnectBtn.classList.add('initially-hidden');
     }
