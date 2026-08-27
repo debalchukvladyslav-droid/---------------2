@@ -280,23 +280,72 @@ function renderMarketCriteriaAdminPanel(panel) {
 }
 
 async function invokePolygonAdmin(action, extra = {}) {
-    const { data, error } = await supabase.functions.invoke('market-best-exits', { body: { action, ...extra } });
-    if (error) throw error;
-    if (data?.message) throw new Error(data.message);
-    return data || {};
+    const { data, error } = await supabase.auth.getSession();
+    const token = data?.session?.access_token;
+    if (error || !token) throw new Error(error?.message || 'Auth session not found');
+    const endpoint = `${String(SUPABASE_URL).replace(/\/$/, '')}/functions/v1/market-best-exits`;
+    let response;
+    try {
+        response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action, ...extra }),
+        });
+    } catch (cause) {
+        const requestError = new Error('Edge Function недоступна або заблокована CORS');
+        requestError.status = 0;
+        requestError.cause = cause;
+        throw requestError;
+    }
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload?.ok === false) {
+        const requestError = new Error(payload?.error || payload?.message || `market-best-exits HTTP ${response.status}`);
+        requestError.status = response.status;
+        requestError.code = payload?.code || '';
+        throw requestError;
+    }
+    return payload || {};
 }
 
 let polygonStatusTimer = null;
+let polygonTickBusy = false;
+let polygonWorkerBlockedMessage = '';
+
+function stopPolygonStatusTimer() {
+    if (polygonStatusTimer) clearInterval(polygonStatusTimer);
+    polygonStatusTimer = null;
+}
+
+function polygonWorkerErrorMessage(error) {
+    const status = Number(error?.status) || 0;
+    if (status === 400) return 'Функція market-best-exits на сервері не підтримує фонову чергу. Задеплойте актуальну версію, потім натисніть «Оновити статус».';
+    if (!status) return 'market-best-exits недоступна або має помилку CORS. Фонову чергу зупинено, щоб не перевантажувати сервер.';
+    if ([401, 403].includes(status)) return `Немає доступу до market-best-exits (HTTP ${status}). Фонову чергу зупинено.`;
+    return String(error?.message || error || `market-best-exits HTTP ${status}`);
+}
 
 function ensurePolygonStatusTimer() {
-    if (polygonStatusTimer) return;
+    if (polygonStatusTimer || polygonWorkerBlockedMessage) return;
     polygonStatusTimer = setInterval(async () => {
         const host = document.querySelector('[data-testing-polygon-host]');
-        if (!host || !state.USER_DOC_NAME) return;
-        try { await invokePolygonAdmin('admin-process-next'); }
-        catch (error) { console.warn('[Polygon background queue]', error?.message || error); }
-        void renderPolygonAdminPanel(host);
-    }, 3500);
+        if (!host || !state.USER_DOC_NAME || polygonTickBusy) return;
+        polygonTickBusy = true;
+        try {
+            await invokePolygonAdmin('admin-process-next');
+            await renderPolygonAdminPanel(host);
+        } catch (error) {
+            polygonWorkerBlockedMessage = polygonWorkerErrorMessage(error);
+            stopPolygonStatusTimer();
+            console.warn('[Polygon background queue stopped]', polygonWorkerBlockedMessage, error);
+            const result = host.querySelector('[data-polygon-result]');
+            if (result) {
+                result.textContent = polygonWorkerBlockedMessage;
+                result.classList.add('admin-error');
+            }
+        } finally {
+            polygonTickBusy = false;
+        }
+    }, 13000);
 }
 
 async function renderPolygonAdminPanel(targetPanel = null) {
@@ -311,11 +360,8 @@ async function renderPolygonAdminPanel(targetPanel = null) {
         const processing = Number(status.counts?.processing) || 0;
         const ready = Number(status.counts?.ready) || 0;
         const failed = Number(status.counts?.failed) || 0;
-        if (!pending && !processing && !failed && polygonStatusTimer) {
-            clearInterval(polygonStatusTimer);
-            polygonStatusTimer = null;
-        }
-        if (pending || processing || failed) ensurePolygonStatusTimer();
+        if (!pending && !processing && !failed) stopPolygonStatusTimer();
+        if ((pending || processing || failed) && !polygonWorkerBlockedMessage) ensurePolygonStatusTimer();
         panel.innerHTML = `
             <div class="admin-service-bots-head">
                 <div>
@@ -328,13 +374,12 @@ async function renderPolygonAdminPanel(targetPanel = null) {
                 <span>У черзі <strong>${pending}</strong></span><span>Обробляється <strong>${processing}</strong></span><span>Готово <strong>${ready}</strong></span><span>Помилки <strong>${failed}</strong></span>
             </div>
             <progress class="testing-job-progress" value="${ready}" max="${Math.max(1, pending + processing + ready + failed)}"></progress>
-            <p class="admin-polygon-result">Виконано ${ready} · залишилось ${pending + processing} · помилок ${failed}</p>
+            <p class="admin-polygon-result${polygonWorkerBlockedMessage ? ' admin-error' : ''}" data-polygon-result>${escapeHtml(polygonWorkerBlockedMessage || `Виконано ${ready} · залишилось ${pending + processing} · помилок ${failed}`)}</p>
             <div class="admin-polygon-actions">
                 <button type="button" class="${paused ? 'btn-admin-action' : 'btn-admin-danger'}" data-polygon-pause>${paused ? 'Продовжити Polygon' : 'Зупинити Polygon'}</button>
                 <button type="button" class="btn-admin-action" data-polygon-enqueue>Завантажити всі полігони</button>
                 <button type="button" class="btn-admin-action" data-polygon-refresh>Оновити статус</button>
-            </div>
-            <p class="admin-polygon-result" data-polygon-result></p>`;
+            </div>`;
         const result = panel.querySelector('[data-polygon-result]');
         const run = async (button, task) => {
             panel.querySelectorAll('button').forEach((item) => { item.disabled = true; });
@@ -350,12 +395,16 @@ async function renderPolygonAdminPanel(targetPanel = null) {
         }));
         panel.querySelector('[data-polygon-enqueue]')?.addEventListener('click', (event) => run(event.currentTarget, async () => {
             const queued = await invokePolygonAdmin('admin-enqueue-all');
+            polygonWorkerBlockedMessage = '';
             showToast(`Polygon запущено: у чергу додано ${Number(queued.queued) || 0}`);
             if (result) result.textContent = `Polygon запущено · Trades: ${Number(queued.total) || 0} · вже були: ${Number(queued.archived) || 0} · додано: ${Number(queued.queued) || 0}`;
             ensurePolygonStatusTimer();
             setTimeout(() => renderPolygonAdminPanel(panel), 1200);
         }));
-        panel.querySelector('[data-polygon-refresh]')?.addEventListener('click', () => renderPolygonAdminPanel(panel));
+        panel.querySelector('[data-polygon-refresh]')?.addEventListener('click', () => {
+            polygonWorkerBlockedMessage = '';
+            renderPolygonAdminPanel(panel);
+        });
     } catch (error) {
         panel.innerHTML = `<p class="admin-error">Polygon: ${escapeHtml(error?.message || error)}</p>`;
     }
