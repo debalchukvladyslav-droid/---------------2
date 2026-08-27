@@ -20,7 +20,7 @@ function hasPnl(day) {
 }
 function monthKey(now) { const date = now instanceof Date ? now : new Date(now || Date.now()); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`; }
 function localDateKey(now) { const date = now instanceof Date ? now : new Date(now || Date.now()); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; }
-function weekKey(dateStr) { const date = new Date(`${dateStr}T12:00:00Z`); const monday = new Date(date); const day = monday.getUTCDay() || 7; monday.setUTCDate(monday.getUTCDate() - day + 1); return monday.toISOString().slice(0, 10); }
+function learningWeek(dateStr) { return Math.min(4, Math.max(1, Math.ceil(Number(String(dateStr).slice(8, 10)) / 7))); }
 function monthWorkDates(now) {
     const date = now instanceof Date ? now : new Date(now || Date.now());
     const year = date.getFullYear();
@@ -45,8 +45,8 @@ function dailyCore(day) {
     const checks = {
         pnl: hasPnl(day),
         thought: hasText(day.notes) || hasText(day.nextSessionImprovement),
-        sessionStart: hasText(day.sessionGoal) || hasText(day.sessionPlan) || hasText(day.sessionReadiness),
-        sessionEnd: day.sessionDone === true || day.sessionReviewDone === true || hasText(day.nextSessionImprovement),
+        sessionStart: day.sessionStartRecorded === true || day.sessionDone === true || hasText(day.sessionGoal) || hasText(day.sessionPlan),
+        sessionEnd: day.sessionEndRecorded === true || day.sessionReviewDone === true || hasText(day.sessionReviewCompletedAt),
     };
     return { checks };
 }
@@ -79,12 +79,24 @@ export function calculateJournalScore({ journal = {}, reviews = [], learnCache =
     const completedReviews = relevantReviews.filter((review) => review.final_status === 'normal' || review.final_status === 'bad').length;
     const stops = { label: 'Розбір стопів', done: completedReviews, total: relevantReviews.length, weight: 1 };
     const stopsRatio = stops.total ? stops.done / stops.total : 0;
-    const score = workDays ? Math.max(0, Math.min(10, Math.round((coreRatio * 6 + sessionRatio * 3 + stopsRatio) * 10) / 10)) : 0;
+    const availableLearningWeeks = new Set(workDates.map(learningWeek));
+    const learnedWeeks = new Set((Array.isArray(learningDates) ? learningDates : [])
+        .filter((date) => String(date || '').startsWith(prefix) && String(date) <= todayKey)
+        .map(learningWeek));
+    const learning = {
+        label: 'Навчання раз на тиждень',
+        done: [...availableLearningWeeks].filter((week) => learnedWeeks.has(week)).length,
+        total: availableLearningWeeks.size,
+        weight: 0.5,
+    };
+    const learningRatio = learning.total ? learning.done / learning.total : 0;
+    const score = workDays ? Math.max(0, Math.min(10, Math.round((coreRatio * 5.5 + sessionRatio * 3 + stopsRatio + learningRatio * 0.5) * 10) / 10)) : 0;
     const label = score >= 8.5 ? 'Системно' : score >= 7 ? 'Добре' : score >= 5 ? 'Набирає ритм' : 'Потрібна увага';
     const gaps = [
         { ...core, ratio: core.total ? core.done / core.total : 1 },
         { ...session, ratio: session.total ? session.done / session.total : 1 },
         { ...stops, ratio: stopsRatio },
+        { ...learning, ratio: learningRatio },
     ];
-    return { score, label, activeDays: core.done, workDays, absentDays: absentDates.size, gaps, details: 'Поточний місяць до сьогодні включно. PnL + думка дня дають 60% оцінки. Сесія дає 30%: початок і завершення мають по половині денного бала. Розбір усіх стопів дає 10%. Майбутні та позначені як відсутність дні не входять у план.' };
+    return { score, label, activeDays: core.done, workDays, absentDays: absentDates.size, gaps, details: 'Поточний місяць до сьогодні включно. PnL + думка дня дають 55% оцінки, сесія — 30%, розбір стопів — 10%, навчання — 5%. Навчання зараховується один раз на тиждень, максимум 4 рази на місяць. Майбутні та позначені як відсутність дні не входять у план.' };
 }

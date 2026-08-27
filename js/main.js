@@ -399,6 +399,7 @@ window.saveSessionData = function() {
     state.appData.journal[state.selectedDateStr].sessionPlan = plan;
     state.appData.journal[state.selectedDateStr].sessionReadiness = parseInt(readiness);
     state.appData.journal[state.selectedDateStr].sessionSetups = setups;
+    state.appData.journal[state.selectedDateStr].sessionStartRecorded = true;
     state.appData.journal[state.selectedDateStr].__detailsLoaded = true;
     markJournalDayDirty(state.selectedDateStr);
     saveJournalData();
@@ -473,6 +474,7 @@ window.saveSessionModal = async function() {
     state.appData.journal[today].sessionReadiness = parseInt(document.getElementById('sm-readiness')?.value) || 5;
     state.appData.journal[today].sessionSetups = [...document.querySelectorAll('#sm-playbook-checks input:checked')].map(cb => cb.value);
     state.appData.journal[today].sessionDone = true;
+    state.appData.journal[today].sessionStartRecorded = true;
     state.appData.journal[today].__detailsLoaded = true;
     markJournalDayDirty(today);
     await saveJournalData();
@@ -764,6 +766,7 @@ window.saveSessionReview = async function() {
     day.notes = document.getElementById('session-review-notes')?.value || '';
     day.nextSessionImprovement = document.getElementById('session-review-improvement')?.value || '';
     day.sessionReviewDone = true;
+    day.sessionEndRecorded = true;
     day.sessionReviewCompletedAt = new Date().toISOString();
     day.__detailsLoaded = true;
     state.appData.journal[today] = day;

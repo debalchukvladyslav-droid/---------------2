@@ -191,8 +191,10 @@ function dayEntryToJournalRow(userId, tradeDate, entry) {
             sessionSetups: Array.isArray(day.sessionSetups) ? day.sessionSetups : [],
             sessionAiResult: day.sessionAiResult ?? '',
             sessionDone: day.sessionDone ?? false,
+            sessionStartRecorded: day.sessionStartRecorded === true,
             nextSessionImprovement: day.nextSessionImprovement ?? '',
             sessionReviewDone: day.sessionReviewDone ?? false,
+            sessionEndRecorded: day.sessionEndRecorded === true,
             sessionReviewCompletedAt: day.sessionReviewCompletedAt ?? '',
             trades: Array.isArray(day.trades) ? day.trades : [],
             tradePolygons: day.tradePolygons && typeof day.tradePolygons === 'object' ? day.tradePolygons : {},
@@ -237,8 +239,12 @@ function journalRowToDayEntry(row) {
         sessionSetups: metrics.sessionSetups || [],
         sessionAiResult: metrics.sessionAiResult,
         sessionDone: metrics.sessionDone,
+        sessionStartRecorded: metrics.sessionStartRecorded === true || metrics.sessionDone === true
+            || String(metrics.sessionGoal || '').trim() !== '' || String(metrics.sessionPlan || '').trim() !== '',
         nextSessionImprovement: metrics.nextSessionImprovement,
         sessionReviewDone: metrics.sessionReviewDone,
+        sessionEndRecorded: metrics.sessionEndRecorded === true || metrics.sessionReviewDone === true
+            || String(metrics.sessionReviewCompletedAt || '').trim() !== '',
         sessionReviewCompletedAt: metrics.sessionReviewCompletedAt,
         trades: metrics.trades || [],
         tradePolygons: metrics.tradePolygons && typeof metrics.tradePolygons === 'object' ? metrics.tradePolygons : {},
@@ -273,6 +279,10 @@ function journalRowToMonthEntry(row) {
             ppro: metrics.ppro,
             pproSource: metrics.pproSource,
             traderAbsent: metrics.traderAbsent === true,
+            sessionStartRecorded: metrics.sessionStartRecorded === true || metrics.sessionDone === true
+                || String(metrics.sessionGoal || '').trim() !== '' || String(metrics.sessionPlan || '').trim() !== '',
+            sessionEndRecorded: metrics.sessionEndRecorded === true || metrics.sessionReviewDone === true
+                || String(metrics.sessionReviewCompletedAt || '').trim() !== '',
             trades: metrics.trades || [],
             tradePolygons: metrics.tradePolygons && typeof metrics.tradePolygons === 'object' ? metrics.tradePolygons : {},
         }),

@@ -8,6 +8,16 @@ import { buildTradeTypeAIContext } from './trade_type_analysis.js';
 const MAX_QUERIES = 3;
 const MAX_PREFERENCE_LENGTH = 500;
 
+function markLearningActivity() {
+    state.appData.settings = state.appData.settings || {};
+    const history = Array.isArray(state.appData.settings.learningHistory) ? state.appData.settings.learningHistory : [];
+    const today = getTodayStr();
+    if (history.includes(today)) return;
+    state.appData.settings.learningHistory = [...new Set([...history, today])].slice(-104);
+    window.dispatchEvent(new CustomEvent('journal:score-refresh'));
+    import('./storage.js').then((module) => module.saveSettings()).catch((error) => console.warn('[Learning history]', error));
+}
+
 function normalizeLearningPreference(value) {
     return String(value || '').replace(/\s+/g, ' ').trim().slice(0, MAX_PREFERENCE_LENGTH);
 }
@@ -158,8 +168,10 @@ function renderQueriesOnly(resultsEl, queries, reason = 'default') {
 
         const link = document.createElement('a');
         link.href = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+        link.addEventListener('click', markLearningActivity);
         link.target = '_blank';
         link.rel = 'noopener noreferrer';
+        link.addEventListener('click', markLearningActivity);
         link.className = 'btn-secondary';
         link.style.cssText = 'display:inline-block;margin-top:10px;text-decoration:none;padding:8px 14px;border-radius:6px;font-size:0.85rem;';
         link.textContent = 'Відкрити пошук на YouTube';
@@ -376,7 +388,7 @@ Return only a JSON array of strings.`;
             state.appData.learnCache = { date: getTodayStr(), queries, videos: allVideos, queryLabel: labelText, preference: learningPreference, summaries: {} };
         }
 
-        import('./storage.js').then(m => m.saveToLocal());
+        import('./storage.js').then(m => m.saveSettings());
     } catch (e) {
         clearNode(resultsEl);
         const div = document.createElement('div');
@@ -391,6 +403,7 @@ Return only a JSON array of strings.`;
 
 window.summarizeVideo = async function summarizeVideo(vid, title, desc) {
     if (!/^[A-Za-z0-9_-]{6,32}$/.test(String(vid || ''))) return;
+    markLearningActivity();
     const box = document.getElementById(`summary-${vid}`);
     const btn = box?.previousElementSibling;
     if (!box || !btn) return;
@@ -419,11 +432,6 @@ window.summarizeVideo = async function summarizeVideo(vid, title, desc) {
         if (!state.appData.learnCache) state.appData.learnCache = {};
         if (!state.appData.learnCache.summaries) state.appData.learnCache.summaries = {};
         state.appData.learnCache.summaries[vid] = text;
-        state.appData.settings = state.appData.settings || {};
-        const learningHistory = Array.isArray(state.appData.settings.learningHistory) ? state.appData.settings.learningHistory : [];
-        const today = getTodayStr();
-        state.appData.settings.learningHistory = [...new Set([...learningHistory, today])].slice(-104);
-        window.dispatchEvent(new CustomEvent('journal:score-refresh'));
         import('./storage.js').then(m => m.saveToLocal());
     } catch (e) {
         box.textContent = `Помилка: ${e.message}`;

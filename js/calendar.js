@@ -675,7 +675,9 @@ export function saveEntry() {
     if (oldData.sessionAiResult !== undefined) dayData.sessionAiResult = oldData.sessionAiResult;
     if (oldData.trades !== undefined) dayData.trades = oldData.trades;
     if (oldData.sessionDone !== undefined) dayData.sessionDone = oldData.sessionDone;
+    if (oldData.sessionStartRecorded !== undefined) dayData.sessionStartRecorded = oldData.sessionStartRecorded;
     if (oldData.sessionReviewDone !== undefined) dayData.sessionReviewDone = oldData.sessionReviewDone;
+    if (oldData.sessionEndRecorded !== undefined) dayData.sessionEndRecorded = oldData.sessionEndRecorded;
     if (oldData.sessionReviewCompletedAt !== undefined) dayData.sessionReviewCompletedAt = oldData.sessionReviewCompletedAt;
     if (oldData.review_requests !== undefined) dayData.review_requests = oldData.review_requests;
 
