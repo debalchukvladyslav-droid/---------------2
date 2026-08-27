@@ -146,7 +146,7 @@ test('journal score depends only on working days with both PnL and a daily thoug
     });
     assert.equal(withLearning.score, withoutLearning.score);
     assert.equal(withoutLearning.activeDays, 1);
-    assert.equal(withoutLearning.score, 0.5);
+    assert.equal(withoutLearning.score, 1);
 });
 
 test('journal score uses only current month and prioritizes PnL plus daily thought', () => {
@@ -158,8 +158,8 @@ test('journal score uses only current month and prioritizes PnL plus daily thoug
         },
     });
     assert.equal(result.activeDays, 1);
-    assert.equal(result.score, 0.5);
-    assert.equal(result.workDays, 21);
+    assert.equal(result.score, 0.7);
+    assert.equal(result.workDays, 14);
     assert.equal(result.gaps[0].label, 'PnL + думка дня');
 });
 
@@ -172,7 +172,7 @@ test('an absent trader day is removed from journal working-day target', () => {
         },
     });
     assert.equal(result.activeDays, 1);
-    assert.equal(result.workDays, 20);
+    assert.equal(result.workDays, 13);
     assert.equal(result.absentDays, 1);
-    assert.equal(result.score, 0.5);
+    assert.equal(result.score, 0.8);
 });

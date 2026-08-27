@@ -19,6 +19,7 @@ function hasPnl(day) {
     );
 }
 function monthKey(now) { const date = now instanceof Date ? now : new Date(now || Date.now()); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`; }
+function localDateKey(now) { const date = now instanceof Date ? now : new Date(now || Date.now()); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; }
 function weekKey(dateStr) { const date = new Date(`${dateStr}T12:00:00Z`); const monday = new Date(date); const day = monday.getUTCDay() || 7; monday.setUTCDate(monday.getUTCDate() - day + 1); return monday.toISOString().slice(0, 10); }
 function monthWorkDates(now) {
     const date = now instanceof Date ? now : new Date(now || Date.now());
@@ -47,7 +48,8 @@ function dailyCore(day) {
 
 export function calculateJournalScore({ journal = {}, reviews = [], learnCache = null, learningDates = [], now = new Date() } = {}) {
     const prefix = `${monthKey(now)}-`;
-    const calendarWorkDates = monthWorkDates(now);
+    const todayKey = localDateKey(now);
+    const calendarWorkDates = monthWorkDates(now).filter((date) => date <= todayKey);
     const absentDates = new Set(calendarWorkDates.filter((date) => journal?.[date]?.traderAbsent === true));
     const workDates = calendarWorkDates.filter((date) => !absentDates.has(date));
     const workDateSet = new Set(workDates);
@@ -72,7 +74,6 @@ export function calculateJournalScore({ journal = {}, reviews = [], learnCache =
     const completedReviews = relevantReviews.filter((review) => review.final_status === 'normal' || review.final_status === 'bad').length;
     if (relevantReviews.length) habits.stops = { label: 'Розбір стопів', done: completedReviews, total: relevantReviews.length, weight: 2 };
 
-    const todayKey = (now instanceof Date ? now : new Date(now || Date.now())).toISOString().slice(0, 10);
     const activeWeeks = new Set(workDates.filter((date) => date <= todayKey).map(weekKey));
     const recordedLearningDates = new Set([...(Array.isArray(learningDates) ? learningDates : []), learnCache?.date].filter((date) => String(date || '').startsWith(prefix)));
     const learnedWeeks = new Set([...recordedLearningDates].map(weekKey));
@@ -82,5 +83,5 @@ export function calculateJournalScore({ journal = {}, reviews = [], learnCache =
     const score = workDays ? Math.max(0, Math.min(10, Math.round((habits.core.done / workDays) * 100) / 10)) : 0;
     const label = score >= 8.5 ? 'Системно' : score >= 7 ? 'Добре' : score >= 5 ? 'Набирає ритм' : 'Потрібна увага';
     const gaps = Object.values(habits).map((item) => ({ ...item, ratio: item.total ? item.done / item.total : 1 })).filter((item) => item.ratio < .8).sort((a, b) => b.weight - a.weight || a.ratio - b.ratio).slice(0, 6);
-    return { score, label, activeDays: habits.core.done, workDays, absentDays: absentDates.size, gaps, details: 'Поточний місяць. Оцінка — це частка робочих днів, у яких одночасно записані PnL і думка дня. Дні з позначкою «Був(-ла) відсутній(-я)» не входять у план.' };
+    return { score, label, activeDays: habits.core.done, workDays, absentDays: absentDates.size, gaps, details: 'Поточний місяць до сьогодні включно. Оцінка — це частка вже минулих робочих днів, у яких одночасно записані PnL і думка дня. Майбутні та позначені як відсутність дні не входять у план.' };
 }
