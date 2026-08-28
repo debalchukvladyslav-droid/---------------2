@@ -1,4 +1,5 @@
 import { supabase } from './supabase.js';
+import { normalizeScreenshotTimestamp } from './screenshot_registry_core.js';
 
 const COLUMNS = 'storage_path,source,source_file_id,original_name,mime_type,source_created_at,source_modified_at,created_at,updated_at,ticker,trade_key,screenshot_role,captured_at,pixel_width,pixel_height,byte_size,quality_status,quality_details';
 
@@ -73,14 +74,17 @@ export function mergeScreenshotRegistry(appData, rows = [], ignoredPaths = appDa
             added++;
         }
         if (row.source === 'drive' && row.source_file_id) {
+            const sourceCreatedAt = normalizeScreenshotTimestamp(row.source_created_at, null);
+            const sourceModifiedAt = normalizeScreenshotTimestamp(row.source_modified_at, null);
             appData.screenMeta[path] = {
                 ...(appData.screenMeta[path] || {}), source: 'drive',
                 driveId: String(row.source_file_id), driveName: row.original_name || '',
-                createdAt: row.source_created_at || row.created_at || new Date().toISOString(),
-                driveCreatedTime: row.source_created_at || null,
-                driveModifiedTime: row.source_modified_at || null,
+                createdAt: sourceCreatedAt || normalizeScreenshotTimestamp(row.created_at, new Date().toISOString()),
+                driveCreatedTime: sourceCreatedAt,
+                driveModifiedTime: sourceModifiedAt,
                 ticker: row.ticker || '', tradeKey: row.trade_key || '',
-                screenshotRole: row.screenshot_role || 'unknown', capturedAt: row.captured_at || null,
+                screenshotRole: row.screenshot_role || 'unknown',
+                capturedAt: normalizeScreenshotTimestamp(row.captured_at, null),
                 width: row.pixel_width || null, height: row.pixel_height || null,
                 byteSize: row.byte_size || null, qualityStatus: row.quality_status || 'unchecked',
             };

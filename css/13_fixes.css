@@ -1373,6 +1373,15 @@ body.is-calendar-tab .quick-trade-fab {
     margin-bottom: 0;
     min-height: 0;
     overflow: hidden;
+    transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+.stat-card-pro.market-sentiment-card:hover {
+    border-color: color-mix(in srgb, var(--accent) 25%, var(--border));
+    background:
+        linear-gradient(145deg, color-mix(in srgb, var(--accent) 5%, transparent), transparent 42%),
+        color-mix(in srgb, var(--bg-panel) 96%, var(--bg-main));
+    box-shadow: var(--shadow-accent-md);
+    transform: translateY(-1px);
 }
 .market-sentiment-card::before {
     content: '';

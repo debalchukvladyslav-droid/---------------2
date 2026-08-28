@@ -9,7 +9,7 @@ import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 import { ensureGoogleApi, ensureGoogleIdentity } from './vendor_loader.js';
 import { supabase } from './supabase.js';
 import { loadScreenshotRegistry, mergeScreenshotRegistry, registerDriveScreenshot } from './screenshot_registry.js';
-import { selectRegistryBackfills } from './screenshot_registry_core.js';
+import { normalizeScreenshotTimestamp, selectRegistryBackfills } from './screenshot_registry_core.js';
 import { shouldSkipSilentDriveSync } from './drive_sync_core.js';
 
 const appConfig = window.TRADING_JOURNAL_CONFIG || {};
@@ -30,13 +30,23 @@ let _serviceDriveAvailable = true;
 let _lastSuccessfulSyncAt = 0;
 
 function driveScreenMetaFromFile(file, prev = {}) {
-    const createdAt = file.createdTime || file.modifiedTime || prev.createdAt || new Date().toISOString();
+    const previousCreatedAt = normalizeScreenshotTimestamp(prev.createdAt, null);
+    const createdAt = normalizeScreenshotTimestamp(
+        file.createdTime || file.modifiedTime,
+        previousCreatedAt || new Date().toISOString(),
+    );
     return {
         ...prev,
         source: 'drive',
         createdAt,
-        driveCreatedTime: file.createdTime || null,
-        driveModifiedTime: file.modifiedTime || null,
+        driveCreatedTime: normalizeScreenshotTimestamp(
+            file.createdTime,
+            normalizeScreenshotTimestamp(prev.driveCreatedTime, null),
+        ),
+        driveModifiedTime: normalizeScreenshotTimestamp(
+            file.modifiedTime,
+            normalizeScreenshotTimestamp(prev.driveModifiedTime, null),
+        ),
         driveId: file.id,
         driveName: file.name,
     };

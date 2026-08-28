@@ -41,7 +41,7 @@ async function deleteDriveFile(req, res, token, user) {
     if (!folderId) return sendJson(res, 403, { ok: false, error: 'Google Drive folder is not configured' });
 
     const metaResponse = await driveFetch(`files/${fileId}`, token, {
-        fields: 'id,parents,trashed',
+        fields: 'id,parents,trashed,ownedByMe,driveId,capabilities(canTrash,canDelete)',
         supportsAllDrives: 'true',
     });
     const meta = await metaResponse.json().catch(() => ({}));
@@ -62,10 +62,49 @@ async function deleteDriveFile(req, res, token, user) {
     });
     if (!response.ok) {
         const data = await response.json().catch(() => ({}));
+        const trashError = data.error?.message || 'Google Drive could not move this file to trash';
+
+        // In a personal My Drive folder an Editor can read and organize files,
+        // but Google only lets the owner move a foreign-owned file to Trash.
+        // Removing the configured parent prevents the screenshot from being
+        // discovered and re-imported while leaving the owner's original safe.
+        if (response.status === 403) {
+            const detachResponse = await driveFetch(`files/${fileId}`, token, {
+                removeParents: folderId,
+                fields: 'id,parents',
+                supportsAllDrives: 'true',
+            }, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+            });
+            const detachData = await detachResponse.json().catch(() => ({}));
+            if (detachResponse.ok) {
+                console.log('[Drive service] file removed from configured folder', {
+                    fileId,
+                    ownedByServiceAccount: meta.ownedByMe === true,
+                });
+                return sendJson(res, 200, {
+                    ok: true,
+                    deleted: false,
+                    trashed: false,
+                    removedFromFolder: true,
+                    code: 'DRIVE_REMOVED_FROM_FOLDER',
+                    warning: 'Google permits only the file owner to move it to Trash. The file was removed from the connected folder.',
+                });
+            }
+            return sendJson(res, detachResponse.status || response.status, {
+                ok: false,
+                code: 'DRIVE_DELETE_PERMISSION_DENIED',
+                error: trashError,
+                detachError: detachData.error?.message || detachResponse.statusText,
+            });
+        }
+
         return sendJson(res, response.status, {
             ok: false,
             code: 'DRIVE_TRASH_FAILED',
-            error: data.error?.message || 'Google Drive could not move this file to trash',
+            error: trashError,
         });
     }
     return sendJson(res, 200, { ok: true, deleted: true, trashed: true });

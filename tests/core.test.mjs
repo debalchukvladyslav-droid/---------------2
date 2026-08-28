@@ -44,6 +44,7 @@ const { parseDecimalInput } = await import('../js/utils.js');
 const { getZonedClockParts, isEndOfSessionReviewTime } = await import('../js/session_schedule.js');
 const { buildServiceBotSnapshot, hashServiceBotApiKey, hasServiceBotPermission, parseServiceBotRange } = await import('../lib/service_bots.js');
 const { calculateCumulativeWeek, collectWeekStarts, getWeekRange, getWeekStartIso, parseCumulativeNumber, resolveMonthlyDayloss } = await import('../js/cumulative_weekly.js');
+const { normalizeScreenshotTimestamp } = await import('../js/screenshot_registry_core.js');
 const { getNyseDaySchedule } = await import('../js/nyse_calendar.js');
 const { mergedJournalDayForReview, reviewReasonsForDay } = await import('../js/review_signals.js');
 
@@ -86,6 +87,14 @@ test('cumulative week uses Monday through Friday and parses supported numbers', 
     assert.equal(parseCumulativeNumber(' -1,25R '), -1.25);
     assert.equal(parseCumulativeNumber('$42.50'), 42.5);
     assert.equal(parseCumulativeNumber('none'), null);
+});
+
+test('screenshot timestamps compare identically across Drive and Postgres formats', () => {
+    assert.equal(
+        normalizeScreenshotTimestamp('2026-08-28T10:15:30+00:00'),
+        normalizeScreenshotTimestamp('2026-08-28T10:15:30.000Z'),
+    );
+    assert.equal(normalizeScreenshotTimestamp('', null), null);
 });
 
 test('cumulative week aggregates exact sheet types and authoritative imported pnl', () => {

@@ -799,10 +799,25 @@ async function deleteDriveSource(path) {
             error.code = result.code || '';
             throw error;
         }
-        return { deleted: true, skipped: false };
+        return {
+            deleted: result.deleted === true,
+            removedFromFolder: result.removedFromFolder === true,
+            skipped: false,
+            warning: result.warning || '',
+        };
     } catch (error) {
         console.warn('[Screenshots] Drive source delete failed:', error?.message || error);
         return { deleted: false, skipped: false, error };
+    }
+}
+
+function showDriveDeleteOutcome(result) {
+    if (result?.error) {
+        showToast(`Скріншот прибрано із сайту. Google Drive: ${result.error.message}`);
+    } else if (result?.removedFromFolder) {
+        showToast('Скріншот прибрано з підключеної папки. Оригінал лишився у власника Google Drive.');
+    } else if (result?.deleted) {
+        showToast('Скріншот переміщено в кошик Google Drive.');
     }
 }
 
@@ -837,7 +852,7 @@ export function deleteFileFromPC(encodedPath) {
         const driveResult = await permanentlyDeleteScreenshot(url);
         await saveSettings();
         await loadImages();
-        if (driveResult.error) showToast(`Скріншот прибрано із сайту. Google Drive: ${driveResult.error.message}`);
+        showDriveDeleteOutcome(driveResult);
     });
 }
 
@@ -854,7 +869,7 @@ export function deleteAssignedImage(encodedPath, category) {
             .then(() => {
                 loadImages();
                 if(window.renderView) window.renderView();
-                if (driveResult.error) showToast(`Скріншот прибрано із сайту. Google Drive: ${driveResult.error.message}`);
+                showDriveDeleteOutcome(driveResult);
             });
     });
 }
