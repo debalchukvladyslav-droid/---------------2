@@ -2715,6 +2715,19 @@ body {
     height: 100%;
 }
 
+@media (min-width: 761px) {
+    #view-ai.active {
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    #view-ai.active .ai-workspace {
+        height: calc(100dvh - 40px);
+        min-height: calc(100dvh - 40px);
+        max-height: calc(100dvh - 40px);
+    }
+}
+
 .ai-toolbar {
     display: flex;
     align-items: flex-end;
