@@ -129,7 +129,7 @@ test('cumulative week aggregates exact sheet types and authoritative imported pn
     assert.equal(result.purpleKf, 1.5);
     assert.equal(result.purpleKfCount, 1);
     assert.equal(result.greenKfCount, 0);
-    assert.equal(result.effectiveness, 0.17);
+    assert.equal(result.effectiveness, 0.0739);
 });
 
 test('cumulative metro result falls back to calendar import formula with locates', () => {

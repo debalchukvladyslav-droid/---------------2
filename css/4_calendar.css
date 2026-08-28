@@ -75,6 +75,11 @@
     border-radius: 12px;
 }
 .cumulative-dayloss-editor label { display: grid; min-width: 0; gap: 6px; color: var(--text-muted); font-size: .85rem; }
+.cumulative-dayloss-formula {
+    color: var(--text-muted);
+    font-size: .76rem;
+    line-height: 1.4;
+}
 .cumulative-dayloss-editor .btn-primary { width: auto !important; min-width: 124px; max-width: 100%; margin: 0 !important; white-space: nowrap; }
 .cumulative-dayloss-editor input {
     box-sizing: border-box;

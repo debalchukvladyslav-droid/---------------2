@@ -168,6 +168,6 @@ export function calculateCumulativeWeek({ weekStart, journal = {}, rowsByDay = {
         if (key !== 'rowCount' && !key.endsWith('Count')) totals[key] = round(totals[key]);
     });
     const limit = Math.abs(parseCumulativeNumber(dayloss) || 0);
-    totals.effectiveness = limit ? round(totals.metroResult / limit, 4) : null;
+    totals.effectiveness = limit ? round(totals.metroResult / (limit * 2.3), 4) : null;
     return { ...range, ...totals, dayloss: limit || null };
 }
