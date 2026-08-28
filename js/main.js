@@ -171,7 +171,17 @@ async function manualSyncAll(trigger = null, options = {}) {
     if (!quiet) showToast('Синхронізація запущена...');
     try {
         const isOwnProfile = state.CURRENT_VIEWED_USER === state.USER_DOC_NAME;
+        // Те, що користувач бачить на головній, має з'явитися першим. Новини
+        // та індекс страху незалежні, тому завантажуємо їх паралельно ще до
+        // Trades, Drive, резервної копії та фонового OCR.
+        const dashboardPrioritySteps = document.getElementById('view-dash')?.classList.contains('active')
+            ? await Promise.all([
+                runManualSyncStep('dashboard-news', () => renderDashboardNews()),
+                runManualSyncStep('market-sentiment', () => renderMarketSentiment()),
+            ])
+            : [];
         const steps = [
+            ...dashboardPrioritySteps,
             await runManualSyncStep('save-local', () => saveToLocal(), { optional: false }),
             await runManualSyncStep('load-trades', () => loadTradeDays()),
             // Google Sheets must be checked before optional services: a backup or
@@ -189,9 +199,7 @@ async function manualSyncAll(trigger = null, options = {}) {
             await runManualSyncStep('stats-view', () => document.getElementById('view-stats')?.classList.contains('active') ? refreshStatsView() : null),
             await runManualSyncStep('datagrid-view', () => document.getElementById('view-datagrid')?.classList.contains('active') ? renderTradesDatagrid() : null),
             await runManualSyncStep('mentor-review', () => canAccessMentorReviewQueue() ? refreshMentorReviewQueue() : null),
-            await runManualSyncStep('dashboard-news', () => document.getElementById('view-dash')?.classList.contains('active') ? renderDashboardNews() : null),
             await runManualSyncStep('dashboard-ai', () => document.getElementById('view-dash')?.classList.contains('active') ? renderDashboardAI() : null),
-            await runManualSyncStep('market-sentiment', () => document.getElementById('view-dash')?.classList.contains('active') ? renderMarketSentiment() : null),
             await runManualSyncStep('sidebar-account', () => refreshSidebarAccount()),
             await runManualSyncStep('drive-ui', () => updateDriveUI()),
         ];
