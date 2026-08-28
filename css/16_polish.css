@@ -2709,9 +2709,10 @@ body {
 
 .ai-workspace {
     display: flex;
-    flex: 0 0 auto;
+    flex: 1 1 auto;
     flex-direction: column;
     min-height: 0;
+    height: 100%;
 }
 
 .ai-toolbar {
@@ -2774,6 +2775,10 @@ body {
     gap: 10px;
 }
 
+#ai-chat-section .data-chat-row {
+    flex: 0 0 auto;
+}
+
 .ai-tab-row {
     margin-bottom: 15px;
 }
@@ -2788,8 +2793,9 @@ body {
 
 .ai-section {
     display: flex;
-    flex: 0 0 auto;
+    flex: 1 1 auto;
     flex-direction: column;
+    min-height: 0;
     overflow: hidden;
 }
 
@@ -2937,8 +2943,10 @@ body {
 }
 
 .data-chat-box {
-    flex: 0 0 auto;
-    height: clamp(230px, 36vh, 420px);
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 230px;
+    max-height: none;
     margin-bottom: 15px;
     overflow-y: auto;
     padding: 15px;
