@@ -37,7 +37,7 @@ const marketSessionLowCache = new Map();
 const POLYGON_DISABLED = false;
 
 async function loadMarketSessionLow(symbol, dateStr) {
-    if (POLYGON_DISABLED) return null;
+    if (POLYGON_DISABLED || state.activeTradesImports > 0) return null;
     const normalizedSymbol = String(symbol || '').toUpperCase();
     if (!/^[A-Z]{1,10}$/.test(normalizedSymbol) || !/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || ''))) return null;
     const key = `${normalizedSymbol}|${dateStr}`;
@@ -709,6 +709,13 @@ async function buildLWChart(symbol, dateStr, trades) {
     const placeholder = document.getElementById('tv-placeholder');
     const container   = document.getElementById('tradingview-widget');
     if (!container) return;
+
+    if (state.activeTradesImports > 0) {
+        if (placeholder) placeholder.style.display = 'none';
+        container.style.display = 'block';
+        container.innerHTML = '<div style="color:var(--text-muted);padding:20px;text-align:center;">Trades імпортуються. Polygon і ринкові критерії не запускаються автоматично.</div>';
+        return;
+    }
 
     if (placeholder) placeholder.style.display = 'none';
     container.style.display = 'block';

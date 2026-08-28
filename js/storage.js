@@ -526,9 +526,13 @@ async function _doSave(opts = {}) {
 
         // Semantic memory is derived after the durable journal write. A temporary
         // inference failure must never roll back or block the trader's save flow.
-        void enqueueTradeEmbeddingSync(savedDays).catch((error) => {
-            console.warn('[trade-memory] embedding sync deferred:', error?.message || error);
-        });
+        if (!opts.skipEmbedding) {
+            void enqueueTradeEmbeddingSync(savedDays).catch((error) => {
+                console.warn('[trade-memory] embedding sync deferred:', error?.message || error);
+            });
+        } else {
+            console.log(`[trade-memory] skipped for bulk import: ${savedDays.length} days`);
+        }
 
         clearStatsCache(state.USER_DOC_NAME);
         entries.forEach(([dateStr]) => _dirtyJournalDates.delete(dateStr));

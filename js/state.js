@@ -93,7 +93,8 @@ export const state = {
     statsCompareTradeTypeFilter: null,
     statsCompareContext: { journal: {}, label: 'Мій профіль', tradeTypes: [] },
     statsCompareEquityAdvancedMode: false,
-    autoFlagsCache: { records: new Set(), absoluteRecord: null }
+    autoFlagsCache: { records: new Set(), absoluteRecord: null },
+    activeTradesImports: 0
 };
 
 // Задаємо сьогоднішню дату при старті

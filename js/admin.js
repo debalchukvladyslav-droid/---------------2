@@ -361,7 +361,8 @@ async function renderPolygonAdminPanel(targetPanel = null) {
         const ready = Number(status.counts?.ready) || 0;
         const failed = Number(status.counts?.failed) || 0;
         if (!pending && !processing && !failed) stopPolygonStatusTimer();
-        if ((pending || processing || failed) && !polygonWorkerBlockedMessage) ensurePolygonStatusTimer();
+        // Перегляд панелі та імпорт Trades не запускають Polygon. Обробник
+        // стартує лише після ручної кнопки «Завантажити всі полігони».
         panel.innerHTML = `
             <div class="admin-service-bots-head">
                 <div>

@@ -622,6 +622,7 @@ export function importFondexxTrades(event) {
     if (!canMutateJournalImports(event)) return;
     const reader = new FileReader();
     reader.onload = async function(e) {
+        state.activeTradesImports = (Number(state.activeTradesImports) || 0) + 1;
         try {
             await ensureXlsx();
             let data = new Uint8Array(e.target.result);
@@ -687,7 +688,7 @@ export function importFondexxTrades(event) {
                 markJournalDayDirty(d);
                 daysUpdated++;
             }
-            saveJournalData().then(async () => {
+            saveJournalData({ skipEmbedding: true }).then(async () => {
                 if (window.refreshSheetMatchesAfterTradesImport) {
                     try {
                         await window.refreshSheetMatchesAfterTradesImport({ quiet: true });
@@ -713,8 +714,13 @@ export function importFondexxTrades(event) {
                 if (window.selectDate) window.selectDate(state.selectedDateStr);
             }).catch(err => {
                 showToast('Import save error: ' + (err?.message || err));
+            }).finally(() => {
+                state.activeTradesImports = Math.max(0, (Number(state.activeTradesImports) || 1) - 1);
             });
-        } catch(err) { showToast('Помилка імпорту Trades: ' + err.message); }
+        } catch(err) {
+            state.activeTradesImports = Math.max(0, (Number(state.activeTradesImports) || 1) - 1);
+            showToast('Помилка імпорту Trades: ' + err.message);
+        }
     };
     reader.readAsArrayBuffer(file); event.target.value = '';
 }

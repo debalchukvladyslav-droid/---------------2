@@ -1230,6 +1230,34 @@ let _appInitialized = false;
 
 // ─── TIMEOUT (10 s) ──────────────────────────────────────────────────────────
 let _initTimeoutId = null;
+function withBootDeadline(operation, label, timeoutMs = 10000) {
+    let timeoutId;
+    const deadline = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(`${label}: timeout after ${timeoutMs}ms`)), timeoutMs);
+    });
+    return Promise.race([Promise.resolve(operation), deadline])
+        .finally(() => clearTimeout(timeoutId));
+}
+
+function showBootRetry(message = 'Не вдалося завершити запуск сайту.') {
+    let toast = document.getElementById('_load-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = '_load-toast';
+        toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--bg-panel);border:1px solid var(--border);color:var(--text-main);padding:10px 20px;border-radius:8px;z-index:99999;font-size:0.9rem;transition:opacity 0.3s;text-align:center;';
+        document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = '🔄 Повторити запуск';
+    button.style.cssText = 'display:block;margin:8px auto 0;padding:6px 16px;border-radius:6px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:0.9rem;';
+    button.addEventListener('click', () => location.reload());
+    toast.appendChild(button);
+    toast.style.opacity = '1';
+    toast.style.display = 'block';
+}
+
 function startInitTimeout() {
     _initTimeoutId = setTimeout(() => {
         console.warn('[DIAG] ⏱ Init timeout > 10 s');
@@ -1269,23 +1297,47 @@ function hideAuthSpinner() {
 async function bootApp(user) {
     if (_appInitialized) return;
     _appInitialized = true;
+    startInitTimeout();
     resetRuntimeDataForAccountSwitch();
 
-    let { data: bootProfile, error: bootProfileError } = await supabase
-        .from('profiles')
-        .select('nick, role, mentor_enabled, settings')
-        .eq('id', user.id)
-        .maybeSingle();
+    let bootProfile;
+    let bootProfileError;
+    try {
+        console.log('[INIT] 1/4 loading profile');
+        const profileResponse = await withBootDeadline(
+            supabase
+                .from('profiles')
+                .select('nick, role, mentor_enabled, settings')
+                .eq('id', user.id)
+                .maybeSingle(),
+            'profile load',
+            10000,
+        );
+        bootProfile = profileResponse.data;
+        bootProfileError = profileResponse.error;
+        console.log('[INIT] 1/4 profile loaded');
+    } catch (error) {
+        console.error('[INIT] profile load failed:', error);
+        _appInitialized = false;
+        clearInitTimeout();
+        hideAuthSpinner();
+        showBootRetry('Профіль не відповів вчасно. Перевірте з’єднання та повторіть запуск.');
+        return;
+    }
     if (bootProfileError) console.warn('[AUTH] Could not load profile nick:', bootProfileError);
 
     if (!bootProfile?.nick) {
         try {
-            await ensureAuthUserProfile(user);
-            const refetched = await supabase
-                .from('profiles')
-                .select('nick, role, mentor_enabled, settings')
-                .eq('id', user.id)
-                .maybeSingle();
+            await withBootDeadline(ensureAuthUserProfile(user), 'profile creation', 10000);
+            const refetched = await withBootDeadline(
+                supabase
+                    .from('profiles')
+                    .select('nick, role, mentor_enabled, settings')
+                    .eq('id', user.id)
+                    .maybeSingle(),
+                'profile reload',
+                10000,
+            );
             bootProfile = refetched.data;
         } catch (e) {
             console.error('[AUTH] ensureAuthUserProfile:', e);
@@ -1294,12 +1346,16 @@ async function bootApp(user) {
 
     if (bootProfile?.role !== 'admin' && bootProfile?.settings?.account_approved !== true) {
         try {
-            await submitRegistrationRequest();
-            const refreshed = await supabase
-                .from('profiles')
-                .select('nick, role, mentor_enabled, settings')
-                .eq('id', user.id)
-                .maybeSingle();
+            await withBootDeadline(submitRegistrationRequest(), 'registration request', 10000);
+            const refreshed = await withBootDeadline(
+                supabase
+                    .from('profiles')
+                    .select('nick, role, mentor_enabled, settings')
+                    .eq('id', user.id)
+                    .maybeSingle(),
+                'registration status',
+                10000,
+            );
             bootProfile = refreshed.data || bootProfile;
         } catch (error) {
             console.error('[AUTH] registration request:', error);
@@ -1333,11 +1389,11 @@ async function bootApp(user) {
     state.CURRENT_VIEWED_USER = state.USER_DOC_NAME;
     state.myUserId = user.id || null;
     setCurrentViewedUserId(user.id || null);
-    await resolveViewedUserId(state.CURRENT_VIEWED_USER);
+    console.log('[INIT] 2/4 profile context ready');
 
-    startInitTimeout();
     try {
-        await ensureAppShellLoaded();
+        console.log('[INIT] 3/4 loading interface');
+        await withBootDeadline(ensureAppShellLoaded(), 'interface load', 15000);
         document.querySelectorAll('.testing-nav-item, .testing-tab-mobile').forEach((item) => {
             item.classList.toggle('initially-hidden', state.myRole !== 'admin');
         });
@@ -1347,7 +1403,9 @@ async function bootApp(user) {
         const errEl = document.getElementById('auth-error');
         if (errEl) errEl.style.display = 'none';
 
-        await initializeApp();
+        console.log('[INIT] 4/4 loading journal');
+        await withBootDeadline(initializeApp(), 'journal load', 25000);
+        console.log('[INIT] boot completed');
         initTerminalShortcuts();
 
         if (canAccessMentorReviewQueue()) {
@@ -1371,10 +1429,18 @@ async function bootApp(user) {
         applyPersistedBackground();
     } catch (e) {
         console.error('[INIT] Помилка ініціалізації:', e);
+        _appInitialized = false;
+        showBootRetry(
+            String(e?.message || '').includes('timeout')
+                ? 'Завантаження не відповіло вчасно. Натисніть, щоб повторити запуск.'
+                : 'Під час запуску сталася помилка. Натисніть, щоб повторити.',
+        );
     } finally {
         clearInitTimeout();
-        hideLoadingToast();
+        if (_appInitialized) hideLoadingToast();
     }
+
+    if (!_appInitialized) return;
 
     setTimeout(async () => {
         if (!state.USER_DOC_NAME) return;

@@ -399,12 +399,14 @@ export function initOnboarding(options) {
     let local = null;
     try { local = JSON.parse(localStorage.getItem(localKey()) || 'null'); } catch (_) {}
     const saved = server.version === VERSION ? server : (local?.version === VERSION ? local : null);
-    if (saved?.status === 'in_progress') return setTimeout(() => startOnboardingTour({ resume: true }), 900);
-    if (saved && ['completed', 'dismissed'].includes(saved.status)) return;
-    if (saved?.status === 'later') return setTimeout(() => startOnboardingTour(), 900);
+    // Автоматичне знайомство показується лише один раз. Навіть якщо користувач
+    // закрив тур або перезавантажив сторінку посеред нього, повторний запуск
+    // доступний тільки вручну через налаштування.
+    if (saved && ['shown', 'in_progress', 'later', 'completed', 'dismissed'].includes(saved.status)) return;
 
     const createdAt = Date.parse(options.user?.created_at || '');
     if (Number.isFinite(createdAt) && createdAt >= RELEASED_AT) {
+        writeState('shown', { shownAt: new Date().toISOString() });
         setTimeout(() => startOnboardingTour(), 1100);
     }
 }
