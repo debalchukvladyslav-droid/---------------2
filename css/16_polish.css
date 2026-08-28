@@ -2708,24 +2708,18 @@ body {
 }
 
 .ai-workspace {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    flex: 1 1 0;
     min-height: 0;
     height: 100%;
 }
 
-@media (min-width: 761px) {
-    #view-ai.active {
-        min-height: 0;
-        overflow: hidden;
-    }
-
-    #view-ai.active .ai-workspace {
-        height: calc(100dvh - 40px);
-        min-height: calc(100dvh - 40px);
-        max-height: calc(100dvh - 40px);
-    }
+#view-ai.active {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr);
+    min-height: 0;
+    overflow: hidden;
 }
 
 .ai-toolbar {
@@ -2810,6 +2804,13 @@ body {
     flex-direction: column;
     min-height: 0;
     overflow: hidden;
+}
+
+.ai-section,
+.ai-saved-section,
+.ai-learning {
+    grid-row: 3;
+    min-height: 0;
 }
 
 .ai-learning {
