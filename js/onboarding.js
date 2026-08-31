@@ -2,6 +2,7 @@ import { state } from './state.js';
 
 const VERSION = 1;
 const RELEASED_AT = Date.parse('2026-07-14T00:00:00Z');
+const NEW_ACCOUNT_WINDOW_MS = 24 * 60 * 60 * 1000;
 const LOCAL_PREFIX = 'tj:onboarding:';
 
 let deps = null;
@@ -405,7 +406,12 @@ export function initOnboarding(options) {
     if (saved && ['shown', 'in_progress', 'later', 'completed', 'dismissed'].includes(saved.status)) return;
 
     const createdAt = Date.parse(options.user?.created_at || '');
-    if (Number.isFinite(createdAt) && createdAt >= RELEASED_AT) {
+    const accountAge = Date.now() - createdAt;
+    const isNewAccount = Number.isFinite(createdAt)
+        && createdAt >= RELEASED_AT
+        && accountAge >= 0
+        && accountAge <= NEW_ACCOUNT_WINDOW_MS;
+    if (isNewAccount) {
         writeState('shown', { shownAt: new Date().toISOString() });
         setTimeout(() => startOnboardingTour(), 1100);
     }
