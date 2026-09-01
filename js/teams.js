@@ -200,6 +200,11 @@ function fillAuthTeamSelect() {
     });
 }
 
+function refreshVisibleTeamUI() {
+    const container = document.getElementById('team-list-container');
+    if (container && state.USER_DOC_NAME) _renderTeamSidebarDOM(container);
+}
+
 export async function loadTeams() {
     try {
         const { data: sessionData } = await supabase.auth.getSession();
@@ -207,6 +212,7 @@ export async function loadTeams() {
             state._teamProfiles = {};
             state.TEAM_GROUPS = buildPublicTeamGroups(await fetchPublicTeamNames());
             fillAuthTeamSelect();
+            refreshVisibleTeamUI();
             return;
         }
 
@@ -214,11 +220,16 @@ export async function loadTeams() {
         state._teamProfiles = Object.fromEntries(profiles.map(profile => [profile.nick, profile]));
         state.TEAM_GROUPS = buildTeamGroups(profiles);
         fillAuthTeamSelect();
+        refreshVisibleTeamUI();
         if (window.renderStatsSourceSelector) window.renderStatsSourceSelector();
     } catch (e) {
         console.error('Помилка завантаження кущів:', e);
-        state.TEAM_GROUPS = { [DEFAULT_TEAM]: [] };
+        // Тимчасова помилка мережі/RLS не повинна стирати вже показану команду.
+        if (!state.TEAM_GROUPS || Object.keys(state.TEAM_GROUPS).length === 0) {
+            state.TEAM_GROUPS = { [DEFAULT_TEAM]: [] };
+        }
         fillAuthTeamSelect();
+        refreshVisibleTeamUI();
     }
 }
 

@@ -1226,6 +1226,7 @@ window.saveProfileName = async function() {
             if (idx > -1) { arr[idx] = displayName; changed = true; }
         }
         document.getElementById('name-modal').style.display = 'none';
+        void loadTeams().catch((error) => console.warn('[Init] teams:', error?.message || error));
         if (window.renderTeamSidebar) window.renderTeamSidebar();
         if (window.refreshSidebarAccount) await window.refreshSidebarAccount();
     } catch(e) {
@@ -1453,7 +1454,6 @@ async function bootApp(user) {
 
     setTimeout(async () => {
         if (!state.USER_DOC_NAME) return;
-        await loadTeams().catch((error) => console.warn('[Deferred init] teams:', error?.message || error));
         await loadMentorStatusForAccount().catch((error) => console.warn('[Deferred init] mentor:', error?.message || error));
         startLiveSync();
         await tryRestoreDriveToken().catch((error) => console.warn('[Deferred init] Drive token:', error?.message || error));
