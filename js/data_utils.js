@@ -20,6 +20,7 @@ export function getDefaultSettings() {
         defaultDayloss: -1000,
         monthlyDayloss: {},
         cumulativeMonthlyDayloss: {},
+        cumulativeIncludeDemo: true,
         fondexxMonthlyAdjustments: {},
         dashboardLayout: null
     };
@@ -323,6 +324,7 @@ export function normalizeAppData(rawData) {
         normalizedSettings.cumulativeMonthlyDayloss && typeof normalizedSettings.cumulativeMonthlyDayloss === 'object'
             ? normalizedSettings.cumulativeMonthlyDayloss
             : {};
+    normalizedSettings.cumulativeIncludeDemo = normalizedSettings.cumulativeIncludeDemo !== false;
     normalizedSettings.fondexxMonthlyAdjustments = typeof normalizedSettings.fondexxMonthlyAdjustments === 'object' ? normalizedSettings.fondexxMonthlyAdjustments : {};
     
     if (!normalizedSettings.gemini_key && typeof normalizedSettings.openai_key === 'string') {

@@ -36,6 +36,10 @@ function monthlyLimits() {
         : (settings.cumulativeMonthlyDayloss = {});
 }
 
+function includeDemoDays() {
+    return state.appData?.settings?.cumulativeIncludeDemo !== false;
+}
+
 function renderWeekOptions(rowsByDay) {
     const select = element('cumulative-week-select');
     if (!select) return;
@@ -75,6 +79,7 @@ export function renderCumulativeWeekly() {
         journal: state.appData?.journal || {},
         rowsByDay,
         dayloss: storedDayloss,
+        includeDemo: includeDemoDays(),
     });
 
     const range = element('cumulative-week-range');
@@ -101,6 +106,8 @@ export function renderCumulativeWeekly() {
     if (input) input.value = storedDayloss ?? '';
     const month = element('cumulative-dayloss-month');
     if (month) month.textContent = monthKey;
+    const includeDemo = element('cumulative-include-demo');
+    if (includeDemo) includeDemo.checked = includeDemoDays();
 }
 
 function bindEvents() {
@@ -109,6 +116,17 @@ function bindEvents() {
     element('cumulative-week-select')?.addEventListener('change', (event) => {
         selectedWeek = event.target.value;
         renderCumulativeWeekly();
+    });
+    element('cumulative-include-demo')?.addEventListener('change', async (event) => {
+        const settings = state.appData.settings || (state.appData.settings = {});
+        settings.cumulativeIncludeDemo = event.target.checked === true;
+        renderCumulativeWeekly();
+        try {
+            await saveSettings();
+        } catch (error) {
+            console.error('[Накопичувальна] Не вдалося зберегти налаштування демо:', error);
+            showToast('Не вдалося зберегти налаштування демо.');
+        }
     });
 }
 

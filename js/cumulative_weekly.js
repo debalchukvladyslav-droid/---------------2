@@ -92,7 +92,7 @@ function round(value, digits = 2) {
     return Number((Number(value) || 0).toFixed(digits));
 }
 
-export function calculateCumulativeWeek({ weekStart, journal = {}, rowsByDay = {}, dayloss = null } = {}) {
+export function calculateCumulativeWeek({ weekStart, journal = {}, rowsByDay = {}, dayloss = null, includeDemo = true } = {}) {
     const range = getWeekRange(weekStart);
     const dateSet = new Set(range.dates);
     const totals = {
@@ -119,6 +119,7 @@ export function calculateCumulativeWeek({ weekStart, journal = {}, rowsByDay = {
 
     range.dates.forEach((dateStr) => {
         const day = journal?.[dateStr] || {};
+        if (!includeDemo && day.demoTrading === true) return;
         const hasSummary = day.fondexxSource === 'summary-by-date';
         const hasPpro = day.pproSource === 'ppro-total-report';
         if (hasSummary || hasPpro) {
@@ -136,6 +137,7 @@ export function calculateCumulativeWeek({ weekStart, journal = {}, rowsByDay = {
 
     Object.entries(rowsByDay || {}).forEach(([dateStr, rows]) => {
         if (!dateSet.has(dateStr) || !Array.isArray(rows)) return;
+        if (!includeDemo && journal?.[dateStr]?.demoTrading === true) return;
         rows.forEach((row) => {
             const sheet = row?.sheet && typeof row.sheet === 'object' ? row.sheet : {};
             const pnl = parseCumulativeNumber(sheet.sheetNet ?? row?.net);
