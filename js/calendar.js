@@ -772,16 +772,16 @@ export function saveEntry(options = {}) {
                 showGlobalLoader('save-day', 'День збережено', { type: 'success' });
                 hideGlobalLoader('save-day', 900);
             }
-            if (window.updateAutoFlags) {
+            if (!silent && window.updateAutoFlags) {
                 window.updateAutoFlags().then(() => {
                     if (window.renderView) window.renderView();
                     if (window.scanJournalForNotifications) window.scanJournalForNotifications();
                 });
-            } else if (window.renderView) {
+            } else if (!silent && window.renderView) {
                 window.renderView();
                 if (window.scanJournalForNotifications) window.scanJournalForNotifications();
             }
-            if (window.refreshStatsView) window.refreshStatsView();
+            if (!silent && window.refreshStatsView) window.refreshStatsView();
             if (!silent && window.innerWidth <= 1024 && window.toggleMobileSidebar) window.toggleMobileSidebar(false);
             return true;
         }).catch(err => {
@@ -1260,7 +1260,9 @@ export function initSelectors() {
             _dayEditorDirty = true;
             _dayEditorRevision += 1;
             if (_dayAutoSaveTimer) clearTimeout(_dayAutoSaveTimer);
-            _dayAutoSaveTimer = setTimeout(() => { void autoSaveCurrentDay(); }, 1500);
+            const isInstantControl = event.target.matches('input[type="checkbox"], input[type="radio"], select');
+            const delay = isInstantControl ? 120 : (event.type === 'change' ? 250 : 650);
+            _dayAutoSaveTimer = setTimeout(() => { void autoSaveCurrentDay(); }, delay);
         };
         dayEditor.addEventListener('input', markDirty);
         dayEditor.addEventListener('change', markDirty);
