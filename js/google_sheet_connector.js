@@ -113,6 +113,19 @@ export async function fetchSheetServiceAccount() {
     return fetchSheetsService({ action: 'service-account' });
 }
 
+export async function updateSpreadsheetCells(spreadsheetId, sheetTitle, updates) {
+    const token = await getSupabaseAccessToken();
+    if (!token) throw new Error('Supabase session expired');
+    const response = await fetch('/api/sheets-service?action=update-values', {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spreadsheetId, sheetTitle, updates }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.ok === false) throw new Error(data.error || `Sheets service ${response.status}`);
+    return data;
+}
+
 function cleanDocNick(docName = '') {
     return String(docName || '').replace(/_stats$/, '').trim();
 }

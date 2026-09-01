@@ -2,6 +2,17 @@ import { parseSheetDateCellsToIsoSequence } from './parser_utils.js';
 
 export const SHEET_DATA_FIRST_ROW = 6;
 
+export function calculateTimeExitKf(entryPrice, priceAtTime, consolidationCents, slippageRate = 0.1) {
+    const entry = Number(entryPrice);
+    const exit = Number(priceAtTime);
+    const cents = Number(String(consolidationCents ?? '').replace(',', '.').replace(/[^0-9.-]/g, ''));
+    const slippage = Math.max(0, Math.min(1, Number(slippageRate) || 0));
+    if (!(entry > 0) || !(exit > 0) || !(cents > 0)) return null;
+    const riskPerShare = cents * 1.1 / 100;
+    const rawKf = (entry - exit) / riskPerShare;
+    return Number((rawKf - Math.abs(rawKf) * slippage).toFixed(2));
+}
+
 export function columnLetterToIndex(letters) {
     const s = String(letters || '').trim().toUpperCase().replace(/[^A-Z]/g, '');
     if (!s) return -1;

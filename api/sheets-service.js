@@ -23,13 +23,14 @@ function buildRange(range, sheetTitle) {
     return `${quoteSheetTitle(sheetTitle)}!${range}`;
 }
 
-async function sheetsFetch(path, token, query = {}) {
+async function sheetsFetch(path, token, query = {}, options = {}) {
     const url = new URL(`https://sheets.googleapis.com/v4/spreadsheets/${path.replace(/^\/+/, '')}`);
     for (const [key, value] of Object.entries(query)) {
         if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, value);
     }
     return fetch(url.toString(), {
-        headers: { Authorization: `Bearer ${token}` },
+        ...options,
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(options.headers || {}) },
     });
 }
 
@@ -109,6 +110,25 @@ async function values(req, res, token) {
     return sendJson(res, 200, { ok: true, values: data.values || [], hyperlinks });
 }
 
+async function updateValues(req, res, token) {
+    const spreadsheetId = cleanSpreadsheetId(req.body?.spreadsheetId);
+    const sheetTitle = String(req.body?.sheetTitle || '').trim();
+    const updates = Array.isArray(req.body?.updates) ? req.body.updates.slice(0, 500) : [];
+    if (!spreadsheetId || !sheetTitle || !updates.length) return sendJson(res, 400, { ok: false, error: 'Missing update data' });
+    const data = updates.map((item) => ({
+        range: buildRange(String(item?.range || '').trim(), sheetTitle),
+        values: [[item?.value ?? '']],
+    })).filter((item) => item.range && /^[A-Z]{1,3}\d+$/i.test(item.range.split('!').at(-1).replace(/'/g, '')));
+    if (!data.length) return sendJson(res, 400, { ok: false, error: 'No valid cells to update' });
+    const response = await sheetsFetch(`${encodeURIComponent(spreadsheetId)}/values:batchUpdate`, token, {}, {
+        method: 'POST',
+        body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) return sendJson(res, response.status, { ok: false, error: payload.error?.message || response.statusText });
+    return sendJson(res, 200, { ok: true, updatedCells: Number(payload.totalUpdatedCells) || data.length });
+}
+
 async function exportWorkbook(res, user) {
     const [days, reviews] = await Promise.all([
         supabaseRest(`journal_days?user_id=eq.${encodeURIComponent(user.id)}&select=trade_date,pnl,daily_metrics&order=trade_date.asc`),
@@ -123,8 +143,8 @@ async function teamReport(req, res, user) { const limit=Math.min(180,Math.max(7,
 
 export default async function handler(req, res) {
     try {
-        if (req.method !== 'GET') {
-            res.setHeader('Allow', 'GET');
+        if (!['GET', 'PATCH'].includes(req.method)) {
+            res.setHeader('Allow', 'GET, PATCH');
             return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
         }
 
@@ -132,11 +152,16 @@ export default async function handler(req, res) {
         if (!user?.id) return sendJson(res, 401, { ok: false, error: 'Unauthorized' });
 
         const action = String(req.query.action || 'metadata');
+        if (req.method === 'PATCH' && action !== 'update-values') return sendJson(res, 400, { ok: false, error: 'Unknown write action' });
+        if (action === 'update-values') {
+            const profiles = await supabaseRest(`profiles?id=eq.${encodeURIComponent(user.id)}&select=role&limit=1`);
+            if (profiles?.[0]?.role !== 'admin') return sendJson(res, 403, { ok: false, error: 'Admin access required' });
+        }
         if (action === 'export') return exportWorkbook(res, user);
         if (action === 'team-report') return teamReport(req, res, user);
         if (action === 'service-account') return sendJson(res, 200, { ok: true, email: getGoogleServiceAccountEmail() });
 
-        let token = String(req.headers['x-google-access-token'] || '').trim();
+        let token = action === 'update-values' ? '' : String(req.headers['x-google-access-token'] || '').trim();
         let authMode = token ? 'user' : 'service-account';
         if (!token) {
             try {
@@ -153,6 +178,7 @@ export default async function handler(req, res) {
             }
         }
         console.log('[Sheets service] authorization', { action, authMode });
+        if (action === 'update-values') return updateValues(req, res, token);
         if (action === 'metadata') return metadata(req, res, token);
         if (action === 'values') return values(req, res, token);
         return sendJson(res, 400, { ok: false, error: 'Unknown action' });

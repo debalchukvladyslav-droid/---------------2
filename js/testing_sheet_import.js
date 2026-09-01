@@ -1,8 +1,10 @@
-import { parseSheetGridToTrades } from './sheet_sync_core.js';
+import { calculateTimeExitKf, parseSheetGridToTrades } from './sheet_sync_core.js';
+import { analyzePolygonDay, getOrLoadPolygonDay } from './polygon_intraday_cache.js';
+import { supabase, SUPABASE_URL } from './supabase.js';
 
 const get = (host, id) => host.querySelector(`[data-test-sheet="${id}"]`);
 const SETTINGS_KEY = 'tj_isolated_sheet_test_settings_v1';
-const SETTING_FIELDS = ['source', 'tab', 'date', 'ticker', 'consolidation', 'entry', 'profit-risk', 'start-row'];
+const SETTING_FIELDS = ['source', 'tab', 'date', 'ticker', 'consolidation', 'entry', 'exit', 'profit-risk', 'start-row'];
 
 function readSettings() {
     try {
@@ -65,6 +67,7 @@ function flatten(outByDay = {}) {
         ticker: trade?.symbol || '',
         consolidation: trade?.sheet?.consolidateCents || '',
         entry: trade?.sheet?.entryPrice ?? trade?.entry ?? '',
+        exit: trade?.sheet?.exit || '',
         profitRisk: trade?.sheet?.profitRisk || '',
     })));
 }
@@ -79,7 +82,7 @@ function render(host, rows) {
     const table = document.createElement('table');
     table.className = 'sheet-rows-table';
     const head = table.createTHead().insertRow();
-    ['ДАТА', 'Рядок', 'ТІКЕР', 'Консолідація в цц', 'Точка входу', 'Профіт в КФ'].forEach((label) => {
+    ['ДАТА', 'Рядок', 'ТІКЕР', 'Консолідація в цц', 'Точка входу', 'Вихід', 'Профіт в КФ'].forEach((label) => {
         const th = document.createElement('th');
         th.textContent = label;
         head.append(th);
@@ -87,7 +90,7 @@ function render(host, rows) {
     const body = table.createTBody();
     rows.forEach((item) => {
         const row = body.insertRow();
-        [item.date, item.row, item.ticker, item.consolidation, item.entry, item.profitRisk].forEach((value) => {
+        [item.date, item.row, item.ticker, item.consolidation, item.entry, item.exit, item.profitRisk].forEach((value) => {
             const cell = row.insertCell();
             cell.textContent = value === '' || value == null ? '—' : String(value);
         });
@@ -117,9 +120,11 @@ export function initIsolatedSheetTest(host) {
             <label><span>ТІКЕР</span><select data-test-sheet-column data-test-sheet="ticker" disabled></select></label>
             <label><span>Консолідація в цц</span><select data-test-sheet-column data-test-sheet="consolidation" disabled></select></label>
             <label><span>Точка входу</span><select data-test-sheet-column data-test-sheet="entry" disabled></select></label>
+            <label><span>Вихід</span><select data-test-sheet-column data-test-sheet="exit" disabled></select></label>
             <label><span>Профіт в КФ</span><select data-test-sheet-column data-test-sheet="profit-risk" disabled></select></label>
             <label><span>Стартовий рядок</span><input type="number" min="1" value="6" data-test-sheet="start-row"></label>
             <button type="button" class="btn-admin-action" data-test-sheet="run" disabled>Запустити тест</button>
+            <button type="button" class="btn-admin-action" data-test-sheet="calculate-kf" disabled>Розрахувати КФ на 10:20 і записати</button>
         </div>
         <p class="admin-polygon-result" data-test-sheet="summary">Результат з’явиться нижче.</p>
         <div class="sheet-rows-list testing-sheet-output" data-test-sheet="output"></div>`;
@@ -153,6 +158,7 @@ export function initIsolatedSheetTest(host) {
         restoreAvailableSettings(host, readSettings());
         host.querySelectorAll('[data-test-sheet-column]').forEach((select) => { select.disabled = false; });
         get(host, 'run').disabled = false;
+        get(host, 'calculate-kf').disabled = false;
         status.textContent = `Лист «${tab.value}» завантажено: ${values.length} рядків. Оберіть колонки.`;
         if (restoringSaved && get(host, 'date').value && get(host, 'ticker').value) {
             restoringSaved = false;
@@ -198,10 +204,76 @@ export function initIsolatedSheetTest(host) {
             symbol,
             consolidateCents: get(host, 'consolidation').value,
             entryPrice: get(host, 'entry').value,
+            exit: get(host, 'exit').value,
             profitRisk: get(host, 'profit-risk').value,
         }, spreadsheetId, startRow);
         saveSettings(host);
         render(host, flatten(parsed.outByDay));
+    });
+
+    get(host, 'calculate-kf').addEventListener('click', async (event) => {
+        const button = event.currentTarget;
+        const required = ['date', 'ticker', 'consolidation', 'entry', 'exit', 'profit-risk'];
+        if (required.some((field) => !get(host, field).value)) {
+            status.textContent = 'Для розрахунку виберіть ДАТА, ТІКЕР, Консолідацію, Точку входу, Вихід і Профіт в КФ.';
+            return;
+        }
+        button.disabled = true;
+        try {
+            const startRow = Math.max(1, Number(get(host, 'start-row').value) || 6);
+            const sliced = values.slice(startRow - 1);
+            const parsed = parseSheetGridToTrades(sliced, {
+                date: get(host, 'date').value,
+                symbol: get(host, 'ticker').value,
+                consolidateCents: get(host, 'consolidation').value,
+                entryPrice: get(host, 'entry').value,
+                exit: get(host, 'exit').value,
+                profitRisk: get(host, 'profit-risk').value,
+            }, spreadsheetId, startRow);
+            const todayParts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+            const today = `${todayParts.find((p) => p.type === 'year').value}-${todayParts.find((p) => p.type === 'month').value}-${todayParts.find((p) => p.type === 'day').value}`;
+            const eligibleDates = Object.entries(parsed.outByDay).filter(([date, trades]) => date < today && trades.some((trade) => /(?:по\s*часу|за\s*часом|time)/iu.test(String(trade?.sheet?.exit || '')))).map(([date]) => date).sort();
+            const targetDate = eligibleDates.at(-1);
+            if (!targetDate) throw new Error('Не знайдено попереднього дня з виходами по часу.');
+            const trades = parsed.outByDay[targetDate].filter((trade) => /(?:по\s*часу|за\s*часом|time)/iu.test(String(trade?.sheet?.exit || '')));
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.access_token) throw new Error('Потрібно увійти в акаунт.');
+            const offsetLabel = new Date(`${targetDate}T12:00:00Z`).toLocaleString('en-US', { timeZone: 'America/New_York', timeZoneName: 'short', hour: '2-digit' });
+            const offset = offsetLabel.includes('EDT') ? '-04:00' : '-05:00';
+            const fromMs = new Date(`${targetDate}T04:00:00${offset}`).getTime();
+            const toMs = new Date(`${targetDate}T20:00:00${offset}`).getTime();
+            const calculated = [];
+            for (let index = 0; index < trades.length; index += 1) {
+                const trade = trades[index];
+                status.textContent = `${targetDate}: Polygon ${index + 1} із ${trades.length} · ${trade.symbol}`;
+                const loaded = await getOrLoadPolygonDay(trade.symbol, targetDate, async () => {
+                    const response = await fetch(`${String(SUPABASE_URL).replace(/\/$/, '')}/functions/v1/polygon-aggs`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+                        body: JSON.stringify({ symbol: trade.symbol, fromMs, toMs }),
+                    });
+                    const payload = await response.json().catch(() => ({}));
+                    if (!response.ok) throw new Error(payload?.message || `Polygon: ${response.status}`);
+                    return Array.isArray(payload?.results) ? payload.results : [];
+                });
+                const market = analyzePolygonDay(loaded.bars, { symbol: trade.symbol, date: targetDate, entryMinute: 570, stopEntryMinute: 570 }, 620);
+                const price1020 = Number(market?.priceAtTime);
+                const kf = calculateTimeExitKf(trade?.sheet?.entryPrice ?? trade?.entry, price1020, trade?.sheet?.consolidateCents, 0.1);
+                if (kf == null) continue;
+                calculated.push({ trade, kf });
+            }
+            if (!calculated.length) throw new Error('Не вдалося отримати ціну 10:20 або розрахувати КФ.');
+            const connector = await import('./google_sheet_connector.js');
+            const profitColumn = get(host, 'profit-risk').value;
+            await connector.updateSpreadsheetCells(spreadsheetId, tab.value, calculated.map(({ trade, kf }) => ({ range: `${profitColumn}${trade.sheet.sheetRow}`, value: kf })));
+            calculated.forEach(({ trade, kf }) => { trade.sheet.profitRisk = String(kf); });
+            render(host, flatten(parsed.outByDay));
+            status.textContent = `${targetDate}: записано КФ для ${calculated.length} із ${trades.length} виходів по часу.`;
+        } catch (error) {
+            status.textContent = `Помилка: ${error?.message || error}`;
+        } finally {
+            button.disabled = false;
+        }
     });
 
     if (restoringSaved) {
