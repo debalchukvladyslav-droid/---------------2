@@ -4,7 +4,7 @@ import { supabase, SUPABASE_URL } from './supabase.js';
 
 const get = (host, id) => host.querySelector(`[data-test-sheet="${id}"]`);
 const SETTINGS_KEY = 'tj_isolated_sheet_test_settings_v1';
-const SETTING_FIELDS = ['source', 'tab', 'date', 'ticker', 'consolidation', 'entry', 'exit', 'profit-risk', 'start-row'];
+const SETTING_FIELDS = ['source', 'tab', 'date', 'ticker', 'consolidation', 'entry', 'exit', 'risk', 'profit-risk', 'start-row'];
 
 function readSettings() {
     try {
@@ -68,7 +68,10 @@ function flatten(outByDay = {}) {
         consolidation: trade?.sheet?.consolidateCents || '',
         entry: trade?.sheet?.entryPrice ?? trade?.entry ?? '',
         exit: trade?.sheet?.exit || '',
+        risk: trade?.sheet?.riskUsd || '',
         profitRisk: trade?.sheet?.profitRisk || '',
+        price1020: trade?.sheet?.testPrice1020 ?? '',
+        calculatedKf: trade?.sheet?.testCalculatedKf ?? '',
     })));
 }
 
@@ -82,7 +85,7 @@ function render(host, rows) {
     const table = document.createElement('table');
     table.className = 'sheet-rows-table';
     const head = table.createTHead().insertRow();
-    ['ДАТА', 'Рядок', 'ТІКЕР', 'Консолідація в цц', 'Точка входу', 'Вихід', 'Профіт в КФ'].forEach((label) => {
+    ['ДАТА', 'Рядок', 'ТІКЕР', 'Консолідація в цц', 'Точка входу', 'Вихід', 'Ризик', 'Ціна 10:20', 'Розрахований КФ', 'Профіт в КФ'].forEach((label) => {
         const th = document.createElement('th');
         th.textContent = label;
         head.append(th);
@@ -90,7 +93,7 @@ function render(host, rows) {
     const body = table.createTBody();
     rows.forEach((item) => {
         const row = body.insertRow();
-        [item.date, item.row, item.ticker, item.consolidation, item.entry, item.exit, item.profitRisk].forEach((value) => {
+        [item.date, item.row, item.ticker, item.consolidation, item.entry, item.exit, item.risk, item.price1020, item.calculatedKf, item.profitRisk].forEach((value) => {
             const cell = row.insertCell();
             cell.textContent = value === '' || value == null ? '—' : String(value);
         });
@@ -121,6 +124,7 @@ export function initIsolatedSheetTest(host) {
             <label><span>Консолідація в цц</span><select data-test-sheet-column data-test-sheet="consolidation" disabled></select></label>
             <label><span>Точка входу</span><select data-test-sheet-column data-test-sheet="entry" disabled></select></label>
             <label><span>Вихід</span><select data-test-sheet-column data-test-sheet="exit" disabled></select></label>
+            <label><span>Ризик</span><select data-test-sheet-column data-test-sheet="risk" disabled></select></label>
             <label><span>Профіт в КФ</span><select data-test-sheet-column data-test-sheet="profit-risk" disabled></select></label>
             <label><span>Стартовий рядок</span><input type="number" min="1" value="6" data-test-sheet="start-row"></label>
             <button type="button" class="btn-admin-action" data-test-sheet="run" disabled>Запустити тест</button>
@@ -205,6 +209,7 @@ export function initIsolatedSheetTest(host) {
             consolidateCents: get(host, 'consolidation').value,
             entryPrice: get(host, 'entry').value,
             exit: get(host, 'exit').value,
+            riskUsd: get(host, 'risk').value,
             profitRisk: get(host, 'profit-risk').value,
         }, spreadsheetId, startRow);
         saveSettings(host);
@@ -228,6 +233,7 @@ export function initIsolatedSheetTest(host) {
                 consolidateCents: get(host, 'consolidation').value,
                 entryPrice: get(host, 'entry').value,
                 exit: get(host, 'exit').value,
+                riskUsd: get(host, 'risk').value,
                 profitRisk: get(host, 'profit-risk').value,
             }, spreadsheetId, startRow);
             const todayParts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
@@ -260,13 +266,17 @@ export function initIsolatedSheetTest(host) {
                 const price1020 = Number(market?.priceAtTime);
                 const kf = calculateTimeExitKf(trade?.sheet?.entryPrice ?? trade?.entry, price1020, trade?.sheet?.consolidateCents, 0.1);
                 if (kf == null) continue;
-                calculated.push({ trade, kf });
+                calculated.push({ trade, kf, price1020: Number(price1020.toFixed(4)) });
             }
             if (!calculated.length) throw new Error('Не вдалося отримати ціну 10:20 або розрахувати КФ.');
             const connector = await import('./google_sheet_connector.js');
             const profitColumn = get(host, 'profit-risk').value;
             await connector.updateSpreadsheetCells(spreadsheetId, tab.value, calculated.map(({ trade, kf }) => ({ range: `${profitColumn}${trade.sheet.sheetRow}`, value: kf })));
-            calculated.forEach(({ trade, kf }) => { trade.sheet.profitRisk = String(kf); });
+            calculated.forEach(({ trade, kf, price1020 }) => {
+                trade.sheet.testPrice1020 = price1020;
+                trade.sheet.testCalculatedKf = kf;
+                trade.sheet.profitRisk = String(kf);
+            });
             render(host, flatten(parsed.outByDay));
             status.textContent = `${targetDate}: записано КФ для ${calculated.length} із ${trades.length} виходів по часу.`;
         } catch (error) {
