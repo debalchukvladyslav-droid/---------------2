@@ -634,6 +634,9 @@ export async function switchUser(nick) {
     const previousViewedUserId = state.currentViewedUserId;
     let restoreViewedUserId = null;
     _isSwitching = true;
+    // Finish any pending edit while the old profile is still active. After the
+    // viewed profile changes, autosave correctly becomes read-only.
+    await window.autoSaveCurrentDay?.();
     if (typeof window.stopSheetAutoSync === 'function') window.stopSheetAutoSync();
     const selectedDocName = `${nick}_stats`;
     state.CURRENT_VIEWED_USER = selectedDocName;
@@ -644,14 +647,18 @@ export async function switchUser(nick) {
     _renderTeamSidebarDOM(document.getElementById('team-list-container'));
 
     try {
-        const { initializeApp, resolveViewedUserId, setCurrentViewedUserId } = await import('./storage.js');
+        const {
+            initializeApp,
+            resolveViewedUserId,
+            resetJournalLoadStateForProfileSwitch,
+            setCurrentViewedUserId
+        } = await import('./storage.js');
         restoreViewedUserId = setCurrentViewedUserId;
         const selectedUserId = await resolveViewedUserId(selectedDocName, { force: true });
         setCurrentViewedUserId(selectedUserId);
+        resetJournalLoadStateForProfileSwitch();
         state.statsLoadRequestId++;
         state.appData = { ...state.appData, journal: {} };
-        state.loadedMonths[selectedDocName] = new Set();
-        state._availableMonthKeys = new Set();
         if (window.renderView) window.renderView();
         await initializeApp();
         await window.initDashboardWidgets?.();

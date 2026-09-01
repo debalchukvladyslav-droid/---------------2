@@ -127,6 +127,7 @@ export function resetRuntimeDataForAccountSwitch() {
     _dirtyJournalDates.clear();
     _journalDateRevisions.clear();
     _dayDetailsPromises.clear();
+    _tradeDaysLoadedFor.clear();
     state.appData = normalizeAppData(getDefaultAppData());
     state.currentUnassignedImages = [];
     state.unassignedVisibleCount = 5;
@@ -145,6 +146,24 @@ export function resetRuntimeDataForAccountSwitch() {
     state._availableMonthKeys = new Set();
     state.autoFlagsCache = { records: new Set(), absoluteRecord: null };
     clearStatsCache();
+}
+
+// Journal requests and dirty-date protection are global runtime state. They must
+// not survive a switch to another team member, otherwise matching calendar dates
+// from the previous profile can suppress the newly loaded rows.
+export function resetJournalLoadStateForProfileSwitch() {
+    _dirtyJournalDates.clear();
+    _journalDateRevisions.clear();
+    _dayDetailsPromises.clear();
+    _tradeDaysLoadedFor.clear();
+    state.loadedMonths = {};
+    state._allMonthsLoaded = false;
+    state._monthListLoaded = false;
+    state._availableMonthKeys = new Set();
+}
+
+function isCurrentProfileRequest(nick, userId) {
+    return state.CURRENT_VIEWED_USER === nick && getCurrentViewedUserId() === userId;
 }
 
 function dayEntryToJournalRow(userId, tradeDate, entry) {
@@ -619,11 +638,22 @@ export async function loadMonth(nick, mk, userId = null) {
 
         if (error) throw error;
 
+        if (!isCurrentProfileRequest(nick, targetUserId)) {
+            console.info(`[LOAD] ${mk}: застарілу відповідь іншого профілю пропущено`);
+            return;
+        }
+
         (data || []).forEach(row => {
             const dateStr = row.trade_date;
             if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
                 if (_dirtyJournalDates.has(dateStr)) return;
-                state.appData.journal[dateStr] = journalRowToMonthEntry(row);
+                // The month query already includes daily_metrics, so keeping a
+                // deliberately partial entry only made saved fields appear after
+                // the user clicked the day and triggered a second request.
+                state.appData.journal[dateStr] = markDayEntryDetailsLoaded(
+                    journalRowToDayEntry(row),
+                    true
+                );
             }
         });
 
@@ -669,6 +699,11 @@ export async function loadDayDetails(dateStr, userId = null, options = {}) {
                 .maybeSingle();
 
             if (error) throw error;
+
+            if (getCurrentViewedUserId() !== targetUserId) {
+                console.info(`[LOAD] ${dateStr}: застарілі деталі іншого профілю пропущено`);
+                return existing || null;
+            }
 
             if (!data) {
                 const fallbackEntry = markDayEntryDetailsLoaded(existing || {}, true);
@@ -719,6 +754,11 @@ export async function loadAllMonths(nick, userId = null) {
 
         if (error) throw error;
 
+        if (!isCurrentProfileRequest(nick, targetUserId)) {
+            console.info('[LOAD] loadAllMonths: застарілу відповідь іншого профілю пропущено');
+            return;
+        }
+
         if (!state.loadedMonths[nick]) state.loadedMonths[nick] = new Set();
         state._availableMonthKeys = new Set();
 
@@ -756,6 +796,11 @@ export async function loadTradeDays(nick = state.CURRENT_VIEWED_USER, userId = n
             .order('trade_date', { ascending: true });
 
         if (error) throw error;
+
+        if (!isCurrentProfileRequest(nick, targetUserId)) {
+            console.info('[LOAD] loadTradeDays: застарілу відповідь іншого профілю пропущено');
+            return;
+        }
 
         if (!state.loadedMonths[nick]) state.loadedMonths[nick] = new Set();
         if (!state._availableMonthKeys) state._availableMonthKeys = new Set();
