@@ -101,6 +101,7 @@ export function initIsolatedSheetTest(host) {
     let spreadsheetId = '';
     let values = [];
     const savedSettings = readSettings();
+    let restoringSaved = Boolean(String(savedSettings.source || '').trim());
     host.innerHTML = `
         <div class="admin-service-bots-head"><div><span class="admin-section-subtitle">Ізольований інструмент</span><h4 class="admin-section-title">Тест імпорту таблиці</h4></div><span class="admin-polygon-state is-active">Без збереження</span></div>
         <p class="admin-section-subtitle">Вставте Google Sheets link або spreadsheet ID. Таблиця читається лише після натискання кнопки й не змінює дані сайту.</p>
@@ -153,6 +154,10 @@ export function initIsolatedSheetTest(host) {
         host.querySelectorAll('[data-test-sheet-column]').forEach((select) => { select.disabled = false; });
         get(host, 'run').disabled = false;
         status.textContent = `Лист «${tab.value}» завантажено: ${values.length} рядків. Оберіть колонки.`;
+        if (restoringSaved && get(host, 'date').value && get(host, 'ticker').value) {
+            restoringSaved = false;
+            queueMicrotask(() => get(host, 'run')?.click());
+        }
     };
     get(host, 'load').addEventListener('click', async (event) => {
         const button = event.currentTarget;
@@ -171,6 +176,7 @@ export function initIsolatedSheetTest(host) {
             await loadValues();
             saveSettings(host);
         } catch (error) {
+            restoringSaved = false;
             status.textContent = `Помилка: ${error?.message || error}`;
         } finally {
             button.disabled = false;
@@ -197,4 +203,9 @@ export function initIsolatedSheetTest(host) {
         saveSettings(host);
         render(host, flatten(parsed.outByDay));
     });
+
+    if (restoringSaved) {
+        status.textContent = 'Відновлюємо збережену тестову таблицю…';
+        queueMicrotask(() => get(host, 'load')?.click());
+    }
 }
