@@ -1,6 +1,37 @@
 import { parseSheetGridToTrades } from './sheet_sync_core.js';
 
 const get = (host, id) => host.querySelector(`[data-test-sheet="${id}"]`);
+const SETTINGS_KEY = 'tj_isolated_sheet_test_settings_v1';
+const SETTING_FIELDS = ['source', 'tab', 'date', 'ticker', 'consolidation', 'entry', 'profit-risk', 'start-row'];
+
+function readSettings() {
+    try {
+        const value = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+        return value && typeof value === 'object' ? value : {};
+    } catch (_) {
+        return {};
+    }
+}
+
+function saveSettings(host) {
+    const settings = {};
+    SETTING_FIELDS.forEach((field) => { settings[field] = get(host, field)?.value || ''; });
+    try {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch (_) {
+        /* Test panel remains usable when browser storage is unavailable. */
+    }
+}
+
+function restoreAvailableSettings(host, settings) {
+    SETTING_FIELDS.forEach((field) => {
+        const element = get(host, field);
+        const value = settings[field];
+        if (!element || value == null || value === '') return;
+        if (element.tagName === 'SELECT' && ![...element.options].some((option) => option.value === value)) return;
+        element.value = value;
+    });
+}
 
 function columnLetter(index) {
     let value = index + 1;
@@ -34,6 +65,7 @@ function flatten(outByDay = {}) {
         ticker: trade?.symbol || '',
         consolidation: trade?.sheet?.consolidateCents || '',
         entry: trade?.sheet?.entryPrice ?? trade?.entry ?? '',
+        profitRisk: trade?.sheet?.profitRisk || '',
     })));
 }
 
@@ -47,7 +79,7 @@ function render(host, rows) {
     const table = document.createElement('table');
     table.className = 'sheet-rows-table';
     const head = table.createTHead().insertRow();
-    ['ДАТА', 'Рядок', 'ТІКЕР', 'Консолідація в цц', 'Точка входу'].forEach((label) => {
+    ['ДАТА', 'Рядок', 'ТІКЕР', 'Консолідація в цц', 'Точка входу', 'Профіт в КФ'].forEach((label) => {
         const th = document.createElement('th');
         th.textContent = label;
         head.append(th);
@@ -55,7 +87,7 @@ function render(host, rows) {
     const body = table.createTBody();
     rows.forEach((item) => {
         const row = body.insertRow();
-        [item.date, item.row, item.ticker, item.consolidation, item.entry].forEach((value) => {
+        [item.date, item.row, item.ticker, item.consolidation, item.entry, item.profitRisk].forEach((value) => {
             const cell = row.insertCell();
             cell.textContent = value === '' || value == null ? '—' : String(value);
         });
@@ -68,9 +100,11 @@ export function initIsolatedSheetTest(host) {
     host.dataset.ready = 'true';
     let spreadsheetId = '';
     let values = [];
+    const savedSettings = readSettings();
     host.innerHTML = `
         <div class="admin-service-bots-head"><div><span class="admin-section-subtitle">Ізольований інструмент</span><h4 class="admin-section-title">Тест імпорту таблиці</h4></div><span class="admin-polygon-state is-active">Без збереження</span></div>
         <p class="admin-section-subtitle">Вставте Google Sheets link або spreadsheet ID. Таблиця читається лише після натискання кнопки й не змінює дані сайту.</p>
+        <div class="testing-sheet-service-account"><span>Сервісна пошта для доступу «Редактор»:</span><strong data-test-sheet="service-email">Завантаження…</strong><button type="button" class="btn-secondary sheet-btn-compact" data-test-sheet="copy-email" disabled>Копіювати</button></div>
         <div class="testing-sheet-source">
             <input class="sheet-service-input" type="text" data-test-sheet="source" placeholder="Google Sheets link або spreadsheet ID">
             <button type="button" class="btn-admin-action" data-test-sheet="load">Завантажити таблицю</button>
@@ -82,19 +116,40 @@ export function initIsolatedSheetTest(host) {
             <label><span>ТІКЕР</span><select data-test-sheet-column data-test-sheet="ticker" disabled></select></label>
             <label><span>Консолідація в цц</span><select data-test-sheet-column data-test-sheet="consolidation" disabled></select></label>
             <label><span>Точка входу</span><select data-test-sheet-column data-test-sheet="entry" disabled></select></label>
+            <label><span>Профіт в КФ</span><select data-test-sheet-column data-test-sheet="profit-risk" disabled></select></label>
             <label><span>Стартовий рядок</span><input type="number" min="1" value="6" data-test-sheet="start-row"></label>
             <button type="button" class="btn-admin-action" data-test-sheet="run" disabled>Запустити тест</button>
         </div>
         <p class="admin-polygon-result" data-test-sheet="summary">Результат з’явиться нижче.</p>
         <div class="sheet-rows-list testing-sheet-output" data-test-sheet="output"></div>`;
 
+    restoreAvailableSettings(host, savedSettings);
+    SETTING_FIELDS.forEach((field) => {
+        const element = get(host, field);
+        element?.addEventListener(element.tagName === 'INPUT' ? 'input' : 'change', () => saveSettings(host));
+    });
+
     const status = get(host, 'status');
     const tab = get(host, 'tab');
+    import('./google_sheet_connector.js').then(async (connector) => {
+        const response = await connector.fetchSheetServiceAccount();
+        const email = String(response?.email || '').trim();
+        const emailElement = get(host, 'service-email');
+        const copyButton = get(host, 'copy-email');
+        emailElement.textContent = email || 'Не налаштована на сервері';
+        copyButton.disabled = !email;
+        copyButton.addEventListener('click', async () => {
+            await navigator.clipboard.writeText(email);
+            copyButton.textContent = 'Скопійовано';
+            setTimeout(() => { copyButton.textContent = 'Копіювати'; }, 1400);
+        });
+    }).catch(() => { get(host, 'service-email').textContent = 'Не вдалося завантажити'; });
     const loadValues = async () => {
         const connector = await import('./google_sheet_connector.js');
         status.textContent = 'Читаємо вибраний лист…';
         values = await connector.fetchSpreadsheetValuesRange(spreadsheetId, 'A1:ZZ', tab.value);
         fillColumnSelects(host, values);
+        restoreAvailableSettings(host, readSettings());
         host.querySelectorAll('[data-test-sheet-column]').forEach((select) => { select.disabled = false; });
         get(host, 'run').disabled = false;
         status.textContent = `Лист «${tab.value}» завантажено: ${values.length} рядків. Оберіть колонки.`;
@@ -111,8 +166,10 @@ export function initIsolatedSheetTest(host) {
             tab.replaceChildren();
             (metadata.sheets || []).forEach((sheet) => tab.append(new Option(sheet.title, sheet.title)));
             if (!tab.options.length) throw new Error('У таблиці не знайдено листів.');
+            restoreAvailableSettings(host, readSettings());
             tab.disabled = false;
             await loadValues();
+            saveSettings(host);
         } catch (error) {
             status.textContent = `Помилка: ${error?.message || error}`;
         } finally {
@@ -135,7 +192,9 @@ export function initIsolatedSheetTest(host) {
             symbol,
             consolidateCents: get(host, 'consolidation').value,
             entryPrice: get(host, 'entry').value,
+            profitRisk: get(host, 'profit-risk').value,
         }, spreadsheetId, startRow);
+        saveSettings(host);
         render(host, flatten(parsed.outByDay));
     });
 }

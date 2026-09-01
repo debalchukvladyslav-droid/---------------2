@@ -1,4 +1,4 @@
-import { getGoogleAccessToken, supabaseRest, verifySupabaseUser } from '../lib/google_sheet_sync.js';
+import { getGoogleAccessToken, getGoogleServiceAccountEmail, supabaseRest, verifySupabaseUser } from '../lib/google_sheet_sync.js';
 import { tradingWorkbookBuffer } from '../lib/trading_export.js';
 import { buildTeamReport } from '../lib/team_report.js';
 
@@ -134,6 +134,7 @@ export default async function handler(req, res) {
         const action = String(req.query.action || 'metadata');
         if (action === 'export') return exportWorkbook(res, user);
         if (action === 'team-report') return teamReport(req, res, user);
+        if (action === 'service-account') return sendJson(res, 200, { ok: true, email: getGoogleServiceAccountEmail() });
 
         let token = String(req.headers['x-google-access-token'] || '').trim();
         let authMode = token ? 'user' : 'service-account';

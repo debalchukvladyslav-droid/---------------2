@@ -109,6 +109,10 @@ export async function fetchSpreadsheetMetadata(spreadsheetId) {
     return fetchSheetsService({ action: 'metadata', spreadsheetId });
 }
 
+export async function fetchSheetServiceAccount() {
+    return fetchSheetsService({ action: 'service-account' });
+}
+
 function cleanDocNick(docName = '') {
     return String(docName || '').replace(/_stats$/, '').trim();
 }
