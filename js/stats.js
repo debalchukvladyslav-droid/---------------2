@@ -83,11 +83,21 @@ function journalRowToEntry(row) {
         checkedParams: metrics.checkedParams || [],
         sliders: metrics.sliders || {},
         tradeTypesData: metrics.tradeTypesData || {},
+        sheetGrossSource: metrics.sheetSync?.grossSource || '',
+        sheetGrossValue: metrics.sheetSync?.grossValue ?? null,
+        sheetTradeTypesSource: metrics.sheetSync?.tradeTypesSource || '',
+        sheetCalendarOnly: metrics.sheetSync?.calendarOnly === true,
+        sheetPnlSource: metrics.sheetSync?.legacyPnlSource || '',
+        sheetTradeTypesSyncEnabled: metrics.sheetSync?.tradeTypesEnabled === true,
         screenshots: metrics.screenshots || { good: [], normal: [], bad: [], error: [] },
         tickers: metrics.tickers || {},
         traded_tickers: metrics.traded_tickers || [],
-        fondexx: metrics.fondexx || { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
-        ppro: metrics.ppro || { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
+        fondexx: metrics.fondexx,
+        fondexxSource: metrics.fondexxSource,
+        ppro: metrics.ppro,
+        pproSource: metrics.pproSource,
+        traderAbsent: metrics.traderAbsent === true,
+        demoTrading: metrics.demoTrading === true,
         sessionGoal: metrics.sessionGoal ?? '',
         sessionPlan: metrics.sessionPlan ?? '',
         sessionReadiness: metrics.sessionReadiness ?? null,
@@ -522,7 +532,7 @@ function getStatsSourceOptionsHtml(selection = state.statsSourceSelection, dataP
     const renderedTraderNicks = new Set();
     const myNick = cleanStatsNick(state.USER_DOC_NAME || '').replace(/_stats$/, '');
     const isViewingOtherProfile = !!(state.USER_DOC_NAME && state.CURRENT_VIEWED_USER && state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME);
-    let html = isStatsNickAllowed(currentKey.replace(/_stats$/, ''))
+    let html = currentKey
         ? `<button class="${getStatsSourceButtonClass('current', currentKey, selection)}" ${typeAttr}="current" ${keyAttr}="${escapeHtml(currentKey)}">${isViewingOtherProfile ? '👤 Поточний профіль' : '🏠 Мій профіль'}</button>`
         : '';
 
@@ -855,8 +865,6 @@ async function loadStatsPeriodTreeJournal(selection = state.statsSourceSelection
     const sel = selection || { type: 'current', key: state.CURRENT_VIEWED_USER || state.USER_DOC_NAME || '' };
     try {
         if (sel.type === 'current') {
-            const nick = cleanStatsNick(state.CURRENT_VIEWED_USER || state.USER_DOC_NAME).replace(/_stats$/, '');
-            if (!isStatsNickAllowed(nick)) return {};
             await loadAllMonths(state.CURRENT_VIEWED_USER, currentUserId || getCurrentViewedUserId());
             return prepareStatsJournal(state.appData.journal || {});
         }
@@ -1161,10 +1169,7 @@ export async function refreshStatsView() {
 
     try {
         if (sel.type === 'current') {
-            const currentNick = cleanStatsNick(state.CURRENT_VIEWED_USER || state.USER_DOC_NAME).replace(/_stats$/, '');
-            if (!isStatsNickAllowed(currentNick)) {
-                journal = {};
-            } else if (isAllTime) {
+            if (isAllTime) {
                 if (loadingText) loadingText.textContent = 'Завантаження всіх місяців...';
                 await loadAllMonths(state.CURRENT_VIEWED_USER, currentUserId);
                 journal = state.appData.journal || {};
@@ -1287,10 +1292,8 @@ export async function refreshStatsView() {
     let contextSettings = {};
     if (sel.type === 'current') {
         const currentNick = cleanStatsNick(state.CURRENT_VIEWED_USER || state.USER_DOC_NAME).replace(/_stats$/, '');
-        contextTradeTypes = isStatsNickAllowed(currentNick)
-            ? normalizeTradeTypesList([...(state.appData.tradeTypes || []), ...extractTradeTypesFromJournal(journal)])
-            : extractTradeTypesFromJournal(journal);
-        contextSettings = isStatsNickAllowed(currentNick) ? (state.appData.settings || {}) : {};
+        contextTradeTypes = normalizeTradeTypesList([...(state.appData.tradeTypes || []), ...extractTradeTypesFromJournal(journal)]);
+        contextSettings = getStatsProfileSettingsByNick(currentNick) || state.appData.settings || {};
     } else if (sel.type === 'trader') {
         const nick = cleanStatsNick(sel.key);
         if (isStatsNickAllowed(nick)) {
