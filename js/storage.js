@@ -169,7 +169,7 @@ function dayEntryToJournalRow(userId, tradeDate, entry) {
                 tradeTypesSource: day.sheetTradeTypesSource || '',
                 calendarOnly: day.sheetCalendarOnly === true,
                 legacyPnlSource: day.sheetPnlSource || '',
-                tradeTypesEnabled: day.sheetTradeTypesSyncEnabled !== false,
+                tradeTypesEnabled: day.sheetTradeTypesSyncEnabled === true,
             },
             screenshots: day.screenshots && typeof day.screenshots === 'object'
                 ? day.screenshots
@@ -225,7 +225,7 @@ function journalRowToDayEntry(row) {
         sheetTradeTypesSource: metrics.sheetSync?.tradeTypesSource || '',
         sheetCalendarOnly: metrics.sheetSync?.calendarOnly === true,
         sheetPnlSource: metrics.sheetSync?.legacyPnlSource || '',
-        sheetTradeTypesSyncEnabled: metrics.sheetSync?.tradeTypesEnabled !== false,
+        sheetTradeTypesSyncEnabled: metrics.sheetSync?.tradeTypesEnabled === true,
         screenshots: metrics.screenshots || { good: [], normal: [], bad: [], error: [] },
         tickers: metrics.tickers || {},
         traded_tickers: metrics.traded_tickers || [],
@@ -272,7 +272,7 @@ function journalRowToMonthEntry(row) {
             sheetTradeTypesSource: metrics.sheetSync?.tradeTypesSource || '',
             sheetCalendarOnly: metrics.sheetSync?.calendarOnly === true,
             sheetPnlSource: metrics.sheetSync?.legacyPnlSource || '',
-            sheetTradeTypesSyncEnabled: metrics.sheetSync?.tradeTypesEnabled !== false,
+            sheetTradeTypesSyncEnabled: metrics.sheetSync?.tradeTypesEnabled === true,
             screenshots: metrics.screenshots || { good: [], normal: [], bad: [], error: [] },
             tickers: metrics.tickers || {},
             traded_tickers: metrics.traded_tickers || [],

@@ -22,6 +22,7 @@ export function getDefaultSettings() {
         cumulativeMonthlyDayloss: {},
         cumulativeIncludeDemo: true,
         fondexxMonthlyAdjustments: {},
+        sheetTradeTypesSyncEnabled: false,
         dashboardLayout: null
     };
 }
@@ -295,7 +296,7 @@ export function normalizeDayEntry(entry) {
         demoTrading: safeEntry.demoTrading === true,
         tradeTypesData:
             safeEntry.tradeTypesData && typeof safeEntry.tradeTypesData === 'object' ? { ...safeEntry.tradeTypesData } : {},
-        sheetTradeTypesSyncEnabled: safeEntry.sheetTradeTypesSyncEnabled !== false,
+        sheetTradeTypesSyncEnabled: safeEntry.sheetTradeTypesSyncEnabled === true,
         trades: normalizedTrades,
         review_requests:
             safeEntry.review_requests && typeof safeEntry.review_requests === 'object' ? { ...safeEntry.review_requests } : {},

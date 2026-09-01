@@ -17,6 +17,54 @@ let _dayEditorDirty = false;
 let _dayAutoSavePromise = null;
 let _dayEditorRevision = 0;
 let _dayAutoSaveTimer = null;
+const SHEET_TYPES_ROLLBACK_MS = 15 * 60 * 1000;
+
+function cloneTradeTypesData(value) {
+    if (!value || typeof value !== 'object') return {};
+    return JSON.parse(JSON.stringify(value));
+}
+
+function ensureSheetTypesRollbackSnapshot(monthKey) {
+    const settings = state.appData.settings || (state.appData.settings = {});
+    const current = settings.sheetTradeTypesRollback;
+    if (current && current.monthKey === monthKey && Number(current.expiresAt) > Date.now() && current.days && typeof current.days === 'object') return current;
+    const days = {};
+    Object.entries(state.appData?.journal || {}).forEach(([dateStr, day]) => {
+        if (!dateStr.startsWith(`${monthKey}-`) || !day || typeof day !== 'object') return;
+        days[dateStr] = cloneTradeTypesData(day.tradeTypesData);
+    });
+    const startedAt = Date.now();
+    settings.sheetTradeTypesRollback = { monthKey, startedAt, expiresAt: startedAt + SHEET_TYPES_ROLLBACK_MS, days };
+    return settings.sheetTradeTypesRollback;
+}
+
+function restoreSheetTypesRollbackSnapshot() {
+    const snapshot = state.appData?.settings?.sheetTradeTypesRollback;
+    if (!snapshot || Number(snapshot.expiresAt) < Date.now() || !snapshot.days || typeof snapshot.days !== 'object') return 0;
+    const journal = state.appData?.journal || {};
+    const monthKey = String(snapshot.monthKey || '');
+    const savedDates = new Set(Object.keys(snapshot.days));
+    let restored = 0;
+    Object.entries(snapshot.days).forEach(([dateStr, tradeTypesData]) => {
+        const day = journal[dateStr];
+        if (!day || typeof day !== 'object') return;
+        day.tradeTypesData = cloneTradeTypesData(tradeTypesData);
+        delete day.sheetTradeTypesSource;
+        markJournalDayDirty(dateStr);
+        restored += 1;
+    });
+    Object.entries(journal).forEach(([dateStr, day]) => {
+        if (!dateStr.startsWith(`${monthKey}-`) || savedDates.has(dateStr) || !day?.sheetTradeTypesSource) return;
+        const data = cloneTradeTypesData(day.tradeTypesData);
+        (state.appData?.tradeTypes || []).forEach((type) => delete data[type]);
+        day.tradeTypesData = data;
+        delete day.sheetTradeTypesSource;
+        markJournalDayDirty(dateStr);
+        restored += 1;
+    });
+    delete state.appData.settings.sheetTradeTypesRollback;
+    return restored;
+}
 
 function getFondexxMonthAdjustment(monthKey) {
     const source = state.appData?.settings?.fondexxMonthlyAdjustments?.[monthKey];
@@ -499,10 +547,11 @@ function fillSelectedDateUI(dateStr) {
     const ttContainer = document.getElementById('trade-types-container');
     if (ttContainer && state.appData?.tradeTypes) {
         const savedTT = dayData.tradeTypesData || {};
-        const syncEnabled = state.appData?.settings?.sheetTradeTypesSyncEnabled !== false;
+        const syncEnabled = state.appData?.settings?.sheetTradeTypesSyncEnabled === true;
+        const syncMonth = String(state.appData?.settings?.sheetTradeTypesSyncMonth || '');
         let ttHtml = `
             <div class="trade-types-sync-row">
-                <div><strong>Синхронізація з таблицею</strong><small>${syncEnabled ? 'Типи оновлюються з основної таблиці для всіх днів' : 'Значення залишаються ручними для всіх днів'}</small></div>
+                <div><strong>Синхронізація з таблицею</strong><small>${syncEnabled ? `Типи оновлюються лише за ${syncMonth || 'поточний місяць'}` : 'Значення залишаються ручними'}</small></div>
                 <label class="trade-types-sync-switch" title="Синхронізувати Синя / Зелена / Фіолетова / Візуально з таблицею">
                     <input type="checkbox" id="trade-types-sheet-sync" ${syncEnabled ? 'checked' : ''}>
                     <span></span>
@@ -537,18 +586,32 @@ function fillSelectedDateUI(dateStr) {
                 }
             }
             state.appData.settings = state.appData.settings || {};
+            if (enabled) {
+                const viewed = getCalendarYearMonth();
+                const monthKey = `${viewed.year}-${String(viewed.month + 1).padStart(2, '0')}`;
+                state.appData.settings.sheetTradeTypesSyncMonth = monthKey;
+                ensureSheetTypesRollbackSnapshot(monthKey);
+            }
             state.appData.settings.sheetTradeTypesSyncEnabled = enabled;
             const text = ttContainer.querySelector('.trade-types-sync-row small');
-            if (text) text.textContent = enabled ? 'Типи оновлюються з основної таблиці для всіх днів' : 'Значення залишаються ручними для всіх днів';
+            if (text) text.textContent = enabled ? `Типи оновлюються лише за ${state.appData.settings.sheetTradeTypesSyncMonth}` : 'Значення залишаються ручними';
             try {
                 const storage = await import('./storage.js');
                 await storage.saveSettings();
+                let restored = 0;
                 if (enabled) {
                     const sheetModule = await import('./sheet_table.js');
                     const spreadsheetId = sheetModule.getEffectiveSpreadsheetId?.('main');
                     if (spreadsheetId) await sheetModule.rematchStoredMainSheetRows?.(spreadsheetId);
+                } else {
+                    restored = restoreSheetTypesRollbackSnapshot();
+                    if (restored) {
+                        await storage.saveJournalData();
+                        await storage.saveSettings();
+                        fillSelectedDateUI(state.selectedDateStr);
+                    }
                 }
-                showToast(enabled ? 'Синхронізацію типів увімкнено для всіх днів' : 'Синхронізацію типів вимкнено для всіх днів');
+                showToast(enabled ? 'Синхронізацію типів увімкнено для всіх днів' : 'Синхронізацію вимкнено' + (restored ? ` · повернуто попередні дані (${restored} дн.)` : ''));
             } catch (error) {
                 showToast(`Не вдалося зберегти перемикач: ${error?.message || error}`);
             }
@@ -665,7 +728,7 @@ export function saveEntry(options = {}) {
         checkedParams: checklist,
         sliders: sliders,
         tradeTypesData: ttData,
-        sheetTradeTypesSyncEnabled: oldData.sheetTradeTypesSyncEnabled !== false,
+        sheetTradeTypesSyncEnabled: oldData.sheetTradeTypesSyncEnabled === true,
         traderAbsent: document.getElementById('trade-day-absent')?.checked === true,
         demoTrading: document.getElementById('trade-day-demo')?.checked === true,
     };
