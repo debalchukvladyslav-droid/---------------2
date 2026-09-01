@@ -93,9 +93,10 @@ test('site loading and Trades import do not start Polygon automatically', async 
 });
 
 test('best-exit tickers open their exact journal trade and Polygon logs every ticker', async () => {
-    const [source, tradesView] = await Promise.all([
+    const [source, tradesView, journalPolygon] = await Promise.all([
         readFile(new URL('../js/best_exit_analysis.js', import.meta.url), 'utf8'),
         readFile(new URL('../js/trades_view2.js', import.meta.url), 'utf8'),
+        readFile(new URL('../js/journal_polygon.js', import.meta.url), 'utf8'),
     ]);
     assert.match(source, /data-best-exit-date/);
     assert.match(source, /data-best-exit-index/);
@@ -112,7 +113,8 @@ test('best-exit tickers open their exact journal trade and Polygon logs every ti
     assert.match(source, /renderSummary\(container, summarizeBestExits\(rows\), after, false\)/);
     assert.match(source, /\[Polygon\] переглядається/);
     assert.doesNotMatch(source, /functions\/v1\/market-best-exits/);
-    assert.match(source, /functions\/v1\/polygon-aggs/);
+    assert.match(source, /loadJournalPolygonDay/);
+    assert.match(journalPolygon, /functions\/v1\/polygon-aggs/);
     assert.match(source, /очікує в черзі або дані недоступні/);
     assert.match(tradesView, /await window\.switchMainTab\('trades'\)/);
     assert.match(tradesView, /findTradeIndexByIdentity/);
@@ -120,17 +122,19 @@ test('best-exit tickers open their exact journal trade and Polygon logs every ti
 });
 
 test('selected exit time never falls forward to a later candle and stale calculations are cancelled', async () => {
-    const [source, edge] = await Promise.all([
+    const [source, edge, journalPolygon] = await Promise.all([
         readFile(new URL('../js/best_exit_analysis.js', import.meta.url), 'utf8'),
         readFile(new URL('../supabase/functions/market-best-exits/index.ts', import.meta.url), 'utf8'),
+        readFile(new URL('../js/journal_polygon.js', import.meta.url), 'utf8'),
     ]);
     assert.match(edge, /target_minute=eq\.\$\{targetMinute\}/);
     assert.doesNotMatch(edge, /for \(let minute = targetMinute; minute <= 720/);
     assert.match(source, /analysisAbortController\?\.abort\(\)/);
-    assert.match(source, /getOrLoadPolygonDay\(item\.symbol, item\.date/);
+    assert.match(source, /loadJournalPolygonDay\(item\.symbol, item\.date/);
+    assert.match(journalPolygon, /getOrLoadPolygonDay\(symbol, date/);
     assert.match(source, /analyzePolygonDay\(/);
-    assert.match(source, /JSON\.stringify\(\{ symbol: item\.symbol, fromMs, toMs \}\)/);
-    assert.match(source, /signal,/);
+    assert.match(journalPolygon, /JSON\.stringify\(\{ symbol, fromMs, toMs \}\)/);
+    assert.match(source, /\{ signal \}/);
 });
 
 test('Polygon archive is the active storage cache and Postgres minute rows are bypassed', async () => {

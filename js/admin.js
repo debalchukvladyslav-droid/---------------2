@@ -5,7 +5,8 @@ import { copyTextToClipboard, showToast } from './utils.js';
 import { loadTeams } from './teams.js';
 import { exportProfileData, resetProfileData, restoreProfileData, loadTradeDays, loadAllMonths } from './storage.js';
 import { listServerBackupsForUser, readCompressedBackupEntry } from './backups.js';
-import { calculatePreMarketVolume, getOrLoadPolygonDay } from './polygon_intraday_cache.js';
+import { calculatePreMarketVolume } from './polygon_intraday_cache.js';
+import { loadJournalPolygonDay } from './journal_polygon.js';
 
 const ROLES = ['trader', 'mentor', 'admin'];
 const DEFAULT_TEAM = 'Без куща';
@@ -191,21 +192,7 @@ function criteriaPairsFromJournal(journal = {}) {
 
 async function loadCriteriaDayBars(pair, token) {
     if (!pair.entryMinutes.length) return [];
-    const offsetLabel = new Date(`${pair.date}T12:00:00Z`).toLocaleString('en-US', { timeZone: 'America/New_York', timeZoneName: 'short', hour: '2-digit' });
-    const offset = offsetLabel.includes('EDT') ? '-04:00' : '-05:00';
-    const fromMs = new Date(`${pair.date}T04:00:00${offset}`).getTime();
-    const toMs = new Date(`${pair.date}T12:01:00${offset}`).getTime();
-    const edgeUrl = `${String(SUPABASE_URL).replace(/\/$/, '')}/functions/v1/polygon-aggs`;
-    const loaded = await getOrLoadPolygonDay(pair.ticker, pair.date, async () => {
-        const response = await fetch(edgeUrl, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ symbol: pair.ticker, fromMs, toMs }),
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload?.message || `Market data HTTP ${response.status}`);
-        return Array.isArray(payload?.results) ? payload.results : [];
-    });
+    const loaded = await loadJournalPolygonDay(pair.ticker, pair.date, token, { to: '12:01:00' });
     return loaded.bars;
 }
 

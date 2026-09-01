@@ -1,7 +1,8 @@
-import { supabase, SUPABASE_URL } from './supabase.js';
+import { supabase } from './supabase.js';
 import { attachBestExitResult, bestExitWindowNY, buildLowTimeFrequencySeries, calculateShortExitComparison, collectTimedShortTrades, summarizeBestExits } from './best_exit_core.js';
 import { readPolygonResult, readPolygonTimePrice, writePolygonResults, writePolygonTimePrices } from './polygon_result_cache.js';
-import { analyzePolygonDay, getOrLoadPolygonDay } from './polygon_intraday_cache.js';
+import { analyzePolygonDay } from './polygon_intraday_cache.js';
+import { loadJournalPolygonDay } from './journal_polygon.js';
 
 const resultCache = new Map();
 let renderRequest = 0;
@@ -108,26 +109,11 @@ async function fetchBatch(items, targetMinute, signal = null) {
     let { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) throw new Error('Потрібно увійти в акаунт');
     items.forEach((item) => console.info(`[Polygon] переглядається ${item.symbol} · ${item.date} · від ${String(Math.floor(item.entryMinute / 60)).padStart(2, '0')}:${String(item.entryMinute % 60).padStart(2, '0')} NY`));
-    const edgeUrl = `${String(SUPABASE_URL).replace(/\/$/, '')}/functions/v1/polygon-aggs`;
     const dayCache = new Map();
     for (const item of items) {
         const key = `${item.symbol}|${item.date}`;
         if (dayCache.has(key)) continue;
-        const offset = (() => {
-            const label = new Date(`${item.date}T12:00:00Z`).toLocaleString('en-US', { timeZone: 'America/New_York', timeZoneName: 'short', hour: '2-digit' });
-            return label.includes('EDT') ? '-04:00' : '-05:00';
-        })();
-        const fromMs = new Date(`${item.date}T04:00:00${offset}`).getTime();
-        const toMs = new Date(`${item.date}T20:00:00${offset}`).getTime();
-        const loaded = await getOrLoadPolygonDay(item.symbol, item.date, async () => {
-            const response = await fetch(edgeUrl, {
-                method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-                body: JSON.stringify({ symbol: item.symbol, fromMs, toMs }), signal,
-            });
-            const payload = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(payload?.message || `Market data: ${response.status}`);
-            return Array.isArray(payload?.results) ? payload.results : [];
-        });
+        const loaded = await loadJournalPolygonDay(item.symbol, item.date, session.access_token, { signal });
         dayCache.set(key, loaded);
         console.info(`[Polygon IndexedDB] ${item.symbol} · ${item.date}: ${loaded.cached ? 'локальний кеш' : 'завантажено один раз'} · ${loaded.bars.length} свічок`);
     }

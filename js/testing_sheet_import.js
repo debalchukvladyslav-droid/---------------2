@@ -1,6 +1,7 @@
 import { calculateTimeExitKf, parseSheetGridToTrades } from './sheet_sync_core.js';
-import { analyzePolygonDay, getOrLoadPolygonDay } from './polygon_intraday_cache.js';
-import { supabase, SUPABASE_URL } from './supabase.js';
+import { analyzePolygonDay } from './polygon_intraday_cache.js';
+import { loadJournalPolygonDay } from './journal_polygon.js';
+import { supabase } from './supabase.js';
 
 const get = (host, id) => host.querySelector(`[data-test-sheet="${id}"]`);
 const SETTINGS_KEY = 'tj_isolated_sheet_test_settings_v1';
@@ -244,24 +245,11 @@ export function initIsolatedSheetTest(host) {
             const trades = parsed.outByDay[targetDate].filter((trade) => /(?:по\s*часу|за\s*часом|time)/iu.test(String(trade?.sheet?.exit || '')));
             const { data: { session } } = await supabase.auth.getSession();
             if (!session?.access_token) throw new Error('Потрібно увійти в акаунт.');
-            const offsetLabel = new Date(`${targetDate}T12:00:00Z`).toLocaleString('en-US', { timeZone: 'America/New_York', timeZoneName: 'short', hour: '2-digit' });
-            const offset = offsetLabel.includes('EDT') ? '-04:00' : '-05:00';
-            const fromMs = new Date(`${targetDate}T04:00:00${offset}`).getTime();
-            const toMs = new Date(`${targetDate}T20:00:00${offset}`).getTime();
             const calculated = [];
             for (let index = 0; index < trades.length; index += 1) {
                 const trade = trades[index];
                 status.textContent = `${targetDate}: Polygon ${index + 1} із ${trades.length} · ${trade.symbol}`;
-                const loaded = await getOrLoadPolygonDay(trade.symbol, targetDate, async () => {
-                    const response = await fetch(`${String(SUPABASE_URL).replace(/\/$/, '')}/functions/v1/polygon-aggs`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-                        body: JSON.stringify({ symbol: trade.symbol, fromMs, toMs }),
-                    });
-                    const payload = await response.json().catch(() => ({}));
-                    if (!response.ok) throw new Error(payload?.message || `Polygon: ${response.status}`);
-                    return Array.isArray(payload?.results) ? payload.results : [];
-                });
+                const loaded = await loadJournalPolygonDay(trade.symbol, targetDate, session.access_token);
                 const market = analyzePolygonDay(loaded.bars, { symbol: trade.symbol, date: targetDate, entryMinute: 570, stopEntryMinute: 570 }, 620);
                 const price1020 = Number(market?.priceAtTime);
                 const kf = calculateTimeExitKf(trade?.sheet?.entryPrice ?? trade?.entry, price1020, trade?.sheet?.consolidateCents, 0.1);
