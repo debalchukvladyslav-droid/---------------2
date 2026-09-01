@@ -1518,6 +1518,14 @@ body.is-calendar-tab .quick-trade-fab {
     width: 150px;
     text-align: center;
 }
+
+.testing-sheet-source { display: grid; grid-template-columns: minmax(240px, 1fr) auto minmax(180px, .45fr); gap: 10px; align-items: end; margin-top: 14px; }
+.testing-sheet-source label, .testing-sheet-mapping label { display: grid; gap: 6px; color: var(--text-muted); font-size: .72rem; font-weight: 700; }
+.testing-sheet-source select, .testing-sheet-mapping select, .testing-sheet-mapping input { min-height: 40px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-main); color: var(--text-main); }
+.testing-sheet-mapping { display: grid; grid-template-columns: repeat(5, minmax(130px, 1fr)) auto; gap: 10px; align-items: end; margin-top: 14px; }
+.testing-sheet-output { margin-top: 10px; overflow-x: auto; }
+@media (max-width: 1000px) { .testing-sheet-source, .testing-sheet-mapping { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .testing-sheet-source, .testing-sheet-mapping { grid-template-columns: 1fr; } }
 .market-sentiment-center strong {
     color: var(--text-main);
     font-family: var(--font-mono);

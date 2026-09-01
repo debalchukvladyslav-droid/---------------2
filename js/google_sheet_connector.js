@@ -95,13 +95,18 @@ function setSheetServiceEmail() {
     });
 }
 
-function extractSpreadsheetId(value = '') {
+export function extractSpreadsheetId(value = '') {
     const raw = String(value || '').trim();
     const match = raw.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
     if (match?.[1]) return match[1];
     const idParam = raw.match(/[?&]id=([a-zA-Z0-9_-]+)/);
     if (idParam?.[1]) return idParam[1];
     return /^[a-zA-Z0-9_-]+$/.test(raw) ? raw : '';
+}
+
+/** Read-only metadata helper for isolated tools (does not update sheet UI/state). */
+export async function fetchSpreadsheetMetadata(spreadsheetId) {
+    return fetchSheetsService({ action: 'metadata', spreadsheetId });
 }
 
 function cleanDocNick(docName = '') {

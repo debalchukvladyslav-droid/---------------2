@@ -83,6 +83,7 @@ export function renderTestingPanel() {
         </div>
         <div class="admin-polygon-actions"><button type="button" class="btn-admin-action" data-test-auto-table>Автотаблиця</button></div>
         <p class="admin-polygon-result" data-test-auto-table-result>Шукає точне прізвище у трьох таблицях і запускає автомапінг.</p>
+        <section class="admin-polygon-panel" data-testing-sheet-import-host></section>
         <section class="testing-loader-grid">
             <div class="admin-polygon-panel" data-testing-criteria-host></div>
             <div class="admin-polygon-panel" data-testing-polygon-host></div>
@@ -110,6 +111,9 @@ export function renderTestingPanel() {
         </section>`;
     renderMarketCriteriaAdminPanel(panel.querySelector('[data-testing-criteria-host]'));
     void renderPolygonAdminPanel(panel.querySelector('[data-testing-polygon-host]'));
+    import('./testing_sheet_import.js').then(({ initIsolatedSheetTest }) => {
+        initIsolatedSheetTest(panel.querySelector('[data-testing-sheet-import-host]'));
+    }).catch((error) => console.warn('[Testing sheet import]', error));
     const button = panel.querySelector('[data-test-auto-table]');
     const result = panel.querySelector('[data-test-auto-table-result]');
     button?.addEventListener('click', async () => {
