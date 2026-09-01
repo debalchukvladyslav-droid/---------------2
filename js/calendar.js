@@ -91,7 +91,7 @@ function dashboardTradeKf(trade) {
 
 function getRecentTradesEmptyStateHtml() {
     return `<div class="app-empty-state app-empty-state--compact">
-        <div class="app-empty-state-title">Угод за цей місяць ще немає</div>
+        <div class="app-empty-state-title">Останніх угод ще немає</div>
         <div class="app-empty-state-copy">Почніть із запису торгового дня або імпортуйте звіт, щоб тут зʼявилися останні угоди.</div>
         <div class="app-empty-state-actions">
             <button type="button" class="btn-secondary recent-trades-link" data-tab="calendar">Календар</button>
@@ -266,7 +266,10 @@ export function updateDashboardWidgets(year, month) {
             });
         } else {
             for (const [date, day] of Object.entries(journal)) {
-                if (!day || !date.startsWith(prefix) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+                // The dashboard keeps the last trades from the two months already
+                // loaded at startup. This avoids an all-history query and still
+                // works correctly on the first days of a new month.
+                if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
                 const tradeRows = visibleTradeRows(day.trades);
                 tradeRows.forEach(({ trade: t, index: idx }) => {
                     const net = parseFloat(t.net);
