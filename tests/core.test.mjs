@@ -248,7 +248,7 @@ test('PPRO report dates are parsed as month/day/year', () => {
     assert.equal(parsePPROReportDate('03/13/2026'), '2026-03-13');
 });
 
-test('PPRO total report rows aggregate daily Trading Total as profit-only source', () => {
+test('PPRO total report rows use Gross, Trading Total as Net, and their difference as locates', () => {
     const rows = [
         ['Trader ID', 'Date', 'Currency', 'Gross', 'Gateway Charge', 'Sec Fee', 'Act Fee', 'Clr Fee', 'Exe Fee', 'Trading Total'],
         ['VLADDEBA', '03/02/2026', 'USD', '-2,087.1539', '80.3625', '0.71', '2.2169', '7.0682', '0.0000', '-2,177.5084'],
@@ -261,8 +261,8 @@ test('PPRO total report rows aggregate daily Trading Total as profit-only source
     const parsed = parsePPROTotalReportRows(rows, { todayIso: '2026-06-18' });
 
     assert.deepEqual(parsed, [
-        { dateStr: '2026-03-02', gross: -1177.25, net: -1177.25, comm: 0, locates: 0, tickers: [] },
-        { dateStr: '2026-03-13', gross: 732.93, net: 732.93, comm: 0, locates: 0, tickers: [] },
+        { dateStr: '2026-03-02', gross: -1987.15, net: -1177.25, comm: 0, locates: -809.9, tickers: [] },
+        { dateStr: '2026-03-13', gross: 745.18, net: 732.93, comm: 0, locates: 12.25, tickers: [] },
     ]);
 });
 
@@ -719,9 +719,9 @@ test('exception criteria use only criterion and KФ from the same isolated Sheet
     const rows = buildExceptionKfRows([], null, { sheetRows });
 
     assert.deepEqual(new Set(rows.map((row) => row.criterion)), new Set([
-        '-', 'Chase', 'Late entry', 'No PnL', 'Shs float <4M', '700K+', 'Shs float <4M; 700K+',
+        '-', 'Chase', 'Late entry', 'No PnL', 'Shs float <4M', '700K+', '700K+; Shs float <4M',
     ]));
-    for (const criterion of ['Shs float <4M', '700K+', 'Shs float <4M; 700K+']) {
+    for (const criterion of ['Shs float <4M', '700K+', '700K+; Shs float <4M']) {
         assert.deepEqual(rows.find((row) => row.criterion === criterion), {
             criterion, pnl: 0, kf: 2, trades: 1, pnlRows: 0, kfRows: 1, avgKf: 2,
         });
@@ -902,6 +902,8 @@ test('main Google Sheet writes grouped metrics and Gross without replacing net c
         mode: 'main',
         sheetRowsStore: {},
         markTouched: (dateStr) => touched.push(dateStr),
+        tradeTypesSyncEnabled: true,
+        tradeTypesMonth: '2026-04',
     });
 
     assert.equal(journal['2026-04-03'].pnl, null);
@@ -948,7 +950,7 @@ test('sheet resync removes deleted rows and restores Summary by Date net PnL', (
         },
     };
 
-    mergeGoogleSheetTradesIntoJournal(journal, {}, 'sheet-1', { mode: 'main', sheetRowsStore: {} });
+    mergeGoogleSheetTradesIntoJournal(journal, {}, 'sheet-1', { mode: 'main', sheetRowsStore: {}, tradeTypesSyncEnabled: true, tradeTypesMonth: '2026-04' });
 
     assert.equal(journal['2026-04-03'].pnl, 17);
     assert.equal(journal['2026-04-03'].gross_pnl, null);
@@ -971,7 +973,7 @@ test('sheet resync clears legacy calendar metrics using the previously stored ro
         },
     };
 
-    mergeGoogleSheetTradesIntoJournal(journal, {}, 'sheet-1', { mode: 'main', sheetRowsStore });
+    mergeGoogleSheetTradesIntoJournal(journal, {}, 'sheet-1', { mode: 'main', sheetRowsStore, tradeTypesSyncEnabled: true, tradeTypesMonth: '2026-04' });
 
     assert.equal(journal['2026-04-04'].pnl, 12);
     assert.equal(journal['2026-04-04'].gross_pnl, null);

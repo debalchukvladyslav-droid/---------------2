@@ -244,6 +244,7 @@ export function parsePPROTotalReportRows(rows, options = {}) {
 
     const headers = rows[headerRow].map((header) => String(header || '').trim());
     const dateIdx = findHeaderIndex(headers, ['Date']);
+    const grossIdx = findHeaderIndex(headers, ['Gross', 'Gross P&L', 'Gross P/L']);
     const totalIdx = findHeaderIndex(headers, ['Trading Total']);
     if (dateIdx < 0 || totalIdx < 0) throw new Error('Date and Trading Total columns are required');
 
@@ -253,18 +254,25 @@ export function parsePPROTotalReportRows(rows, options = {}) {
         if (!dateStr || dateStr > todayIso) continue;
 
         const net = parseMoney(row[totalIdx]);
-        const current = daily.get(dateStr) || 0;
-        daily.set(dateStr, current + net);
+        const gross = grossIdx >= 0 ? parseMoney(row[grossIdx]) : net;
+        const current = daily.get(dateStr) || { gross: 0, net: 0 };
+        current.gross += gross;
+        current.net += net;
+        daily.set(dateStr, current);
     }
 
     return [...daily.entries()]
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([dateStr, net]) => ({
+        .map(([dateStr, totals]) => {
+            const gross = Number(totals.gross.toFixed(2));
+            const net = Number(totals.net.toFixed(2));
+            return {
             dateStr,
-            gross: Number(net.toFixed(2)),
-            net: Number(net.toFixed(2)),
+            gross,
+            net,
             comm: 0,
-            locates: 0,
+            locates: Number((gross - net).toFixed(2)),
             tickers: [],
-        }));
+            };
+        });
 }
