@@ -4,7 +4,7 @@ import { safeExternalUrl, sanitizeHTML } from './sanitize.js';
 import { fetchWithSession } from './authenticated_fetch.js';
 
 const CLIENT_CACHE_TTL_MS = 2 * 60 * 1000;
-const NEWS_CACHE_VERSION = 'uk-v6';
+const NEWS_CACHE_VERSION = 'uk-v7-sheet-tickers';
 const NEWS_PROXY_FALLBACK = 'https://traderjournal-six.vercel.app/api/news';
 let _newsCache = { key: '', ts: 0, payload: null };
 let _newsPromise = null;
@@ -91,7 +91,59 @@ function getSessionWindow(dateStr) {
     };
 }
 
+function getLastSheetDayNewsContext(limit = 8) {
+    const stores = [state.appData?.sheetRows, state.appData?.cumulativeSheetRows]
+        .filter(store => store && typeof store === 'object');
+    let latestDate = '';
+    const latestRows = [];
+
+    stores.forEach(store => {
+        Object.values(store).forEach(byDay => {
+            if (!byDay || typeof byDay !== 'object') return;
+            Object.entries(byDay).forEach(([dateStr, rows]) => {
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr) || !Array.isArray(rows) || !rows.length) return;
+                if (dateStr > latestDate) {
+                    latestDate = dateStr;
+                    latestRows.length = 0;
+                }
+                if (dateStr === latestDate) latestRows.push(...rows);
+            });
+        });
+    });
+
+    if (!latestDate || !latestRows.length) return null;
+
+    const tickers = [];
+    const seen = new Set();
+    // Bottom rows are the latest additions in the connected spreadsheet.
+    [...latestRows].reverse().forEach(row => {
+        if (tickers.length >= limit) return;
+        const raw = row?.symbol ?? row?.ticker ?? row?.sheet?.symbol ?? row?.sheet?.ticker;
+        const ticker = String(raw || '').trim().toUpperCase();
+        if (!/^[A-Z][A-Z0-9.\-]{0,9}$/.test(ticker) || seen.has(ticker)) return;
+        seen.add(ticker);
+        tickers.push(ticker);
+    });
+
+    if (!tickers.length) return null;
+
+    const timestamps = latestRows
+        .map(row => parseTradeTs(row?.opened || row?.sheet?.opened || '', latestDate))
+        .filter(ts => ts > 0);
+    const session = getSessionWindow(latestDate);
+    return {
+        date: latestDate,
+        tickers,
+        fromTs: timestamps.length ? Math.max(session.fromTs, Math.min(...timestamps) - 120 * 60) : session.fromTs,
+        toTs: timestamps.length ? Math.min(session.toTs, Math.max(...timestamps) + 120 * 60) : session.toTs,
+        source: 'sheet',
+    };
+}
+
 function getLastTradeDayNewsContext(limit = 8) {
+    const sheetContext = getLastSheetDayNewsContext(limit);
+    if (sheetContext) return sheetContext;
+
     const tickers = [];
     const seen = new Set();
     const rows = Object.entries(state.appData?.journal || {})
