@@ -242,7 +242,9 @@ export function initIsolatedSheetTest(host) {
             const eligibleDates = Object.entries(parsed.outByDay).filter(([date, trades]) => date < today && trades.some((trade) => /(?:по\s*часу|за\s*часом|time)/iu.test(String(trade?.sheet?.exit || '')))).map(([date]) => date).sort();
             const targetDate = eligibleDates.at(-1);
             if (!targetDate) throw new Error('Не знайдено попереднього дня з виходами по часу.');
-            const trades = parsed.outByDay[targetDate].filter((trade) => /(?:по\s*часу|за\s*часом|time)/iu.test(String(trade?.sheet?.exit || '')));
+            const timedTrades = parsed.outByDay[targetDate].filter((trade) => /(?:по\s*часу|за\s*часом|time)/iu.test(String(trade?.sheet?.exit || '')));
+            const trades = timedTrades.filter((trade) => String(trade?.sheet?.profitRisk ?? '').trim() === '');
+            if (!trades.length) throw new Error(`Усі ${timedTrades.length} виходів по часу вже мають КФ — жодне значення не змінено.`);
             const { data: { session } } = await supabase.auth.getSession();
             if (!session?.access_token) throw new Error('Потрібно увійти в акаунт.');
             const calculated = [];
@@ -252,7 +254,7 @@ export function initIsolatedSheetTest(host) {
                 const loaded = await loadJournalPolygonDay(trade.symbol, targetDate, session.access_token);
                 const market = analyzePolygonDay(loaded.bars, { symbol: trade.symbol, date: targetDate, entryMinute: 570, stopEntryMinute: 570 }, 620);
                 const price1020 = Number(market?.priceAtTime);
-                const kf = calculateTimeExitKf(trade?.sheet?.entryPrice ?? trade?.entry, price1020, trade?.sheet?.consolidateCents, 0.1);
+                const kf = calculateTimeExitKf(trade?.sheet?.entryPrice ?? trade?.entry, price1020, trade?.sheet?.consolidateCents, 0.05);
                 if (kf == null) continue;
                 calculated.push({ trade, kf, price1020: Number(price1020.toFixed(4)) });
             }
@@ -266,7 +268,7 @@ export function initIsolatedSheetTest(host) {
                 trade.sheet.profitRisk = String(kf);
             });
             render(host, flatten(parsed.outByDay));
-            status.textContent = `${targetDate}: записано КФ для ${calculated.length} із ${trades.length} виходів по часу.`;
+            status.textContent = `${targetDate}: записано нових КФ ${calculated.length}; уже заповнених пропущено ${timedTrades.length - trades.length}.`;
         } catch (error) {
             status.textContent = `Помилка: ${error?.message || error}`;
         } finally {

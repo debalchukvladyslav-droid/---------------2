@@ -2,7 +2,7 @@ import { parseSheetDateCellsToIsoSequence } from './parser_utils.js';
 
 export const SHEET_DATA_FIRST_ROW = 6;
 
-export function calculateTimeExitKf(entryPrice, priceAtTime, consolidationCents, slippageRate = 0.1) {
+export function calculateTimeExitKf(entryPrice, priceAtTime, consolidationCents, slippageRate = 0.05) {
     const entry = Number(entryPrice);
     const exit = Number(priceAtTime);
     const cents = Number(String(consolidationCents ?? '').replace(',', '.').replace(/[^0-9.-]/g, ''));
