@@ -55,6 +55,12 @@ test('journal dayloss inherits the latest previous month and defaults to 1000', 
     assert.equal(normalizeAppData({ settings: { defaultDayloss: -100 } }).settings.defaultDayloss, -1000);
 });
 
+test('table trade-type synchronization is off by default and requires explicit true', () => {
+    assert.equal(normalizeAppData({}).settings.sheetTradeTypesSyncEnabled, false);
+    assert.equal(normalizeAppData({ settings: {} }).settings.sheetTradeTypesSyncEnabled, false);
+    assert.equal(normalizeAppData({ settings: { sheetTradeTypesSyncEnabled: true } }).settings.sheetTradeTypesSyncEnabled, true);
+});
+
 test('review completeness uses trader Gross instead of imported net PnL', () => {
     const completed = reviewReasonsForDay({ gross_pnl: 125, pnl: null, notes: 'День заповнено' });
     assert.equal(completed.some((reason) => reason.key === 'inc'), false);
