@@ -661,8 +661,9 @@ export async function switchUser(nick) {
         state.appData = { ...state.appData, journal: {} };
         if (window.renderView) window.renderView();
         await initializeApp();
-        await window.initDashboardWidgets?.();
-        if (window.refreshStatsView) await window.refreshStatsView();
+        const activeView = document.querySelector('.view-content.active')?.id || '';
+        if (activeView === 'view-dash') await window.initDashboardWidgets?.();
+        if (activeView === 'view-stats' && window.refreshStatsView) await window.refreshStatsView();
         if (window.renderJournalScore) await window.renderJournalScore();
     } catch (e) {
         console.error('switchUser: initializeApp failed:', e);

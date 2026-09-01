@@ -236,15 +236,17 @@ function stopManualSyncScheduler() {
     manualSyncIntervalId = null;
 }
 
-function runStartupManualSync(userId) {
-    // The primary profile and two calendar months are already visible at this point.
-    // Run exactly the same path as the header sync button, once per app boot.
-    setTimeout(() => {
+function runStartupDashboardSync(userId) {
+    // Keep startup intentionally small. Full Trades/Sheets/Drive/OCR/backup sync
+    // remains available from the explicit header button and must not compete with
+    // the initial calendar render.
+    setTimeout(async () => {
         if (!state.USER_DOC_NAME || state.myUserId !== userId) return;
-        const button = document.getElementById('manual-sync-btn');
-        void manualSyncAll(button).catch((error) => {
-            console.warn('[Startup sync]', error?.message || error);
-        });
+        if (!document.getElementById('view-dash')?.classList.contains('active')) return;
+        await Promise.allSettled([
+            runManualSyncStep('startup-dashboard-news', () => renderDashboardNews()),
+            runManualSyncStep('startup-market-sentiment', () => renderMarketSentiment()),
+        ]);
     }, 800);
 }
 
@@ -1463,7 +1465,7 @@ async function bootApp(user) {
         cleanupUnusedAIRequests();
     }, 5000);
     startManualSyncScheduler();
-    runStartupManualSync(user.id || null);
+    runStartupDashboardSync(user.id || null);
     initOnboarding({ user, saveSettings, switchMainTab });
     setTimeout(() => window._checkSessionModal?.(), 1500);
     setTimeout(() => window._checkSessionReview?.(), 1800);
