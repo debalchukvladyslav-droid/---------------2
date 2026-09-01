@@ -488,9 +488,9 @@ function cleanStatsNick(value = '') {
 }
 
 function isStatsProfile(profile) {
-    if (!profile) return false;
-    if (profile.role === 'admin') return true;
-    return profile.role !== 'mentor' && !profile.mentor_enabled;
+    // Every real team profile can be selected as an analytics source. The role
+    // controls access rights, not whether that profile's journal has statistics.
+    return !!profile?.nick;
 }
 
 function isStatsNickAllowed(nick) {
