@@ -124,6 +124,9 @@ async function getCurrentUserContext() {
 }
 
 export function resetRuntimeDataForAccountSwitch() {
+    _dirtyJournalDates.clear();
+    _journalDateRevisions.clear();
+    _dayDetailsPromises.clear();
     state.appData = normalizeAppData(getDefaultAppData());
     state.currentUnassignedImages = [];
     state.unassignedVisibleCount = 5;
@@ -307,6 +310,7 @@ let _journalSaveQueue = Promise.resolve();
 let _settingsSavePromise = null;
 let _settingsSaveRequested = false;
 const _dirtyJournalDates = new Set();
+const _journalDateRevisions = new Map();
 const _dayDetailsPromises = new Map();
 const _tradeDaysLoadedFor = new Set();
 
@@ -330,7 +334,26 @@ export function saveJournalData(opts = {}) {
 export function markJournalDayDirty(dateStr) {
     if (/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || ''))) {
         _dirtyJournalDates.add(dateStr);
+        _journalDateRevisions.set(dateStr, (_journalDateRevisions.get(dateStr) || 0) + 1);
     }
+}
+
+const LOCALLY_AUTHORITATIVE_DAY_KEYS = [
+    'pnl', 'gross_pnl', 'commissions', 'locates', 'kf', 'notes', 'mentor_comment', 'ai_advice',
+    'tradeTypesData', 'sheetGrossSource', 'sheetGrossValue', 'sheetTradeTypesSource',
+    'sheetCalendarOnly', 'sheetPnlSource', 'fondexx', 'fondexxSource', 'ppro', 'pproSource',
+    'traderAbsent', 'demoTrading', 'trades', 'tradePolygons', 'traded_tickers', 'tickers',
+];
+
+function mergeServerDayWithNewerLocal(serverEntry, localEntry) {
+    if (!localEntry || typeof localEntry !== 'object') return serverEntry;
+    if (localEntry.__detailsLoaded === true) return { ...serverEntry, ...localEntry, __detailsLoaded: true };
+    const merged = { ...serverEntry };
+    LOCALLY_AUTHORITATIVE_DAY_KEYS.forEach((key) => {
+        if (Object.prototype.hasOwnProperty.call(localEntry, key)) merged[key] = localEntry[key];
+    });
+    merged.__detailsLoaded = true;
+    return merged;
 }
 
 export function markJournalDaysDirty(dateStrs = []) {
@@ -599,6 +622,7 @@ export async function loadMonth(nick, mk, userId = null) {
         (data || []).forEach(row => {
             const dateStr = row.trade_date;
             if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+                if (_dirtyJournalDates.has(dateStr)) return;
                 state.appData.journal[dateStr] = journalRowToMonthEntry(row);
             }
         });
@@ -617,6 +641,8 @@ export async function loadDayDetails(dateStr, userId = null, options = {}) {
 
     const existing = state.appData.journal[dateStr];
     if (!options.force && existing?.__detailsLoaded) return existing;
+    const revisionAtStart = _journalDateRevisions.get(dateStr) || 0;
+    const dirtyAtStart = _dirtyJournalDates.has(dateStr);
 
     const targetUserId = getCurrentViewedUserId(userId) || await resolveViewedUserId(state.CURRENT_VIEWED_USER);
     if (!targetUserId) {
@@ -658,8 +684,14 @@ export async function loadDayDetails(dateStr, userId = null, options = {}) {
                 __detailsLoaded: true
             };
 
-            state.appData.journal[dateStr] = fullEntry;
-            return fullEntry;
+            const localNow = state.appData.journal[dateStr];
+            const changedWhileLoading = (_journalDateRevisions.get(dateStr) || 0) !== revisionAtStart;
+            const keepLocal = dirtyAtStart || changedWhileLoading || _dirtyJournalDates.has(dateStr);
+            const resolvedEntry = keepLocal
+                ? mergeServerDayWithNewerLocal(fullEntry, localNow)
+                : fullEntry;
+            state.appData.journal[dateStr] = resolvedEntry;
+            return resolvedEntry;
         } catch (e) {
             console.error(`[LOAD] Day details failed for ${dateStr}:`, e);
             return existing || null;
