@@ -1163,10 +1163,6 @@ export async function renderView() {
                 const revReasons = reviewReasonsForDay(data, currentMonthDayloss);
                 if (revReasons.length) {
                     cell.classList.add('day-needs-review');
-                    const dot = document.createElement('span');
-                    dot.className = 'day-review-dot';
-                    dot.title = revReasons.map((r) => r.label).join(' · ');
-                    cell.appendChild(dot);
                     reviewLine = `\n\nРев'ю: ${revReasons.map((r) => r.label).join(', ')}`;
                 }
             }
