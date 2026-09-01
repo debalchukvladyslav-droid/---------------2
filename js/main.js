@@ -10,7 +10,7 @@ import { loadTeams, openTeamManager, createNewTeam, moveTrader, deleteTeam, rena
 import { saveToLocal, saveJournalData, saveSettings, markJournalDayDirty, markAllJournalDirty, initializeApp, resetRuntimeDataForAccountSwitch, exportData, importData, loadMonth, loadTradeDays, resolveViewedUserId, setCurrentViewedUserId,
          loadBackgroundGallery } from './storage.js';
 import { applyTheme, resetCustomTheme, saveThemeSettings, switchTab, toggleMobileSidebar, switchMainTab, scrollMainTabs, toggleMoreTabs, toggleMobileMoreMenu, closeMobileMoreMenu, bindMainTabRoutes, syncMainTabFromRoute, refreshCurrentMainTitle } from './ui.js';
-import { shiftDate, selectDateFromInput, saveEntry, renderView, selectDate, updateAutoFlags, initSelectors, renderSidebarTradesList } from './calendar.js';
+import { shiftDate, selectDateFromInput, saveEntry, autoSaveCurrentDay, renderView, selectDate, updateAutoFlags, initSelectors, renderSidebarTradesList } from './calendar.js';
 import { toggleStatsDropdown, toggleTree, toggleStatsFilter, refreshStatsView, closeStatsDropdown, renderStatsSourceSelector, selectStatsSource, renderTradeTypeSelector, selectTradeTypeFilter, toggleStatsEquityMode, toggleStatsCompareMode, closeStatsCompareMode, openStatsComparisonWithTrader } from './stats.js';
 import { openAnalyticsExport, closeAnalyticsExport, analyticsExportNext, analyticsExportPrev, addAnalyticsReportPeriod, resetAnalyticsExport, saveAnalyticsExportPreset, loadAnalyticsExportPreset, generateCurrentAnalyticsPdf } from './analytics_export.js';
 import { renderErrorsList, addNewErrorType, deleteErrorType, renderChecklistDisplay, renderSettingsChecklist, addNewChecklistItem, deleteChecklistItem, saveChecklist, renderSidebarSliders, renderSettingsSliders, addNewSliderItem, deleteSliderItem, saveSlidersSettings, renderSettingsTradeTypes, addNewTradeType, deleteTradeType, saveTradeTypes, renderMyTradeTypes, addMyTradeType, deleteMyTradeType, saveMyTradeTypes, renderSettingsSituations, addPlaybookSituation, deletePlaybookSituation, savePlaybookSituations } from './settings.js';
@@ -310,6 +310,7 @@ bindMainTabRoutes();
 window.shiftDate = shiftDate;
 window.selectDateFromInput = selectDateFromInput;
 window.saveEntry = saveEntry;
+window.autoSaveCurrentDay = autoSaveCurrentDay;
 window.renderView = renderView;
 window.selectDate = selectDate;
 window.updateAutoFlags = updateAutoFlags;

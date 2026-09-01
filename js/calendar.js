@@ -13,6 +13,10 @@ import { getNyseDaySchedule } from './nyse_calendar.js';
 import { resolveMonthlyDayloss } from './data_utils.js';
 
 let _selectDateRequestId = 0;
+let _dayEditorDirty = false;
+let _dayAutoSavePromise = null;
+let _dayEditorRevision = 0;
+let _dayAutoSaveTimer = null;
 
 function getFondexxMonthAdjustment(monthKey) {
     const source = state.appData?.settings?.fondexxMonthlyAdjustments?.[monthKey];
@@ -275,7 +279,7 @@ export function updateDashboardWidgets(year, month) {
     window.refreshDashboardWidgets?.();
 }
 
-export function shiftDate(offset) {
+export async function shiftDate(offset) {
     let parts = state.selectedDateStr.split('-');
     let d = new Date(parts[0], parts[1] - 1, parts[2]); 
     do {
@@ -289,7 +293,7 @@ export function shiftDate(offset) {
 
     applyDateStrToCalendarSelectors(newDateStr);
 
-    selectDate(newDateStr);
+    await selectDate(newDateStr);
     renderView();
 }
 
@@ -300,9 +304,9 @@ export function updateDisplayDate(dateStr) {
     document.getElementById('display-date').innerText = dateObj.toLocaleDateString('uk-UA', options);
 }
 
-export function selectDateFromInput(dateStr) {
+export async function selectDateFromInput(dateStr) {
     applyDateStrToCalendarSelectors(dateStr);
-    selectDate(dateStr);
+    await selectDate(dateStr);
     renderView();
 }
 
@@ -552,6 +556,7 @@ function fillSelectedDateUI(dateStr) {
     }
 
     if (window.refreshReviewRequestButtons) window.refreshReviewRequestButtons();
+    _dayEditorDirty = false;
 }
 
 function focusActiveDayEditorField() {
@@ -579,6 +584,9 @@ async function openDayEditor(dateStr) {
 }
 
 export async function selectDate(dateStr) {
+    if (state.selectedDateStr && state.selectedDateStr !== dateStr) {
+        await autoSaveCurrentDay();
+    }
     const requestId = ++_selectDateRequestId;
     state.selectedDateStr = dateStr;
     applyDateStrToCalendarSelectors(dateStr);
@@ -600,12 +608,13 @@ export async function selectDate(dateStr) {
     }
 }
 
-export function saveEntry() {
-    if (!state.selectedDateStr) return; // Ніяких алертів, просто тихий вихід, якщо день не обрано
-    if (state.dayDetailsLoading) return;
+export function saveEntry(options = {}) {
+    const silent = options?.silent === true;
+    if (!state.selectedDateStr) return Promise.resolve(false); // Ніяких алертів, просто тихий вихід, якщо день не обрано
+    if (state.dayDetailsLoading) return Promise.resolve(false);
     if (state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) {
-        showToast('This profile is read-only.');
-        return;
+        if (!silent) showToast('This profile is read-only.');
+        return Promise.resolve(false);
     }
     
     // Збираємо типи трейдів
@@ -683,19 +692,23 @@ export function saveEntry() {
     if (oldData.sessionReviewCompletedAt !== undefined) dayData.sessionReviewCompletedAt = oldData.sessionReviewCompletedAt;
     if (oldData.review_requests !== undefined) dayData.review_requests = oldData.review_requests;
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(state.selectedDateStr) || Object.prototype.hasOwnProperty.call(Object.prototype, state.selectedDateStr)) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(state.selectedDateStr) || Object.prototype.hasOwnProperty.call(Object.prototype, state.selectedDateStr)) return Promise.resolve(false);
     dayData.__detailsLoaded = true;
     state.appData.journal[state.selectedDateStr] = dayData;
     markJournalDayDirty(state.selectedDateStr);
+    const savedRevision = _dayEditorRevision;
     const saveBtn = document.getElementById('btn-save-day');
-    setElementLoading(saveBtn, true, 'Збереження...');
+    if (!silent) setElementLoading(saveBtn, true, 'Збереження...');
     
     // Тихе збереження
-    import('./storage.js').then(module => {
-        module.saveJournalData().then(() => {
+    return import('./storage.js').then(module => {
+        return module.saveJournalData().then(() => {
+            if (_dayEditorRevision === savedRevision) _dayEditorDirty = false;
             window.dispatchEvent(new CustomEvent('journal:score-refresh'));
-            showGlobalLoader('save-day', 'День збережено', { type: 'success' });
-            hideGlobalLoader('save-day', 900);
+            if (!silent) {
+                showGlobalLoader('save-day', 'День збережено', { type: 'success' });
+                hideGlobalLoader('save-day', 900);
+            }
             if (window.updateAutoFlags) {
                 window.updateAutoFlags().then(() => {
                     if (window.renderView) window.renderView();
@@ -706,13 +719,30 @@ export function saveEntry() {
                 if (window.scanJournalForNotifications) window.scanJournalForNotifications();
             }
             if (window.refreshStatsView) window.refreshStatsView();
-            if (window.innerWidth <= 1024 && window.toggleMobileSidebar) window.toggleMobileSidebar(false);
+            if (!silent && window.innerWidth <= 1024 && window.toggleMobileSidebar) window.toggleMobileSidebar(false);
+            return true;
         }).catch(err => {
-            showGlobalLoader('save-day', 'Помилка збереження', { type: 'error' });
-            hideGlobalLoader('save-day', 2400);
+            if (!silent) {
+                showGlobalLoader('save-day', 'Помилка збереження', { type: 'error' });
+                hideGlobalLoader('save-day', 2400);
+            }
             console.error("Помилка фонового збереження:", err);
-        }).finally(() => setElementLoading(saveBtn, false));
+            return false;
+        }).finally(() => { if (!silent) setElementLoading(saveBtn, false); });
     });
+}
+
+export function autoSaveCurrentDay() {
+    if (_dayAutoSaveTimer) {
+        clearTimeout(_dayAutoSaveTimer);
+        _dayAutoSaveTimer = null;
+    }
+    if (!_dayEditorDirty || state.dayDetailsLoading || state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) {
+        return Promise.resolve(false);
+    }
+    if (_dayAutoSavePromise) return _dayAutoSavePromise;
+    _dayAutoSavePromise = saveEntry({ silent: true }).finally(() => { _dayAutoSavePromise = null; });
+    return _dayAutoSavePromise;
 }
 
 // Допоміжні функції для календаря
@@ -1157,6 +1187,20 @@ export function initSelectors() {
         cmCal.dataset.calSyncWired = '1';
         cmCal.addEventListener('change', () => void renderView());
         cyCal.addEventListener('change', () => void renderView());
+    }
+
+    const dayEditor = document.getElementById('form-sidebar');
+    if (dayEditor && !dayEditor.dataset.autoSaveWired) {
+        dayEditor.dataset.autoSaveWired = '1';
+        const markDirty = (event) => {
+            if (!event.target?.matches('input, textarea, select')) return;
+            _dayEditorDirty = true;
+            _dayEditorRevision += 1;
+            if (_dayAutoSaveTimer) clearTimeout(_dayAutoSaveTimer);
+            _dayAutoSaveTimer = setTimeout(() => { void autoSaveCurrentDay(); }, 1500);
+        };
+        dayEditor.addEventListener('input', markDirty);
+        dayEditor.addEventListener('change', markDirty);
     }
 
     const absentInput = document.getElementById('trade-day-absent');

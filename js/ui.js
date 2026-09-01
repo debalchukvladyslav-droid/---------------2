@@ -855,6 +855,7 @@ export async function switchMainTab(tab, options = {}) {
     const previousView = document.querySelector('.view-content.active');
     const previousTab = previousView?.id?.replace(/^view-/, '') || '';
     if (previousTab === tab) return;
+    await window.autoSaveCurrentDay?.();
     const switchToken = ++mainTabSwitchToken;
     if (options.updateRoute !== false) updateRouteForTab(tab, options.historyMode);
     // Очищаємо старі активні стани
