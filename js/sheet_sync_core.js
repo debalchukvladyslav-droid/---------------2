@@ -8,7 +8,7 @@ export function calculateTimeExitKf(entryPrice, priceAtTime, consolidationCents,
     const cents = Number(String(consolidationCents ?? '').replace(',', '.').replace(/[^0-9.-]/g, ''));
     const slippage = Math.max(0, Math.min(1, Number(slippageRate) || 0));
     if (!(entry > 0) || !(exit > 0) || !(cents > 0)) return null;
-    const riskPerShare = cents * 1.1 / 100;
+    const riskPerShare = cents / 100;
     const rawKf = (entry - exit) / riskPerShare;
     return Number((rawKf - Math.abs(rawKf) * slippage).toFixed(2));
 }
