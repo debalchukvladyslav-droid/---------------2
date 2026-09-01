@@ -3,7 +3,7 @@ import { state } from './state.js';
 import { saveJournalData, saveToLocal, markJournalDayDirty } from './storage.js';
 import { applyAutoTradeTypesData, getDefaultDayEntry } from './data_utils.js';
 import { ensureXlsx } from './vendor_loader.js';
-import { ecnFeeColumnIndex, parsePPROTotalReportRows } from './parser_utils.js';
+import { ecnFeeColumnIndex, parsePPROTotalReportRows, reconcileDayLocates } from './parser_utils.js';
 import { isGoogleSheetTrade, isPureGoogleSheetTrade } from './trade_filters.js';
 import { parseFondexxSummaryByDateRows as parseFondexxSummaryByDateRowsPure } from './fondexx_summary_parser.js';
 import { normalizeBrokerTradeType } from './trade_import_utils.js';
@@ -267,12 +267,15 @@ function recalculateDailyTotals(d, options = {}) {
         entry.gross_pnl = parseFloat((f.gross + p.gross).toFixed(2));
     }
     entry.commissions = parseFloat((f.comm + p.comm).toFixed(2));
-    entry.locates = parseFloat((f.locates + p.locates).toFixed(2));
-    
     let fondexxNet = f.net - f.locates;
     let pproNet = p.net; 
-    
     entry.pnl = parseFloat((fondexxNet + pproNet).toFixed(2));
+    entry.locates = reconcileDayLocates(
+        entry.gross_pnl,
+        entry.pnl,
+        entry.commissions,
+        f.locates + p.locates,
+    );
     
     let existingTickers = new Set();
     if (f.tickers) f.tickers.forEach(t => existingTickers.add(t));

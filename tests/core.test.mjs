@@ -28,7 +28,7 @@ const {
     isViewingOtherProfileState,
 } = await import('../js/access_control.js');
 const { buildAutoTradeTypesData, DEFAULT_TRADE_TYPES, deriveDayKfFromTrades, getTradeResult, isNotTakenTrade, normalizeAppData, normalizeDayEntry, resolveMonthlyDayloss: resolveJournalMonthlyDayloss } = await import('../js/data_utils.js');
-const { ecnFeeColumnIndex, parsePPROReportDate, parsePPROTotalReportRows, parseSheetDateCellToIso, parseSheetDateCellsToIsoSequence } = await import('../js/parser_utils.js');
+const { ecnFeeColumnIndex, parsePPROReportDate, parsePPROTotalReportRows, parseSheetDateCellToIso, parseSheetDateCellsToIsoSequence, reconcileDayLocates } = await import('../js/parser_utils.js');
 const { sanitizeHTML, safeExternalUrl, sanitizeRichHTML } = await import('../js/sanitize.js');
 const { mergeGoogleSheetTradesIntoJournal } = await import('../js/sheet_journal_merge.js');
 const { parseFondexxSummaryByDateRows } = await import('../js/fondexx_summary_parser.js');
@@ -270,6 +270,12 @@ test('PPRO total report rows import only Net and use Gross only to calculate loc
         { dateStr: '2026-03-02', gross: 0, net: -1177.25, comm: 0, locates: -809.9, tickers: [] },
         { dateStr: '2026-03-13', gross: 0, net: 732.93, comm: 0, locates: 12.25, tickers: [] },
     ]);
+});
+
+test('day locates reconcile table Gross with imported Net and commissions', () => {
+    assert.equal(reconcileDayLocates(636.22, 591.58, 0, 16.05), 44.64);
+    assert.equal(reconcileDayLocates(636.22, 591.58, 10, 16.05), 34.64);
+    assert.equal(reconcileDayLocates(null, 591.58, 0, 16.05), 16.05);
 });
 
 test('stats math summarizes journal pnl safely', () => {

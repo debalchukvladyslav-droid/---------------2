@@ -5,6 +5,7 @@ import {
 } from './sheet_sync_core.js';
 import { isPureGoogleSheetTrade } from './trade_filters.js';
 import { buildAutoTradeTypesData, DEFAULT_TRADE_TYPES, getDefaultDayEntry, isNotTakenTrade } from './data_utils.js';
+import { reconcileDayLocates } from './parser_utils.js';
 
 function sumTradeMoney(trades = []) {
     return trades.reduce((sum, trade) => {
@@ -158,6 +159,9 @@ function syncMainSheetMetricsToCalendar(journal, outByDay, spreadsheetId, markTo
             day.gross_pnl = gross;
             day.sheetGrossSource = spreadsheetId;
             day.sheetGrossValue = gross;
+            if (day.pnl !== null && day.pnl !== undefined && day.pnl !== '') {
+                day.locates = reconcileDayLocates(gross, day.pnl, day.commissions, day.locates);
+            }
         }
         if (Object.keys(tradeTypesData).length) {
             day.tradeTypesData = {

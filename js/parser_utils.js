@@ -237,6 +237,13 @@ function findHeaderIndex(headers, names) {
     return headers.findIndex((header) => wanted.includes(String(header || '').trim().toLowerCase()));
 }
 
+export function reconcileDayLocates(gross, net, commissions = 0, fallbackLocates = 0) {
+    if (gross === null || gross === undefined || gross === '' || !Number.isFinite(Number(gross))) {
+        return Number((Number(fallbackLocates) || 0).toFixed(2));
+    }
+    return Number((Number(gross) - (Number(net) || 0) - (Number(commissions) || 0)).toFixed(2));
+}
+
 export function parsePPROTotalReportRows(rows, options = {}) {
     const todayIso = options.todayIso || todayIsoDate();
     const headerRow = rows.findIndex((row) => row.some((cell) => String(cell).trim().toLowerCase() === 'date'));
