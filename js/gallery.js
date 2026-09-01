@@ -302,6 +302,39 @@ function screenCreatedMs(path) {
     return Number.isFinite(timestamp) ? timestamp : null;
 }
 
+function localDateKeyFromMs(timestamp) {
+    if (!Number.isFinite(timestamp)) return '';
+    const date = new Date(timestamp);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function screenCreatedDateKey(path, fallbackDate = '') {
+    return localDateKeyFromMs(screenCreatedMs(path)) || fallbackDate;
+}
+
+function unassignedScreensForCreatedDate(dateStr) {
+    return (state.appData?.unassignedImages || [])
+        .filter(path => screenCreatedDateKey(path) === dateStr)
+        .reverse();
+}
+
+function assignedScreensForCreatedDate(dateStr) {
+    const result = Object.fromEntries(SCREEN_CATS.map(category => [category.id, []]));
+    const seen = new Set();
+    Object.entries(state.appData?.journal || {}).forEach(([assignedDate, day]) => {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(assignedDate)) return;
+        const screenshots = day?.screenshots || {};
+        SCREEN_CATS.forEach(category => {
+            (screenshots[category.id] || []).forEach(path => {
+                if (!path || seen.has(path) || screenCreatedDateKey(path, assignedDate) !== dateStr) return;
+                seen.add(path);
+                result[category.id].push(path);
+            });
+        });
+    });
+    return result;
+}
+
 function isScreenFreshForTrade(path, dateStr) {
     const createdAt = screenCreatedMs(path);
     if (createdAt === null) return true;
@@ -408,7 +441,12 @@ export async function renderUnassignedUI() {
     
     titleEl.innerHTML = "Ваші нерозподілені скріншоти: " + hintHTML;
 
-    if (state.currentUnassignedImages.length === 0) {
+    const selectedDate = /^\d{4}-\d{2}-\d{2}$/.test(state.selectedDateStr || '')
+        ? state.selectedDateStr
+        : localDateKeyFromMs(Date.now());
+    const datedUnassignedImages = unassignedScreensForCreatedDate(selectedDate);
+
+    if (datedUnassignedImages.length === 0) {
         const driveConnected = !!state.appData.settings.driveFolderId;
         container.innerHTML = driveConnected
             ? '<div style="color:var(--text-muted); padding: 10px;">Всі скріншоти розсортовані або папка порожня.</div>'
@@ -417,8 +455,8 @@ export async function renderUnassignedUI() {
               + 'для автосинхронізації скріншотів, або вставте зображення через <strong>Ctrl+V</strong>.</div>';
         return;
     }
-    const imagesToShow = state.currentUnassignedImages.slice(0, state.unassignedVisibleCount);
-    const leftCount = state.currentUnassignedImages.length - state.unassignedVisibleCount;
+    const imagesToShow = datedUnassignedImages.slice(0, state.unassignedVisibleCount);
+    const leftCount = datedUnassignedImages.length - state.unassignedVisibleCount;
     container.innerHTML = '';
     await Promise.all(imagesToShow.map(async (img) => {
         let encodedPath = encodeURIComponent(img);
@@ -496,8 +534,9 @@ export async function loadMoreUnassigned() {
 }
 
 function screenCountForDate(dateStr) {
-    const screenshots = state.appData.journal?.[dateStr]?.screenshots || {};
-    return SCREEN_CATS.reduce((total, category) => total + (Array.isArray(screenshots[category.id]) ? screenshots[category.id].length : 0), 0);
+    const assigned = assignedScreensForCreatedDate(dateStr);
+    const assignedCount = SCREEN_CATS.reduce((total, category) => total + assigned[category.id].length, 0);
+    return assignedCount + unassignedScreensForCreatedDate(dateStr).length;
 }
 
 function renderScreensDateStrip() {
@@ -539,7 +578,8 @@ function renderScreensDateStrip() {
 export async function renderAssignedScreens() {
     renderScreensDateStrip();
     cleanupDuplicateScreensDetailTitles();
-    let screens = state.appData.journal[state.selectedDateStr]?.screenshots || { good:[], normal:[], bad:[], error:[] }; 
+    void renderUnassignedUI();
+    let screens = assignedScreensForCreatedDate(state.selectedDateStr);
     const assignedContainer = document.getElementById('assigned-container');
     if (!assignedContainer) return;
     assignedContainer.innerHTML = '';
@@ -717,7 +757,6 @@ export async function loadImages() {
     state.currentUnassignedImages = [...state.appData.unassignedImages].reverse();
     state.unassignedVisibleCount = 5; 
     try {
-        renderUnassignedUI();
         await renderAssignedScreens();
         window.enqueueBackgroundOCRForAllScreens?.();
     } finally {
