@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import serviceBotsHandler from './api/admin/service-bots.js';
+import sheetsServiceHandler from './api/sheets-service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
@@ -41,6 +42,8 @@ function readLocalClientConfig() {
 const localClientConfig = readLocalClientConfig();
 const SUPABASE_URL = (process.env.SUPABASE_URL || localClientConfig.supabaseUrl || '').replace(/\/$/, '');
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || localClientConfig.supabaseAnonKey || '';
+if (!process.env.SUPABASE_URL && SUPABASE_URL) process.env.SUPABASE_URL = SUPABASE_URL;
+if (!process.env.SUPABASE_ANON_KEY && SUPABASE_ANON_KEY) process.env.SUPABASE_ANON_KEY = SUPABASE_ANON_KEY;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -389,6 +392,13 @@ const server = http.createServer((req, res) => {
     if (u.pathname === '/api/admin/service-bots') {
         handleVercelRoute(serviceBotsHandler, req, res, u).catch((e) => {
             console.error(e);
+            if (!res.headersSent) sendJson(res, 500, { ok: false, error: e.message || 'Server error' });
+        });
+        return;
+    }
+    if (u.pathname === '/api/sheets-service') {
+        handleVercelRoute(sheetsServiceHandler, req, res, u).catch((e) => {
+            console.error('[Sheets service local]', e);
             if (!res.headersSent) sendJson(res, 500, { ok: false, error: e.message || 'Server error' });
         });
         return;
