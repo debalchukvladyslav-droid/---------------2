@@ -252,6 +252,15 @@
     box-shadow: inset 3px 0 0 color-mix(in srgb, #a5abb5 66%, transparent) !important;
 }
 .day-cell.trader-absent .day-number { color: var(--text-main); }
+.day-cell.demo-trading-day,
+.day-cell.demo-trading-day:hover:not(.empty) {
+    background: linear-gradient(145deg, color-mix(in srgb, #7d838e 14%, var(--bg-panel)), color-mix(in srgb, #555b65 8%, var(--bg-panel))) !important;
+    border-color: color-mix(in srgb, #a5abb5 38%, var(--border)) !important;
+    box-shadow: inset 3px 0 0 color-mix(in srgb, #a5abb5 58%, transparent) !important;
+}
+.day-cell.demo-trading-day .day-pnl.text-green { color: var(--profit) !important; }
+.day-cell.demo-trading-day .day-pnl.text-red { color: var(--loss) !important; }
+.day-cell.demo-trading-day .demo-market-badge { color: #a5abb5; }
 
 .day-cell.record-day {
     border-color: var(--gold) !important;

@@ -433,6 +433,8 @@ function fillSelectedDateUI(dateStr) {
     document.getElementById('trade-kf').value = formatStoredDecimal(dayData.kf);
     const absentInput = document.getElementById('trade-day-absent');
     if (absentInput) absentInput.checked = dayData.traderAbsent === true;
+    const demoInput = document.getElementById('trade-day-demo');
+    if (demoInput) demoInput.checked = dayData.demoTrading === true;
     document.getElementById('trade-notes').value = dayData.notes || '';
     const nextImprovement = document.getElementById('next-session-improvement');
     if (nextImprovement) nextImprovement.value = dayData.nextSessionImprovement || '';
@@ -656,6 +658,7 @@ export function saveEntry() {
         tradeTypesData: ttData,
         sheetTradeTypesSyncEnabled: oldData.sheetTradeTypesSyncEnabled !== false,
         traderAbsent: document.getElementById('trade-day-absent')?.checked === true,
+        demoTrading: document.getElementById('trade-day-demo')?.checked === true,
     };
 
     dayData.screenshots = oldData.screenshots || { good: [], normal: [], bad: [], error: [] };
@@ -997,6 +1000,9 @@ export async function renderView() {
         if (data?.traderAbsent === true) {
             cell.classList.add('trader-absent');
             cell.dataset.marketSchedule = 'Неторговий день: трейдер був(-ла) відсутній(-я).';
+        } else if (data?.demoTrading === true) {
+            cell.classList.add('demo-trading-day');
+            cell.dataset.marketSchedule = 'Демо-торгівля: результат не входить у загальний PnL.';
         }
         if (marketSchedule && data?.traderAbsent !== true) {
             const marketBadge = document.createElement('span');
@@ -1008,6 +1014,11 @@ export async function renderView() {
             absentBadge.className = 'nyse-market-badge';
             absentBadge.textContent = 'Відсутній';
             dayNum.appendChild(absentBadge);
+        } else if (data?.demoTrading === true) {
+            const demoBadge = document.createElement('span');
+            demoBadge.className = 'nyse-market-badge demo-market-badge';
+            demoBadge.textContent = 'Демо';
+            dayNum.appendChild(demoBadge);
         }
         const dayPnl = document.createElement('div');
 
@@ -1019,8 +1030,8 @@ export async function renderView() {
 
             // «Відсутній» виключає день зі шкали журналу, але не скасовує
             // фактичні фінанси, що могли прийти з брокерського імпорту.
-            if (financialPnl !== null) totalPnl += parseFloat(financialPnl.toFixed(2));
-            if (financialPnl !== null || dayCommissions !== 0 || dayLocates !== 0) {
+            if (data.demoTrading !== true && financialPnl !== null) totalPnl += parseFloat(financialPnl.toFixed(2));
+            if (data.demoTrading !== true && (financialPnl !== null || dayCommissions !== 0 || dayLocates !== 0)) {
                 totalComm += dayCommissions;
                 totalLocates += dayLocates;
             }
@@ -1146,5 +1157,13 @@ export function initSelectors() {
         cmCal.dataset.calSyncWired = '1';
         cmCal.addEventListener('change', () => void renderView());
         cyCal.addEventListener('change', () => void renderView());
+    }
+
+    const absentInput = document.getElementById('trade-day-absent');
+    const demoInput = document.getElementById('trade-day-demo');
+    if (absentInput && demoInput && !demoInput.dataset.dayModeWired) {
+        demoInput.dataset.dayModeWired = '1';
+        absentInput.addEventListener('change', () => { if (absentInput.checked) demoInput.checked = false; });
+        demoInput.addEventListener('change', () => { if (demoInput.checked) absentInput.checked = false; });
     }
 }

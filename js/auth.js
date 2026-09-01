@@ -413,6 +413,8 @@ function dayEntryToJournalRow(userId, tradeDate, entry) {
                 : { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] },
             fondexxSource: typeof day.fondexxSource === 'string' ? day.fondexxSource : '',
             pproSource: typeof day.pproSource === 'string' ? day.pproSource : '',
+            traderAbsent: day.traderAbsent === true,
+            demoTrading: day.demoTrading === true,
             sessionGoal: day.sessionGoal ?? '',
             sessionPlan: day.sessionPlan ?? '',
             sessionReadiness: day.sessionReadiness ?? null,

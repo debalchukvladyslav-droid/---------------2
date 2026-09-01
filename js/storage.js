@@ -185,6 +185,7 @@ function dayEntryToJournalRow(userId, tradeDate, entry) {
             fondexxSource: typeof day.fondexxSource === 'string' ? day.fondexxSource : '',
             pproSource: typeof day.pproSource === 'string' ? day.pproSource : '',
             traderAbsent: day.traderAbsent === true,
+            demoTrading: day.demoTrading === true,
             sessionGoal: day.sessionGoal ?? '',
             sessionPlan: day.sessionPlan ?? '',
             sessionReadiness: day.sessionReadiness ?? null,
@@ -233,6 +234,7 @@ function journalRowToDayEntry(row) {
         ppro: metrics.ppro,
         pproSource: metrics.pproSource,
         traderAbsent: metrics.traderAbsent === true,
+        demoTrading: metrics.demoTrading === true,
         sessionGoal: metrics.sessionGoal,
         sessionPlan: metrics.sessionPlan,
         sessionReadiness: metrics.sessionReadiness,
@@ -279,6 +281,7 @@ function journalRowToMonthEntry(row) {
             ppro: metrics.ppro,
             pproSource: metrics.pproSource,
             traderAbsent: metrics.traderAbsent === true,
+            demoTrading: metrics.demoTrading === true,
             sessionStartRecorded: metrics.sessionStartRecorded === true || metrics.sessionDone === true
                 || String(metrics.sessionGoal || '').trim() !== '' || String(metrics.sessionPlan || '').trim() !== '',
             sessionEndRecorded: metrics.sessionEndRecorded === true || metrics.sessionReviewDone === true

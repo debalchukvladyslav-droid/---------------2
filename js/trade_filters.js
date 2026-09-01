@@ -75,6 +75,7 @@ export function isSheetOnlyPnl(day = {}) {
 }
 
 export function getEffectiveDayPnl(day = {}) {
+    if (day?.demoTrading === true) return null;
     if (isSheetOnlyPnl(day)) return null;
     const net = parseDecimalInput(day.pnl);
     if (net !== null) return net;

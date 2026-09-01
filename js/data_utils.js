@@ -38,6 +38,7 @@ export function getDefaultDayEntry() {
         fondexxSource: '',
         pproSource: '',
         traderAbsent: false,
+        demoTrading: false,
         trades: [],
         tradeTypesData: {},
         review_requests: {},
@@ -290,6 +291,7 @@ export function normalizeDayEntry(entry) {
         fondexxSource: typeof safeEntry.fondexxSource === 'string' ? safeEntry.fondexxSource : '',
         pproSource: typeof safeEntry.pproSource === 'string' ? safeEntry.pproSource : '',
         traderAbsent: safeEntry.traderAbsent === true,
+        demoTrading: safeEntry.demoTrading === true,
         tradeTypesData:
             safeEntry.tradeTypesData && typeof safeEntry.tradeTypesData === 'object' ? { ...safeEntry.tradeTypesData } : {},
         sheetTradeTypesSyncEnabled: safeEntry.sheetTradeTypesSyncEnabled !== false,
