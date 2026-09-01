@@ -1012,18 +1012,25 @@ export async function renderView() {
         const dayPnl = document.createElement('div');
 
         if (data) {
-            const effectivePnl = data.traderAbsent === true ? null : getCalendarDayResult(data).value;
+            const financialPnl = getCalendarDayResult(data).value;
+            const effectivePnl = data.traderAbsent === true ? null : financialPnl;
+            const dayCommissions = parseStoredDecimalOrZero(data.commissions);
+            const dayLocates = parseStoredDecimalOrZero(data.locates);
+
+            // «Відсутній» виключає день зі шкали журналу, але не скасовує
+            // фактичні фінанси, що могли прийти з брокерського імпорту.
+            if (financialPnl !== null) totalPnl += parseFloat(financialPnl.toFixed(2));
+            if (financialPnl !== null || dayCommissions !== 0 || dayLocates !== 0) {
+                totalComm += dayCommissions;
+                totalLocates += dayLocates;
+            }
+
             if (data.traderAbsent === true) pnlDisplay = 'Неторговий';
             if (effectivePnl !== null) { 
                 let roundedPnl = parseFloat(effectivePnl.toFixed(2));
                 pnlDisplay = roundedPnl >= 0 ? `+${roundedPnl}$` : `${roundedPnl}$`; 
                 
                 cell.classList.add(roundedPnl >= 0 ? 'green' : 'red'); 
-                if (effectivePnl !== null) {
-                    totalPnl += parseFloat(effectivePnl.toFixed(2));
-                    totalComm += parseStoredDecimalOrZero(data.commissions);
-                    totalLocates += parseStoredDecimalOrZero(data.locates);
-                }
                 
                 if (state.autoFlagsCache.absoluteRecord === dateKey) { cell.classList.add('record-day'); } 
                 else if (state.autoFlagsCache.records.has(dateKey)) { cell.classList.add('record-day-old'); }
