@@ -241,9 +241,20 @@ function criterionValues(sheet = {}) {
         .flatMap((value) => String(value || '').split(/[;,]/))
         .map((value) => value.trim())
         .filter(Boolean))];
-    const combinable = values.filter((value) => value !== '-');
+    const combinable = values
+        .filter((value) => value !== '-')
+        .sort((a, b) => criterionKey(a).localeCompare(criterionKey(b), 'uk', { numeric: true }));
     if (combinable.length > 1) values.push(combinable.join('; '));
     return [...new Set(values)];
+}
+
+function criterionKey(value) {
+    return String(value || '')
+        .normalize('NFKC')
+        .trim()
+        .toLocaleLowerCase('uk-UA')
+        .replace(/\s+/g, ' ')
+        .replace(/\s*([<>+=])\s*/g, '$1');
 }
 
 export function buildExceptionKfRows(entries = [], tradeTypeFilter = null, options = {}) {
@@ -259,8 +270,10 @@ export function buildExceptionKfRows(entries = [], tradeTypeFilter = null, optio
                 // same raw Sheet row. Journal, Trades and PnL are not involved.
                 if (!criteria.length || kf == null) return;
                 criteria.forEach((criterion) => {
-                    if (!buckets.has(criterion)) buckets.set(criterion, { criterion, pnl: 0, kf: 0, trades: 0, pnlRows: 0, kfRows: 0 });
-                    const bucket = buckets.get(criterion);
+                    const key = criterionKey(criterion);
+                    if (!key) return;
+                    if (!buckets.has(key)) buckets.set(key, { criterion, pnl: 0, kf: 0, trades: 0, pnlRows: 0, kfRows: 0 });
+                    const bucket = buckets.get(key);
                     bucket.kf += kf;
                     bucket.kfRows += 1;
                     bucket.trades += 1;
