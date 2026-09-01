@@ -268,7 +268,7 @@ export function parsePPROTotalReportRows(rows, options = {}) {
             const net = Number(totals.net.toFixed(2));
             return {
             dateStr,
-            gross,
+            gross: 0,
             net,
             comm: 0,
             locates: Number((gross - net).toFixed(2)),

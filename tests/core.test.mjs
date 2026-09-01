@@ -248,7 +248,7 @@ test('PPRO report dates are parsed as month/day/year', () => {
     assert.equal(parsePPROReportDate('03/13/2026'), '2026-03-13');
 });
 
-test('PPRO total report rows use Gross, Trading Total as Net, and their difference as locates', () => {
+test('PPRO total report rows import only Net and use Gross only to calculate locates', () => {
     const rows = [
         ['Trader ID', 'Date', 'Currency', 'Gross', 'Gateway Charge', 'Sec Fee', 'Act Fee', 'Clr Fee', 'Exe Fee', 'Trading Total'],
         ['VLADDEBA', '03/02/2026', 'USD', '-2,087.1539', '80.3625', '0.71', '2.2169', '7.0682', '0.0000', '-2,177.5084'],
@@ -261,8 +261,8 @@ test('PPRO total report rows use Gross, Trading Total as Net, and their differen
     const parsed = parsePPROTotalReportRows(rows, { todayIso: '2026-06-18' });
 
     assert.deepEqual(parsed, [
-        { dateStr: '2026-03-02', gross: -1987.15, net: -1177.25, comm: 0, locates: -809.9, tickers: [] },
-        { dateStr: '2026-03-13', gross: 745.18, net: 732.93, comm: 0, locates: 12.25, tickers: [] },
+        { dateStr: '2026-03-02', gross: 0, net: -1177.25, comm: 0, locates: -809.9, tickers: [] },
+        { dateStr: '2026-03-13', gross: 0, net: 732.93, comm: 0, locates: 12.25, tickers: [] },
     ]);
 });
 

@@ -257,13 +257,15 @@ export function syncFondexxFromTradesForDay(dateStr) {
     }
 }
 
-function recalculateDailyTotals(d) {
+function recalculateDailyTotals(d, options = {}) {
     if (!state.appData.journal[d]) return;
     let entry = state.appData.journal[d];
     let f = normalizeSourceTotals(entry.fondexx, getDefaultDayEntry().fondexx);
     let p = normalizeSourceTotals(entry.ppro, getDefaultDayEntry().ppro);
     
-    entry.gross_pnl = parseFloat((f.gross + p.gross).toFixed(2));
+    if (options.preserveGross !== true) {
+        entry.gross_pnl = parseFloat((f.gross + p.gross).toFixed(2));
+    }
     entry.commissions = parseFloat((f.comm + p.comm).toFixed(2));
     entry.locates = parseFloat((f.locates + p.locates).toFixed(2));
     
@@ -581,7 +583,7 @@ export function importFondexxSummaryByDate(event) {
 
                 entry.fondexx = { gross: day.gross, net: day.net, comm: day.comm, locates: day.locates, tickers };
                 entry.fondexxSource = 'summary-by-date';
-                recalculateDailyTotals(dateStr);
+                recalculateDailyTotals(dateStr, { preserveGross: true });
                 markJournalDayDirty(dateStr);
                 importedDates.push(dateStr);
             }
@@ -749,7 +751,7 @@ export function importPPROReport(event) {
                 const entry = state.appData.journal[dateStr];
                 entry.ppro = { gross: day.gross, net: day.net, comm: day.comm, locates: day.locates, tickers: day.tickers };
                 entry.pproSource = 'ppro-total-report';
-                recalculateDailyTotals(dateStr);
+                recalculateDailyTotals(dateStr, { preserveGross: true });
                 markJournalDayDirty(dateStr);
                 importedDates.push(dateStr);
                 daysUpdated++;
