@@ -2822,13 +2822,34 @@ body.is-calendar-tab .quick-trade-fab {
 }
 .calendar-period-switcher {
     display: inline-flex;
-    align-items: flex-end;
+    align-items: center;
     gap: 6px;
     min-width: 0;
 }
+.calendar-period-switcher .cal-period-field {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    margin: 0;
+}
+.calendar-period-switcher .cal-period-label {
+    display: inline-flex;
+    align-items: center;
+    height: 30px;
+    margin: 0;
+    line-height: 1;
+}
+.calendar-view-period .calendar-period-switcher select.cal-period-select {
+    height: 30px;
+    margin: 0;
+    vertical-align: middle;
+}
 .calendar-period-arrow {
-    width: 28px;
-    height: 26px;
+    width: 30px;
+    height: 30px;
+    margin: 0;
     padding: 0;
     display: inline-grid;
     place-items: center;
