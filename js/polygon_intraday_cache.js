@@ -117,6 +117,20 @@ export function analyzePolygonDay(bars, item, targetMinute = null) {
     if (targetMinute < result.stopEntryMinute) return { ...result, notOpened: true, stopHit: false };
     const stop = result.stopPrice > 0 ? [...byMinute.entries()].find(([minute, bar]) => minute >= result.stopEntryMinute && minute <= targetMinute && Number(bar?.h) >= result.stopPrice) : null;
     if (stop) return { ...result, stopHit: true, stopMinute: stop[0], stopTime: new Date(Number(stop[1].t)).toISOString(), priceMinute: targetMinute, priceAtTime: result.stopPrice, priceTime: new Date(Number(stop[1].t)).toISOString() };
-    const target = byMinute.get(targetMinute);
-    return target && Number(target.c) > 0 ? { ...result, stopHit: false, priceMinute: targetMinute, priceAtTime: Number(target.c), priceTime: new Date(Number(target.t)).toISOString() } : result;
+    // Polygon does not emit a minute candle when a thinly traded ticker had no
+    // executions in that exact minute. In that case the price at the requested
+    // time is the latest known close at or before it, never a future candle.
+    const target = byMinute.get(targetMinute) || [...byMinute.entries()]
+        .filter(([minute, bar]) => minute >= result.stopEntryMinute && minute <= targetMinute && Number(bar?.c) > 0)
+        .reduce((latest, current) => !latest || current[0] > latest[0] ? current : latest, null)?.[1];
+    if (!target || !(Number(target.c) > 0)) return result;
+    const actualMinute = minuteNY(target.t);
+    return {
+        ...result,
+        stopHit: false,
+        priceMinute: actualMinute,
+        requestedPriceMinute: targetMinute,
+        priceAtTime: Number(target.c),
+        priceTime: new Date(Number(target.t)).toISOString(),
+    };
 }

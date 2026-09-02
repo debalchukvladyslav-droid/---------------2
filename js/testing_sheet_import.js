@@ -248,6 +248,7 @@ export function initIsolatedSheetTest(host) {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session?.access_token) throw new Error('Потрібно увійти в акаунт.');
             const calculated = [];
+            const skipped = [];
             for (let index = 0; index < trades.length; index += 1) {
                 const trade = trades[index];
                 status.textContent = `${targetDate}: Polygon ${index + 1} із ${trades.length} · ${trade.symbol}`;
@@ -255,10 +256,17 @@ export function initIsolatedSheetTest(host) {
                 const market = analyzePolygonDay(loaded.bars, { symbol: trade.symbol, date: targetDate, entryMinute: 570, stopEntryMinute: 570 }, 620);
                 const price1020 = Number(market?.priceAtTime);
                 const kf = calculateTimeExitKf(trade?.sheet?.entryPrice ?? trade?.entry, price1020, trade?.sheet?.consolidateCents, 0.05);
-                if (kf == null) continue;
+                if (kf == null) {
+                    const missing = [];
+                    if (!(price1020 > 0)) missing.push('ціна до 10:20');
+                    if (!(Number(trade?.sheet?.entryPrice ?? trade?.entry) > 0)) missing.push('точка входу');
+                    if (!(Number(String(trade?.sheet?.consolidateCents ?? '').replace(',', '.').replace(/[^0-9.-]/g, '')) > 0)) missing.push('консолідація');
+                    skipped.push(`${trade.symbol || 'без тікера'} (рядок ${trade?.sheet?.sheetRow || '—'}: ${missing.join(', ') || 'невірні дані'})`);
+                    continue;
+                }
                 calculated.push({ trade, kf, price1020: Number(price1020.toFixed(4)) });
             }
-            if (!calculated.length) throw new Error('Не вдалося отримати ціну 10:20 або розрахувати КФ.');
+            if (!calculated.length) throw new Error(`Не вдалося розрахувати КФ. Перевірте: ${skipped.slice(0, 5).join('; ')}.`);
             const connector = await import('./google_sheet_connector.js');
             const profitColumn = get(host, 'profit-risk').value;
             await connector.updateSpreadsheetCells(spreadsheetId, tab.value, calculated.map(({ trade, kf }) => ({ range: `${profitColumn}${trade.sheet.sheetRow}`, value: kf })));
@@ -268,7 +276,7 @@ export function initIsolatedSheetTest(host) {
                 trade.sheet.profitRisk = String(kf);
             });
             render(host, flatten(parsed.outByDay));
-            status.textContent = `${targetDate}: записано нових КФ ${calculated.length}; уже заповнених пропущено ${timedTrades.length - trades.length}.`;
+            status.textContent = `${targetDate}: записано нових КФ ${calculated.length}; уже заповнених пропущено ${timedTrades.length - trades.length}${skipped.length ? `; без достатніх даних ${skipped.length}` : ''}.`;
         } catch (error) {
             status.textContent = `Помилка: ${error?.message || error}`;
         } finally {
