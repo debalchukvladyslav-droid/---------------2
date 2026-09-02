@@ -15,8 +15,12 @@
                                     <span class="winstreak-lbl">Стрік</span>
                                     <span id="winstreak-val" class="winstreak-val">0</span>
                                 </div>
-                                <label class="mr-field cal-period-field"><span class="cal-period-label">Місяць</span><select id="cal-view-month" class="month-select strip-select cal-period-select"></select></label>
-                                <label class="mr-field cal-period-field"><span class="cal-period-label">Рік</span><select id="cal-view-year" class="year-select strip-select cal-period-select"></select></label>
+                                <div class="calendar-period-switcher" role="group" aria-label="Перемикання місяців">
+                                    <button type="button" class="calendar-period-arrow" id="cal-view-prev-month" aria-label="Попередній місяць" title="Попередній місяць">&#8249;</button>
+                                    <label class="mr-field cal-period-field"><span class="cal-period-label">Місяць</span><select id="cal-view-month" class="month-select strip-select cal-period-select"></select></label>
+                                    <label class="mr-field cal-period-field"><span class="cal-period-label">Рік</span><select id="cal-view-year" class="year-select strip-select cal-period-select"></select></label>
+                                    <button type="button" class="calendar-period-arrow" id="cal-view-next-month" aria-label="Наступний місяць" title="Наступний місяць">&#8250;</button>
+                                </div>
                             </div>
                         </div>
                         <div class="calendar-scroll-wrap">

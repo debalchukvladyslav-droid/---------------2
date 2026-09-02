@@ -2820,6 +2820,34 @@ body.is-calendar-tab .quick-trade-fab {
     line-height: 1;
     pointer-events: none;
 }
+.calendar-period-switcher {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 6px;
+    min-width: 0;
+}
+.calendar-period-arrow {
+    width: 28px;
+    height: 26px;
+    padding: 0;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-panel) 88%, var(--accent) 12%);
+    color: var(--text-main);
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: border-color .16s ease, background .16s ease, transform .16s ease;
+}
+.calendar-period-arrow:hover {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--bg-panel) 76%, var(--accent) 24%);
+}
+.calendar-period-arrow:active { transform: scale(.94); }
+.calendar-period-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .global-sync-state[data-state="syncing"] { color: var(--accent); }
 .global-sync-state[data-state="synced"] { color: var(--profit); }

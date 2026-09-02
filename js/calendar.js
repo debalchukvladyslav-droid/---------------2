@@ -1256,6 +1256,37 @@ export function initSelectors() {
         cyCal.addEventListener('change', () => void renderView());
     }
 
+    const shiftCalendarMonth = (offset) => {
+        if (!cmCal || !cyCal) return;
+        const currentYear = Number.parseInt(cyCal.value, 10);
+        const currentMonth = Number.parseInt(cmCal.value, 10);
+        if (!Number.isFinite(currentYear) || !Number.isFinite(currentMonth)) return;
+        const shifted = new Date(currentYear, currentMonth + offset, 1);
+        const nextYear = shifted.getFullYear();
+        if (![...cyCal.options].some((option) => Number(option.value) === nextYear)) {
+            const option = document.createElement('option');
+            option.value = String(nextYear);
+            option.textContent = String(nextYear);
+            cyCal.appendChild(option);
+            [...cyCal.options]
+                .sort((a, b) => Number(a.value) - Number(b.value))
+                .forEach((option) => cyCal.appendChild(option));
+        }
+        cyCal.value = String(nextYear);
+        cmCal.value = String(shifted.getMonth());
+        void renderView();
+    };
+    const prevMonth = document.getElementById('cal-view-prev-month');
+    const nextMonth = document.getElementById('cal-view-next-month');
+    if (prevMonth && !prevMonth.dataset.calShiftWired) {
+        prevMonth.dataset.calShiftWired = '1';
+        prevMonth.addEventListener('click', () => shiftCalendarMonth(-1));
+    }
+    if (nextMonth && !nextMonth.dataset.calShiftWired) {
+        nextMonth.dataset.calShiftWired = '1';
+        nextMonth.addEventListener('click', () => shiftCalendarMonth(1));
+    }
+
     const dayEditor = document.getElementById('form-sidebar');
     if (dayEditor && !dayEditor.dataset.autoSaveWired) {
         dayEditor.dataset.autoSaveWired = '1';
