@@ -51,7 +51,7 @@ function dailyCore(day) {
     return { checks };
 }
 
-export function calculateJournalScore({ journal = {}, reviews = [], learnCache = null, learningDates = [], now = new Date() } = {}) {
+export function calculateJournalScore({ journal = {}, reviews = [], stopCandidates = null, learnCache = null, learningDates = [], now = new Date() } = {}) {
     const prefix = `${monthKey(now)}-`;
     const todayKey = localDateKey(now);
     const calendarWorkDates = monthWorkDates(now).filter((date) => date <= todayKey);
@@ -76,8 +76,32 @@ export function calculateJournalScore({ journal = {}, reviews = [], learnCache =
         const date = String(review?.trade_date || '');
         return review?.active && date.startsWith(prefix) && date <= todayKey && workDateSet.has(date);
     });
-    const completedReviews = relevantReviews.filter((review) => review.final_status === 'normal' || review.final_status === 'bad').length;
-    const stops = { label: 'Розбір стопів', done: completedReviews, total: relevantReviews.length, weight: 1 };
+    const reviewByKey = new Map(relevantReviews.map((review) => [
+        `${review.trade_date}|${String(review.symbol || '').trim().toUpperCase()}`,
+        review,
+    ]));
+    const liveStopCandidates = Array.isArray(stopCandidates)
+        ? stopCandidates.filter((candidate) => {
+            const date = String(candidate?.trade_date || '');
+            return date.startsWith(prefix) && date <= todayKey && workDateSet.has(date);
+        })
+        : null;
+    let stopTotal = 0;
+    let completedReviews = 0;
+    if (liveStopCandidates) {
+        liveStopCandidates.forEach((candidate) => {
+            const count = Math.max(1, Array.isArray(candidate?.trade_refs) ? candidate.trade_refs.length : 0);
+            stopTotal += count;
+            const key = `${candidate.trade_date}|${String(candidate.symbol || '').trim().toUpperCase()}`;
+            const review = reviewByKey.get(key);
+            const hasScreenshot = Array.isArray(candidate?.screenshot_paths) && candidate.screenshot_paths.length > 0;
+            if (hasScreenshot && (review?.final_status === 'normal' || review?.final_status === 'bad')) completedReviews += count;
+        });
+    } else {
+        stopTotal = relevantReviews.length;
+        completedReviews = relevantReviews.filter((review) => review.final_status === 'normal' || review.final_status === 'bad').length;
+    }
+    const stops = { label: 'Розбір стопів', done: completedReviews, total: stopTotal, weight: 1 };
     const stopsRatio = stops.total ? stops.done / stops.total : 0;
     const availableLearningWeeks = new Set(workDates.map(learningWeek));
     const learnedWeeks = new Set((Array.isArray(learningDates) ? learningDates : [])

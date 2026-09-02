@@ -219,6 +219,22 @@ test('completed stop reviews contribute ten percent of the total journal score',
     assert.equal(complete.score, 9.5);
 });
 
+test('journal stop score counts table stop rows and requires their ticker screenshot', () => {
+    const result = calculateJournalScore({
+        now: new Date('2026-08-03T12:00:00Z'),
+        journal: { '2026-08-03': { gross_pnl: 10, notes: 'Підсумок' } },
+        reviews: [
+            { trade_date: '2026-08-03', symbol: 'TSLA', active: true, final_status: 'normal' },
+            { trade_date: '2026-08-03', symbol: 'AMD', active: true, final_status: 'bad' },
+        ],
+        stopCandidates: [
+            { trade_date: '2026-08-03', symbol: 'TSLA', trade_refs: [{ sheetRow: 10 }, { sheetRow: 11 }], screenshot_paths: ['screenshots/TSLA.png'] },
+            { trade_date: '2026-08-03', symbol: 'AMD', trade_refs: [{ sheetRow: 12 }], screenshot_paths: [] },
+        ],
+    });
+    assert.deepEqual({ done: result.gaps[2].done, total: result.gaps[2].total }, { done: 2, total: 3 });
+});
+
 test('learning is credited once per week and capped at four points per month', () => {
     const result = calculateJournalScore({
         now: new Date('2026-08-27T12:00:00Z'),

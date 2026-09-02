@@ -1,6 +1,7 @@
 import { state } from './state.js';
 import { supabase } from './supabase.js';
 import { calculateJournalScore } from './journal_score_core.js';
+import { buildStopReviewCandidates } from './stop_review_core.js';
 
 export async function renderJournalScore() {
     const chip = document.getElementById('journal-score-chip');
@@ -24,6 +25,7 @@ export async function renderJournalScore() {
     const result = calculateJournalScore({
         journal: state.appData?.journal || {},
         reviews,
+        stopCandidates: buildStopReviewCandidates(state.appData || {}, monthStart, monthEnd),
         learnCache: state.appData?.learnCache,
         learningDates: state.appData?.settings?.learningHistory || [],
         now,
