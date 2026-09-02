@@ -2,7 +2,7 @@ import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { getSupabaseStorageUrl } from './supabase_storage.js';
 import { showToast } from './utils.js';
-import { markJournalDayDirty, saveToLocal } from './storage.js';
+import { markJournalDayDirty, saveSettings, saveToLocal } from './storage.js';
 import { buildStopReviewCandidates, googleDriveFileId, isStopExitReason, normalizeStopExitReason } from './stop_review_core.js';
 
 const STATUS_LABELS = {
@@ -36,6 +36,10 @@ export function isStopExit(value) {
 
 function normalizeSymbol(value) {
     return String(value || '').trim().toUpperCase();
+}
+
+function mistakeTitleKey(value) {
+    return String(value || '').trim().toLocaleLowerCase('uk-UA');
 }
 
 export function collectStopCandidates(appData = {}, from = '', to = '') {
@@ -86,8 +90,8 @@ async function loadRemoteData() {
 async function syncSharedMistakeCatalog() {
     if (!isOwner()) return;
     const dayTitles = [...new Set((state.appData?.errorTypes || []).map(title => String(title).trim()).filter(Boolean))];
-    const remoteTitles = new Set(runtime.mistakes.map(item => item.title));
-    const missingRemote = dayTitles.filter(title => !remoteTitles.has(title));
+    const remoteTitles = new Set(runtime.mistakes.map(item => mistakeTitleKey(item.title)));
+    const missingRemote = dayTitles.filter(title => !remoteTitles.has(mistakeTitleKey(title)));
     if (missingRemote.length) {
         const { error } = await supabase.from('stop_mistakes').insert(missingRemote.map((title, index) => ({
             user_id: currentUserId(),
@@ -97,13 +101,17 @@ async function syncSharedMistakeCatalog() {
         if (error) throw error;
         await loadRemoteData();
     }
-    const canonicalOrder = new Map(dayTitles.map((title, index) => [title, index]));
+    const canonicalOrder = new Map(dayTitles.map((title, index) => [mistakeTitleKey(title), index]));
+    const canonicalTitles = new Map(dayTitles.map(title => [mistakeTitleKey(title), title]));
     const updates = runtime.mistakes.map((item) => {
-        const index = canonicalOrder.get(item.title);
+        const titleKey = mistakeTitleKey(item.title);
+        const index = canonicalOrder.get(titleKey);
+        const canonicalTitle = canonicalTitles.get(titleKey) || item.title;
         const archived = index == null;
         const sortOrder = index == null ? Number(item.sort_order) || dayTitles.length : index;
-        if (item.archived === archived && Number(item.sort_order) === sortOrder) return null;
+        if (item.title === canonicalTitle && item.archived === archived && Number(item.sort_order) === sortOrder) return null;
         return supabase.from('stop_mistakes').update({
+            title: canonicalTitle,
             archived,
             sort_order: sortOrder,
             updated_at: new Date().toISOString(),
@@ -119,12 +127,14 @@ async function syncSharedMistakeCatalog() {
 
 function canonicalMistakes({ includeChosen = new Set() } = {}) {
     const titles = Array.isArray(state.appData?.errorTypes) ? state.appData.errorTypes : [];
-    const order = new Map(titles.map((title, index) => [title, index]));
+    const order = new Map(titles.map((title, index) => [mistakeTitleKey(title), index]));
     return runtime.mistakes
-        .filter(item => order.has(item.title) || includeChosen.has(item.id))
+        .filter(item => order.has(mistakeTitleKey(item.title)) || includeChosen.has(item.id))
         .sort((a, b) => {
-            const aOrder = order.has(a.title) ? order.get(a.title) : Number.MAX_SAFE_INTEGER;
-            const bOrder = order.has(b.title) ? order.get(b.title) : Number.MAX_SAFE_INTEGER;
+            const aKey = mistakeTitleKey(a.title);
+            const bKey = mistakeTitleKey(b.title);
+            const aOrder = order.has(aKey) ? order.get(aKey) : Number.MAX_SAFE_INTEGER;
+            const bOrder = order.has(bKey) ? order.get(bKey) : Number.MAX_SAFE_INTEGER;
             return aOrder - bOrder || String(a.title).localeCompare(String(b.title), 'uk');
         });
 }
@@ -523,17 +533,17 @@ async function addMistake() {
     if ((state.appData.errorTypes || []).some(item => item.localeCompare(title, 'uk', { sensitivity: 'accent' }) === 0)) {
         return showToast('Помилка з такою назвою вже існує.');
     }
-    const maxOrder = runtime.mistakes.reduce((max, item) => Math.max(max, item.sort_order || 0), -1);
-    const { data, error } = await supabase.from('stop_mistakes').insert({ user_id: currentUserId(), title, sort_order: maxOrder + 1 }).select().single();
-    if (error) return showToast(error.message);
-    runtime.selectedMistakeId = data.id;
     if (!Array.isArray(state.appData.errorTypes)) state.appData.errorTypes = [];
     if (!state.appData.errorTypes.includes(title)) {
         state.appData.errorTypes.push(title);
-        await saveToLocal();
+        // The main day-form list is canonical. Persist it before touching the
+        // derived stop-review catalog so a rerender cannot archive the new item.
+        await saveSettings();
         window.renderErrorsList?.();
     }
-    await loadRemoteData();
+    await syncSharedMistakeCatalog();
+    const created = runtime.mistakes.find(item => mistakeTitleKey(item.title) === mistakeTitleKey(title));
+    runtime.selectedMistakeId = created?.id || '';
     renderMistakeCatalog();
     await renderCurrentCard();
 }
