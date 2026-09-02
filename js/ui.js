@@ -732,8 +732,14 @@ async function runMainTabWork(tab) {
     if (tab === 'datagrid' && window.renderTradesDatagrid) tasks.push(Promise.resolve(window.renderTradesDatagrid()));
     if (tab === 'dash') {
         tasks.push(Promise.resolve(refreshDashMiniEquityChartTheme()));
-        if (window.renderDashboardNews) tasks.push(Promise.resolve(window.renderDashboardNews()));
-        if (window.renderMarketSentiment) tasks.push(Promise.resolve(window.renderMarketSentiment()));
+        // Network widgets must never keep the dashboard loading overlay active.
+        // They update their own placeholders when the responses arrive.
+        if (window.renderDashboardNews) void Promise.resolve(window.renderDashboardNews()).catch((error) => {
+            console.warn('[Dashboard news]', error?.message || error);
+        });
+        if (window.renderMarketSentiment) void Promise.resolve(window.renderMarketSentiment()).catch((error) => {
+            console.warn('[Market sentiment]', error?.message || error);
+        });
     }
     if (tab === 'screens') {
         if (window.setupOCRDrawing) window.setupOCRDrawing();

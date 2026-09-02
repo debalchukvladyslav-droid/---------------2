@@ -17,6 +17,8 @@ async function callNewsAI(key, payload) {
             return await callGemini(key, payload);
         } catch (error) {
             lastError = error;
+            // Retrying a rejected credential only keeps the dashboard waiting.
+            if (/api key not valid|invalid api key|unauthorized|forbidden|\b401\b|\b403\b/i.test(String(error?.message || error))) break;
             if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 1200));
         }
     }
@@ -233,7 +235,9 @@ async function fetchDashboardNews(force = false) {
 
     const translated = await translateNewsPayload(data);
     _newsCache = { key: cacheKey, ts: Date.now(), payload: translated };
-    savePersistentNewsCache(newsContext, translated);
+    // A temporary AI credential/provider failure must be retried on a later
+    // visit, not stored as an empty feed across page reloads.
+    if (!translated?.translationPending) savePersistentNewsCache(newsContext, translated);
     return translated;
 }
 
@@ -242,7 +246,19 @@ async function translateNewsPayload(payload) {
     if (!items.length) return payload;
     if (items.every((item) => cleanNewsDisplayTitle(item?.titleUk))) return payload;
     if (payload?.translation?.ok === false) {
-        console.warn('[News] server translation skipped:', payload.translation.reason || 'unknown reason');
+        const reason = String(payload.translation.reason || 'unknown reason');
+        console.info('[News] server translation unavailable; feed continues in background mode:', reason);
+        // The browser uses the same configured AI credentials. If the server has
+        // already rejected that credential, do not repeat the slow doomed call.
+        if (/api key not valid|invalid api key|unauthorized|forbidden|\b401\b|\b403\b/i.test(reason)) {
+            return {
+                ...payload,
+                items: items
+                    .filter((item) => cleanNewsDisplayTitle(item?.titleUk))
+                    .map((item) => ({ ...item, titleUk: cleanNewsDisplayTitle(item.titleUk) })),
+                translationPending: true,
+            };
+        }
     }
 
     try {
