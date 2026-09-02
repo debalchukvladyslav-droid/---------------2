@@ -1,6 +1,6 @@
 import { supabase } from './supabase.js';
 import { state } from './state.js';
-import { loadDayDetails } from './storage.js';
+import { loadDayDetails, wasDayRecentlySaved } from './storage.js';
 import { createRealtimeEventGate, classifyRealtimeEvent } from './realtime_sync_core.js';
 
 let channel = null;
@@ -14,6 +14,7 @@ async function refresh(kind, payload = null) {
     if (kind === 'journal') {
         const tradeDate = payload?.new?.trade_date || payload?.old?.trade_date || '';
         if (/^\d{4}-\d{2}-\d{2}$/.test(tradeDate)) {
+            if (wasDayRecentlySaved(tradeDate)) return;
             await loadDayDetails(tradeDate, state.myUserId, { force: true }).catch(() => {});
             if (document.getElementById('view-trades')?.classList.contains('active')) {
                 window.populateSymbolSelect?.(tradeDate);

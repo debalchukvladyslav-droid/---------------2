@@ -2804,3 +2804,23 @@ body.is-calendar-tab .quick-trade-fab {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
+.global-sync-state {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    z-index: 10020;
+    padding: 7px 11px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+    color: var(--text-muted);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, .22);
+    backdrop-filter: blur(12px);
+    font-size: .76rem;
+    line-height: 1;
+    pointer-events: none;
+}
+
+.global-sync-state[data-state="syncing"] { color: var(--accent); }
+.global-sync-state[data-state="synced"] { color: var(--profit); }
+.global-sync-state[data-state="offline"] { color: #f59e0b; }

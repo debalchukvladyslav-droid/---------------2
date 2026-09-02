@@ -2,6 +2,7 @@ import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { showToast, showConfirm, showPrompt } from './utils.js';
 import { getSupabaseStorageUrl } from './supabase_storage.js';
+import { cacheValue, readCachedValue } from './local_data_store.js';
 
 const DEFAULT_TEAM = 'Без куща';
 const EXTRA_TEAMS_KEY = 'pj:extra-teams';
@@ -223,12 +224,22 @@ async function performTeamsLoad() {
             return;
         }
 
+        const userId = sessionData.session.user.id;
+        const cached = await readCachedValue(userId, 'team-profiles');
+        if (Array.isArray(cached?.value) && cached.value.length && !Object.keys(state._teamProfiles || {}).length) {
+            state._teamProfiles = Object.fromEntries(cached.value.map(profile => [profile.nick, profile]));
+            state.TEAM_GROUPS = buildTeamGroups(cached.value);
+            refreshVisibleTeamUI();
+            if (window.renderStatsSourceSelector) window.renderStatsSourceSelector();
+        }
+
         const profiles = await fetchProfiles();
         if (!profiles.length && state.USER_DOC_NAME) {
             throw new Error('Supabase повернув порожній список профілів');
         }
         state._teamProfiles = Object.fromEntries(profiles.map(profile => [profile.nick, profile]));
         state.TEAM_GROUPS = buildTeamGroups(profiles);
+        await cacheValue(userId, 'team-profiles', profiles);
         fillAuthTeamSelect();
         refreshVisibleTeamUI();
         if (window.renderStatsSourceSelector) window.renderStatsSourceSelector();

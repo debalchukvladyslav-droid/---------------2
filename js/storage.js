@@ -6,6 +6,10 @@ import { clearStatsCache } from './stats.js';
 import { ensureSupabaseStorageUser, uploadToSupabaseStorage, deleteFromSupabaseStorage, getSupabaseStorageUrl } from './supabase_storage.js';
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 import { createCompressedBackup } from './backups.js';
+import {
+    cacheJournalRows, cacheValue, markJournalRowsSynced, publishSyncState,
+    readCachedDay, readCachedMonth, readCachedValue, readDirtyJournalRows,
+} from './local_data_store.js';
 
 let tradeEmbeddingQueue = Promise.resolve();
 let tradeEmbeddingTimer = null;
@@ -326,12 +330,21 @@ function markDayEntryDetailsLoaded(entry, loaded) {
 }
 
 let _journalSaveQueue = Promise.resolve();
+let _journalSaveTimer = null;
+let _journalSaveDeferred = null;
+let _journalSaveOptions = {};
+let _journalSaveFirstRequestedAt = 0;
 let _settingsSavePromise = null;
 let _settingsSaveRequested = false;
 const _dirtyJournalDates = new Set();
 const _journalDateRevisions = new Map();
 const _dayDetailsPromises = new Map();
 const _tradeDaysLoadedFor = new Set();
+const _recentlySavedDays = new Map();
+
+export function wasDayRecentlySaved(dateStr, windowMs = 2500) {
+    return Date.now() - (_recentlySavedDays.get(dateStr) || 0) < windowMs;
+}
 
 export function saveToLocal() {
     return Promise.all([saveJournalData(), saveSettings()])
@@ -339,21 +352,55 @@ export function saveToLocal() {
 }
 
 export function saveJournalData(opts = {}) {
-    const run = _journalSaveQueue
-        .catch(() => {})
-        .then(() => _doSave(opts));
+    _journalSaveOptions = {
+        ..._journalSaveOptions,
+        ...opts,
+        forceFull: _journalSaveOptions.forceFull === true || opts.forceFull === true,
+        skipEmbedding: _journalSaveOptions.skipEmbedding === true || opts.skipEmbedding === true,
+    };
+    if (!_journalSaveDeferred) {
+        _journalSaveFirstRequestedAt = Date.now();
+        let resolve;
+        let reject;
+        const promise = new Promise((ok, fail) => { resolve = ok; reject = fail; });
+        _journalSaveDeferred = { promise, resolve, reject };
+    }
 
-    _journalSaveQueue = run.catch(e => {
-        console.error('saveJournalData queue error:', e);
+    clearTimeout(_journalSaveTimer);
+    const elapsed = Date.now() - _journalSaveFirstRequestedAt;
+    const delay = opts.immediate === true || elapsed >= 800 ? 0 : 180;
+    _journalSaveTimer = setTimeout(() => {
+        const deferred = _journalSaveDeferred;
+        const runOptions = _journalSaveOptions;
+        _journalSaveDeferred = null;
+        _journalSaveOptions = {};
+        _journalSaveFirstRequestedAt = 0;
+        const run = _journalSaveQueue.catch(() => {}).then(() => _doSave(runOptions));
+        _journalSaveQueue = run.catch(e => console.error('saveJournalData queue error:', e));
+        run.then(deferred.resolve, deferred.reject);
+    }, delay);
+
+    return _journalSaveDeferred.promise;
+}
+
+if (typeof window !== 'undefined') {
+    window.addEventListener('online', () => {
+        if (state.USER_DOC_NAME && state.CURRENT_VIEWED_USER === state.USER_DOC_NAME) {
+            void saveJournalData({ immediate: true, skipEmbedding: true }).catch(() => {});
+        }
     });
-
-    return run;
 }
 
 export function markJournalDayDirty(dateStr) {
     if (/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || ''))) {
         _dirtyJournalDates.add(dateStr);
         _journalDateRevisions.set(dateStr, (_journalDateRevisions.get(dateStr) || 0) + 1);
+        const userId = state.myUserId || getCurrentViewedUserId();
+        const entry = state.appData?.journal?.[dateStr];
+        if (userId && entry?.__detailsLoaded !== false) {
+            void cacheJournalRows(userId, [dayEntryToJournalRow(userId, dateStr, entry)], { dirty: true });
+            publishSyncState('local', { pending: _dirtyJournalDates.size });
+        }
     }
 }
 
@@ -411,11 +458,14 @@ async function performSettingsSave() {
             weeklyComments:
                 state.appData.weeklyComments && typeof state.appData.weeklyComments === 'object' ? state.appData.weeklyComments : {},
         };
+        await cacheValue(user.id, 'settings', settingsPayload);
+        publishSyncState('syncing', { kind: 'settings' });
         const { error } = await supabase
             .from('profiles')
             .update({ settings: settingsPayload })
             .eq('id', user.id);
         if (error) throw error;
+        publishSyncState('synced', { kind: 'settings' });
         console.log('✅ Settings збережено в Supabase');
     } catch (e) {
         console.error('❌ Помилка збереження settings:', e);
@@ -438,6 +488,10 @@ export async function loadSettings() {
     try {
         const { user } = await getCurrentUserContext();
         if (!user) return;
+        const cached = await readCachedValue(user.id, 'settings');
+        if (cached?.value && typeof cached.value === 'object') {
+            state.appData.settings = { ...state.appData.settings, ...cached.value };
+        }
         const { data, error } = await supabase
             .from('profiles')
             .select('settings')
@@ -445,6 +499,7 @@ export async function loadSettings() {
             .single();
         if (error) throw error;
         if (data?.settings && typeof data.settings === 'object') {
+            await cacheValue(user.id, 'settings', data.settings);
             const incoming = { ...data.settings };
             if (Array.isArray(incoming.unassignedImages)) {
                 state.appData.unassignedImages = incoming.unassignedImages;
@@ -534,6 +589,13 @@ async function _doSave(opts = {}) {
         if (!user || !userId) throw new Error('Немає авторизованого користувача Supabase');
 
         const journal = state.appData.journal || {};
+        const durableDirty = await readDirtyJournalRows(userId);
+        durableDirty.forEach((record) => {
+            if (record?.tradeDate && record?.row && !journal[record.tradeDate]) {
+                journal[record.tradeDate] = markDayEntryDetailsLoaded(journalRowToDayEntry(record.row), true);
+            }
+            if (record?.tradeDate) _dirtyJournalDates.add(record.tradeDate);
+        });
         const dirtyDates = [..._dirtyJournalDates].filter(dateStr => journal[dateStr]?.__detailsLoaded !== false);
 
         if (!forceFull && dirtyDates.length === 0) {
@@ -547,6 +609,7 @@ async function _doSave(opts = {}) {
 
         const entries = sourceEntries
             .filter(([dateStr, entry]) => /^\d{4}-\d{2}-\d{2}$/.test(dateStr) && entry?.__detailsLoaded !== false);
+        const revisionsAtSave = new Map(entries.map(([dateStr]) => [dateStr, _journalDateRevisions.get(dateStr) || 0]));
 
         if (forceFull && entries.length) {
             await createCompressedBackup({ reason: forceFull ? 'full-save' : 'sync', requireServer: true });
@@ -558,15 +621,26 @@ async function _doSave(opts = {}) {
             return row;
         });
 
+        await cacheJournalRows(userId, rows, { dirty: true });
+        publishSyncState('syncing', { pending: rows.length, kind: 'journal' });
+
         const savedDays = [];
         for (let i = 0; i < rows.length; i += 200) {
-            const { data, error } = await supabase
+            const batch = rows.slice(i, i + 200);
+            const rpc = await supabase.rpc('sync_journal_days_batch', { payload: batch });
+            if (!rpc.error) {
+                savedDays.push(...(rpc.data || []));
+                continue;
+            }
+            // Older/staging databases can keep using the existing Data API
+            // until the additive local-first migration is installed.
+            if (!['PGRST202', '42883'].includes(String(rpc.error.code || ''))) throw rpc.error;
+            const fallback = await supabase
                 .from('journal_days')
-                .upsert(rows.slice(i, i + 200), { onConflict: 'user_id,trade_date' })
+                .upsert(batch, { onConflict: 'user_id,trade_date' })
                 .select('id,trade_date');
-
-            if (error) throw error;
-            savedDays.push(...(data || []));
+            if (fallback.error) throw fallback.error;
+            savedDays.push(...(fallback.data || []));
         }
 
         // Semantic memory is derived after the durable journal write. A temporary
@@ -580,10 +654,26 @@ async function _doSave(opts = {}) {
         }
 
         clearStatsCache(state.USER_DOC_NAME);
-        entries.forEach(([dateStr]) => _dirtyJournalDates.delete(dateStr));
-        if (forceFull) _dirtyJournalDates.clear();
+        const confirmedDates = entries
+            .map(([dateStr]) => dateStr)
+            .filter((dateStr) => (_journalDateRevisions.get(dateStr) || 0) === revisionsAtSave.get(dateStr));
+        await markJournalRowsSynced(userId, confirmedDates);
+        confirmedDates.forEach((dateStr) => {
+            _recentlySavedDays.set(dateStr, Date.now());
+            _dirtyJournalDates.delete(dateStr);
+        });
+        const changedDuringSave = entries
+            .map(([dateStr]) => dateStr)
+            .filter((dateStr) => !confirmedDates.includes(dateStr));
+        if (changedDuringSave.length) {
+            const latestRows = changedDuringSave.map((dateStr) => dayEntryToJournalRow(userId, dateStr, journal[dateStr]));
+            await cacheJournalRows(userId, latestRows, { dirty: true });
+            changedDuringSave.forEach((dateStr) => _dirtyJournalDates.add(dateStr));
+            queueMicrotask(() => void saveJournalData({ skipEmbedding: opts.skipEmbedding === true }).catch(() => {}));
+        }
         state._availableMonthKeys = getMonthsInJournal(journal);
         state._monthListLoaded = true;
+        publishSyncState('synced', { pending: _dirtyJournalDates.size, kind: 'journal' });
         console.log('✅ Дані днів успішно збережено в Supabase!');
     } catch (e) {
         console.error('❌ Помилка збереження днів у Supabase:', e);
@@ -616,6 +706,51 @@ function _computeAggregation(journal) {
     };
 }
 
+async function loadBootstrapJournal(nick, userId, months) {
+    const ordered = [...new Set(months)].sort();
+    if (!userId || !ordered.length) return false;
+    const first = getMonthRange(ordered[0]).start;
+    const last = getMonthRange(ordered.at(-1)).end;
+    const { data, error } = await supabase.rpc('get_app_bootstrap', {
+        target_user_id: userId,
+        date_from: first,
+        date_to: last,
+    });
+    if (error) {
+        console.warn('[LOAD] bootstrap unavailable, using month queries:', error.message);
+        return false;
+    }
+    if (!isCurrentProfileRequest(nick, userId)) return false;
+    const rows = Array.isArray(data?.journal_days) ? data.journal_days : [];
+    await cacheJournalRows(userId, rows.filter((row) => !_dirtyJournalDates.has(row.trade_date)), { dirty: false });
+    rows.forEach((row) => {
+        const dateStr = row?.trade_date;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || '')) || _dirtyJournalDates.has(dateStr)) return;
+        state.appData.journal[dateStr] = markDayEntryDetailsLoaded(journalRowToDayEntry(row), true);
+    });
+    if (!state.loadedMonths[nick]) state.loadedMonths[nick] = new Set();
+    if (!state._availableMonthKeys) state._availableMonthKeys = new Set();
+    ordered.forEach((mk) => {
+        state.loadedMonths[nick].add(mk);
+        state._availableMonthKeys.add(mk);
+    });
+    console.log(`[LOAD] bootstrap: ${rows.length} days in one request`);
+    return true;
+}
+
+async function hydrateLocalJournal(userId, months) {
+    const groups = await Promise.all(months.map((mk) => readCachedMonth(userId, mk)));
+    let restored = 0;
+    groups.flat().forEach((record) => {
+        const dateStr = record?.tradeDate;
+        if (!record?.row || !/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || ''))) return;
+        state.appData.journal[dateStr] = markDayEntryDetailsLoaded(journalRowToDayEntry(record.row), true);
+        if (record.dirty) _dirtyJournalDates.add(dateStr);
+        restored += 1;
+    });
+    return restored;
+}
+
 export async function loadMonth(nick, mk, userId = null) {
     if (!state.loadedMonths[nick]) state.loadedMonths[nick] = new Set();
     if (state.loadedMonths[nick].has(mk)) {
@@ -627,6 +762,18 @@ export async function loadMonth(nick, mk, userId = null) {
     if (!targetUserId) { console.warn('[LOAD] loadMonth: currentViewedUserId не встановлено'); return; }
 
     try {
+        const cachedRows = await readCachedMonth(targetUserId, mk);
+        cachedRows.forEach((record) => {
+            const dateStr = record.tradeDate;
+            if (!record?.row || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
+            state.appData.journal[dateStr] = markDayEntryDetailsLoaded(journalRowToDayEntry(record.row), true);
+            if (record.dirty) _dirtyJournalDates.add(dateStr);
+        });
+        if (cachedRows.length) {
+            if (!state._availableMonthKeys) state._availableMonthKeys = new Set();
+            state._availableMonthKeys.add(mk);
+            console.log(`[LOAD] local ${mk}: ${cachedRows.length} days`);
+        }
         const { start, end } = getMonthRange(mk);
         const { data, error } = await supabase
             .from('journal_days')
@@ -637,6 +784,7 @@ export async function loadMonth(nick, mk, userId = null) {
             .order('trade_date', { ascending: true });
 
         if (error) throw error;
+        await cacheJournalRows(targetUserId, (data || []).filter((row) => !_dirtyJournalDates.has(row.trade_date)), { dirty: false });
 
         if (!isCurrentProfileRequest(nick, targetUserId)) {
             console.info(`[LOAD] ${mk}: застарілу відповідь іншого профілю пропущено`);
@@ -719,6 +867,10 @@ export async function loadDayDetails(dateStr, userId = null, options = {}) {
                 __detailsLoaded: true
             };
 
+            if (!_dirtyJournalDates.has(dateStr)) {
+                await cacheJournalRows(targetUserId, [data], { dirty: false });
+            }
+
             const localNow = state.appData.journal[dateStr];
             const changedWhileLoading = (_journalDateRevisions.get(dateStr) || 0) !== revisionAtStart;
             const keepLocal = dirtyAtStart || changedWhileLoading || _dirtyJournalDates.has(dateStr);
@@ -753,6 +905,7 @@ export async function loadAllMonths(nick, userId = null) {
             .order('trade_date', { ascending: true });
 
         if (error) throw error;
+        await cacheJournalRows(targetUserId, (data || []).filter((row) => !_dirtyJournalDates.has(row.trade_date)), { dirty: false });
 
         if (!isCurrentProfileRequest(nick, targetUserId)) {
             console.info('[LOAD] loadAllMonths: застарілу відповідь іншого профілю пропущено');
@@ -796,6 +949,7 @@ export async function loadTradeDays(nick = state.CURRENT_VIEWED_USER, userId = n
             .order('trade_date', { ascending: true });
 
         if (error) throw error;
+        await cacheJournalRows(targetUserId, (data || []).filter((row) => !_dirtyJournalDates.has(row.trade_date)), { dirty: false });
 
         if (!isCurrentProfileRequest(nick, targetUserId)) {
             console.info('[LOAD] loadTradeDays: застарілу відповідь іншого профілю пропущено');
@@ -896,11 +1050,23 @@ export async function initializeApp() {
         const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         const prevMk = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
 
-        await Promise.all([
+        const restoredLocalDays = await hydrateLocalJournal(viewedUserId, [prevMk, currentMk]);
+        if (restoredLocalDays) {
+            console.log(`[LOAD] local-first: rendered ${restoredLocalDays} cached days before server sync`);
+            if (window.renderView) await window.renderView();
+            if (window.selectDate) window.selectDate(state.selectedDateStr);
+        }
+
+        const [bootstrapLoaded] = await Promise.all([
+            loadBootstrapJournal(nick, viewedUserId, [prevMk, currentMk]),
             isViewingOwnProfile ? loadSettings() : Promise.resolve(),
-            loadMonth(nick, currentMk, viewedUserId),
-            loadMonth(nick, prevMk, viewedUserId),
         ]);
+        if (!bootstrapLoaded) {
+            await Promise.all([
+                loadMonth(nick, currentMk, viewedUserId),
+                loadMonth(nick, prevMk, viewedUserId),
+            ]);
+        }
 
         if (state.selectedDateStr) {
             const selMk = monthKey(state.selectedDateStr);
