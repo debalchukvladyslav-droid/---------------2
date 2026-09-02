@@ -260,6 +260,7 @@ export function updateDashboardWidgets(year, month) {
                         opened: String(trade?.opened || ''),
                         trade: { ...(trade || {}), sheet },
                         sheetRowIndex,
+                        sheetRowNumber: Number.isFinite(Number(sheet.sheetRow)) ? Number(sheet.sheetRow) : sheetRowIndex,
                         source: 'sheet',
                     });
                 });
@@ -279,9 +280,13 @@ export function updateDashboardWidgets(year, month) {
             }
         }
         rows.sort((a, b) => {
+            if (a.source === 'sheet' && b.source === 'sheet') {
+                // Preserve the spreadsheet's real bottom-to-top order. Date and
+                // time must not reshuffle rows that the trader entered later.
+                return b.sheetRowNumber - a.sheetRowNumber;
+            }
             const c = b.date.localeCompare(a.date);
             if (c !== 0) return c;
-            if (a.source === 'sheet' || b.source === 'sheet') return b.opened.localeCompare(a.opened);
             return Math.abs(b.net) - Math.abs(a.net);
         });
         const top = rows.slice(0, 12);
