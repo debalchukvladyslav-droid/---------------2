@@ -255,7 +255,7 @@ export function initIsolatedSheetTest(host) {
                 const loaded = await loadJournalPolygonDay(trade.symbol, targetDate, session.access_token);
                 const market = analyzePolygonDay(loaded.bars, { symbol: trade.symbol, date: targetDate, entryMinute: 570, stopEntryMinute: 570 }, 620);
                 const price1020 = Number(market?.priceAtTime);
-                const kf = calculateTimeExitKf(trade?.sheet?.entryPrice ?? trade?.entry, price1020, trade?.sheet?.consolidateCents, 0.05);
+                const kf = calculateTimeExitKf(trade?.sheet?.entryPrice ?? trade?.entry, price1020, trade?.sheet?.consolidateCents, 0);
                 if (kf == null) {
                     const missing = [];
                     if (!(price1020 > 0)) missing.push('ціна до 10:20');
