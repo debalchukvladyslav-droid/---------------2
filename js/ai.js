@@ -8,6 +8,7 @@ import { buildTradeTypeAIContext, buildDayTradeTypeAIContext } from './trade_typ
 import { isNotTakenTrade } from './data_utils.js';
 import { prepareImageInlineData } from './ai/image.js';
 import { buildBoundedJournalContext, buildBoundedScreenTagContext } from './ai/journal_context.js';
+import { getCalendarDayResult } from './trade_filters.js';
 
 export { getGeminiKeys, callGemini, callGeminiViaProxy, callGeminiJSON, sleep };
 
@@ -153,7 +154,14 @@ export async function getAIAdvice() {
     const key = getGeminiKeys()[0];
     
     let btn = document.getElementById('ai-btn'); btn.innerText = '⏳ Бот аналізує день...'; btn.disabled = true;
-    let pnl = document.getElementById('trade-pnl').value || 0;
+    const savedDay = state.appData.journal[state.selectedDateStr] || {};
+    const netInput = document.getElementById('trade-pnl')?.value?.trim();
+    const grossInput = document.getElementById('trade-gross')?.value?.trim();
+    const pnl = getCalendarDayResult({
+        ...savedDay,
+        pnl: netInput === '' ? null : netInput,
+        gross_pnl: grossInput === '' ? null : grossInput,
+    }).value ?? 0;
     let notes = document.getElementById('trade-notes').value || "Немає коментарів.";
     
     let errs = []; document.querySelectorAll('#errors-list-container input[type="checkbox"]:checked').forEach(cb => errs.push(cb.value));
@@ -197,7 +205,7 @@ export async function analyzeTagPatterns() {
             const screens = dayData.screenshots || {};
             const allScreens = [...(screens.good||[]), ...(screens.normal||[]), ...(screens.bad||[]), ...(screens.error||[])];
             if (!allScreens.includes(filename)) continue;
-            const pnl = parseFloat(dayData.pnl) || 0;
+            const pnl = getCalendarDayResult(dayData).value ?? 0;
             tags.forEach(tag => {
                 if (!tagStats[tag]) tagStats[tag] = { days: 0, totalPnl: 0, minusDays: 0 };
                 tagStats[tag].days++;

@@ -1441,7 +1441,7 @@ async function executeSyncWithCfg(cfg, options = {}) {
             };
         }
         await deleteJournalDatesFromSupabase(mergeResult.deletedDates);
-        await saveJournalData();
+        await saveJournalData({ skipEmbedding: true });
         await saveSettings();
         syncSheetModeUi();
         renderSheetRowsPanel();
@@ -1937,7 +1937,7 @@ export async function rematchStoredMainSheetRows(spreadsheetId) {
         tradeTypesMonth: state.appData?.settings?.sheetTradeTypesSyncMonth || '',
     });
     await deleteJournalDatesFromSupabase(mergeResult.deletedDates);
-    await saveJournalData();
+    await saveJournalData({ skipEmbedding: true });
     await saveSettings();
     refreshAfterSheetMatchUpdate();
     return { ok: true, local: true, mergeResult };

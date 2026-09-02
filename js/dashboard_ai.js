@@ -5,6 +5,7 @@ import { saveSettings } from './storage.js';
 import { getDashboardTeamMomentum } from './stats.js';
 import { renderMarkdown } from './sanitize.js';
 import { resolveMonthlyDayloss } from './data_utils.js';
+import { getCalendarDayResult } from './trade_filters.js';
 
 const CACHE_MS = 6 * 60 * 60 * 1000;
 const DASHBOARD_MENTOR_ENABLED = false;
@@ -26,11 +27,7 @@ let mentorBusy = false;
 let mentorAllItems = [];
 
 function pnlOf(day) {
-    for (const value of [day?.fondexx?.pnl, day?.ppro?.pnl, day?.pnl]) {
-        const number = Number(value);
-        if (Number.isFinite(number)) return number;
-    }
-    return null;
+    return getCalendarDayResult(day).value;
 }
 
 function recentDays() {

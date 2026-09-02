@@ -96,6 +96,17 @@ test('AI chat context is bounded and excludes raw day payloads', () => {
     assert.equal(Object.values(context)[0].notes.length, 500);
 });
 
+test('AI journal context reads calendar Net first and Gross as fallback', () => {
+    const context = buildBoundedJournalContext({
+        '2026-08-01': { pnl: null, gross_pnl: '125.50' },
+        '2026-08-02': { pnl: '-40', gross_pnl: '90' },
+    });
+    assert.equal(context['2026-08-01'].pnl, 125.5);
+    assert.equal(context['2026-08-01'].pnlKind, 'gross');
+    assert.equal(context['2026-08-02'].pnl, -40);
+    assert.equal(context['2026-08-02'].pnlKind, 'net');
+});
+
 test('AI chat sends only bounded screenshot tag metadata', () => {
     const tags = Object.fromEntries(Array.from({ length: 130 }, (_, index) => [`folder/screen-${index}.png`, ['tag']]));
     const context = buildBoundedScreenTagContext(tags);

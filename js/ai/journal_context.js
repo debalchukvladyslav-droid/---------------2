@@ -1,3 +1,5 @@
+import { getCalendarDayResult } from '../trade_filters.js';
+
 const compact = (value, limit = 240) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, limit);
 const numberOrNull = (value) => {
     if (value == null || value === '') return null;
@@ -33,8 +35,10 @@ export function buildBoundedJournalContext(journal = {}, { maxDays = 120, maxTra
                 executionStatus: notTaken ? 'not_taken' : 'executed',
             };
         });
+        const calendarResult = getCalendarDayResult(day);
         output[date] = {
-            pnl: numberOrNull(day?.fondexx?.pnl ?? day?.ppro?.pnl ?? day?.pnl),
+            pnl: numberOrNull(calendarResult.value),
+            pnlKind: calendarResult.kind,
             notes: compact(day.notes ?? day.comment ?? day.sessionComment, 500),
             errors: (Array.isArray(day.errors) ? day.errors : []).map((item) => compact(item, 120)).filter(Boolean).slice(0, 20),
             trades,

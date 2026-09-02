@@ -175,15 +175,14 @@ async function manualSyncAll(trigger = null, options = {}) {
         // Те, що користувач бачить на головній, має з'явитися першим. Новини
         // та індекс страху незалежні, тому завантажуємо їх паралельно ще до
         // Trades, Drive, резервної копії та фонового OCR.
-        const dashboardPrioritySteps = document.getElementById('view-dash')?.classList.contains('active')
-            ? await Promise.all([
+        if (document.getElementById('view-dash')?.classList.contains('active')) {
+            void Promise.all([
                 runManualSyncStep('dashboard-news', () => renderDashboardNews()),
                 runManualSyncStep('market-sentiment', () => renderMarketSentiment()),
-            ])
-            : [];
+            ]).catch((error) => console.warn('[Dashboard feeds]', error?.message || error));
+        }
         const steps = [
-            ...dashboardPrioritySteps,
-            await runManualSyncStep('save-local', () => saveToLocal(), { optional: false }),
+            await runManualSyncStep('save-local', () => saveToLocal({ skipEmbedding: startup }), { optional: false }),
             // initializeApp already loaded complete daily_metrics (including
             // Trades) for the current and previous months. A startup sync must
             // not immediately repeat the old all-history journal query.
@@ -246,8 +245,8 @@ function stopManualSyncScheduler() {
 
 function runStartupManualSync(userId) {
     // Run the same full sync as the header button after the primary profile and
-    // the two calendar months are visible. Dashboard news and sentiment still run
-    // first inside manualSyncAll before the heavier background steps.
+    // the two calendar months are visible. Dashboard feeds start in parallel and
+    // can never hold the journal synchronization queue.
     setTimeout(() => {
         if (!state.USER_DOC_NAME || state.myUserId !== userId) return;
         void manualSyncAll(null, { quiet: true, startup: true }).catch((error) => {

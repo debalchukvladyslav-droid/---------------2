@@ -37,7 +37,14 @@ function enqueueTradeEmbeddingSync(savedDays) {
         pendingEmbeddingDays = [];
         tradeEmbeddingQueue = tradeEmbeddingQueue
             .catch(() => undefined)
-            .then(() => syncTradeEmbeddings(unique));
+            .then(() => syncTradeEmbeddings(unique))
+            .catch((error) => {
+                // Embeddings are optional derived data. Edge overloads (546),
+                // timeouts and provider failures must never become an unhandled
+                // rejection or affect journal synchronization.
+                console.warn('[trade-memory] background sync deferred:', error?.message || error);
+                return undefined;
+            });
     }, 30000);
     return tradeEmbeddingQueue;
 }
@@ -346,8 +353,8 @@ export function wasDayRecentlySaved(dateStr, windowMs = 2500) {
     return Date.now() - (_recentlySavedDays.get(dateStr) || 0) < windowMs;
 }
 
-export function saveToLocal() {
-    return Promise.all([saveJournalData(), saveSettings()])
+export function saveToLocal(opts = {}) {
+    return Promise.all([saveJournalData(opts), saveSettings()])
         .catch(e => console.error('saveToLocal queue error:', e));
 }
 
