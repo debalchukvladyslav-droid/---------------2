@@ -29,8 +29,9 @@ create trigger trg_journal_days_sync_version
 before insert or update on public.journal_days
 for each row execute function public.touch_journal_day_sync_version();
 
-create or replace function public.sync_journal_days_batch(payload jsonb)
-returns table (id bigint, trade_date date, sync_version bigint, updated_at timestamptz)
+drop function if exists public.sync_journal_days_batch(jsonb);
+create function public.sync_journal_days_batch(payload jsonb)
+returns table (id uuid, trade_date date, sync_version bigint, updated_at timestamptz)
 language plpgsql
 security invoker
 set search_path = ''
@@ -55,7 +56,7 @@ begin
         locates numeric, kf numeric, notes text, mentor_comment text,
         ai_advice text, daily_metrics jsonb
     )
-    on conflict (user_id, trade_date) do update set
+    on conflict on constraint journal_days_user_id_trade_date_key do update set
         pnl = excluded.pnl,
         gross_pnl = excluded.gross_pnl,
         commissions = excluded.commissions,
