@@ -1954,15 +1954,20 @@ export async function refreshSheetMatchesAfterTradesImport(options = {}) {
         return { ok: false, reason: 'no-main-sheet-mapping' };
     }
 
+    const syncStampKey = `sheet_full_sync_at:${spreadsheetId}`;
+    const persistedFullSyncAt = Number(getStoredValue(syncStampKey)) || 0;
+    const latestFullSyncAt = Math.max(_lastFullMainSheetSyncAt, persistedFullSyncAt);
+
     const fullSyncCoolingDown = !forceFresh
-        && _lastFullMainSheetSyncAt > 0
-        && Date.now() - _lastFullMainSheetSyncAt < MAIN_SHEET_FULL_SYNC_COOLDOWN_MS;
+        && latestFullSyncAt > 0
+        && Date.now() - latestFullSyncAt < MAIN_SHEET_FULL_SYNC_COOLDOWN_MS;
 
     if (cfg?.smartColumns && !validateSheetMappingConfig(cfg).length && !fullSyncCoolingDown) {
         try {
             const result = await executeSyncWithCfg(cfg, { quiet: true, mode: SHEET_MODE_MAIN });
             if (!result?.ok) throw new Error(result?.skipped ? 'sheet sync already in progress' : 'sheet sync did not complete');
             _lastFullMainSheetSyncAt = Date.now();
+            setStoredValue(syncStampKey, String(_lastFullMainSheetSyncAt));
             if (!quiet) showToast('Статуси Google Sheets оновлено після імпорту Trades.');
             return { ok: true, resynced: true, result };
         } catch (error) {

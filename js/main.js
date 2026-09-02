@@ -159,6 +159,7 @@ async function manualSyncAll(trigger = null, options = {}) {
     if (manualSyncInProgress) return;
     manualSyncInProgress = true;
     const quiet = options.quiet === true;
+    const startup = options.startup === true;
     const btn = quiet ? null : (trigger || document.getElementById('manual-sync-btn'));
     const prevTitle = btn?.getAttribute('title') || '';
     if (btn) {
@@ -183,7 +184,10 @@ async function manualSyncAll(trigger = null, options = {}) {
         const steps = [
             ...dashboardPrioritySteps,
             await runManualSyncStep('save-local', () => saveToLocal(), { optional: false }),
-            await runManualSyncStep('load-trades', () => loadTradeDays()),
+            // initializeApp already loaded complete daily_metrics (including
+            // Trades) for the current and previous months. A startup sync must
+            // not immediately repeat the old all-history journal query.
+            await runManualSyncStep('load-trades', () => startup ? null : loadTradeDays()),
             // Google Sheets must be checked before optional services: a backup or
             // Drive failure must never prevent a new trade from reaching calendar PnL.
             await runManualSyncStep('google-sheet', () => isOwnProfile ? window.refreshSheetMatchesAfterTradesImport?.({
@@ -191,7 +195,11 @@ async function manualSyncAll(trigger = null, options = {}) {
                 requireFresh: true,
                 forceFresh: !quiet,
             }) : null),
-            await runManualSyncStep('backup', () => isOwnProfile ? createCompressedBackup({ reason: 'manual-sync', force: true, requireServer: true }) : null),
+            await runManualSyncStep('backup', () => isOwnProfile ? createCompressedBackup({
+                reason: startup ? 'startup-sync' : 'manual-sync',
+                force: !startup,
+                requireServer: true,
+            }) : null),
             await runManualSyncStep('drive-screenshots', () => isOwnProfile ? syncDriveScreenshots(true) : null),
             await runManualSyncStep('background-ocr', () => isOwnProfile ? window.enqueueBackgroundOCRForAllScreens?.() : null),
             await runManualSyncStep('calendar-view', () => window.renderView?.()),
@@ -242,8 +250,7 @@ function runStartupManualSync(userId) {
     // first inside manualSyncAll before the heavier background steps.
     setTimeout(() => {
         if (!state.USER_DOC_NAME || state.myUserId !== userId) return;
-        const button = document.getElementById('manual-sync-btn');
-        void manualSyncAll(button).catch((error) => {
+        void manualSyncAll(null, { quiet: true, startup: true }).catch((error) => {
             console.warn('[Startup sync]', error?.message || error);
         });
     }, 800);
