@@ -236,17 +236,16 @@ function stopManualSyncScheduler() {
     manualSyncIntervalId = null;
 }
 
-function runStartupDashboardSync(userId) {
-    // Keep startup intentionally small. Full Trades/Sheets/Drive/OCR/backup sync
-    // remains available from the explicit header button and must not compete with
-    // the initial calendar render.
-    setTimeout(async () => {
+function runStartupManualSync(userId) {
+    // Run the same full sync as the header button after the primary profile and
+    // the two calendar months are visible. Dashboard news and sentiment still run
+    // first inside manualSyncAll before the heavier background steps.
+    setTimeout(() => {
         if (!state.USER_DOC_NAME || state.myUserId !== userId) return;
-        if (!document.getElementById('view-dash')?.classList.contains('active')) return;
-        await Promise.allSettled([
-            runManualSyncStep('startup-dashboard-news', () => renderDashboardNews()),
-            runManualSyncStep('startup-market-sentiment', () => renderMarketSentiment()),
-        ]);
+        const button = document.getElementById('manual-sync-btn');
+        void manualSyncAll(button).catch((error) => {
+            console.warn('[Startup sync]', error?.message || error);
+        });
     }, 800);
 }
 
@@ -1465,7 +1464,7 @@ async function bootApp(user) {
         cleanupUnusedAIRequests();
     }, 5000);
     startManualSyncScheduler();
-    runStartupDashboardSync(user.id || null);
+    runStartupManualSync(user.id || null);
     initOnboarding({ user, saveSettings, switchMainTab });
     setTimeout(() => window._checkSessionModal?.(), 1500);
     setTimeout(() => window._checkSessionReview?.(), 1800);
