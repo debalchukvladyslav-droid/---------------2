@@ -7,6 +7,7 @@ const DEFAULT_TEAM = 'Без куща';
 const EXTRA_TEAMS_KEY = 'pj:extra-teams';
 
 let _isSwitching = false;
+let _teamsLoadPromise = null;
 
 function extractNick(entry = '') {
     return (entry.includes('(') && entry.includes(')'))
@@ -205,10 +206,16 @@ function refreshVisibleTeamUI() {
     if (container && state.USER_DOC_NAME) _renderTeamSidebarDOM(container);
 }
 
-export async function loadTeams() {
+async function performTeamsLoad() {
     try {
         const { data: sessionData } = await supabase.auth.getSession();
         if (!sessionData?.session) {
+            // During token refresh getSession can briefly yield no session. If
+            // the app is already authenticated, keep the last good team list
+            // instead of replacing it with an empty public catalogue.
+            if (state.USER_DOC_NAME) {
+                throw new Error('Сесія тимчасово недоступна під час завантаження команди');
+            }
             state._teamProfiles = {};
             state.TEAM_GROUPS = buildPublicTeamGroups(await fetchPublicTeamNames());
             fillAuthTeamSelect();
@@ -217,6 +224,9 @@ export async function loadTeams() {
         }
 
         const profiles = await fetchProfiles();
+        if (!profiles.length && state.USER_DOC_NAME) {
+            throw new Error('Supabase повернув порожній список профілів');
+        }
         state._teamProfiles = Object.fromEntries(profiles.map(profile => [profile.nick, profile]));
         state.TEAM_GROUPS = buildTeamGroups(profiles);
         fillAuthTeamSelect();
@@ -231,6 +241,16 @@ export async function loadTeams() {
         fillAuthTeamSelect();
         refreshVisibleTeamUI();
     }
+}
+
+export function loadTeams() {
+    // Several views request the same catalogue during boot. Sharing one request
+    // prevents a slower stale response from clearing a newer successful result.
+    if (_teamsLoadPromise) return _teamsLoadPromise;
+    _teamsLoadPromise = performTeamsLoad().finally(() => {
+        _teamsLoadPromise = null;
+    });
+    return _teamsLoadPromise;
 }
 
 export async function openTeamManager() {
