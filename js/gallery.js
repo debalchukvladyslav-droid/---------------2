@@ -539,6 +539,13 @@ function screenCountForDate(dateStr) {
     return assignedCount + unassignedScreensForCreatedDate(dateStr).length;
 }
 
+function getScreensSelectedDates(fallbackDate) {
+    const selectedDates = Array.isArray(state.screensSelectedDates)
+        ? state.screensSelectedDates.filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date))
+        : [];
+    return selectedDates.length ? selectedDates : [fallbackDate];
+}
+
 function renderScreensDateStrip() {
     const strip = document.getElementById('screens-date-strip');
     const title = document.getElementById('screens-selected-date');
@@ -546,6 +553,7 @@ function renderScreensDateStrip() {
     const selected = /^\d{4}-\d{2}-\d{2}$/.test(state.selectedDateStr || '')
         ? state.selectedDateStr
         : new Date().toISOString().slice(0, 10);
+    const selectedDates = getScreensSelectedDates(selected);
     const center = new Date(`${selected}T12:00:00`);
     const shiftSelectedDay = (offset) => {
         const next = new Date(center);
@@ -558,7 +566,9 @@ function renderScreensDateStrip() {
     if (previousButton) previousButton.onclick = () => shiftSelectedDay(-1);
     if (nextButton) nextButton.onclick = () => shiftSelectedDay(1);
     if (title) {
-        title.textContent = new Intl.DateTimeFormat('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' }).format(center);
+        title.textContent = selectedDates.length > 1
+            ? `Вибрано днів: ${selectedDates.length}`
+            : new Intl.DateTimeFormat('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' }).format(center);
     }
     strip.innerHTML = '';
     for (let offset = -3; offset <= 3; offset++) {
@@ -568,11 +578,18 @@ function renderScreensDateStrip() {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'screens-date-chip';
-        button.classList.toggle('active', dateStr === selected);
+        button.classList.toggle('active', selectedDates.includes(dateStr));
         button.innerHTML = `<span>${new Intl.DateTimeFormat('uk-UA', { weekday: 'short' }).format(date)}</span><strong>${date.getDate()}</strong><small>${screenCountForDate(dateStr)} скр.</small>`;
-        button.addEventListener('click', () => void window.selectDate?.(dateStr));
+        button.addEventListener('click', () => {
+            state.screensSelectedDates = [dateStr];
+            void window.selectDate?.(dateStr);
+        });
         button.addEventListener('contextmenu', event => {
             event.preventDefault();
+            const nextDates = new Set(getScreensSelectedDates(selected));
+            if (nextDates.has(dateStr) && nextDates.size > 1) nextDates.delete(dateStr);
+            else nextDates.add(dateStr);
+            state.screensSelectedDates = [...nextDates];
             void window.selectDate?.(dateStr);
         });
         strip.appendChild(button);
@@ -583,7 +600,25 @@ export async function renderAssignedScreens() {
     renderScreensDateStrip();
     cleanupDuplicateScreensDetailTitles();
     void renderUnassignedUI();
-    let screens = assignedScreensForCreatedDate(state.selectedDateStr);
+    const selectedDates = getScreensSelectedDates(state.selectedDateStr);
+    const multiDay = selectedDates.length > 1;
+    const screenCategoryByFilename = {};
+    let screens;
+    if (multiDay) {
+        const combinedScreens = [];
+        selectedDates.forEach(dateStr => {
+            const dayScreens = assignedScreensForCreatedDate(dateStr);
+            SCREEN_CATS.forEach(category => {
+                (dayScreens[category.id] || []).forEach(filename => {
+                    combinedScreens.push(filename);
+                    screenCategoryByFilename[filename] = category.id;
+                });
+            });
+        });
+        screens = { multi: combinedScreens };
+    } else {
+        screens = assignedScreensForCreatedDate(state.selectedDateStr);
+    }
     const assignedContainer = document.getElementById('assigned-container');
     if (!assignedContainer) return;
     assignedContainer.innerHTML = '';
@@ -591,11 +626,14 @@ export async function renderAssignedScreens() {
 
     // Презавантажуємо blob URL для Firebase Storage
     const allFilenames = SCREEN_CATS.flatMap(cat => screens[cat.id] || []);
-    const catCounts = Object.fromEntries(SCREEN_CATS.map(cat => [cat.id, (screens[cat.id] || []).length]));
+    const screenCategories = multiDay
+        ? [{ id: 'multi', name: 'Скріншоти за вибрані дні', color: 'var(--accent)' }]
+        : SCREEN_CATS;
+    const catCounts = Object.fromEntries(screenCategories.map(cat => [cat.id, (screens[cat.id] || []).length]));
     const activeFilter = state.screensCategoryFilter || 'all';
-    const visibleCats = activeFilter === 'all'
-        ? SCREEN_CATS
-        : SCREEN_CATS.filter(cat => cat.id === activeFilter);
+    const visibleCats = activeFilter === 'all' || multiDay
+        ? screenCategories
+        : screenCategories.filter(cat => cat.id === activeFilter);
     const srcMap = {};
     await Promise.all(allFilenames.map(async f => {
         srcMap[f] = await getStorageUrl(f);
@@ -609,7 +647,7 @@ export async function renderAssignedScreens() {
     filterBar.className = 'screen-category-filter';
     const filterOptions = [
         { id: 'all', name: 'Всі', count: allFilenames.length, color: 'var(--accent)' },
-        ...SCREEN_CATS.map(cat => ({ ...cat, count: catCounts[cat.id] || 0 })),
+        ...screenCategories.map(cat => ({ ...cat, count: catCounts[cat.id] || 0 })),
     ];
     filterOptions.forEach(option => {
         const btn = document.createElement('button');
@@ -631,10 +669,11 @@ export async function renderAssignedScreens() {
         if (list.length === 0) return;
 
         const catDiv = document.createElement('div');
-        catDiv.className = 'big-screen-cat';
+        catDiv.className = multiDay ? 'big-screen-cat screens-multi-day-list' : 'big-screen-cat';
         const catTitle = document.createElement('h4');
         catTitle.style.color = cat.color;
-        catTitle.textContent = cat.name;
+        if (multiDay) catTitle.textContent = `${cat.name} (${selectedDates.length})`;
+        else catTitle.textContent = cat.name;
         catDiv.appendChild(catTitle);
 
         list.forEach(filename => {
@@ -677,7 +716,7 @@ export async function renderAssignedScreens() {
             const retBtn = document.createElement('button');
             retBtn.className = 'btn-secondary screen-card-action rr-exempt-access';
             retBtn.textContent = '↩️ Повернути наверх';
-            retBtn.addEventListener('click', () => removeAssignedImage(encodedPath, cat.id));
+            retBtn.addEventListener('click', () => removeAssignedImage(encodedPath, multiDay ? screenCategoryByFilename[filename] : cat.id));
             actRow.appendChild(aiBtn); actRow.appendChild(rrBtn); actRow.appendChild(retBtn);
 
             // Discipline slider
@@ -747,7 +786,7 @@ export async function renderAssignedScreens() {
         assignedContainer.appendChild(empty);
     }
     
-    document.getElementById('big-screen-date').innerText = state.selectedDateStr; 
+    document.getElementById('big-screen-date').innerText = multiDay ? `${selectedDates.length} вибраних днів` : state.selectedDateStr;
     const infoEl = document.getElementById('sidebar-screen-info'); if (infoEl) infoEl.innerText = `Скріншотів додано: ${allFilenames.length}`;
     
     currentDayImages.forEach(encodedPath => { if(window.updateBadgeUI) window.updateBadgeUI(encodedPath) });

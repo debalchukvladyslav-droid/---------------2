@@ -50,6 +50,7 @@ export const state = {
     // Дані для UI та Чарту
     todayObj: new Date(),
     selectedDateStr: "", // Ініціалізуємо пізніше
+    screensSelectedDates: [],
     pnlChartInstance: null,
     daysChartInstance: null,
     winLossChartInstance: null,
