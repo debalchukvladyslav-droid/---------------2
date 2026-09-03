@@ -742,6 +742,10 @@ async function runMainTabWork(tab) {
         });
     }
     if (tab === 'screens') {
+        // The screenshots workspace is a daily inbox. Opening it from the main
+        // navigation must start on today, not on an old calendar selection.
+        const today = new Date();
+        state.selectedDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
         if (window.setupOCRDrawing) window.setupOCRDrawing();
         if (window.updateDriveUI) tasks.push(Promise.resolve(window.updateDriveUI()));
         if (window.restoreScreensDistributionState) tasks.push(Promise.resolve(window.restoreScreensDistributionState()));

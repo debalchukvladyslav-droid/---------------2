@@ -34,6 +34,15 @@ test('ordinary journal saves do not create backups and embeddings are gently def
     assert.match(storage, /setTimeout\(resolve, 2000\)/);
 });
 
+test('opening screenshots resets its daily inbox to the local current date', async () => {
+    const ui = await readFile(new URL('../js/ui.js', import.meta.url), 'utf8');
+    const tabWork = ui.slice(ui.indexOf('async function runMainTabWork'), ui.indexOf('function getDashboardGreetingName'));
+    const screensBlock = tabWork.slice(tabWork.indexOf("if (tab === 'screens')"));
+    assert.match(screensBlock, /const today = new Date\(\)/);
+    assert.match(screensBlock, /state\.selectedDateStr = `\$\{today\.getFullYear\(\)\}/);
+    assert.doesNotMatch(screensBlock.slice(0, screensBlock.indexOf("if (tab === 'stop-errors')")), /toISOString\(\)/);
+});
+
 test('Polygon durable cron remains disabled after migrations', async () => {
     const migration = await readFile(new URL('../supabase/migrations/20260824152000_disable_polygon_cron.sql', import.meta.url), 'utf8');
     assert.match(migration, /cron\.unschedule/);
