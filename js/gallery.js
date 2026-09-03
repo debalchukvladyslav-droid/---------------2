@@ -571,6 +571,10 @@ function renderScreensDateStrip() {
         button.classList.toggle('active', dateStr === selected);
         button.innerHTML = `<span>${new Intl.DateTimeFormat('uk-UA', { weekday: 'short' }).format(date)}</span><strong>${date.getDate()}</strong><small>${screenCountForDate(dateStr)} скр.</small>`;
         button.addEventListener('click', () => void window.selectDate?.(dateStr));
+        button.addEventListener('contextmenu', event => {
+            event.preventDefault();
+            void window.selectDate?.(dateStr);
+        });
         strip.appendChild(button);
     }
 }
