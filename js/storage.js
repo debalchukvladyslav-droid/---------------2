@@ -14,6 +14,7 @@ import {
 let tradeEmbeddingQueue = Promise.resolve();
 let tradeEmbeddingTimer = null;
 let pendingEmbeddingDays = [];
+let _accountContextGeneration = 0;
 
 async function syncTradeEmbeddings(savedDays) {
     const ids = [...new Set((savedDays || []).map((row) => row?.id).filter(Boolean))];
@@ -135,6 +136,7 @@ async function getCurrentUserContext() {
 }
 
 export function resetRuntimeDataForAccountSwitch() {
+    invalidatePendingPersistenceContext();
     _dirtyJournalDates.clear();
     _journalDateRevisions.clear();
     _dayDetailsPromises.clear();
@@ -163,6 +165,7 @@ export function resetRuntimeDataForAccountSwitch() {
 // not survive a switch to another team member, otherwise matching calendar dates
 // from the previous profile can suppress the newly loaded rows.
 export function resetJournalLoadStateForProfileSwitch() {
+    invalidatePendingPersistenceContext();
     _dirtyJournalDates.clear();
     _journalDateRevisions.clear();
     _dayDetailsPromises.clear();
@@ -343,6 +346,7 @@ let _journalSaveOptions = {};
 let _journalSaveFirstRequestedAt = 0;
 let _settingsSavePromise = null;
 let _settingsSaveRequested = false;
+let _settingsSaveContext = null;
 const _dirtyJournalDates = new Set();
 const _journalDateRevisions = new Map();
 const _dayDetailsPromises = new Map();
@@ -359,9 +363,28 @@ export function saveToLocal(opts = {}) {
 }
 
 export function saveJournalData(opts = {}) {
+    const requestContext = {
+        generation: _accountContextGeneration,
+        userId: state.myUserId || null,
+        ownDocName: state.USER_DOC_NAME || '',
+    };
+    const pendingContext = _journalSaveOptions.context;
+    if (_journalSaveDeferred && pendingContext && (
+        pendingContext.generation !== requestContext.generation
+        || pendingContext.userId !== requestContext.userId
+        || pendingContext.ownDocName !== requestContext.ownDocName
+    )) {
+        clearTimeout(_journalSaveTimer);
+        _journalSaveTimer = null;
+        _journalSaveDeferred.resolve(false);
+        _journalSaveDeferred = null;
+        _journalSaveOptions = {};
+        _journalSaveFirstRequestedAt = 0;
+    }
     _journalSaveOptions = {
         ..._journalSaveOptions,
         ...opts,
+        context: requestContext,
         forceFull: _journalSaveOptions.forceFull === true || opts.forceFull === true,
         skipEmbedding: _journalSaveOptions.skipEmbedding === true || opts.skipEmbedding === true,
     };
@@ -388,6 +411,18 @@ export function saveJournalData(opts = {}) {
     }, delay);
 
     return _journalSaveDeferred.promise;
+}
+
+function invalidatePendingPersistenceContext() {
+    _accountContextGeneration += 1;
+    clearTimeout(_journalSaveTimer);
+    _journalSaveTimer = null;
+    if (_journalSaveDeferred) _journalSaveDeferred.resolve(false);
+    _journalSaveDeferred = null;
+    _journalSaveOptions = {};
+    _journalSaveFirstRequestedAt = 0;
+    _settingsSaveRequested = false;
+    _settingsSaveContext = null;
 }
 
 if (typeof window !== 'undefined') {
@@ -438,10 +473,10 @@ export function markAllJournalDirty() {
     Object.keys(journal).forEach(markJournalDayDirty);
 }
 
-async function performSettingsSave() {
+async function performSettingsSave(context) {
     try {
         const { user } = await getCurrentUserContext();
-        if (!user) return;
+        if (!user || !context || context.generation !== _accountContextGeneration || user.id !== context.userId) return;
         const settingsPayload = {
             ...state.appData.settings,
             aiChatHistory: Array.isArray(state.appData.aiChatHistory) ? state.appData.aiChatHistory : [],
@@ -466,6 +501,7 @@ async function performSettingsSave() {
                 state.appData.weeklyComments && typeof state.appData.weeklyComments === 'object' ? state.appData.weeklyComments : {},
         };
         await cacheValue(user.id, 'settings', settingsPayload);
+        if (context.generation !== _accountContextGeneration || state.myUserId !== context.userId) return;
         publishSyncState('syncing', { kind: 'settings' });
         const { error } = await supabase
             .from('profiles')
@@ -480,12 +516,16 @@ async function performSettingsSave() {
 }
 
 export function saveSettings() {
+    const context = { generation: _accountContextGeneration, userId: state.myUserId || null };
+    if (!context.userId) return Promise.resolve(false);
     _settingsSaveRequested = true;
+    _settingsSaveContext = context;
     if (_settingsSavePromise) return _settingsSavePromise;
     _settingsSavePromise = (async () => {
         while (_settingsSaveRequested) {
             _settingsSaveRequested = false;
-            await performSettingsSave();
+            const runContext = _settingsSaveContext;
+            await performSettingsSave(runContext);
         }
     })().finally(() => { _settingsSavePromise = null; });
     return _settingsSavePromise;
@@ -586,6 +626,14 @@ export async function saveMonth() {
 
 async function _doSave(opts = {}) {
     const forceFull = !!opts.forceFull;
+    const context = opts.context;
+    if (!context
+        || context.generation !== _accountContextGeneration
+        || context.userId !== state.myUserId
+        || context.ownDocName !== state.USER_DOC_NAME) {
+        console.info('[journal] stale save from another account context was discarded');
+        return false;
+    }
     if (state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) {
         console.log('Режим глядача: базове збереження заблоковано.');
         return;
@@ -593,6 +641,10 @@ async function _doSave(opts = {}) {
 
     try {
         const { user, userId, email } = await getCurrentUserContext();
+        if (context.generation !== _accountContextGeneration || userId !== context.userId || state.myUserId !== context.userId) {
+            console.info('[journal] account changed while save was queued; write discarded');
+            return false;
+        }
         if (!user || !userId) throw new Error('Немає авторизованого користувача Supabase');
 
         const journal = state.appData.journal || {};
@@ -629,10 +681,12 @@ async function _doSave(opts = {}) {
         });
 
         await cacheJournalRows(userId, rows, { dirty: true });
+        if (context.generation !== _accountContextGeneration || state.myUserId !== context.userId) return false;
         publishSyncState('syncing', { pending: rows.length, kind: 'journal' });
 
         const savedDays = [];
         for (let i = 0; i < rows.length; i += 200) {
+            if (context.generation !== _accountContextGeneration || state.myUserId !== context.userId) return false;
             const batch = rows.slice(i, i + 200);
             const rpc = await supabase.rpc('sync_journal_days_batch', { payload: batch });
             if (!rpc.error) {
@@ -649,6 +703,7 @@ async function _doSave(opts = {}) {
             if (fallback.error) throw fallback.error;
             savedDays.push(...(fallback.data || []));
         }
+        if (context.generation !== _accountContextGeneration || state.myUserId !== context.userId) return false;
 
         // Semantic memory is derived after the durable journal write. A temporary
         // inference failure must never roll back or block the trader's save flow.

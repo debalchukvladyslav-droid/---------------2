@@ -30,6 +30,16 @@ test('writes are coalesced, version-safe, and sent in batches', () => {
     assert.match(migration, /security invoker/gi);
 });
 
+test('queued persistence is isolated from account and viewed-profile switches', () => {
+    assert.match(storage, /let _accountContextGeneration = 0/);
+    assert.match(storage, /context\.userId !== state\.myUserId/);
+    assert.match(storage, /account changed while save was queued; write discarded/);
+    assert.match(storage, /function invalidatePendingPersistenceContext\(\)/);
+    assert.match(storage, /export function resetRuntimeDataForAccountSwitch\(\) \{\s*invalidatePendingPersistenceContext\(\)/);
+    assert.match(storage, /export function resetJournalLoadStateForProfileSwitch\(\) \{\s*invalidatePendingPersistenceContext\(\)/);
+    assert.match(storage, /user\.id !== context\.userId/);
+});
+
 test('realtime ignores the echo of a just-confirmed local write', () => {
     assert.match(realtime, /wasDayRecentlySaved\(tradeDate\)/);
     assert.ok(realtime.indexOf(".on('postgres_changes'") < realtime.indexOf('.subscribe('));
