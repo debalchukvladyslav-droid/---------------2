@@ -221,7 +221,10 @@ async function fetchSheetsService(params) {
 export async function autoConnectTraderSheet(options = {}) {
     const force = options?.force === true;
     const markerKey = `tj_auto_table_v1:${state.myUserId || cleanDocNick(state.USER_DOC_NAME) || 'anonymous'}`;
-    if (!force && localStorage.getItem(markerKey)) return { ok: true, skipped: true, reason: 'already-checked' };
+    if (!force && getCurrentStoredSpreadsheetId('main')) return { ok: true, skipped: true, reason: 'already-connected' };
+    let previousCheck = null;
+    try { previousCheck = JSON.parse(localStorage.getItem(markerKey) || 'null'); } catch (_) {}
+    if (!force && previousCheck?.spreadsheetId && !previousCheck.mappingFailed) return { ok: true, skipped: true, reason: 'already-checked' };
     if (autoTablePromise) return autoTablePromise;
 
     autoTablePromise = (async () => {
@@ -248,7 +251,6 @@ export async function autoConnectTraderSheet(options = {}) {
             await fetchSpreadsheetData(spreadsheetId, matched.title);
             const mapping = autoMapSheetColumns({ silent: true });
             if (!mapping?.ok) {
-                localStorage.setItem(markerKey, JSON.stringify({ spreadsheetId, sheetTitle: matched.title, mappingFailed: true, at: new Date().toISOString() }));
                 return { ok: false, reason: mapping?.reason || 'mapping-failed', spreadsheetId, sheetTitle: matched.title, message: 'Лист знайдено, але автомапінг не зміг визначити колонки.' };
             }
             await saveSheetMapping();
@@ -259,7 +261,6 @@ export async function autoConnectTraderSheet(options = {}) {
         if (lookupErrors.length === AUTO_TABLE_SPREADSHEET_IDS.length) {
             throw new Error(`Не вдалося перевірити жодну з трьох таблиць: ${lookupErrors.join('; ')}`);
         }
-        localStorage.setItem(markerKey, JSON.stringify({ notFound: true, lastName, at: new Date().toISOString() }));
         return { ok: false, reason: 'sheet-not-found', lookupErrors, message: `Лист «${lastName}» не знайдено у трьох таблицях.` };
     })().finally(() => { autoTablePromise = null; });
     return autoTablePromise;

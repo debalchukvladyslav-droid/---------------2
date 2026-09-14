@@ -53,7 +53,7 @@ function loadPersistentNewsCache(context) {
         if (!raw) return null;
         const payload = JSON.parse(raw);
         if (!payload || !Array.isArray(payload.items)) return null;
-        if (payload.items.some((item) => !cleanNewsDisplayTitle(item?.titleUk))) return null;
+        if (payload.degraded || !payload.items.length || payload.items.some((item) => !displayNewsTitle(item))) return null;
         return payload;
     } catch {
         return null;
@@ -226,8 +226,6 @@ async function fetchDashboardNews(force = false) {
             newsWindow: { matched: 0 },
             degraded: true,
         };
-        _newsCache = { key: cacheKey, ts: Date.now(), payload: degraded };
-        savePersistentNewsCache(newsContext, degraded);
         return degraded;
     }
     const data = await response.json().catch(() => ({}));
@@ -237,7 +235,7 @@ async function fetchDashboardNews(force = false) {
     _newsCache = { key: cacheKey, ts: Date.now(), payload: translated };
     // A temporary AI credential/provider failure must be retried on a later
     // visit, not stored as an empty feed across page reloads.
-    if (!translated?.translationPending) savePersistentNewsCache(newsContext, translated);
+    if (!translated?.translationPending && !translated?.degraded && translated?.items?.length) savePersistentNewsCache(newsContext, translated);
     return translated;
 }
 
@@ -253,9 +251,7 @@ async function translateNewsPayload(payload) {
         if (/api key not valid|invalid api key|unauthorized|forbidden|\b401\b|\b403\b/i.test(reason)) {
             return {
                 ...payload,
-                items: items
-                    .filter((item) => cleanNewsDisplayTitle(item?.titleUk))
-                    .map((item) => ({ ...item, titleUk: cleanNewsDisplayTitle(item.titleUk) })),
+                items,
                 translationPending: true,
             };
         }
@@ -327,12 +323,17 @@ async function translateNewsPayload(payload) {
         console.warn('[News] quality translation failed:', error);
         return {
             ...payload,
-            items: (payload.items || [])
-                .filter((item) => cleanNewsDisplayTitle(item?.titleUk))
-                .map((item) => ({ ...item, titleUk: cleanNewsDisplayTitle(item.titleUk) })),
+            items: payload.items || [],
             translationPending: true,
         };
     }
+}
+
+function displayNewsTitle(item) {
+    const translated = cleanNewsDisplayTitle(item?.titleUk);
+    if (translated) return translated;
+    const original = String(item?.title || '').replace(/\s+/g, ' ').trim();
+    return original && !isLowValueCatalystTitle(original) ? original.slice(0, 140) : '';
 }
 
 function cleanNewsDisplayTitle(value) {
@@ -404,7 +405,7 @@ function renderLiveNewsModalList(items = _visibleNewsItems) {
         const time = formatNewsTime(item.datetime);
         const source = item.source ? sanitizeHTML(item.source) : '';
         const meta = [source, time].filter(Boolean).join(' • ');
-        const title = sanitizeHTML(cleanNewsDisplayTitle(item.titleUk));
+        const title = sanitizeHTML(displayNewsTitle(item));
         const summaryText = hasCyrillic(item.summary) ? String(item.summary).slice(0, 260) : '';
         const summary = summaryText ? `<p>${sanitizeHTML(summaryText)}</p>` : '';
         const url = safeExternalUrl(item.url);
@@ -476,7 +477,7 @@ function renderTickerNews(payload) {
             ? `[${sanitizeHTML(item.related.slice(0, 3).join(','))}] `
             : '';
         const time = formatNewsTime(item.datetime);
-        const title = sanitizeHTML(cleanNewsDisplayTitle(item.titleUk));
+        const title = sanitizeHTML(displayNewsTitle(item));
         const suffix = time ? ` (${sanitizeHTML(time)})` : '';
         return `${label}<a href="${sanitizeHTML(safeExternalUrl(item.url))}" target="_blank" rel="noopener noreferrer">${related}${title}${suffix}</a>`;
     }).join('<span class="news-ticker-sep">•</span>');

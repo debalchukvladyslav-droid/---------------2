@@ -43,10 +43,15 @@ export default async function handler(req, res) {
     }
 
     try {
-        const [marketNews, companyNews] = await Promise.all([
+        const [marketResult, companyResult] = await Promise.allSettled([
             fetchMarketNews(apiKey),
             tickers.length ? fetchCompanyNews(tickers, apiKey, fromTs, toTs) : Promise.resolve([]),
         ]);
+        if (marketResult.status === 'rejected' && companyResult.status === 'rejected') {
+            throw marketResult.reason;
+        }
+        const marketNews = marketResult.status === 'fulfilled' ? marketResult.value : [];
+        const companyNews = companyResult.status === 'fulfilled' ? companyResult.value : [];
 
         const generalItems = normalizeItems(marketNews, 'general').slice(0, 8);
         const allTickerItems = normalizeItems(companyNews, 'tickers');
@@ -135,7 +140,7 @@ async function fetchCompanyNews(tickers, apiKey, fromTs = null, toTs = null) {
     const fromStr = from.toISOString().slice(0, 10);
     const toStr = toDate.toISOString().slice(0, 10);
 
-    const results = await Promise.all(tickers.map(async (symbol) => {
+    const results = await Promise.allSettled(tickers.map(async (symbol) => {
         const url = new URL(`${FINNHUB_BASE}/company-news`);
         url.searchParams.set('symbol', symbol);
         url.searchParams.set('from', fromStr);
@@ -149,7 +154,7 @@ async function fetchCompanyNews(tickers, apiKey, fromTs = null, toTs = null) {
         }));
     }));
 
-    return results.flat();
+    return results.flatMap((result) => result.status === 'fulfilled' ? result.value : []);
 }
 
 function filterNewsWindow(items, fromTs, toTs) {

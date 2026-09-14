@@ -29,7 +29,8 @@ test('dashboard news translation failure never blocks tab navigation or becomes 
         readFile(new URL('../js/ui.js', import.meta.url), 'utf8'),
     ]);
     assert.match(news, /api key not valid\|invalid api key/);
-    assert.match(news, /if \(!translated\?\.translationPending\) savePersistentNewsCache/);
+    assert.match(news, /!translated\?\.translationPending && !translated\?\.degraded && translated\?\.items\?\.length/);
+    assert.match(news, /function displayNewsTitle\(item\)/);
     assert.match(ui, /void Promise\.resolve\(window\.renderDashboardNews\(\)\)/);
     assert.doesNotMatch(ui, /tasks\.push\(Promise\.resolve\(window\.renderDashboardNews\(\)\)\)/);
 });

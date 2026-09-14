@@ -1472,6 +1472,9 @@ async function bootApp(user) {
     startManualSyncScheduler();
     runStartupManualSync(user.id || null);
     initOnboarding({ user, saveSettings, switchMainTab });
+    void import('./google_sheet_connector.js')
+        .then((module) => module.autoConnectTraderSheet())
+        .catch((error) => console.warn('[Auto table] startup check deferred:', error?.message || error));
     setTimeout(() => window._checkSessionModal?.(), 1500);
     setTimeout(() => window._checkSessionReview?.(), 1800);
 }

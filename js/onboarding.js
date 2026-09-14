@@ -2,7 +2,6 @@ import { state } from './state.js';
 
 const VERSION = 1;
 const RELEASED_AT = Date.parse('2026-07-14T00:00:00Z');
-const NEW_ACCOUNT_WINDOW_MS = 24 * 60 * 60 * 1000;
 const LOCAL_PREFIX = 'tj:onboarding:';
 
 let deps = null;
@@ -30,7 +29,7 @@ const steps = [
     { id: 'ocr-select', tab: 'screens', target: '#ocr-setup-container', title: 'OCR-зона тікера', text: 'На завантаженому скріншоті виділіть мишкою або пальцем ділянку, де показаний тікер.', prepare: 'screens-open', action: '#ocr-setup-container', event: 'pointerup', actionLabel: 'Виділіть область тікера', optional: true },
     { id: 'ocr-save', tab: 'screens', target: '[data-action="ocr-save"]', title: 'Збережіть OCR-зону', text: 'Після виділення збережіть зону. Сайт використає її для автоматичного визначення тікерів.', prepare: 'screens-open', action: '[data-action="ocr-save"]', actionLabel: 'Збережіть OCR-зону', optional: true },
     { id: 'broker-imports', tab: 'table', target: '.broker-import-card', title: 'Імпорт брокерських звітів', text: 'Summary by date оновлює денні підсумки, Trades додає угоди, а PPRO імпортує денні результати PPRO. Тур не відкриватиме вибір файлу автоматично.' },
-    { id: 'sheet-source', tab: 'table', target: '.sheet-preset-picker:not(.sheet-preset-picker--workspace)', title: '1. Оберіть таблицю статистики', text: 'Оберіть готову таблицю своєї групи: «Валенштак, Семенюк, Кость, Дмитрук, Скіпальський», «Чачанко, Наход» або «Хомік, Mikulich». Власне посилання нижче потрібне лише тоді, коли вашої групи немає у списку.', group: 'mapping', prepare: 'sheet-open', action: '.sheet-preset-picker:not(.sheet-preset-picker--workspace) .sheet-preset-btn, [data-action="sheet-service-load"]', actionLabel: 'Оберіть свою таблицю зі списку', optional: true },
+    { id: 'sheet-source', tab: 'table', target: '.sheet-preset-picker:not(.sheet-preset-picker--workspace)', title: '1. Оберіть таблицю статистики', text: 'Оберіть готову таблицю своєї групи: «Дебальчук, Валенштак, Семенюк, Кость, Дмитрук, Скіпальський», «Чачанко, Наход» або «Хомік, Mikulich». Власне посилання нижче потрібне лише тоді, коли вашої групи немає у списку.', group: 'mapping', prepare: 'sheet-open', action: '.sheet-preset-picker:not(.sheet-preset-picker--workspace) .sheet-preset-btn, [data-action="sheet-service-load"]', actionLabel: 'Оберіть свою таблицю зі списку', optional: true },
     { id: 'sheet-sheet', tab: 'table', target: '#sheet-tab-picker', title: '2. Оберіть аркуш', text: 'Це аркуш, з якого сайт читатиме статистику. Перевірте, що тут вибране ім’я потрібного трейдера або потрібного листа.', group: 'mapping', prepare: 'sheet-open', optional: true },
     { id: 'sheet-map', tab: 'table', target: '[data-action="sheet-auto-map"]', title: '3. Запустіть автомапінг', text: 'Автомапінг сам знаходить Дату, Ticker та всі доступні додаткові колонки, зберігає налаштування і запускає синхронізацію. Відсутні необов’язкові колонки не заважають імпорту.', group: 'mapping', prepare: 'sheet-open', action: '[data-action="sheet-auto-map"]', actionLabel: 'Натисніть «Автомапінг»', optional: true },
     { id: 'sheet-edit', tab: 'table', target: '[data-action="sheet-mapping-edit"]', title: '4. Редагування за потреби', text: 'Якщо автомапінг вибрав не ту колонку, натисніть «Редагувати». Усі ручні налаштування залишаються схованими, доки вони не потрібні.', group: 'mapping', prepare: 'sheet-open', action: '[data-action="sheet-mapping-edit"]', actionLabel: 'Натисніть «Редагувати»', optional: true },
@@ -403,16 +402,11 @@ export function initOnboarding(options) {
     // Автоматичне знайомство показується лише один раз. Навіть якщо користувач
     // закрив тур або перезавантажив сторінку посеред нього, повторний запуск
     // доступний тільки вручну через налаштування.
-    if (saved && ['shown', 'in_progress', 'later', 'completed', 'dismissed'].includes(saved.status)) return;
+    if (saved && ['in_progress', 'later', 'completed', 'dismissed'].includes(saved.status)) return;
 
     const createdAt = Date.parse(options.user?.created_at || '');
-    const accountAge = Date.now() - createdAt;
-    const isNewAccount = Number.isFinite(createdAt)
-        && createdAt >= RELEASED_AT
-        && accountAge >= 0
-        && accountAge <= NEW_ACCOUNT_WINDOW_MS;
-    if (isNewAccount) {
-        writeState('shown', { shownAt: new Date().toISOString() });
-        setTimeout(() => startOnboardingTour(), 1100);
-    }
+    if (!Number.isFinite(createdAt) || createdAt < RELEASED_AT) return;
+
+    writeState('shown', { shownAt: new Date().toISOString() });
+    setTimeout(() => startOnboardingTour(), 1100);
 }
