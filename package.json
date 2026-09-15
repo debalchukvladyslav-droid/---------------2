@@ -9,6 +9,8 @@
     "test:seed": "node scripts/seed-test-environment.mjs",
     "dataset:export": "node scripts/export-ai-training-dataset.mjs",
     "dataset:exceptions": "node scripts/export-exception-learning-dataset.mjs",
+    "verify:deployment-schema": "node scripts/verify-deployment-schema.mjs",
+    "postinstall": "node scripts/verify-deployment-schema.mjs",
     "dev": "node dev-server.mjs",
     "dev:5500": "node dev-server.mjs --port 5500",
     "start": "node dev-server.mjs"

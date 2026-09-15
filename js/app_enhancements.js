@@ -189,7 +189,14 @@ function activateAction(action, trigger, event = null) {
         'right-sidebar-toggle': () => window.toggleRightSidebar?.(),
         'team-sidebar-open': () => window.openTeamSidebar?.(),
         'notifications-toggle': () => window.toggleNotificationPanel?.(),
-        'manual-sync-all': () => window.manualSyncAll?.(trigger),
+        'manual-sync-all': () => {
+            const task = window.manualSyncAll?.(trigger);
+            task?.catch?.((error) => {
+                console.error('[Manual sync]', error);
+                window.showToast?.(error?.message || 'Синхронізацію не завершено. Дані залишилися на пристрої.');
+            });
+            return task;
+        },
         'zoom-close': () => window.closeZoom?.(event),
         'zoom-prev': () => window.zoomStep?.(-1),
         'zoom-next': () => window.zoomStep?.(1),
