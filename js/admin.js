@@ -3,8 +3,8 @@ import { supabase, SUPABASE_URL } from './supabase.js';
 import { state } from './state.js';
 import { copyTextToClipboard, showToast } from './utils.js';
 import { loadTeams } from './teams.js';
-import { exportProfileData, resetProfileData, restoreProfileData, loadTradeDays, loadAllMonths } from './storage.js';
-import { listServerBackupsForUser, readCompressedBackupEntry } from './backups.js';
+import { exportProfileData, resetProfileData, loadTradeDays, loadAllMonths } from './storage.js';
+import { listServerBackupsForUser, prepareBackupRestore, restorePreparedBackup } from './backups.js';
 import { calculatePreMarketVolume } from './polygon_intraday_cache.js';
 import { loadJournalPolygonDay } from './journal_polygon.js';
 
@@ -1400,12 +1400,14 @@ function buildAdminBackupPanel(profile, card) {
 
 async function adminRestoreBackup(profile, backup, card) {
     if (!backup) return;
-    const confirmed = confirm(`Відновити профіль «${profile.nick || profile.email || profile.id}» з бекапу від ${formatAdminBackupDate(backup.createdAt)}? Поточний журнал буде замінено.`);
-    if (!confirmed) return;
     card?.classList.add('admin-user-busy');
     try {
-        const { payload } = await readCompressedBackupEntry(backup);
-        await restoreProfileData(profile.id, payload.appData, profile.nick);
+        const preview = await prepareBackupRestore(backup, profile.id);
+        const dayCount = preview?.counts?.journal_days || 0;
+        const missingFiles = preview?.missingFiles?.length || 0;
+        const confirmed = confirm(`Відновити профіль «${profile.nick || profile.email || profile.id}» з копії від ${formatAdminBackupDate(backup.createdAt)}? Днів: ${dayCount}. Відсутніх файлів: ${missingFiles}.`);
+        if (!confirmed) return;
+        await restorePreparedBackup(preview, profile.id);
         showToast(`Профіль «${profile.nick || profile.email}» відновлено`);
     } catch (error) {
         showToast('Помилка відновлення: ' + (error?.message || error));
@@ -1425,18 +1427,24 @@ async function adminToggleUserBlock(profile, blocked, cardEl) {
         : confirm(`Розблокувати акаунт «${profile.nick}»?`);
     if (!ok) return;
 
-    const settings = {
-        ...profileSettings(profile),
-        account_blocked: blocked,
-        account_blocked_at: blocked ? new Date().toISOString() : null,
-    };
-    if (!blocked) delete settings.account_blocked_at;
-
     cardEl?.classList.add('admin-user-busy');
-    const { error } = await supabase
-        .from('profiles')
-        .update({ settings })
-        .eq('id', profile.id);
+    const current = await supabase.rpc('get_data_sync_state', { p_user_id: profile.id });
+    let error = current.error;
+    if (!error) {
+        const operationId = crypto.randomUUID();
+        const patch = blocked
+            ? { account_blocked: true, account_blocked_at: new Date().toISOString() }
+            : { account_blocked: false, account_blocked_at: null };
+        const applied = await supabase.rpc('apply_data_operations', { p_atomic: true, p_operations: [{
+            operationId, userId: profile.id, domain: 'settings', entityId: profile.id,
+            epoch: current.data.epoch, baseVersion: current.data.settingsVersion,
+            base: current.data.settings || {}, patch,
+        }] });
+        error = applied.error;
+        if (!error && applied.data?.results?.[0]?.status !== 'applied') {
+            error = new Error('Профіль змінився паралельно. Оновіть список і повторіть дію.');
+        }
+    }
     cardEl?.classList.remove('admin-user-busy');
 
     if (error) {

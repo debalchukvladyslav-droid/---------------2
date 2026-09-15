@@ -1,6 +1,9 @@
-import { getGoogleAccessToken, getGoogleServiceAccountEmail, supabaseRest, verifySupabaseUser } from '../lib/google_sheet_sync.js';
+import crypto from 'node:crypto';
+import { getGoogleAccessToken, getGoogleServiceAccountEmail, getSupabaseEnv, supabaseRest, verifySupabaseUser } from '../lib/google_sheet_sync.js';
 import { tradingWorkbookBuffer } from '../lib/trading_export.js';
 import { buildTeamReport } from '../lib/team_report.js';
+import { resolveSourceConnection, assertScopedSheetRange } from '../lib/source_access.js';
+import { fetchWithRetry } from '../lib/integration_io.js';
 
 function sendJson(res, status, body) {
     res.status(status).setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -28,7 +31,7 @@ async function sheetsFetch(path, token, query = {}, options = {}) {
     for (const [key, value] of Object.entries(query)) {
         if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, value);
     }
-    return fetch(url.toString(), {
+    return fetchWithRetry(url.toString(), {
         ...options,
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(options.headers || {}) },
     });
@@ -54,7 +57,7 @@ async function metadata(req, res, token) {
 
     const sheets = (data.sheets || [])
         .map(sheet => sheet.properties)
-        .filter(Boolean)
+        .filter(sheet => sheet && (!req.sourceConnection?.scope || sheet.title === req.sourceConnection.scope))
         .sort((a, b) => Number(a.index || 0) - Number(b.index || 0));
     console.log('[Sheets service] metadata ok', { spreadsheetId, title: data.properties?.title || '', sheets: sheets.length });
     return sendJson(res, 200, {
@@ -68,10 +71,11 @@ async function metadata(req, res, token) {
 async function values(req, res, token) {
     const spreadsheetId = cleanSpreadsheetId(req.query.spreadsheetId);
     const range = String(req.query.range || '').trim();
-    const sheetTitle = String(req.query.sheetTitle || '').trim();
+    const sheetTitle = String(req.sourceConnection?.scope || req.query.sheetTitle || '').trim();
     if (!spreadsheetId) return sendJson(res, 400, { ok: false, error: 'Missing spreadsheetId' });
     if (!range) return sendJson(res, 400, { ok: false, error: 'Missing range' });
 
+    if (req.sourceConnection?.scope) assertScopedSheetRange(range, req.sourceConnection.scope);
     const fullRange = buildRange(range, sheetTitle);
     console.log('[Sheets service] values start', { spreadsheetId, range: fullRange });
     const response = await sheetsFetch(`${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(fullRange)}`, token);
@@ -113,7 +117,8 @@ async function values(req, res, token) {
 async function updateValues(req, res, token) {
     const spreadsheetId = cleanSpreadsheetId(req.body?.spreadsheetId);
     const sheetTitle = String(req.body?.sheetTitle || '').trim();
-    const updates = Array.isArray(req.body?.updates) ? req.body.updates.slice(0, 500) : [];
+    const updates = Array.isArray(req.body?.updates) ? req.body.updates : [];
+    if (updates.length > 500) return sendJson(res, 413, { ok: false, error: 'Maximum 500 cells per request; no cells were changed' });
     if (!spreadsheetId || !sheetTitle || !updates.length) return sendJson(res, 400, { ok: false, error: 'Missing update data' });
     const data = updates.map((item) => ({
         range: buildRange(String(item?.range || '').trim(), sheetTitle),
@@ -130,14 +135,23 @@ async function updateValues(req, res, token) {
 }
 
 async function exportWorkbook(res, user) {
-    const [days, reviews] = await Promise.all([
-        supabaseRest(`journal_days?user_id=eq.${encodeURIComponent(user.id)}&select=trade_date,pnl,daily_metrics&order=trade_date.asc`),
-        supabaseRest(`daily_reviews?user_id=eq.${encodeURIComponent(user.id)}&select=trade_date,status,debrief,strengths,mistakes,next_session_rules,model_name&order=trade_date.asc`),
-    ]);
-    const buffer = await tradingWorkbookBuffer({ days, reviews });
+    const snapshot = await supabaseRest('rpc/export_data_snapshot', { method: 'POST', body: JSON.stringify({ p_user_id: user.id }) });
+    const days = (snapshot.tables?.journal_days || []).sort((a, b) => a.trade_date.localeCompare(b.trade_date));
+    const reviews = (snapshot.tables?.daily_reviews || []).sort((a, b) => a.trade_date.localeCompare(b.trade_date));
+    const buffer = await tradingWorkbookBuffer({ days, reviews, generatedAt: new Date(snapshot.createdAt) });
     const date = new Date().toISOString().slice(0, 10);
-    res.status(200); res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); res.setHeader('Content-Disposition', `attachment; filename="STRUM-trading-journal-${date}.xlsx"`); res.setHeader('Cache-Control', 'private, no-store');
-    return res.end(Buffer.from(buffer));
+    const filename = `STRUM-trading-journal-${date}.xlsx`;
+    const path = `${user.id}/${crypto.randomUUID()}/${filename}`;
+    const { url, serviceKey } = getSupabaseEnv();
+    const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` };
+    const uploaded = await fetchWithRetry(`${url}/storage/v1/object/journal-exports/${path}`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'x-upsert': 'false' }, body: Buffer.from(buffer) }, { attempts: 1 });
+    if (!uploaded.ok) throw new Error('Не вдалося зберегти Excel. Спробуйте ще раз.');
+    const signed = await fetchWithRetry(`${url}/storage/v1/object/sign/journal-exports/${path}`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ expiresIn: 600, download: filename }) });
+    const result = await signed.json();
+    if (!signed.ok || !result.signedURL) throw new Error('Не вдалося створити посилання на Excel.');
+    const downloadUrl = result.signedURL.startsWith('http') ? result.signedURL : `${url}/storage/v1${result.signedURL}`;
+    res.setHeader('Cache-Control', 'private, no-store');
+    return sendJson(res, 200, { ok: true, downloadUrl, filename, epoch: snapshot.epoch, cursor: snapshot.cursor, days: days.length });
 }
 async function teamReport(req, res, user) { const limit=Math.min(180,Math.max(7,Number(req.query.days)||30)); const [days,reviews]=await Promise.all([supabaseRest(`journal_days?user_id=eq.${encodeURIComponent(user.id)}&select=trade_date,daily_metrics&order=trade_date.desc&limit=${limit}`),supabaseRest(`daily_reviews?user_id=eq.${encodeURIComponent(user.id)}&select=trade_date,status,debrief,strengths,mistakes,next_session_rules&order=trade_date.desc&limit=${limit}`)]); return sendJson(res,200,{ok:true,report:buildTeamReport(days,reviews,{includePnl:req.query.includePnl==='true'})}); }
 
@@ -164,6 +178,11 @@ export default async function handler(req, res) {
         let token = action === 'update-values' ? '' : String(req.headers['x-google-access-token'] || '').trim();
         let authMode = token ? 'user' : 'service-account';
         if (!token) {
+            const spreadsheetId = cleanSpreadsheetId(action === 'update-values' ? req.body?.spreadsheetId : req.query.spreadsheetId);
+            req.sourceConnection = await resolveSourceConnection(user, 'sheets', spreadsheetId, {
+                scope: String(action === 'update-values' ? req.body?.sheetTitle || '' : req.query.sheetTitle || ''),
+                connectionId: req.query.connectionId || '', write: action === 'update-values',
+            });
             try {
                 token = await getGoogleAccessToken();
             } catch (error) {
@@ -185,6 +204,6 @@ export default async function handler(req, res) {
     } catch (error) {
         const message = error?.message || String(error);
         console.error('[Sheets service] fatal', { message });
-        return sendJson(res, 500, { ok: false, error: message });
+        return sendJson(res, error.status || 500, { ok: false, error: message, code: error.code || '' });
     }
 }

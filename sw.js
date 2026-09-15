@@ -1,4 +1,5 @@
-const CACHE = 'strum-shell-v7';
+const DATA_SYNC_PROTOCOL = 2;
+const CACHE = `strum-shell-v8-data-${DATA_SYNC_PROTOCOL}`;
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icons/strum-icon.svg', '/css/1_tokens.css', '/css/2_base.css', '/css/10_mobile.css', '/css/24_phase6.css'];
 
 self.addEventListener('install', (event) => {
@@ -6,7 +7,10 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-    event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)))).then(() => self.clients.claim()));
+    event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
+        .then(() => self.clients.claim())
+        .then(() => self.clients.matchAll({ type: 'window' }))
+        .then((clients) => clients.forEach((client) => client.postMessage({ type: 'strum:data-protocol', version: DATA_SYNC_PROTOCOL }))));
 });
 
 self.addEventListener('fetch', (event) => {

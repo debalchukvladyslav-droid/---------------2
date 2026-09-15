@@ -1,0 +1,61 @@
+name: Monthly restore drill
+
+on:
+  schedule:
+    - cron: "23 5 1 * *"
+  workflow_dispatch:
+
+concurrency:
+  group: trader-journal-restore-drill
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      RESTIC_PASSWORD: ${{ secrets.RESTIC_PASSWORD }}
+      RESTIC_REPOSITORY: rclone:gdrive:TraderJournalBackups/restic
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Install restore tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends restic rclone postgresql-client
+      - name: Configure private Google Drive
+        shell: bash
+        env:
+          RCLONE_CONFIG_B64: ${{ secrets.RCLONE_CONFIG_B64 }}
+        run: |
+          mkdir -p "$HOME/.config/rclone"
+          printf '%s' "$RCLONE_CONFIG_B64" | base64 --decode > "$HOME/.config/rclone/rclone.conf"
+          chmod 600 "$HOME/.config/rclone/rclone.conf"
+      - name: Restore latest encrypted snapshot
+        run: restic restore latest --target .drill
+      - name: Verify archive and every Storage checksum
+        shell: bash
+        run: |
+          docker run --rm -v "$PWD/.drill/.recovery:/backup" postgres:17 pg_restore --list /backup/database.dump >/dev/null
+          node scripts/verify-storage-backup.mjs .drill/.recovery
+      - name: Start isolated Supabase database
+        shell: bash
+        run: |
+          mkdir -p .drill/supabase-local
+          cd .drill/supabase-local
+          supabase init
+          supabase start -x studio,imgproxy,inbucket,edge-runtime,logflare,vector,supavisor
+          PGPASSWORD=postgres createdb -T template0 -h 127.0.0.1 -p 54322 -U postgres restore_drill
+      - name: Restore database transactionally
+        shell: bash
+        run: |
+          docker run --rm --network host -v "$PWD/.drill/.recovery:/backup" postgres:17 \
+            pg_restore --exit-on-error --single-transaction --no-owner --no-privileges \
+            --dbname postgresql://postgres:postgres@127.0.0.1:54322/restore_drill /backup/database.dump
+          PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d restore_drill -v ON_ERROR_STOP=1 \
+            -c "select count(*) as profiles from public.profiles" \
+            -c "select count(*) as journal_days from public.journal_days" \
+            -c "select count(*) as auth_users from auth.users"

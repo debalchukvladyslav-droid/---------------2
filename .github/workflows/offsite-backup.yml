@@ -1,0 +1,94 @@
+name: Encrypted offsite backup
+
+on:
+  schedule:
+    - cron: "37 2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: trader-journal-offsite-backup
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      RESTIC_PASSWORD: ${{ secrets.RESTIC_PASSWORD }}
+      RESTIC_REPOSITORY: rclone:gdrive:TraderJournalBackups/restic
+      BACKUP_WORKDIR: .recovery
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install backup tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends restic rclone
+      - name: Configure private Google Drive
+        shell: bash
+        env:
+          RCLONE_CONFIG_B64: ${{ secrets.RCLONE_CONFIG_B64 }}
+        run: |
+          mkdir -p "$HOME/.config/rclone"
+          printf '%s' "$RCLONE_CONFIG_B64" | base64 --decode > "$HOME/.config/rclone/rclone.conf"
+          chmod 600 "$HOME/.config/rclone/rclone.conf"
+      - name: Register backup run
+        shell: bash
+        run: |
+          suffix=$(printf '%012d' "$GITHUB_RUN_ID" | tail -c 13)
+          echo "RUN_UUID=00000000-0000-4000-8000-$suffix" >> "$GITHUB_ENV"
+          curl --fail-with-body --silent --show-error "$SUPABASE_URL/rest/v1/rpc/report_backup_run" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            -H 'Content-Type: application/json' \
+            --data "{\"p_run\":{\"id\":\"00000000-0000-4000-8000-$suffix\",\"status\":\"running\"}}" || true
+      - name: Initialize encrypted repository
+        shell: bash
+        run: restic snapshots >/dev/null 2>&1 || restic init
+      - name: Restore previous file cache
+        shell: bash
+        run: |
+          mkdir -p .previous .recovery
+          restic restore latest --target .previous --include '/.recovery/storage/**' --include '/.recovery/storage-manifest.json' || true
+          if [ -d .previous/.recovery/storage ]; then mv .previous/.recovery/storage .recovery/storage; fi
+          if [ -f .previous/.recovery/storage-manifest.json ]; then mv .previous/.recovery/storage-manifest.json .recovery/storage-manifest.json; fi
+      - name: Create consistent PostgreSQL archive
+        shell: bash
+        run: |
+          mkdir -p .recovery
+          docker run --rm -v "$PWD/.recovery:/backup" postgres:17 \
+            pg_dump "$SUPABASE_DB_URL" --format=custom --compress=6 --file=/backup/database.dump
+          docker run --rm -v "$PWD/.recovery:/backup" postgres:17 pg_restore --list /backup/database.dump >/dev/null
+      - name: Download changed Storage objects and verify checksums
+        run: node scripts/backup-storage.mjs > .recovery/backup-summary.json
+      - name: Write backup manifest
+        shell: bash
+        run: |
+          sha256sum .recovery/database.dump > .recovery/database.sha256
+          printf '{"createdAt":"%s","commit":"%s","runId":"%s"}\n' \
+            "$(date -u +%FT%TZ)" "$GITHUB_SHA" "$GITHUB_RUN_ID" > .recovery/run-manifest.json
+      - name: Encrypt, upload, verify, and rotate
+        shell: bash
+        run: |
+          restic backup .recovery --host trader-journal --tag daily --tag trader-journal
+          restic check --read-data-subset=2.5%
+          restic forget --tag trader-journal --group-by tags --keep-daily 30 --keep-weekly 12 --prune
+      - name: Report verified backup
+        if: success()
+        shell: bash
+        run: |
+          summary=$(cat .recovery/backup-summary.json)
+          curl --fail-with-body --silent --show-error "$SUPABASE_URL/rest/v1/rpc/report_backup_run" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            -H 'Content-Type: application/json' \
+            --data "{\"p_run\":{\"id\":\"$RUN_UUID\",\"status\":\"verified\",\"manifest\":$summary}}" || true
+      - name: Report failed backup
+        if: failure() && env.RUN_UUID != ''
+        shell: bash
+        run: |
+          curl --silent --show-error "$SUPABASE_URL/rest/v1/rpc/report_backup_run" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            -H 'Content-Type: application/json' \
+            --data "{\"p_run\":{\"id\":\"$RUN_UUID\",\"status\":\"failed\",\"error\":\"GitHub Actions run $GITHUB_RUN_ID failed\"}}" || true

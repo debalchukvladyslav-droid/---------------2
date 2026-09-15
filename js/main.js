@@ -8,7 +8,7 @@ import { hasImportedNetPnl } from './trade_filters.js';
 import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm, canAccessMentorReviewQueue, mentorAcceptReviewRequest, ensureAuthUserProfile, rejectBlockedProfile, rejectPendingProfile, submitRegistrationRequest, isPasswordRecoveryUrl, showPasswordRecoveryForm } from './auth.js';
 import { loadTeams, openTeamManager, createNewTeam, moveTrader, deleteTeam, renameTeam, deleteTraderProfile, renderTeamSidebar, switchUser } from './teams.js';
 import { saveToLocal, saveJournalData, saveSettings, markJournalDayDirty, markAllJournalDirty, initializeApp, resetRuntimeDataForAccountSwitch, exportData, importData, loadMonth, loadTradeDays, resolveViewedUserId, setCurrentViewedUserId,
-         loadBackgroundGallery } from './storage.js';
+         loadBackgroundGallery, flushPendingDataSync } from './storage.js';
 import { applyTheme, resetCustomTheme, saveThemeSettings, switchTab, toggleMobileSidebar, switchMainTab, scrollMainTabs, toggleMoreTabs, toggleMobileMoreMenu, closeMobileMoreMenu, bindMainTabRoutes, syncMainTabFromRoute, refreshCurrentMainTitle } from './ui.js';
 import { shiftDate, selectDateFromInput, saveEntry, autoSaveCurrentDay, renderView, selectDate, updateAutoFlags, initSelectors, renderSidebarTradesList } from './calendar.js';
 import { toggleStatsDropdown, toggleTree, toggleStatsFilter, refreshStatsView, closeStatsDropdown, renderStatsSourceSelector, selectStatsSource, renderTradeTypeSelector, selectTradeTypeFilter, toggleStatsEquityMode, toggleStatsCompareMode, closeStatsCompareMode, openStatsComparisonWithTrader } from './stats.js';
@@ -47,6 +47,8 @@ import {
     refreshServerBackups,
     restoreCompressedBackup,
     restoreCompressedBackupEntry,
+    prepareBackupRestore,
+    restorePreparedBackup,
 } from './backups.js';
 import { loadPartials } from './partials.js';
 import { applyPersistedBackground, initBackgroundControls } from './backgrounds.js';
@@ -63,6 +65,8 @@ import { initExcelExport } from './excel_export.js';
 import { initTeamReport, renderTeamReport } from './team_report.js';
 import { initPwa, initTradeCardGestures } from './pwa.js';
 import { initRealtimeSync } from './realtime_sync.js';
+import { initDurableUploads } from './durable_uploads.js';
+import { initDataHealth } from './data_health.js';
 
 let appShellPromise = null;
 let appShellEventsReady = false;
@@ -182,7 +186,7 @@ async function manualSyncAll(trigger = null, options = {}) {
             ]).catch((error) => console.warn('[Dashboard feeds]', error?.message || error));
         }
         const steps = [
-            await runManualSyncStep('save-local', () => saveToLocal({ skipEmbedding: startup }), { optional: false }),
+            await runManualSyncStep('save-server', () => flushPendingDataSync(), { optional: false }),
             // initializeApp already loaded complete daily_metrics (including
             // Trades) for the current and previous months. A startup sync must
             // not immediately repeat the old all-history journal query.
@@ -1016,6 +1020,7 @@ window.refreshSettingsBackups = async function() {
 };
 window.createSettingsBackup = async function() {
     try {
+        await flushPendingDataSync();
         await createCompressedBackup({ reason: 'manual', force: true, requireServer: true });
         renderSettingsBackups();
         showToast('Бекап створено');
@@ -1037,44 +1042,38 @@ window.deleteSettingsBackup = function(id) {
     renderSettingsBackups();
     showToast('Бекап видалено');
 };
+function confirmRestorePreview(preview) {
+    if (!preview.canRestore) throw new Error('Відновлення заблоковано: контрольна сума хибна або відсутні файли.');
+    const days = preview.counts?.journal_days || 0;
+    const current = preview.currentCounts?.journal_days || 0;
+    return window.confirm('Відновити ' + days + ' днів (зараз ' + current + ')? ' +
+        (preview.incomplete ? 'Старий формат: буде виконано безпечне злиття без видалення інших даних. ' : 'Усі дані профілю буде відновлено до обраної точки. ') +
+        'Перед операцією сервер автоматично створить ще одну точку відновлення.');
+}
 window.restoreSettingsBackup = async function(id) {
-    if (!window.confirm('Відновити журнал з цього бекапу? Поточні дані будуть замінені локально і збережені в Supabase.')) return;
     try {
-        await createCompressedBackup({ reason: 'before-restore', force: true, requireServer: true });
-        await restoreCompressedBackup(id);
-        markAllJournalDirty();
-        await saveToLocal();
-        renderSettingsBackups();
-        if (window.renderView) window.renderView();
-        if (window.refreshStatsView) window.refreshStatsView();
-        showToast('Бекап відновлено');
-    } catch (error) {
-        console.error('[Backups] restore failed', error);
-        showToast('Не вдалося відновити бекап: ' + (error?.message || error));
-    }
+        const entry = listCompressedBackups().find(item => item.id === id);
+        if (!entry) throw new Error('Копію не знайдено.');
+        const preview = await prepareBackupRestore(entry);
+        if (!confirmRestorePreview(preview)) return;
+        await restorePreparedBackup(preview);
+        renderSettingsBackups(); window.renderView?.();
+        showToast('Дані відновлено з копії.');
+    } catch (error) { showToast('Не вдалося відновити: ' + error.message); }
 };
-
 window.importSettingsBackup = async function(event) {
     const file = event?.target?.files?.[0];
     if (!file) return;
     try {
-        const text = await file.text();
-        const entry = JSON.parse(text);
-        if (!window.confirm('Відновити журнал з backup-файлу? Поточні дані будуть замінені локально і збережені в Supabase.')) return;
-        await createCompressedBackup({ reason: 'before-file-restore', force: true, requireServer: true });
-        await restoreCompressedBackupEntry(entry);
-        markAllJournalDirty();
-        await saveToLocal();
-        renderSettingsBackups();
-        if (window.renderView) window.renderView();
-        if (window.refreshStatsView) window.refreshStatsView();
-        showToast('Backup-файл відновлено');
-    } catch (error) {
-        console.error('[Backups] file restore failed', error);
-        showToast('Не вдалося імпортувати backup: ' + (error?.message || error));
-    } finally {
-        if (event?.target) event.target.value = '';
-    }
+        if (file.size > 32 * 1024 * 1024) throw new Error('Файл перевищує 32 МБ.');
+        const entry = { ...JSON.parse(await file.text()), importedFile: true };
+        const preview = await prepareBackupRestore(entry);
+        if (!confirmRestorePreview(preview)) return;
+        await restorePreparedBackup(preview);
+        renderSettingsBackups(); window.renderView?.();
+        showToast('Копію перевірено та відновлено.');
+    } catch (error) { showToast('Не вдалося імпортувати: ' + error.message); }
+    finally { if (event?.target) event.target.value = ''; }
 };
 
 function getCalendarMonthKey() {
@@ -1599,6 +1598,8 @@ initTeamReport(); window.renderTeamReport=renderTeamReport;
 document.addEventListener('app:shell-ready', initTeamReport);
 initPwa(); initTradeCardGestures();
 initRealtimeSync();
+initDurableUploads();
+initDataHealth();
 initNotifications();
 initSheetTableView({ deferGoogleRestore: true });
 window.initSheetTableView = initSheetTableView;

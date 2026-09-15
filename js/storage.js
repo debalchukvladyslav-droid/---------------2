@@ -5,11 +5,13 @@ import { normalizeAppData, normalizeDayEntry, getDefaultAppData, normalizeTradeT
 import { clearStatsCache } from './stats.js';
 import { ensureSupabaseStorageUser, uploadToSupabaseStorage, deleteFromSupabaseStorage, getSupabaseStorageUrl } from './supabase_storage.js';
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
-import { createCompressedBackup } from './backups.js';
 import {
-    cacheJournalRows, cacheValue, markJournalRowsSynced, publishSyncState,
-    readCachedDay, readCachedMonth, readCachedValue, readDirtyJournalRows,
+    cacheJournalRows, cacheValue, publishSyncState, commitLocalChanges,
+    readCachedDay, readCachedMonth, readCachedValue, readDirtyJournalRows, resolveDataOperation,
 } from './local_data_store.js';
+import { canonicalJournalRow, cloneData, syncError } from './data_sync_core.js';
+import { beginDataSync, stopDataSync, setDataSyncHandlers, notifyDataSync, ensureDataSyncMetadata,
+    flushDataSync, syncDataNow as runDataSyncNow, refreshDataSnapshot, getCachedSyncEpoch as readCachedEpoch } from './data_sync.js';
 
 let tradeEmbeddingQueue = Promise.resolve();
 let tradeEmbeddingTimer = null;
@@ -92,12 +94,6 @@ export function getCurrentViewedUserId(userId = null) {
         || (typeof window !== 'undefined' ? window.currentViewedUserId : null)
         || null;
 
-    if (resolvedUserId !== state.currentViewedUserId) {
-        setCurrentViewedUserId(resolvedUserId);
-    } else if (typeof window !== 'undefined' && window.currentViewedUserId !== resolvedUserId) {
-        window.currentViewedUserId = resolvedUserId;
-    }
-
     return resolvedUserId;
 }
 
@@ -137,6 +133,7 @@ async function getCurrentUserContext() {
 
 export function resetRuntimeDataForAccountSwitch() {
     invalidatePendingPersistenceContext();
+    stopDataSync();
     _dirtyJournalDates.clear();
     _journalDateRevisions.clear();
     _dayDetailsPromises.clear();
@@ -195,6 +192,7 @@ function dayEntryToJournalRow(userId, tradeDate, entry) {
         mentor_comment: typeof day.mentor_comment === 'string' ? day.mentor_comment : '',
         ai_advice: typeof day.ai_advice === 'string' ? day.ai_advice : '',
         daily_metrics: {
+            ...(entry?.__syncBase?.daily_metrics || {}),
             errors: Array.isArray(day.errors) ? day.errors : [],
             checkedParams: Array.isArray(day.checkedParams) ? day.checkedParams : [],
             sliders: day.sliders && typeof day.sliders === 'object' ? day.sliders : {},
@@ -244,6 +242,8 @@ function journalRowToDayEntry(row) {
     const metrics = row?.daily_metrics && typeof row.daily_metrics === 'object' ? row.daily_metrics : {};
 
     return normalizeDayEntry({
+        __syncBase: canonicalJournalRow(row),
+        __syncVersion: row?.sync_version || 0,
         pnl: row?.pnl ?? null,
         gross_pnl: row?.gross_pnl ?? null,
         commissions: row?.commissions ?? null,
@@ -332,6 +332,72 @@ function journalRowToMonthEntry(row) {
     };
 }
 
+function applySettingsPayload(payload) {
+    if (!payload || typeof payload !== 'object') return;
+    const incoming = cloneData(payload);
+    const fields = {
+        aiChatHistory: 'array', aiSavedChats: 'array', errorTypes: 'array', tradeTypes: 'array',
+        unassignedImages: 'array', tickers: 'object', screenMeta: 'object', screenTags: 'object',
+        screenDiscipline: 'object', sheetRows: 'object', cumulativeSheetRows: 'object', weeklyComments: 'object',
+    };
+    for (const [key, kind] of Object.entries(fields)) {
+        const valid = kind === 'array' ? Array.isArray(incoming[key])
+            : incoming[key] && typeof incoming[key] === 'object' && !Array.isArray(incoming[key]);
+        if (!valid) continue;
+        state.appData[key] = key === 'tradeTypes' ? normalizeTradeTypesList(incoming[key]) : incoming[key];
+        delete incoming[key];
+    }
+    if (incoming.learnCache === null || (incoming.learnCache && typeof incoming.learnCache === 'object')) {
+        state.appData.learnCache = incoming.learnCache;
+        delete incoming.learnCache;
+    }
+    state.appData.settings = { ...state.appData.settings, ...incoming };
+}
+
+async function applySynchronizedChanges(userId, changes) {
+    if (userId !== state.myUserId || state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) return;
+    let journalChanged = false;
+    for (const change of changes || []) {
+        if (change.domain === 'journal') {
+            const date = change.entityId;
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+            if (change.deleted && !change.localDirty) delete state.appData.journal[date];
+            else if (change.record?.row) {
+                state.appData.journal[date] = markDayEntryDetailsLoaded(journalRowToDayEntry(change.record.row), true);
+            }
+            journalChanged = true;
+        } else if (change.domain === 'settings' && change.record?.value) {
+            applySettingsPayload(change.record.value);
+        }
+    }
+    if (journalChanged) {
+        state._availableMonthKeys = getMonthsInJournal(state.appData.journal || {});
+        clearStatsCache(state.USER_DOC_NAME);
+        window.renderView?.();
+        window.renderTradesDatagrid?.();
+    }
+}
+
+setDataSyncHandlers({
+    onChange: applySynchronizedChanges,
+    async onSnapshot(userId, records, settings) {
+        if (userId !== state.myUserId || state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) return;
+        const nextJournal = {};
+        for (const record of records || []) {
+            if (record?.tradeDate && record?.row) nextJournal[record.tradeDate] = markDayEntryDetailsLoaded(journalRowToDayEntry(record.row), true);
+        }
+        state.appData.journal = nextJournal;
+        applySettingsPayload(settings);
+        state._availableMonthKeys = getMonthsInJournal(nextJournal);
+        state._monthListLoaded = true;
+        clearStatsCache(state.USER_DOC_NAME);
+        await window.renderView?.();
+    },
+    async onOtherTab(userId) {
+        if (userId === state.myUserId) await runDataSyncNow();
+    },
+});
+
 function markDayEntryDetailsLoaded(entry, loaded) {
     return {
         ...normalizeDayEntry(entry),
@@ -358,8 +424,7 @@ export function wasDayRecentlySaved(dateStr, windowMs = 2500) {
 }
 
 export function saveToLocal(opts = {}) {
-    return Promise.all([saveJournalData(opts), saveSettings()])
-        .catch(e => console.error('saveToLocal queue error:', e));
+    return Promise.all([saveJournalData(opts), saveSettings()]);
 }
 
 export function saveJournalData(opts = {}) {
@@ -437,12 +502,7 @@ export function markJournalDayDirty(dateStr) {
     if (/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || ''))) {
         _dirtyJournalDates.add(dateStr);
         _journalDateRevisions.set(dateStr, (_journalDateRevisions.get(dateStr) || 0) + 1);
-        const userId = state.myUserId || getCurrentViewedUserId();
-        const entry = state.appData?.journal?.[dateStr];
-        if (userId && entry?.__detailsLoaded !== false) {
-            void cacheJournalRows(userId, [dayEntryToJournalRow(userId, dateStr, entry)], { dirty: true });
-            publishSyncState('local', { pending: _dirtyJournalDates.size });
-        }
+        publishSyncState('local', { pending: _dirtyJournalDates.size });
     }
 }
 
@@ -500,18 +560,18 @@ async function performSettingsSave(context) {
             weeklyComments:
                 state.appData.weeklyComments && typeof state.appData.weeklyComments === 'object' ? state.appData.weeklyComments : {},
         };
-        await cacheValue(user.id, 'settings', settingsPayload);
+        await ensureDataSyncMetadata(user.id);
+        const localResult = await commitLocalChanges(user.id, [{
+            domain: 'settings',
+            entityId: user.id,
+            value: settingsPayload,
+        }]);
         if (context.generation !== _accountContextGeneration || state.myUserId !== context.userId) return;
-        publishSyncState('syncing', { kind: 'settings' });
-        const { error } = await supabase
-            .from('profiles')
-            .update({ settings: settingsPayload })
-            .eq('id', user.id);
-        if (error) throw error;
-        publishSyncState('synced', { kind: 'settings' });
-        console.log('✅ Settings збережено в Supabase');
+        publishSyncState('local', { pending: localResult.pending, kind: 'settings' });
+        if (localResult.pending) notifyDataSync();
     } catch (e) {
         console.error('❌ Помилка збереження settings:', e);
+        throw e;
     }
 }
 
@@ -537,7 +597,7 @@ export async function loadSettings() {
         if (!user) return;
         const cached = await readCachedValue(user.id, 'settings');
         if (cached?.value && typeof cached.value === 'object') {
-            state.appData.settings = { ...state.appData.settings, ...cached.value };
+            applySettingsPayload(cached.value);
         }
         const { data, error } = await supabase
             .from('profiles')
@@ -547,7 +607,8 @@ export async function loadSettings() {
         if (error) throw error;
         if (data?.settings && typeof data.settings === 'object') {
             await cacheValue(user.id, 'settings', data.settings);
-            const incoming = { ...data.settings };
+            const effective = await readCachedValue(user.id, 'settings');
+            const incoming = { ...(effective?.value || data.settings) };
             if (Array.isArray(incoming.unassignedImages)) {
                 state.appData.unassignedImages = incoming.unassignedImages;
                 delete incoming.unassignedImages;
@@ -646,6 +707,7 @@ async function _doSave(opts = {}) {
             return false;
         }
         if (!user || !userId) throw new Error('Немає авторизованого користувача Supabase');
+        await ensureDataSyncMetadata(userId);
 
         const journal = state.appData.journal || {};
         const durableDirty = await readDirtyJournalRows(userId);
@@ -670,56 +732,24 @@ async function _doSave(opts = {}) {
             .filter(([dateStr, entry]) => /^\d{4}-\d{2}-\d{2}$/.test(dateStr) && entry?.__detailsLoaded !== false);
         const revisionsAtSave = new Map(entries.map(([dateStr]) => [dateStr, _journalDateRevisions.get(dateStr) || 0]));
 
-        if (forceFull && entries.length) {
-            await createCompressedBackup({ reason: forceFull ? 'full-save' : 'sync', requireServer: true });
-        }
-
         const rows = entries.map(([dateStr, entry]) => {
             const row = dayEntryToJournalRow(userId, dateStr, entry);
             row.daily_metrics.user_email = email;
             return row;
         });
 
-        await cacheJournalRows(userId, rows, { dirty: true });
+        const localResult = await commitLocalChanges(userId, rows.map((row) => ({
+            domain: 'journal',
+            entityId: row.trade_date,
+            value: row,
+        })), { source: opts.source || (forceFull ? 'full-save' : 'ui') });
         if (context.generation !== _accountContextGeneration || state.myUserId !== context.userId) return false;
-        publishSyncState('syncing', { pending: rows.length, kind: 'journal' });
-
-        const savedDays = [];
-        for (let i = 0; i < rows.length; i += 200) {
-            if (context.generation !== _accountContextGeneration || state.myUserId !== context.userId) return false;
-            const batch = rows.slice(i, i + 200);
-            const rpc = await supabase.rpc('sync_journal_days_batch', { payload: batch });
-            if (!rpc.error) {
-                savedDays.push(...(rpc.data || []));
-                continue;
-            }
-            // Older/staging databases can keep using the existing Data API
-            // until the additive local-first migration is installed.
-            if (!['PGRST202', '42883'].includes(String(rpc.error.code || ''))) throw rpc.error;
-            const fallback = await supabase
-                .from('journal_days')
-                .upsert(batch, { onConflict: 'user_id,trade_date' })
-                .select('id,trade_date');
-            if (fallback.error) throw fallback.error;
-            savedDays.push(...(fallback.data || []));
-        }
-        if (context.generation !== _accountContextGeneration || state.myUserId !== context.userId) return false;
-
-        // Semantic memory is derived after the durable journal write. A temporary
-        // inference failure must never roll back or block the trader's save flow.
-        if (!opts.skipEmbedding) {
-            void enqueueTradeEmbeddingSync(savedDays).catch((error) => {
-                console.warn('[trade-memory] embedding sync deferred:', error?.message || error);
-            });
-        } else {
-            console.log(`[trade-memory] skipped for bulk import: ${savedDays.length} days`);
-        }
+        publishSyncState('local', { pending: localResult.pending, kind: 'journal' });
 
         clearStatsCache(state.USER_DOC_NAME);
         const confirmedDates = entries
             .map(([dateStr]) => dateStr)
             .filter((dateStr) => (_journalDateRevisions.get(dateStr) || 0) === revisionsAtSave.get(dateStr));
-        await markJournalRowsSynced(userId, confirmedDates);
         confirmedDates.forEach((dateStr) => {
             _recentlySavedDays.set(dateStr, Date.now());
             _dirtyJournalDates.delete(dateStr);
@@ -728,15 +758,13 @@ async function _doSave(opts = {}) {
             .map(([dateStr]) => dateStr)
             .filter((dateStr) => !confirmedDates.includes(dateStr));
         if (changedDuringSave.length) {
-            const latestRows = changedDuringSave.map((dateStr) => dayEntryToJournalRow(userId, dateStr, journal[dateStr]));
-            await cacheJournalRows(userId, latestRows, { dirty: true });
             changedDuringSave.forEach((dateStr) => _dirtyJournalDates.add(dateStr));
             queueMicrotask(() => void saveJournalData({ skipEmbedding: opts.skipEmbedding === true }).catch(() => {}));
         }
         state._availableMonthKeys = getMonthsInJournal(journal);
         state._monthListLoaded = true;
-        publishSyncState('synced', { pending: _dirtyJournalDates.size, kind: 'journal' });
-        console.log('✅ Дані днів успішно збережено в Supabase!');
+        if (localResult.pending) notifyDataSync();
+        return true;
     } catch (e) {
         console.error('❌ Помилка збереження днів у Supabase:', e);
         throw e;
@@ -967,7 +995,8 @@ export async function loadAllMonths(nick, userId = null) {
             .order('trade_date', { ascending: true });
 
         if (error) throw error;
-        await cacheJournalRows(targetUserId, (data || []).filter((row) => !_dirtyJournalDates.has(row.trade_date)), { dirty: false });
+        const durableDirtyDates = new Set((await readDirtyJournalRows(targetUserId)).map((record) => record.tradeDate));
+        await cacheJournalRows(targetUserId, (data || []).filter((row) => !_dirtyJournalDates.has(row.trade_date) && !durableDirtyDates.has(row.trade_date)), { dirty: false });
 
         if (!isCurrentProfileRequest(nick, targetUserId)) {
             console.info('[LOAD] loadAllMonths: застарілу відповідь іншого профілю пропущено');
@@ -980,6 +1009,7 @@ export async function loadAllMonths(nick, userId = null) {
         (data || []).forEach(row => {
             const dateStr = row.trade_date;
             if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
+            if (_dirtyJournalDates.has(dateStr) || durableDirtyDates.has(dateStr)) return;
 
             state.appData.journal[dateStr] = markDayEntryDetailsLoaded(journalRowToDayEntry(row), true);
             const mk = monthKey(dateStr);
@@ -1011,7 +1041,8 @@ export async function loadTradeDays(nick = state.CURRENT_VIEWED_USER, userId = n
             .order('trade_date', { ascending: true });
 
         if (error) throw error;
-        await cacheJournalRows(targetUserId, (data || []).filter((row) => !_dirtyJournalDates.has(row.trade_date)), { dirty: false });
+        const durableDirtyDates = new Set((await readDirtyJournalRows(targetUserId)).map((record) => record.tradeDate));
+        await cacheJournalRows(targetUserId, (data || []).filter((row) => !_dirtyJournalDates.has(row.trade_date) && !durableDirtyDates.has(row.trade_date)), { dirty: false });
 
         if (!isCurrentProfileRequest(nick, targetUserId)) {
             console.info('[LOAD] loadTradeDays: застарілу відповідь іншого профілю пропущено');
@@ -1024,6 +1055,7 @@ export async function loadTradeDays(nick = state.CURRENT_VIEWED_USER, userId = n
         (data || []).forEach(row => {
             const dateStr = row.trade_date;
             if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
+            if (_dirtyJournalDates.has(dateStr) || durableDirtyDates.has(dateStr)) return;
 
             const fullEntry = markDayEntryDetailsLoaded(journalRowToDayEntry(row), true);
             if (!Array.isArray(fullEntry.trades) || fullEntry.trades.length === 0) return;
@@ -1092,6 +1124,8 @@ export async function initializeApp() {
         const isViewingOwnProfile = nick === state.USER_DOC_NAME;
         const viewedUserId = getCurrentViewedUserId() || await resolveViewedUserId(nick, { force: true });
         if (!viewedUserId) throw new Error(`Не вдалося визначити userId для ${nick}`);
+        if (isViewingOwnProfile) await ensureDataSyncMetadata(viewedUserId);
+        else stopDataSync();
         const previousAppData = state.appData && typeof state.appData === 'object' ? state.appData : {};
         const baseAppData = getDefaultAppData();
         if (!isViewingOwnProfile) {
@@ -1173,6 +1207,7 @@ export async function initializeApp() {
         if (window.renderJournalScore) void window.renderJournalScore();
         if (window.applyAccessRights) window.applyAccessRights();
         if (window.updateDriveUI) window.updateDriveUI();
+        if (isViewingOwnProfile) beginDataSync(viewedUserId);
     } catch (e) {
         console.error('Data load failed:', e);
         state.appData = normalizeAppData(getDefaultAppData());
@@ -1343,67 +1378,68 @@ export async function exportData() {
     hideLoadingToast();
 }
 
+export async function flushPendingDataSync() {
+    if (state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME || !state.myUserId) return false;
+    await saveToLocal({ immediate: true, skipEmbedding: true });
+    await flushDataSync();
+    return true;
+}
+
+export async function syncDataNow() {
+    if (!state.myUserId) return false;
+    await runDataSyncNow();
+    return true;
+}
+
+export async function getCachedSyncEpoch(userId = state.myUserId) {
+    if (!userId) return null;
+    await ensureDataSyncMetadata(userId);
+    return readCachedEpoch(userId);
+}
+
+export async function resyncAfterRestore() {
+    if (!state.myUserId) return false;
+    beginDataSync(state.myUserId);
+    await refreshDataSnapshot();
+    await runDataSyncNow().catch(() => undefined);
+    return true;
+}
+
+export async function resolveSyncIssue(operationId, choice) {
+    if (!state.myUserId) throw syncError('Потрібна авторизація.', 'AUTH_REQUIRED');
+    const result = await resolveDataOperation(state.myUserId, operationId, choice);
+    if (result.conflictId) {
+        const resolved = await supabase.rpc('resolve_data_conflict', { p_conflict_id: result.conflictId, p_resolution: choice });
+        if (resolved.error && !['PGRST202', '42883'].includes(String(resolved.error.code || ''))) throw resolved.error;
+    }
+    notifyDataSync();
+    return result;
+}
+
 export async function exportProfileData(userId, nick = 'profile') {
     if (!userId) throw new Error('Не вказано профіль для експорту');
 
     const safeNick = String(nick || 'profile').replace(/_stats$/, '') || 'profile';
-    const { data: rows, error: rowsError } = await supabase
-        .from('journal_days')
-        .select('*')
-        .eq('user_id', userId)
-        .gte('trade_date', '2024-01-01')
-        .lte('trade_date', '2030-12-31')
-        .order('trade_date', { ascending: true });
-
-    if (rowsError) throw rowsError;
-
-    const journal = {};
-    (rows || []).forEach((row) => {
-        if (/^\d{4}-\d{2}-\d{2}$/.test(row.trade_date)) {
-            journal[row.trade_date] = journalRowToDayEntry(row);
-        }
-    });
-
-    const payload = { nick: safeNick, exportedAt: new Date().toISOString(), journal };
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(payload, null, 2));
+    if (userId === state.myUserId) await flushPendingDataSync();
+    const { data: payload, error } = await supabase.rpc('export_data_snapshot', { p_user_id: userId });
+    if (error) throw error;
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
     const dl = document.createElement('a');
-    dl.setAttribute('href', dataStr);
-    dl.setAttribute('download', `export_${safeNick}_${new Date().getFullYear()}.json`);
+    dl.href = url;
+    dl.download = `export_${safeNick}_${new Date().toISOString().slice(0, 10)}.tjbackup.json`;
     document.body.appendChild(dl);
     dl.click();
     dl.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export async function resetProfileData(userId, nick = '') {
     if (!userId) throw new Error('Не вказано профіль для очищення');
-
-    const { error: journalError } = await supabase
-        .from('journal_days')
-        .delete()
-        .eq('user_id', userId);
-    if (journalError) throw journalError;
-
-    const clean = getDefaultAppData();
-    const { error: profileError } = await supabase
-        .from('profiles')
-        .update({
-            settings: {
-                ...clean.settings,
-                aiChatHistory: [],
-                aiSavedChats: [],
-                errorTypes: clean.errorTypes,
-                learnCache: null,
-                tickers: {},
-                screenMeta: {},
-                tradeTypes: clean.tradeTypes,
-                unassignedImages: [],
-                screenTags: {},
-                screenDiscipline: {},
-                weeklyComments: {},
-            },
-        })
-        .eq('id', userId);
-    if (profileError) throw profileError;
+    if (userId === state.myUserId) await flushPendingDataSync();
+    const { data: syncState, error: stateError } = await supabase.rpc('get_data_sync_state', { p_user_id: userId });
+    if (stateError) throw stateError;
+    const { error } = await supabase.rpc('reset_data', { p_expected_epoch: syncState.epoch, p_user_id: userId });
+    if (error) throw error;
 
     if (nick) clearStatsCache(`${String(nick).replace(/_stats$/, '')}_stats`);
     if (userId === getCurrentViewedUserId()) {
@@ -1418,37 +1454,20 @@ export async function resetProfileData(userId, nick = '') {
 export async function restoreProfileData(userId, appData, nick = '') {
     if (!userId) throw new Error('Не вказано профіль для відновлення');
     const restored = normalizeAppData(appData || {});
-    const journal = restored.journal && typeof restored.journal === 'object' ? restored.journal : {};
-    const rows = Object.entries(journal)
-        .filter(([date, entry]) => /^\d{4}-\d{2}-\d{2}$/.test(date) && entry?.__detailsLoaded !== false)
-        .map(([date, entry]) => dayEntryToJournalRow(userId, date, entry));
-
-    const { error: deleteError } = await supabase.from('journal_days').delete().eq('user_id', userId);
-    if (deleteError) throw deleteError;
-    for (let i = 0; i < rows.length; i += 200) {
-        const { error } = await supabase.from('journal_days').upsert(rows.slice(i, i + 200), { onConflict: 'user_id,trade_date' });
-        if (error) throw error;
-    }
-
-    const settings = {
-        ...restored.settings,
-        aiChatHistory: Array.isArray(restored.aiChatHistory) ? restored.aiChatHistory : [],
-        aiSavedChats: Array.isArray(restored.aiSavedChats) ? restored.aiSavedChats : [],
-        errorTypes: Array.isArray(restored.errorTypes) ? restored.errorTypes : [],
-        learnCache: restored.learnCache && typeof restored.learnCache === 'object' ? restored.learnCache : null,
-        tickers: restored.tickers && typeof restored.tickers === 'object' ? restored.tickers : {},
-        screenMeta: restored.screenMeta && typeof restored.screenMeta === 'object' ? restored.screenMeta : {},
-        tradeTypes: Array.isArray(restored.tradeTypes) ? restored.tradeTypes : [],
-        unassignedImages: Array.isArray(restored.unassignedImages) ? restored.unassignedImages : [],
-        screenTags: restored.screenTags && typeof restored.screenTags === 'object' ? restored.screenTags : {},
-        screenDiscipline: restored.screenDiscipline && typeof restored.screenDiscipline === 'object' ? restored.screenDiscipline : {},
-        sheetRows: restored.sheetRows && typeof restored.sheetRows === 'object' ? restored.sheetRows : {},
-        cumulativeSheetRows: restored.cumulativeSheetRows && typeof restored.cumulativeSheetRows === 'object' ? restored.cumulativeSheetRows : {},
-        weeklyComments: restored.weeklyComments && typeof restored.weeklyComments === 'object' ? restored.weeklyComments : {},
-    };
-    const { error: profileError } = await supabase.from('profiles').update({ settings }).eq('id', userId);
-    if (profileError) throw profileError;
+    const prepared = await supabase.rpc('prepare_legacy_restore', { p_app_data: restored, p_user_id: userId });
+    if (prepared.error) throw prepared.error;
+    const preview = await supabase.rpc('preview_restore', { p_restore_point_id: prepared.data.id, p_user_id: userId });
+    if (preview.error) throw preview.error;
+    if (!preview.data?.canRestore) throw new Error('Копія неповна або пошкоджена. Відновлення скасовано.');
+    const applied = await supabase.rpc('restore_data', {
+        p_restore_point_id: prepared.data.id,
+        p_expected_epoch: preview.data.epoch,
+        p_user_id: userId,
+    });
+    if (applied.error) throw applied.error;
     if (nick) clearStatsCache(`${String(nick).replace(/_stats$/, '')}_stats`);
+    if (userId === state.myUserId) await resyncAfterRestore();
+    return applied.data;
 }
 
 export function importData(event) {
@@ -1467,11 +1486,27 @@ export function importData(event) {
         try {
             showGlobalLoader('import-data', 'Імпорт даних у Supabase...');
             const imported = JSON.parse(e.target.result);
-            state.appData = normalizeAppData(imported);
-            state.loadedMonths = {};
-            markAllJournalDirty();
-            await saveToLocal();
-            await initializeApp();
+            if (!imported || typeof imported !== 'object' || !imported.journal || typeof imported.journal !== 'object') {
+                throw new Error('Файл не містить журналу.');
+            }
+            const restored = normalizeAppData(imported);
+            const prepared = await supabase.rpc('prepare_legacy_restore', { p_app_data: restored, p_user_id: state.myUserId });
+            if (prepared.error) throw prepared.error;
+            const preview = await supabase.rpc('preview_restore', { p_restore_point_id: prepared.data.id, p_user_id: state.myUserId });
+            if (preview.error) throw preview.error;
+            const days = preview.data?.counts?.journal_days || 0;
+            if (!preview.data?.canRestore) throw new Error('Імпорт неповний або пошкоджений.');
+            if (!window.confirm(`Перевірено ${days} днів. Застосувати імпорт атомарно?`)) {
+                hideGlobalLoader('import-data');
+                return;
+            }
+            const applied = await supabase.rpc('restore_data', {
+                p_restore_point_id: prepared.data.id,
+                p_expected_epoch: preview.data.epoch,
+                p_user_id: state.myUserId,
+            });
+            if (applied.error) throw applied.error;
+            await resyncAfterRestore();
             showGlobalLoader('import-data', 'Дані імпортовано', { type: 'success' });
             hideGlobalLoader('import-data', 1600);
             setTimeout(() => showLoadingToast('✅ Дані успішно імпортовано!'), 300);

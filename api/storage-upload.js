@@ -1,9 +1,9 @@
 import { getSupabaseEnv, verifySupabaseUser } from '../lib/google_sheet_sync.js';
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
-const OWNER_BUCKETS = new Set(['screenshots', 'backgrounds', 'avatars']);
+const OWNER_BUCKETS = new Set(['screenshots', 'backgrounds', 'avatars', 'trade-charts']);
 const AUTO_CREATE_BUCKETS = new Set(['screenshots', 'backgrounds', 'avatars']);
-const ALLOWED_BUCKETS = new Set(['screenshots', 'backgrounds', 'avatars']);
+const ALLOWED_BUCKETS = new Set(['screenshots', 'backgrounds', 'avatars', 'trade-charts']);
 const LEGACY_READ_BUCKETS = new Set(['files']);
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
@@ -95,12 +95,12 @@ function objectOwnerKey(bucket, objectPath) {
     return parts[0] || '';
 }
 
-async function readBody(req) {
+async function readBody(req, maxBytes = 4 * 1024 * 1024) {
     const chunks = [];
     let total = 0;
     for await (const chunk of req) {
         total += chunk.length;
-        if (total > MAX_UPLOAD_BYTES) {
+        if (total > maxBytes) {
             const error = new Error('File is too large');
             error.status = 413;
             throw error;
@@ -211,6 +211,25 @@ export default async function handler(req, res) {
             return sendJson(res, 200, { ok: true, bucket, objectPath, signedUrl });
         }
 
+        if (req.query.action === 'sign-upload') {
+            const request = JSON.parse((await readBody(req, 4096)).toString('utf8'));
+            if (!Number.isSafeInteger(request.size) || request.size < 1 || request.size > MAX_UPLOAD_BYTES || !ALLOWED_IMAGE_TYPES.has(request.contentType)) {
+                return sendJson(res, 400, { ok: false, error: 'Invalid image type or size (maximum 25 MB)' });
+            }
+            await ensureBucketExists({ url, serviceKey, bucket });
+            const response = await fetch(`${url}/storage/v1/object/upload/sign/${bucket}/${encodeStoragePath(objectPath)}`, {
+                method: 'POST',
+                headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ upsert: false }),
+            });
+            const signed = await response.json().catch(() => ({}));
+            if (!response.ok) return sendJson(res, response.status, { ok: false, error: signed.message || signed.error || 'Upload signing failed' });
+            const token = signed.token || new URL(signed.url, url).searchParams.get('token');
+            if (!token) throw new Error('Upload token missing');
+            res.setHeader('Cache-Control', 'no-store');
+            return sendJson(res, 200, { ok: true, token, bucket, objectPath });
+        }
+
         const body = await readBody(req);
         if (!body.length) return sendJson(res, 400, { ok: false, error: 'Empty upload body' });
 
@@ -229,7 +248,7 @@ export default async function handler(req, res) {
                 apikey: serviceKey,
                 Authorization: `Bearer ${serviceKey}`,
                 'Content-Type': contentType,
-                'x-upsert': 'true',
+                'x-upsert': 'false',
             },
             body,
         });
@@ -243,7 +262,7 @@ export default async function handler(req, res) {
                     apikey: serviceKey,
                     Authorization: `Bearer ${serviceKey}`,
                     'Content-Type': contentType,
-                    'x-upsert': 'true',
+                    'x-upsert': 'false',
                 },
                 body,
             });

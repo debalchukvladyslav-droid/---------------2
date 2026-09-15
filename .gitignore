@@ -13,4 +13,6 @@ dev-server.*.log
 .tmp-ai-cases/
 
 node_modules/
+.tools/
+.recovery/
 .vercel

@@ -1,244 +1,90 @@
 import { getGoogleAccessToken, supabaseRest, verifySupabaseUser } from '../lib/google_sheet_sync.js';
+import { fetchWithRetry } from '../lib/integration_io.js';
+import { resolveSourceConnection, saveVerifiedConnection, sourceProfile, sourceAccessError } from '../lib/source_access.js';
 
-const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
+const MAX_PROXY_BYTES = 4 * 1024 * 1024;
+const cleanId = value => /^[a-zA-Z0-9_-]+$/.test(String(value || '')) ? String(value) : '';
+const sendJson = (res, status, body) => { res.status(status).setHeader('Content-Type', 'application/json; charset=utf-8'); res.setHeader('Cache-Control', 'private, no-store'); res.end(JSON.stringify(body)); };
 
-function sendJson(res, status, body) {
-    res.status(status).setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.end(JSON.stringify(body));
-}
-
-function cleanDriveId(value) {
-    const id = String(value || '').trim();
-    return /^[a-zA-Z0-9_-]+$/.test(id) ? id : '';
-}
-
-async function driveFetch(path, token, query = {}, options = {}) {
+export async function driveFetch(path, token, query = {}, options = {}) {
     const url = new URL(`https://www.googleapis.com/drive/v3/${path.replace(/^\/+/, '')}`);
-    for (const [key, value] of Object.entries(query)) {
-        if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, value);
-    }
-    const response = await fetch(url.toString(), {
-        ...options,
-        headers: {
-            Authorization: `Bearer ${token}`,
-            ...(options.headers || {}),
-        },
-    });
-    return response;
+    for (const [key, value] of Object.entries(query)) if (value !== undefined && value !== '') url.searchParams.set(key, value);
+    return fetchWithRetry(url.toString(), { ...options, headers: { Authorization: `Bearer ${token}`, ...(options.headers || {}) } });
 }
-
-async function deleteDriveFile(req, res, token, user) {
-    const rawBody = typeof req.body === 'string'
-        ? JSON.parse(req.body || '{}')
-        : (req.body || {});
-    const fileId = cleanDriveId(rawBody.fileId);
-    if (!fileId) return sendJson(res, 400, { ok: false, error: 'Missing fileId' });
-
-    const profiles = await supabaseRest(
-        `profiles?id=eq.${encodeURIComponent(user.id)}&select=settings&limit=1`,
-    );
-    const folderId = cleanDriveId(profiles?.[0]?.settings?.driveFolderId);
-    if (!folderId) return sendJson(res, 403, { ok: false, error: 'Google Drive folder is not configured' });
-
-    const metaResponse = await driveFetch(`files/${fileId}`, token, {
-        fields: 'id,parents,trashed,ownedByMe,driveId,capabilities(canTrash,canDelete)',
-        supportsAllDrives: 'true',
-    });
-    const meta = await metaResponse.json().catch(() => ({}));
-    if (!metaResponse.ok) {
-        return sendJson(res, metaResponse.status, { ok: false, error: meta.error?.message || metaResponse.statusText });
-    }
-    if (!Array.isArray(meta.parents) || !meta.parents.includes(folderId)) {
-        return sendJson(res, 403, { ok: false, error: 'File does not belong to the configured folder' });
-    }
-
-    const response = await driveFetch(`files/${fileId}`, token, {
-        fields: 'id,trashed',
-        supportsAllDrives: 'true',
-    }, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trashed: true }),
-    });
-    if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        const trashError = data.error?.message || 'Google Drive could not move this file to trash';
-
-        // In a personal My Drive folder an Editor can read and organize files,
-        // but Google only lets the owner move a foreign-owned file to Trash.
-        // Removing the configured parent prevents the screenshot from being
-        // discovered and re-imported while leaving the owner's original safe.
-        if (response.status === 403) {
-            const detachResponse = await driveFetch(`files/${fileId}`, token, {
-                removeParents: folderId,
-                fields: 'id,parents',
-                supportsAllDrives: 'true',
-            }, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({}),
-            });
-            const detachData = await detachResponse.json().catch(() => ({}));
-            if (detachResponse.ok) {
-                console.log('[Drive service] file removed from configured folder', {
-                    fileId,
-                    ownedByServiceAccount: meta.ownedByMe === true,
-                });
-                return sendJson(res, 200, {
-                    ok: true,
-                    deleted: false,
-                    trashed: false,
-                    removedFromFolder: true,
-                    code: 'DRIVE_REMOVED_FROM_FOLDER',
-                    warning: 'Google permits only the file owner to move it to Trash. The file was removed from the connected folder.',
-                });
-            }
-            return sendJson(res, detachResponse.status || response.status, {
-                ok: false,
-                code: 'DRIVE_DELETE_PERMISSION_DENIED',
-                error: trashError,
-                detachError: detachData.error?.message || detachResponse.statusText,
-            });
-        }
-
-        return sendJson(res, response.status, {
-            ok: false,
-            code: 'DRIVE_TRASH_FAILED',
-            error: trashError,
-        });
-    }
-    return sendJson(res, 200, { ok: true, deleted: true, trashed: true });
+async function googleJson(response) {
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw Object.assign(new Error(body.error?.message || `Google Drive HTTP ${response.status}`), { status: response.status });
+    return body;
 }
-
-async function listFolder(req, res, token) {
-    const folderId = cleanDriveId(req.query.folderId);
-    if (!folderId) return sendJson(res, 400, { ok: false, error: 'Missing folderId' });
-
-    console.log('[Drive service] list start', { folderId });
-    const response = await driveFetch('files', token, {
-        q: `'${folderId}' in parents and mimeType contains 'image/' and trashed = false`,
-        fields: 'files(id,name,mimeType,createdTime,modifiedTime,size,imageMediaMetadata(width,height))',
-        orderBy: 'modifiedTime desc',
-        pageSize: '100',
-        supportsAllDrives: 'true',
-        includeItemsFromAllDrives: 'true',
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-        console.warn('[Drive service] list failed', {
-            folderId,
-            status: response.status,
-            message: data.error?.message || response.statusText,
-        });
-        return sendJson(res, response.status, {
-            ok: false,
-            error: data.error?.message || response.statusText,
-        });
-    }
-    console.log('[Drive service] list ok', { folderId, files: data.files?.length || 0 });
-    return sendJson(res, 200, { ok: true, files: data.files || [] });
-}
-
-async function streamFile(req, res, token) {
-    const fileId = cleanDriveId(req.query.fileId);
-    if (!fileId) return sendJson(res, 400, { ok: false, error: 'Missing fileId' });
-
-    console.log('[Drive service] media start', { fileId });
-    const metaResponse = await driveFetch(`files/${fileId}`, token, {
-        fields: 'id,name,mimeType,size',
-        supportsAllDrives: 'true',
-    });
-    const meta = await metaResponse.json().catch(() => ({}));
-    if (!metaResponse.ok) {
-        console.warn('[Drive service] media metadata failed', {
-            fileId,
-            status: metaResponse.status,
-            message: meta.error?.message || metaResponse.statusText,
-        });
-        return sendJson(res, metaResponse.status, {
-            ok: false,
-            error: meta.error?.message || metaResponse.statusText,
-        });
-    }
-    if (Number(meta.size || 0) > MAX_FILE_SIZE_BYTES) {
-        return sendJson(res, 413, { ok: false, error: 'File is too large' });
-    }
-
-    const mediaResponse = await driveFetch(`files/${fileId}`, token, {
-        alt: 'media',
-        supportsAllDrives: 'true',
-    });
-    if (!mediaResponse.ok) {
-        const data = await mediaResponse.json().catch(() => ({}));
-        console.warn('[Drive service] media download failed', {
-            fileId,
-            status: mediaResponse.status,
-            message: data.error?.message || mediaResponse.statusText,
-        });
-        return sendJson(res, mediaResponse.status, {
-            ok: false,
-            error: data.error?.message || mediaResponse.statusText,
-        });
-    }
-
-    const buffer = Buffer.from(await mediaResponse.arrayBuffer());
-    if (buffer.byteLength > MAX_FILE_SIZE_BYTES) {
-        return sendJson(res, 413, { ok: false, error: 'File is too large' });
-    }
-
-    console.log('[Drive service] media ok', {
-        fileId,
-        name: meta.name || '',
-        size: buffer.byteLength,
-        mimeType: meta.mimeType || '',
-    });
-    res.status(200);
-    res.setHeader('Content-Type', meta.mimeType || mediaResponse.headers.get('content-type') || 'application/octet-stream');
-    res.setHeader('Cache-Control', 'private, max-age=300');
-    res.setHeader('X-Drive-File-Name', encodeURIComponent(meta.name || fileId));
-    res.end(buffer);
+async function defaultFolder(userId) {
+    const profiles = await supabaseRest(`profiles?id=eq.${encodeURIComponent(userId)}&select=settings&limit=1`);
+    return cleanId(profiles?.[0]?.settings?.driveFolderId);
 }
 
 export default async function handler(req, res) {
     try {
-        console.log('[Drive service] request', {
-            method: req.method,
-            action: req.query.action || 'list',
-        });
-        if (req.method !== 'GET' && req.method !== 'POST') {
-            res.setHeader('Allow', 'GET, POST');
-            return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
-        }
-
+        if (!['GET', 'POST'].includes(req.method)) return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
         const user = await verifySupabaseUser(req.headers.authorization || '');
         if (!user?.id) return sendJson(res, 401, { ok: false, error: 'Unauthorized' });
-        console.log('[Drive service] supabase user ok', { userId: user.id });
-
-        let token;
-        try {
-            const scope = req.method === 'POST' && String(req.query.action || '') === 'delete'
-                ? 'https://www.googleapis.com/auth/drive'
-                : 'https://www.googleapis.com/auth/drive.readonly';
-            token = await getGoogleAccessToken(scope);
-        } catch (error) {
-            console.warn('[Drive service] service account token unavailable', {
-                message: error?.message || String(error),
-            });
-            return sendJson(res, 503, {
-                ok: false,
-                code: 'GOOGLE_SERVICE_ACCOUNT_UNAVAILABLE',
-                error: 'Google service account is not configured on the server',
-            });
+        const action = String(req.query?.action || 'list');
+        const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
+        if (action === 'connect' && req.method === 'POST') {
+            const folderId = cleanId(body.folderId);
+            if (!folderId) return sendJson(res, 400, { ok: false, error: 'Missing folderId' });
+            const admin = (await sourceProfile(user.id)).role === 'admin';
+            const userGoogleToken = String(req.headers['x-google-access-token'] || '');
+            if (!admin && !userGoogleToken) throw sourceAccessError();
+            const proofToken = userGoogleToken || await getGoogleAccessToken('https://www.googleapis.com/auth/drive.readonly');
+            const folder = await googleJson(await driveFetch(`files/${folderId}`, proofToken, { fields: 'id,mimeType,trashed', supportsAllDrives: 'true' }));
+            if (folder.trashed || folder.mimeType !== 'application/vnd.google-apps.folder') throw sourceAccessError('Потрібна доступна папка Google Drive.');
+            const serviceToken = await getGoogleAccessToken('https://www.googleapis.com/auth/drive.readonly');
+            await googleJson(await driveFetch(`files/${folderId}`, serviceToken, { fields: 'id', supportsAllDrives: 'true' }));
+            const connection = await saveVerifiedConnection({ userId: admin && body.userId ? body.userId : user.id, kind: 'drive', resourceId: folderId });
+            const job = await supabaseRest('rpc/enqueue_source_sync', { method: 'POST', body: JSON.stringify({ p_connection_id: connection.id }) });
+            return sendJson(res, 202, { ok: true, connectionId: connection.id, job });
         }
-        const action = String(req.query.action || 'list');
-        if (req.method === 'POST' && action === 'delete') return deleteDriveFile(req, res, token, user);
-        if (req.method !== 'GET') return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
-        if (action === 'list') return listFolder(req, res, token);
-        if (action === 'media') return streamFile(req, res, token);
+        const folderId = cleanId(req.query?.folderId || body.folderId) || await defaultFolder(user.id);
+        const connection = await resolveSourceConnection(user, 'drive', folderId, { connectionId: req.query?.connectionId || body.connectionId || '', write: req.method === 'POST' });
+        if (action === 'queue' && req.method === 'POST') {
+            if (!connection.id) throw sourceAccessError('Спочатку підтвердьте підключення папки.');
+            const job = await supabaseRest('rpc/enqueue_source_sync', { method: 'POST', body: JSON.stringify({ p_connection_id: connection.id }) });
+            return sendJson(res, 202, { ok: true, queued: true, job });
+        }
+        if (action === 'disconnect' && req.method === 'POST') {
+            if (connection.id) await supabaseRest(`integration_connections?id=eq.${connection.id}`, { method: 'PATCH', body: JSON.stringify({ enabled: false }) });
+            return sendJson(res, 200, { ok: true });
+        }
+        // Ordinary screenshot deletion is reversible and never mutates Google.
+        if (req.method !== 'GET') return sendJson(res, 405, { ok: false, error: 'Unsupported action' });
+        if (action === 'status') {
+            const jobs = connection.id ? await supabaseRest(`source_sync_jobs?connection_id=eq.${connection.id}&select=id,status,last_error,progress,updated_at&limit=1`) : [];
+            return sendJson(res, 200, { ok: true, connectionId: connection.id, lastSyncAt: connection.last_sync_at, job: jobs?.[0] || null });
+        }
+        const token = await getGoogleAccessToken('https://www.googleapis.com/auth/drive.readonly');
+        if (action === 'list') {
+            const data = await googleJson(await driveFetch('files', token, {
+                q: `'${connection.resource_id}' in parents and mimeType contains 'image/' and trashed=false`,
+                fields: 'nextPageToken,incompleteSearch,files(id,name,mimeType,createdTime,modifiedTime,md5Checksum,size,imageMediaMetadata(width,height))',
+                orderBy: 'modifiedTime desc', pageSize: '100', pageToken: String(req.query?.pageToken || ''), supportsAllDrives: 'true', includeItemsFromAllDrives: 'true',
+            }));
+            return sendJson(res, 200, { ok: true, ...data });
+        }
+        if (action === 'media') {
+            const fileId = cleanId(req.query?.fileId);
+            if (!fileId) return sendJson(res, 400, { ok: false, error: 'Missing fileId' });
+            const meta = await googleJson(await driveFetch(`files/${fileId}`, token, { fields: 'id,name,mimeType,size,parents,trashed', supportsAllDrives: 'true' }));
+            if (meta.trashed || !meta.parents?.includes(connection.resource_id)) throw sourceAccessError('Файл не належить дозволеній папці.');
+            if (Number(meta.size) > MAX_PROXY_BYTES) return sendJson(res, 413, { ok: false, code: 'USE_BACKGROUND_SYNC', error: 'Великий файл скопіює фоновий процес.' });
+            const response = await driveFetch(`files/${fileId}`, token, { alt: 'media', supportsAllDrives: 'true' });
+            if (!response.ok) await googleJson(response);
+            const bytes = Buffer.from(await response.arrayBuffer());
+            if (bytes.length > MAX_PROXY_BYTES) return sendJson(res, 413, { ok: false, error: 'Use background sync' });
+            res.status(200).setHeader('Content-Type', meta.mimeType || 'application/octet-stream');
+            res.setHeader('Cache-Control', 'private, no-store');
+            return res.end(bytes);
+        }
         return sendJson(res, 400, { ok: false, error: 'Unknown action' });
     } catch (error) {
-        const message = error?.message || String(error);
-        console.error('[Drive service] fatal', { message });
-        return sendJson(res, 500, { ok: false, error: message });
+        return sendJson(res, error.status || 500, { ok: false, error: error.message || String(error), code: error.code || '' });
     }
 }

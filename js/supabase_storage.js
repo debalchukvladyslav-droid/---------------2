@@ -1,5 +1,6 @@
 import { supabase } from './supabase.js';
 import { buildScreenshotPathVariants } from './storage_paths.js';
+import { uploadDurably } from './durable_uploads.js';
 
 const DEFAULT_SIGNED_URL_TTL = 60 * 60;
 const AVATAR_SIGNED_URL_TTL = 24 * 60 * 60;
@@ -51,6 +52,8 @@ function getPathCandidates(storagePath) {
             { bucket: 'files', objectPath: path },
         ];
     }
+
+    if (path.startsWith('trade-charts/')) return [{ bucket: 'trade-charts', objectPath: path.slice(13) }];
 
     if (path.startsWith('avatars/')) {
         return [
@@ -193,8 +196,9 @@ async function createFirstSignedUrl(candidates, ttl = DEFAULT_SIGNED_URL_TTL) {
 }
 
 export async function ensureSupabaseStorageUser() {
-    const { data: { user }, error } = await supabase.auth.getUser();
+    const { data, error } = await supabase.auth.getSession();
     if (error) throw error;
+    const user = data.session?.user;
     if (!user?.id) {
         throw new Error('Supabase session expired. Sign in again before uploading files.');
     }
@@ -226,89 +230,21 @@ export async function getSupabaseStorageUrl(pathOrUrl, ttl = DEFAULT_SIGNED_URL_
 export async function uploadToSupabaseStorage(storagePath, file, options = {}) {
     const candidates = applyCandidateOptions(getPathCandidates(storagePath), options);
     if (!candidates.length) throw new Error('Invalid Supabase storage path');
-
-    const storageUser = options.skipAuthCheck ? null : await ensureSupabaseStorageUser();
-    let lastError = null;
-    let lastCandidate = null;
-    for (const candidate of candidates) {
-        if (storageUser && (candidate.bucket === 'screenshots' || candidate.bucket === 'backgrounds' || candidate.bucket === 'avatars')) {
-            const ownerKey = candidate.objectPath.split('/')[0] || '';
-            if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ownerKey)
-                && ownerKey !== storageUser.id) {
-                throw new Error(`Storage owner mismatch: path owner ${ownerKey}, auth user ${storageUser.id}`);
-            }
-        }
-
-        if (!options.disableServerFallback && (candidate.bucket === 'screenshots' || candidate.bucket === 'backgrounds' || candidate.bucket === 'avatars')) {
-            try {
-                const signedUrl = await uploadViaServer(candidate, file, options);
-                return signedUrl || storagePath;
-            } catch (serverFirstError) {
-                console.warn('[Storage] server-first upload failed, trying client upload', {
-                    bucket: candidate.bucket,
-                    objectPath: candidate.objectPath,
-                    message: serverFirstError?.message || String(serverFirstError),
-                });
-                lastError = serverFirstError;
-                lastCandidate = candidate;
-            }
-        }
-
-        const { error } = await supabase.storage
-            .from(candidate.bucket)
-            .upload(candidate.objectPath, file, {
-                upsert: true,
-                contentType: options.contentType || file?.type || undefined,
-            });
-
-        if (!error) {
-            const signed = await createFirstSignedUrl([candidate], options.ttl || DEFAULT_SIGNED_URL_TTL);
-            return signed?.url || storagePath;
-        }
-
-        if (!options.disableServerFallback && shouldFallbackToServerUpload(error)) {
-            try {
-                const signedUrl = await uploadViaServer(candidate, file, options);
-                return signedUrl || storagePath;
-            } catch (fallbackError) {
-                console.warn('[Storage] server fallback upload failed', {
-                    bucket: candidate.bucket,
-                    objectPath: candidate.objectPath,
-                    message: fallbackError?.message || String(fallbackError),
-                });
-                lastError = fallbackError;
-                lastCandidate = candidate;
-                continue;
-            }
-        }
-
-        lastError = error;
-        lastCandidate = candidate;
-        console.warn('[Storage] upload failed', {
-            bucket: candidate.bucket,
-            objectPath: candidate.objectPath,
-            statusCode: error?.statusCode || error?.status,
-            message: error?.message || error?.error_description || String(error || ''),
-        });
-    }
-
-    throw new Error(storageErrorMessage(lastError, lastCandidate));
+    const candidate = candidates[0];
+    await uploadDurably(candidate, file, { path: storagePath, metadata: options.metadata || {}, epoch: options.epoch });
+    const signed = await createFirstSignedUrl([candidate], options.ttl || DEFAULT_SIGNED_URL_TTL);
+    return signed?.url || storagePath;
 }
 
 export async function deleteFromSupabaseStorage(storagePathOrUrl) {
-    const value = normalizePath(storagePathOrUrl);
-    const candidates = getPathCandidates(value);
-    let success = false;
-
-    for (const candidate of candidates) {
-        const { error } = await supabase.storage
-            .from(candidate.bucket)
-            .remove([candidate.objectPath]);
-
-        if (!error) success = true;
+    const candidate = getPathCandidates(normalizePath(storagePathOrUrl))[0];
+    if (!candidate) throw new Error('Invalid Supabase storage path');
+    if (candidate.bucket === 'screenshots') {
+        const { error } = await supabase.rpc('soft_delete_screenshot', { p_storage_path: 'screenshots/' + candidate.objectPath });
+        if (error) throw error;
     }
-
-    if (!success && candidates.length) {
-        throw new Error('Supabase storage delete failed');
-    }
+    // Only retention maintenance may remove file bytes after a verified independent backup.
+    signedUrlCache.delete(candidate.bucket + '/' + candidate.objectPath);
 }
+
+supabase.auth.onAuthStateChange(() => signedUrlCache.clear());

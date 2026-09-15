@@ -1,13 +1,13 @@
 // === js/gallery.js ===
 import { state, SCREEN_CATS } from './state.js';
-import { saveJournalData, markJournalDayDirty, saveSettings } from './storage.js';
+import { saveJournalData, markJournalDayDirty, saveSettings, flushPendingDataSync, syncDataNow } from './storage.js';
 import { showToast } from './utils.js';
 import { getDefaultDayEntry } from './data_utils.js';
 import { deleteFromSupabaseStorage, ensureSupabaseStorageUser, getSupabaseStorageUrl, uploadToSupabaseStorage } from './supabase_storage.js';
 import { buildScreenshotPath } from './storage_paths.js';
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 import { INVALID_IMAGE_FORMAT_MESSAGE, isJpegOrPng } from './image_file_validation.js';
-import { deleteScreenshotRegistry } from './screenshot_registry.js';
+import { loadScreenshotRegistry, mergeScreenshotRegistry } from './screenshot_registry.js';
 import { supabase } from './supabase.js';
 
 let zoomSources = [];
@@ -851,109 +851,28 @@ function showConfirmModal(message, onConfirm) {
     document.body.appendChild(overlay);
 }
 
-async function deleteFromStorage(path) {
-    try {
-        await deleteFromSupabaseStorage(path);
-    } catch(e) {
-        console.warn('Storage delete error:', e.message);
-    }
-}
-
-async function deleteDriveSource(path) {
-    const driveId = state.appData?.screenMeta?.[path]?.driveId;
-    if (!driveId) return { deleted: false, skipped: true };
-    try {
-        const { data } = await supabase.auth.getSession();
-        const token = data?.session?.access_token || '';
-        if (!token) throw new Error('Немає активної сесії');
-        const response = await fetch('/api/drive-service?action=delete', {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ fileId: driveId }),
-        });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            const error = new Error(result.error || `Google Drive (${response.status})`);
-            error.status = response.status;
-            error.code = result.code || '';
-            throw error;
-        }
-        return {
-            deleted: result.deleted === true,
-            removedFromFolder: result.removedFromFolder === true,
-            skipped: false,
-            warning: result.warning || '',
-        };
-    } catch (error) {
-        console.warn('[Screenshots] Drive source delete failed:', error?.message || error);
-        return { deleted: false, skipped: false, error };
-    }
-}
-
-function showDriveDeleteOutcome(result) {
-    if (result?.error) {
-        showToast(`Скріншот прибрано із сайту. Google Drive: ${result.error.message}`);
-    } else if (result?.removedFromFolder) {
-        showToast('Скріншот прибрано з підключеної папки. Оригінал лишився у власника Google Drive.');
-    } else if (result?.deleted) {
-        showToast('Скріншот переміщено в кошик Google Drive.');
-    }
-}
-
-async function permanentlyDeleteScreenshot(path) {
-    const driveResult = await deleteDriveSource(path);
-    const userId = state.myUserId || state.currentUser?.id || '';
-    await deleteFromStorage(path);
-    if (userId) {
-        try {
-            await deleteScreenshotRegistry(userId, path);
-        } catch (error) {
-            console.warn('[Screenshots] registry delete failed:', error?.message || error);
-        }
-    }
-    delete state.appData.screenMeta?.[path];
-    delete state.appData.screenTags?.[path];
-    delete state.appData.screenDiscipline?.[path];
-    return driveResult;
-}
-
-function addToBlacklist(url) {
-    if (!state.appData.settings.driveIgnored) state.appData.settings.driveIgnored = [];
-    if (!state.appData.settings.driveIgnored.includes(url)) state.appData.settings.driveIgnored.push(url);
+async function moveScreenshotToTrash(path) {
+    const owner = state.myUserId;
+    if (state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) throw new Error('Read-only profile');
+    await flushPendingDataSync();
+    const { error } = await supabase.rpc('soft_delete_screenshot', { p_storage_path: path, p_user_id: owner });
+    if (error) throw error;
+    if (state.myUserId !== owner) return;
+    await syncDataNow();
+    await loadImages();
+    window.renderView?.();
+    showToast('Переміщено в кошик. Відновлення доступне протягом 30 днів.');
 }
 
 export function deleteFileFromPC(encodedPath) {
-    const url = decodeURIComponent(encodedPath);
-    showConfirmModal('Видалити цей скріншот назавжди?', async () => {
-        const idx = state.appData.unassignedImages.indexOf(url);
-        if (idx > -1) state.appData.unassignedImages.splice(idx, 1);
-        addToBlacklist(url);
-        const driveResult = await permanentlyDeleteScreenshot(url);
-        await saveSettings();
-        await loadImages();
-        showDriveDeleteOutcome(driveResult);
+    showConfirmModal('Перемістити зображення в кошик на 30 днів?', async () => {
+        try { await moveScreenshotToTrash(decodeURIComponent(encodedPath)); }
+        catch (error) { showToast('Не вдалося перемістити в кошик: ' + error.message); }
     });
 }
 
-export function deleteAssignedImage(encodedPath, category) {
-    const url = decodeURIComponent(encodedPath);
-    showConfirmModal('Видалити цей скріншот назавжди?', async () => {
-        const arr = state.appData.journal[state.selectedDateStr]?.screenshots?.[category];
-        if (arr) { const i = arr.indexOf(url); if (i > -1) arr.splice(i, 1); }
-        addToBlacklist(url);
-        const driveResult = await permanentlyDeleteScreenshot(url);
-        markJournalDayDirty(state.selectedDateStr);
-        saveJournalData()
-            .then(() => saveSettings())
-            .then(() => {
-                loadImages();
-                if(window.renderView) window.renderView();
-                showDriveDeleteOutcome(driveResult);
-            });
-    });
+export function deleteAssignedImage(encodedPath) {
+    deleteFileFromPC(encodedPath);
 }
 
 export function assignImage(encodedPath, category) { 
@@ -1353,10 +1272,11 @@ window.addEventListener('paste', async function(e) {
     try {
         showGlobalLoader('upload-screen', 'Завантаження картинки в хмару...');
         const storageUser = await ensureSupabaseStorageUser();
-        state.myUserId = storageUser.id;
+        if (state.myUserId !== storageUser.id) throw new Error('Account changed');
         const ext = file.type.includes('png') ? 'png' : 'jpg';
-        const filename = buildScreenshotPath(`${Date.now()}.${ext}`);
-        await uploadToSupabaseStorage(filename, file, { bucket: 'screenshots' });
+        const filename = `screenshots/${storageUser.id}/${crypto.randomUUID()}.${ext}`;
+        await uploadToSupabaseStorage(filename, file, { bucket: 'screenshots', metadata: { source: 'paste' } });
+        if (state.myUserId !== storageUser.id || state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) return;
         // Зберігаємо шлях файлу (не URL) — URL генеруємо динамічно через SDK
 
         if (!state.appData.unassignedImages) state.appData.unassignedImages = [];
@@ -1365,8 +1285,8 @@ window.addEventListener('paste', async function(e) {
             source: 'paste',
             createdAt: new Date().toISOString(),
         });
-        await saveSettings();
-        loadImages();
+        await syncDataNow();
+        await loadImages();
         showGlobalLoader('upload-screen', 'Скріншот завантажено', { type: 'success' });
         hideGlobalLoader('upload-screen', 1200);
     } catch(err) {
@@ -1377,4 +1297,16 @@ window.addEventListener('paste', async function(e) {
     } finally {
         titleEl.innerHTML = originalText;
     }
+});
+
+// A completed background upload is discoverable even when its original tab closed.
+document.addEventListener('strum:upload-state', async ({ detail }) => {
+    if (detail.status !== 'complete' || detail.userId !== state.myUserId || state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) return;
+    try {
+        const owner = state.myUserId;
+        const rows = await loadScreenshotRegistry(owner);
+        if (state.myUserId !== owner || state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) return;
+        mergeScreenshotRegistry(state.appData, rows);
+        if (document.getElementById('view-screens')?.classList.contains('active')) await loadImages();
+    } catch (error) { console.warn('[Uploads] registry refresh deferred:', error.message); }
 });

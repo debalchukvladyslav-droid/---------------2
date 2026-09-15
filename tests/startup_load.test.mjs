@@ -17,7 +17,7 @@ test('startup loads core months and light dashboard feeds while keeping heavy an
     assert.match(main, /setTimeout\(async \(\) => \{/);
     assert.match(main, /\}, 5000\)/);
     assert.doesNotMatch(realtime, /loadTradeDays/);
-    assert.match(realtime, /loadDayDetails\(tradeDate, state\.myUserId, \{ force: true \}\)/);
+    assert.match(realtime, /await syncDataNow\(\)/);
     const tabWork = ui.slice(ui.indexOf('async function runMainTabWork'), ui.indexOf('function getDashboardGreetingName'));
     assert.match(tabWork, /renderDashboardNews/);
     assert.doesNotMatch(tabWork, /renderDashboardAI/);
@@ -28,7 +28,9 @@ test('startup loads core months and light dashboard feeds while keeping heavy an
 
 test('ordinary journal saves do not create backups and embeddings are gently deferred', async () => {
     const storage = await readFile(new URL('../js/storage.js', import.meta.url), 'utf8');
-    assert.match(storage, /if \(forceFull && entries\.length\)/);
+    const saveBody = storage.slice(storage.indexOf('async function _doSave'), storage.indexOf('function _computeAggregation'));
+    assert.doesNotMatch(saveBody, /createCompressedBackup/);
+    assert.match(saveBody, /commitLocalChanges/);
     assert.match(storage, /tradeEmbeddingTimer = setTimeout/);
     assert.match(storage, /\}, 30000\)/);
     assert.match(storage, /setTimeout\(resolve, 2000\)/);

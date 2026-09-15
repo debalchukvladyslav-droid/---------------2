@@ -14,41 +14,47 @@ export function inferRegistryRole(name = '') {
 
 export async function loadScreenshotRegistry(userId) {
     if (!userId) return [];
-    const { data, error } = await supabase.from('screenshots').select(COLUMNS)
-        .eq('user_id', userId).order('created_at', { ascending: true });
-    if (error) throw error;
-    return Array.isArray(data) ? data : [];
+    const rows = [];
+    for (let offset = 0; ; offset += 500) {
+        const { data, error } = await supabase.from('screenshots').select(COLUMNS)
+            .eq('user_id', userId).is('deleted_at', null)
+            .order('created_at', { ascending: true }).order('id').range(offset, offset + 499);
+        if (error) throw error;
+        rows.push(...(data || []));
+        if ((data || []).length < 500) return rows;
+    }
 }
 
 export async function registerDriveScreenshot(userId, storagePath, file, mimeType = '') {
     if (!userId || !storagePath || !file?.id) return;
-    const { error } = await supabase.from('screenshots').upsert({
-        user_id: userId,
-        storage_path: storagePath,
-        source: 'drive',
-        source_file_id: String(file.id),
-        original_name: String(file.name || ''),
-        mime_type: String(mimeType || file.mimeType || ''),
-        source_created_at: file.createdTime || null,
-        source_modified_at: file.modifiedTime || null,
-        screenshot_role: inferRegistryRole(file.name),
-        captured_at: file.createdTime || file.modifiedTime || null,
-        pixel_width: Number(file.imageMediaMetadata?.width) || null,
-        pixel_height: Number(file.imageMediaMetadata?.height) || null,
-        byte_size: Number(file.size) || null,
-        quality_status: Number(file.imageMediaMetadata?.width) && Number(file.imageMediaMetadata?.height)
-            ? (Number(file.imageMediaMetadata.width) >= 320 && Number(file.imageMediaMetadata.height) >= 180 ? 'ready' : 'image_too_small')
-            : 'unchecked',
-        updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id,storage_path' });
+    const { getCachedSyncEpoch } = await import('./storage.js');
+    const { error } = await supabase.rpc('finalize_screenshot_upload', {
+        p_storage_path: storagePath,
+        p_user_id: userId,
+        p_expected_epoch: await getCachedSyncEpoch(userId),
+        p_metadata: {
+            source: 'drive',
+            source_file_id: String(file.id),
+            original_name: String(file.name || ''),
+            mime_type: String(mimeType || file.mimeType || ''),
+            source_created_at: file.createdTime || null,
+            source_modified_at: file.modifiedTime || null,
+            screenshot_role: inferRegistryRole(file.name),
+            captured_at: file.createdTime || file.modifiedTime || null,
+            pixel_width: Number(file.imageMediaMetadata?.width) || null,
+            pixel_height: Number(file.imageMediaMetadata?.height) || null,
+            byte_size: Number(file.size) || null,
+            quality_status: Number(file.imageMediaMetadata?.width) && Number(file.imageMediaMetadata?.height)
+                ? (Number(file.imageMediaMetadata.width) >= 320 && Number(file.imageMediaMetadata.height) >= 180 ? 'ready' : 'image_too_small')
+                : 'unchecked',
+        },
+    });
     if (error) throw error;
 }
 
 export async function deleteScreenshotRegistry(userId, storagePath) {
     if (!userId || !storagePath) return;
-    const { error } = await supabase.from('screenshots').delete()
-        .eq('user_id', userId)
-        .eq('storage_path', storagePath);
+    const { error } = await supabase.rpc('soft_delete_screenshot', { p_user_id: userId, p_storage_path: storagePath });
     if (error) throw error;
 }
 

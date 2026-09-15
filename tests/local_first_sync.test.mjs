@@ -10,9 +10,9 @@ const migration = await readFile(new URL('../supabase/migrations/20260902113810_
 test('journal uses a durable IndexedDB cache and dirty queue', () => {
     assert.match(localStore, /indexedDB\.open\(DB_NAME, DB_VERSION\)/);
     assert.match(localStore, /user_dirty/);
-    assert.match(storage, /cacheJournalRows\(userId, rows, \{ dirty: true \}\)/);
+    assert.match(storage, /commitLocalChanges\(userId, rows\.map/);
     assert.match(storage, /readDirtyJournalRows\(userId\)/);
-    assert.match(storage, /markJournalRowsSynced\(userId, confirmedDates\)/);
+    assert.match(localStore, /stores\[STORES\.queue\]\.add\(operation\)/);
 });
 
 test('startup hydrates cached months and then uses one bootstrap request', () => {
@@ -24,7 +24,9 @@ test('startup hydrates cached months and then uses one bootstrap request', () =>
 test('writes are coalesced, version-safe, and sent in batches', () => {
     assert.match(storage, /const delay = opts\.immediate === true \|\| elapsed >= 800 \? 0 : 180/);
     assert.match(storage, /revisionsAtSave/);
-    assert.match(storage, /sync_journal_days_batch/);
+    assert.match(storage, /notifyDataSync\(\)/);
+    const saveBody = storage.slice(storage.indexOf('async function _doSave'), storage.indexOf('function _computeAggregation'));
+    assert.doesNotMatch(saveBody, /\.upsert\(|sync_journal_days_batch|\.from\('journal_days'\)/);
     assert.match(migration, /sync_version bigint not null default 1/i);
     assert.match(migration, /create index if not exists idx_journal_days_user_updated/i);
     assert.match(migration, /security invoker/gi);
@@ -42,5 +44,6 @@ test('queued persistence is isolated from account and viewed-profile switches', 
 
 test('realtime ignores the echo of a just-confirmed local write', () => {
     assert.match(realtime, /wasDayRecentlySaved\(tradeDate\)/);
+    assert.match(realtime, /await syncDataNow\(\)/);
     assert.ok(realtime.indexOf(".on('postgres_changes'") < realtime.indexOf('.subscribe('));
 });
