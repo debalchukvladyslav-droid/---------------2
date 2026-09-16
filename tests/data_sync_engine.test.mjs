@@ -32,6 +32,51 @@ test('later edits of a conflicted entity are not sent before resolution', async 
     engine.stop();
 });
 
+test('local-first policy automatically rebases a conflicting edit and sends it again', async () => {
+    let queue = [{ operationId: 'first', userId: 'owner', domain: 'settings', entityId: 'owner', status: 'pending', epoch: 1 }];
+    const sent = [];
+    const audit = [];
+    const engine = createDataSyncEngine({
+        store: {
+            readSyncMetadata: async () => ({ epoch: 1, cursor: 0 }),
+            listDataOperations: async () => queue,
+            applyRemoteChanges: async () => ({ changed: [] }),
+            acknowledgeOperations: async (_user, results) => {
+                for (const result of results) {
+                    const operation = queue.find(item => item.operationId === result.operationId);
+                    if (!operation) continue;
+                    if (result.status === 'conflict') operation.status = 'conflict';
+                    else queue = queue.filter(item => item.operationId !== result.operationId);
+                }
+                return [];
+            },
+            resolveDataOperation: async (_user, operationId) => {
+                queue = queue.filter(item => item.operationId !== operationId);
+                const replacement = { operationId: 'rebased', userId: 'owner', domain: 'settings', entityId: 'owner', status: 'pending', epoch: 1 };
+                queue.push(replacement);
+                return { conflictId: 'audit-id', change: { domain: 'settings', entityId: 'owner', record: { value: { screenMeta: {} } } } };
+            },
+        },
+        transport: {
+            pull: async () => ({ epoch: 1, cursor: 0, changes: [] }),
+            apply: async (_user, operations) => {
+                sent.push(...operations.map(operation => operation.operationId));
+                return { results: operations.map(operation => ({ operationId: operation.operationId,
+                    status: operation.operationId === 'first' ? 'conflict' : 'applied', conflictId: 'audit-id' })) };
+            },
+            resolveConflict: async (_user, conflictId, resolution) => { audit.push([conflictId, resolution]); },
+        },
+        conflictPolicy: 'local', lock: async (_user, run) => run(), schedule: () => 1, cancel: () => {},
+    });
+    engine.start('owner');
+    await engine.flush();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(sent, ['first', 'rebased']);
+    assert.deepEqual(audit, [['audit-id', 'local']]);
+    assert.deepEqual(queue, []);
+    engine.stop();
+});
+
 test('account switch during a network request schedules synchronization for the new account', async () => {
     let release;
     const suspended = new Promise(resolve => { release = resolve; });

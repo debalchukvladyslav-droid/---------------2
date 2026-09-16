@@ -21,6 +21,7 @@ const transport = {
     metadata: userId => rpc('get_data_sync_state', { p_user_id: userId }),
     pull: (userId, cursor) => rpc('pull_data_changes', { p_user_id: userId, p_cursor: cursor, p_limit: 500 }),
     apply: (_userId, operations, atomic) => rpc('apply_data_operations', { p_operations: operations, p_atomic: atomic }),
+    resolveConflict: (_userId, conflictId, resolution) => rpc('resolve_data_conflict', { p_conflict_id: conflictId, p_resolution: resolution }),
     async snapshot(userId) {
         const rows = [];
         let after = null;
@@ -54,6 +55,7 @@ const engine = createDataSyncEngine({ transport,
     lock: globalThis.navigator?.locks
         ? (userId, run) => navigator.locks.request(`strum-data-sync:${userId}`, { mode: 'exclusive' }, run)
         : null,
+    conflictPolicy: 'local',
 });
 
 export function setDataSyncHandlers(value) { handlers = value; }

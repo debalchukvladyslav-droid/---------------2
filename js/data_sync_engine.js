@@ -4,7 +4,7 @@ import { isRetryableSyncError, retryDelay, syncError } from './data_sync_core.js
 // Transport injection makes interruption, duplicate delivery and two-tab behavior testable.
 export function createDataSyncEngine({ transport, store = localStore, onChange = () => {}, onSnapshot = () => {},
     onState = () => {}, online = () => globalThis.navigator?.onLine !== false, now = Date.now,
-    schedule = setTimeout, cancel = clearTimeout, random = Math.random, lock = null } = {}) {
+    schedule = setTimeout, cancel = clearTimeout, random = Math.random, lock = null, conflictPolicy = 'manual' } = {}) {
     let userId = null;
     let generation = 0;
     let activeTask = null;
@@ -95,10 +95,26 @@ export function createDataSyncEngine({ transport, store = localStore, onChange =
                     || operations.some(operation => !response.results.some(result => result.operationId === operation.operationId))) {
                     throw syncError('База не підтвердила всі операції; їх буде повторено без дублювання.', 'INVALID_SYNC_RESPONSE');
                 }
-                const changed = await store.acknowledgeOperations(user, response.results);
+                let changed = await store.acknowledgeOperations(user, response.results);
+                const conflicts = response.results.filter(result => ['conflict', 'stale_epoch'].includes(result.status));
+                // The owner chose local-first conflict handling: keep the edit in
+                // IndexedDB, rebase it on the newest server version and resend it.
+                // This never drops the server variant; it remains in the audit log.
+                if (conflictPolicy === 'local' && conflicts.length) {
+                    if (conflicts.some(result => result.status === 'stale_epoch')) await pull(user, version);
+                    for (const result of conflicts) {
+                        if (!current(user, version)) return;
+                        const resolved = await store.resolveDataOperation(user, result.operationId, 'local');
+                        if (resolved.change) changed = [...changed, resolved.change];
+                        if (resolved.conflictId && transport.resolveConflict) {
+                            void transport.resolveConflict(user, resolved.conflictId, 'local')
+                                .catch(error => console.warn('[Data sync] conflict audit deferred:', error?.message || error));
+                        }
+                    }
+                }
                 if (current(user, version) && changed.length) await onChange(user, changed);
                 // The apply cursor is NOT a pull checkpoint: other users/devices may have changed rows before it.
-                if (response.results.some(result => result.status === 'stale_epoch')) await pull(user, version);
+                if (conflictPolicy !== 'local' && response.results.some(result => result.status === 'stale_epoch')) await pull(user, version);
             } catch (error) {
                 const retryable = isRetryableSyncError(error);
                 const nextAttempt = now() + retryDelay(Math.max(...operations.map(operation => operation.attempts || 0)), random);
