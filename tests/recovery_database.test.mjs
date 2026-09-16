@@ -33,7 +33,7 @@ test('recovery database executes real SQL and protects changes and restore trans
     db = new PGlite();
     await db.exec(await readFile(new URL('./fixtures/recovery_schema.sql', import.meta.url), 'utf8'));
     t.after(() => db.close());
-    for (const filename of ['20260914140339_durable_recovery_sync.sql', '20260914140454_reliable_source_integrations.sql']) {
+    for (const filename of ['20260914140339_durable_recovery_sync.sql', '20260914140454_reliable_source_integrations.sql', '20260916191838_fix_recovery_health_snapshot.sql']) {
         const sql = await readFile(new URL(`../supabase/migrations/${filename}`, import.meta.url), 'utf8');
         try { await db.exec(sql); } catch (error) {
             const position = Number(error.position || 0);
@@ -50,6 +50,14 @@ test('recovery database executes real SQL and protects changes and restore trans
         assert.equal(state.epoch, 1);
         assert.equal(state.settings.account_approved, true);
         await assert.rejects(rpc('get_data_sync_state', [other], ['uuid']), /Data access denied/);
+    });
+    await t.test('health works with Storage owner_id column and isolates owner bytes', async () => {
+        await db.exec('reset role');
+        await query("insert into storage.objects(bucket_id,name,owner_id,metadata) values('files',$1,$2,'{\"size\":123}'),('files',$3,$4,'{\"size\":999}')", [owner+'/a', owner, other+'/b', other]);
+        await db.exec('set role authenticated');
+        const health = await rpc('get_data_health');
+        assert.equal(health.usage.storageBytes, 123);
+        assert.equal(health.historyRetentionDays, 30);
     });
     let first;
     await t.test('write, duplicate retry and disjoint concurrent merge', async () => {

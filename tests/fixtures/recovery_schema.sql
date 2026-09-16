@@ -10,7 +10,7 @@ create function public.app_is_admin() returns boolean language sql stable as $$ 
 create function public.app_is_approved() returns boolean language sql stable as $$ select true $$;
 create function net.http_post(url text,headers jsonb,body jsonb,timeout_milliseconds integer) returns bigint language sql as $$ select 1::bigint $$;
 create table storage.buckets(id text primary key,name text not null,public boolean default false,file_size_limit bigint);
-create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text not null,name text not null,metadata jsonb default '{}',created_at timestamptz default now(),updated_at timestamptz default now(),unique(bucket_id,name));
+create table storage.objects(id uuid primary key default gen_random_uuid(),owner_id text,bucket_id text not null,name text not null,metadata jsonb default '{}',created_at timestamptz default now(),updated_at timestamptz default now(),unique(bucket_id,name));
 create table public.ai_coach_insights (
 id uuid not null default gen_random_uuid(),
 user_id uuid not null,
