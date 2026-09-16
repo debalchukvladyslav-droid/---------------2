@@ -341,16 +341,4 @@ export function publishSyncState(state, detail = {}) {
     if (typeof document === 'undefined') return;
     document.documentElement.dataset.syncState = state;
     document.dispatchEvent(new CustomEvent('strum:sync-state', { detail: { state, ...detail } }));
-    if (!document.body) return;
-    let badge = document.getElementById('global-sync-state');
-    if (!badge) {
-        badge = document.createElement('div'); badge.id = 'global-sync-state'; badge.className = 'global-sync-state';
-        badge.setAttribute('role', 'status'); badge.setAttribute('aria-live', 'polite'); document.body.appendChild(badge);
-    }
-    const labels = { local: `Збережено на пристрої · очікує ${detail.pending || 0}`, syncing: `Синхронізація · очікує ${detail.pending || 0}`,
-        synced: 'Усі зміни збережено на сервері', offline: `Без мережі · на пристрої ${detail.pending || 0} змін`,
-        conflict: 'Зміни збережено на пристрої · потрібне узгодження', error: detail.message || 'Не вдалося зберегти зміни' };
-    badge.textContent = labels[state] || state; badge.dataset.state = state; badge.hidden = false;
-    clearTimeout(publishSyncState.hideTimer);
-    if (state === 'synced') publishSyncState.hideTimer = setTimeout(() => { badge.hidden = true; }, 2000);
 }

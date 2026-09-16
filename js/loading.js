@@ -1,28 +1,55 @@
 const activeLoaders = new Map();
+let syncState = null;
+let syncDetail = {};
+let syncHideTimer = null;
 
 function ensureLoaderRoot() {
     let root = document.getElementById('app-loading-stack');
     if (root) return root;
 
-    const style = document.createElement('style');
-    style.textContent = `
-        #app-loading-stack{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:450;max-width:min(360px,calc(100vw - 32px));pointer-events:none}
-        body.is-calendar-tab #app-loading-stack{bottom:92px}
-        .app-loading-item{display:flex;align-items:center;gap:10px;background:var(--bg-panel,#111827);color:var(--text-main,#f8fafc);border:1px solid var(--border,#334155);box-shadow:0 10px 30px rgba(0,0,0,.28);border-radius:8px;padding:10px 12px;font-size:.9rem;line-height:1.3;pointer-events:auto}
-        .app-loading-spinner{width:15px;height:15px;border:2px solid rgba(148,163,184,.35);border-top-color:var(--accent,#8b5cf6);border-radius:50%;animation:app-spin .8s linear infinite;flex:0 0 auto}
-        .app-loading-done .app-loading-spinner{animation:none;border-color:var(--profit,#10b981)}
-        .app-loading-error .app-loading-spinner{animation:none;border-color:var(--loss,#ef4444)}
-        .is-loading-local{position:relative;opacity:.72}
-        .is-loading-local::after{content:"";position:absolute;right:10px;top:50%;width:13px;height:13px;margin-top:-7px;border:2px solid rgba(148,163,184,.35);border-top-color:var(--accent,#8b5cf6);border-radius:50%;animation:app-spin .8s linear infinite}
-        @keyframes app-spin{to{transform:rotate(360deg)}}
-    `;
-    document.head.appendChild(style);
-
-    root = document.createElement('div');
+    root = document.createElement('aside');
     root.id = 'app-loading-stack';
+    root.className = 'app-activity-center';
+    root.setAttribute('aria-label', 'Стан даних і поточні дії');
+    const sync = document.createElement('button');
+    sync.type = 'button'; sync.className = 'app-activity-sync'; sync.hidden = true;
+    sync.addEventListener('click', () => window.switchMainTab?.('settings'));
+    const jobs = document.createElement('div'); jobs.className = 'app-activity-jobs';
+    root.append(sync, jobs);
     document.body.appendChild(root);
     return root;
 }
+
+function renderActivity() {
+    if (!document.body) return;
+    const root = ensureLoaderRoot();
+    const sync = root.querySelector('.app-activity-sync');
+    const jobs = root.querySelector('.app-activity-jobs');
+    const labels = {
+        local: ['Збережено на пристрої', syncDetail.pending ? `Відправимо ${syncDetail.pending} змін` : 'Очікуємо сервер'],
+        syncing: ['Синхронізація', syncDetail.pending ? `${syncDetail.pending} змін` : 'Перевіряємо зміни'],
+        synced: ['Все збережено', 'Сервер підтвердив зміни'],
+        offline: ['Немає мережі', syncDetail.pending ? `${syncDetail.pending} змін на пристрої` : 'Дані залишаються на пристрої'],
+        conflict: ['Потрібна увага', 'Є дві версії однієї правки'],
+        error: ['Не вдалося зберегти', syncDetail.message || 'Спробуємо ще раз автоматично'],
+    };
+    const [title, detail] = labels[syncState] || ['', ''];
+    sync.hidden = !syncState;
+    sync.dataset.state = syncState || '';
+    sync.replaceChildren(Object.assign(document.createElement('span'), { className: 'app-activity-indicator', ariaHidden: 'true' }),
+        (() => { const text = document.createElement('span'); const heading = document.createElement('strong'); const description = document.createElement('small'); heading.textContent = title; description.textContent = detail; text.append(heading, description); return text; })(),
+        Object.assign(document.createElement('span'), { className: 'app-activity-arrow', ariaHidden: 'true', textContent: '›' }));
+    jobs.hidden = activeLoaders.size === 0;
+    root.hidden = !syncState && activeLoaders.size === 0;
+}
+
+document.addEventListener('strum:sync-state', event => {
+    syncState = event.detail?.state || null;
+    syncDetail = event.detail || {};
+    clearTimeout(syncHideTimer);
+    if (syncState === 'synced') syncHideTimer = setTimeout(() => { syncState = null; renderActivity(); }, 4000);
+    renderActivity();
+});
 
 export function showGlobalLoader(key, message, options = {}) {
     const root = ensureLoaderRoot();
@@ -36,13 +63,14 @@ export function showGlobalLoader(key, message, options = {}) {
         const text = document.createElement('span');
         text.className = 'app-loading-text';
         item.append(spinner, text);
-        root.appendChild(item);
+        root.querySelector('.app-activity-jobs').appendChild(item);
         activeLoaders.set(id, item);
     }
 
     item.classList.toggle('app-loading-done', options.type === 'success');
     item.classList.toggle('app-loading-error', options.type === 'error');
     item.querySelector('.app-loading-text').textContent = message || 'Завантаження...';
+    renderActivity();
     return item;
 }
 
@@ -53,6 +81,7 @@ export function hideGlobalLoader(key, delay = 0) {
     window.setTimeout(() => {
         item.remove();
         activeLoaders.delete(id);
+        renderActivity();
     }, delay);
 }
 
