@@ -103,7 +103,7 @@ jobs:
           docker run --rm \
             -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGDATABASE \
             -v "$PWD/.recovery:/backup" postgres:17 \
-            pg_dump --format=custom --compress=6 --file=/backup/database.dump
+            pg_dump --role=postgres --format=custom --compress=6 --file=/backup/database.dump
           docker run --rm -v "$PWD/.recovery:/backup" postgres:17 pg_restore --list /backup/database.dump >/dev/null
       - name: Download changed Storage objects and verify checksums
         run: node scripts/backup-storage.mjs > .recovery/backup-summary.json
