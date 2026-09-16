@@ -59,6 +59,16 @@ jobs:
           supabase init
           supabase start -x studio,imgproxy,inbucket,edge-runtime,logflare,vector,supavisor
           PGPASSWORD=postgres createdb -T template0 -h 127.0.0.1 -p 54322 -U postgres restore_drill
+          db_container=$(docker ps --filter 'name=supabase_db_' --format '{{.Names}}' | head -n 1)
+          test -n "$db_container"
+          docker exec "$db_container" psql -U postgres -d postgres \
+            -v ON_ERROR_STOP=1 -c "alter system set cron.database_name = 'restore_drill'"
+          docker restart "$db_container" >/dev/null
+          for attempt in $(seq 1 30); do
+            PGPASSWORD=postgres pg_isready -h 127.0.0.1 -p 54322 -U postgres -d restore_drill && break
+            if [ "$attempt" -eq 30 ]; then exit 1; fi
+            sleep 2
+          done
       - name: Restore database transactionally
         shell: bash
         run: |
