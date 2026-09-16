@@ -4,6 +4,10 @@ on:
   schedule:
     - cron: "37 2 * * *"
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/offsite-backup.yml"
 
 concurrency:
   group: trader-journal-offsite-backup
@@ -21,10 +25,9 @@ jobs:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       RESTIC_PASSWORD: ${{ secrets.RESTIC_PASSWORD }}
-      RESTIC_REPOSITORY: rclone:gdrive:TraderJournalBackups/restic
       BACKUP_WORKDIR: .recovery
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install backup tools
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends restic rclone
       - name: Configure private Google Drive
@@ -35,6 +38,17 @@ jobs:
           mkdir -p "$HOME/.config/rclone"
           printf '%s' "$RCLONE_CONFIG_B64" | base64 --decode > "$HOME/.config/rclone/rclone.conf"
           chmod 600 "$HOME/.config/rclone/rclone.conf"
+          mapfile -t remotes < <(rclone listremotes)
+          if printf '%s\n' "${remotes[@]}" | grep -qx 'gdrive:'; then
+            remote='gdrive:'
+          elif [ "${#remotes[@]}" -eq 1 ]; then
+            remote="${remotes[0]}"
+          else
+            echo "Expected one rclone remote, or one named gdrive; found: ${remotes[*]:-none}" >&2
+            exit 1
+          fi
+          rclone lsd "$remote" >/dev/null
+          echo "RESTIC_REPOSITORY=rclone:${remote}TraderJournalBackups/restic" >> "$GITHUB_ENV"
       - name: Register backup run
         shell: bash
         run: |

@@ -18,9 +18,8 @@ jobs:
     timeout-minutes: 45
     env:
       RESTIC_PASSWORD: ${{ secrets.RESTIC_PASSWORD }}
-      RESTIC_REPOSITORY: rclone:gdrive:TraderJournalBackups/restic
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: supabase/setup-cli@v1
         with:
           version: latest
@@ -34,6 +33,17 @@ jobs:
           mkdir -p "$HOME/.config/rclone"
           printf '%s' "$RCLONE_CONFIG_B64" | base64 --decode > "$HOME/.config/rclone/rclone.conf"
           chmod 600 "$HOME/.config/rclone/rclone.conf"
+          mapfile -t remotes < <(rclone listremotes)
+          if printf '%s\n' "${remotes[@]}" | grep -qx 'gdrive:'; then
+            remote='gdrive:'
+          elif [ "${#remotes[@]}" -eq 1 ]; then
+            remote="${remotes[0]}"
+          else
+            echo "Expected one rclone remote, or one named gdrive; found: ${remotes[*]:-none}" >&2
+            exit 1
+          fi
+          rclone lsd "$remote" >/dev/null
+          echo "RESTIC_REPOSITORY=rclone:${remote}TraderJournalBackups/restic" >> "$GITHUB_ENV"
       - name: Restore latest encrypted snapshot
         run: restic restore latest --target .drill
       - name: Verify archive and every Storage checksum
