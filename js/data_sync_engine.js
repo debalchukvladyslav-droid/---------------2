@@ -109,7 +109,10 @@ export function createDataSyncEngine({ transport, store = localStore, onChange =
         if (!current(user, version)) return;
         await pull(user, version);
         const summary = await status(user);
-        if (requireServer && summary?.pending) throw syncError('Частина змін потребує узгодження. Серверне збереження не підтверджено.', 'SYNC_CONFLICT', summary);
+        if (requireServer && summary?.pending) throw syncError(
+            summary.conflicts ? 'Є різні версії правок. Відкрийте Налаштування → Збереження та відновлення й оберіть потрібну версію.'
+                : 'Не всі зміни передано на сервер. Відкрийте Налаштування → Збереження та відновлення, щоб переглянути причину.',
+            summary.conflicts ? 'SYNC_CONFLICT' : 'SYNC_PENDING', summary);
     }
 
     async function run(requireServer = false) {

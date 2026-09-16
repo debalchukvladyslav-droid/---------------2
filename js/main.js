@@ -66,7 +66,7 @@ import { initTeamReport, renderTeamReport } from './team_report.js';
 import { initPwa, initTradeCardGestures } from './pwa.js';
 import { initRealtimeSync } from './realtime_sync.js';
 import { initDurableUploads } from './durable_uploads.js';
-import { initDataHealth } from './data_health.js';
+import { initDataHealth, refreshDataHealth } from './data_health.js';
 
 let appShellPromise = null;
 let appShellEventsReady = false;
@@ -216,6 +216,17 @@ async function manualSyncAll(trigger = null, options = {}) {
         ];
         const failed = steps.filter((step) => step && !step.ok);
         if (!quiet) showToast(failed.length ? `Синхронізацію завершено, але ${failed.length} процес(и) пропущено/не вдалося.` : 'Синхронізацію завершено.');
+    } catch (error) {
+        if (!['SYNC_CONFLICT', 'SYNC_PENDING'].includes(error?.code)) throw error;
+        showToast(error.message);
+        if (!quiet) {
+            await switchMainTab('settings');
+            await refreshDataHealth();
+            const panel = document.getElementById('data-health-panel');
+            panel?.querySelectorAll('details').forEach(item => { item.open = true; });
+            panel?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
+        return { ok: false, needsAttention: true, code: error.code };
     } finally {
         manualSyncInProgress = false;
         if (btn) {

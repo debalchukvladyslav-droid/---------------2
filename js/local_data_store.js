@@ -247,7 +247,8 @@ export async function resolveDataOperation(userId, operationId, choice) {
             epoch: meta.epoch, localRevision: others.at(-1)?.localRevision ?? record.localRevision,
             dirty: others.length ? 1 : 0, cachedAt: Date.now() });
         store.put(record);
-        return { choice, conflictId: operation.conflictId || null, operationId: replacementId };
+        return { choice, conflictId: operation.conflictId || null, operationId: replacementId,
+            change: { domain: operation.domain, entityId: operation.entityId, record: cloneData(record) } };
     });
 }
 export async function applyRemoteChanges(userId, response) {

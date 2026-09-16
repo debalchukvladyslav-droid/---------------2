@@ -54,6 +54,9 @@ export async function refreshDataHealth() {
             const item = document.createElement('details');
             item.appendChild(text('summary', `${operation.domain === 'journal' ? 'Журнал ' + operation.entityId : 'Налаштування'} · ${operation.status === 'stale_epoch' ? 'правка до відновлення' : 'потребує узгодження'}`));
             item.appendChild(text('p', 'Порівняйте свою правку з серверними даними перед вибором.'));
+            const names = { screenMeta: 'Метадані скріншотів', unassignedImages: 'Неприв’язані скріншоти', screenTags: 'Теги скріншотів' };
+            item.appendChild(text('p', 'Змінені поля: ' + Object.keys(operation.patch || {}).map(key => names[key] || key).join(', ')));
+            if (operation.lastError?.message) item.appendChild(text('p', operation.lastError.message));
             item.appendChild(text('pre', JSON.stringify({ 'Було': operation.base, 'Моя правка': operation.patch, 'На сервері': operation.remote }, null, 2)));
             item.appendChild(button('Залишити мою правку', async () => { const { resolveSyncIssue } = await import('./storage.js'); await resolveSyncIssue(operation.operationId, 'local'); }));
             item.appendChild(button('Прийняти серверні дані', async () => { const { resolveSyncIssue } = await import('./storage.js'); await resolveSyncIssue(operation.operationId, 'server'); }));

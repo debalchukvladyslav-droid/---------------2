@@ -1,5 +1,5 @@
 const DATA_SYNC_PROTOCOL = 2;
-const CACHE = `strum-shell-v8-data-${DATA_SYNC_PROTOCOL}`;
+const CACHE = `strum-shell-v9-data-${DATA_SYNC_PROTOCOL}`;
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icons/strum-icon.svg', '/css/1_tokens.css', '/css/2_base.css', '/css/10_mobile.css', '/css/24_phase6.css'];
 
 self.addEventListener('install', (event) => {

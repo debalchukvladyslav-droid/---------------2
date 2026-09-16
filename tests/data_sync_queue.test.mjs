@@ -70,6 +70,9 @@ for (const choice of ['server', 'local']) {
             row: { notes: 'remote', pnl: 1, kf: 5 } }]);
         const resolution = await store.resolveDataOperation(account, first.operationIds[0], choice);
         const cached = await store.readCachedDay(account, date);
+        assert.equal(resolution.change.domain, 'journal');
+        assert.equal(resolution.change.entityId, date);
+        assert.deepEqual(resolution.change.record.row, cached.row);
         assert.equal(cached.row.notes, choice === 'local' ? 'mine' : 'remote');
         assert.equal(cached.row.pnl, 2);
         assert.equal(cached.row.kf, 5);

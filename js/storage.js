@@ -1407,12 +1407,16 @@ export async function resyncAfterRestore() {
 
 export async function resolveSyncIssue(operationId, choice) {
     if (!state.myUserId) throw syncError('Потрібна авторизація.', 'AUTH_REQUIRED');
-    const result = await resolveDataOperation(state.myUserId, operationId, choice);
+    const owner = state.myUserId;
+    const result = await resolveDataOperation(owner, operationId, choice);
+    await applySynchronizedChanges(owner, [result.change]);
+    if (owner !== state.myUserId) return result;
+    // Resume locally resolved work even if the separate audit acknowledgement fails.
+    notifyDataSync();
     if (result.conflictId) {
         const resolved = await supabase.rpc('resolve_data_conflict', { p_conflict_id: result.conflictId, p_resolution: choice });
         if (resolved.error && !['PGRST202', '42883'].includes(String(resolved.error.code || ''))) throw resolved.error;
     }
-    notifyDataSync();
     return result;
 }
 
