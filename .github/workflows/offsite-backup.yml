@@ -30,14 +30,28 @@ jobs:
       - uses: actions/checkout@v5
       - name: Install backup tools
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends restic rclone
-      - name: Configure private Google Drive
+      - name: Decode private rclone configuration
         shell: bash
         env:
           RCLONE_CONFIG_B64: ${{ secrets.RCLONE_CONFIG_B64 }}
         run: |
           mkdir -p "$HOME/.config/rclone"
-          printf '%s' "$RCLONE_CONFIG_B64" | base64 --decode > "$HOME/.config/rclone/rclone.conf"
+          if [ -z "$RCLONE_CONFIG_B64" ]; then
+            echo "RCLONE_CONFIG_B64 is empty" >&2
+            exit 1
+          fi
+          if ! printf '%s' "$RCLONE_CONFIG_B64" | base64 --decode > "$HOME/.config/rclone/rclone.conf"; then
+            echo "RCLONE_CONFIG_B64 is not valid base64" >&2
+            exit 1
+          fi
+          if [ ! -s "$HOME/.config/rclone/rclone.conf" ]; then
+            echo "Decoded rclone configuration is empty" >&2
+            exit 1
+          fi
           chmod 600 "$HOME/.config/rclone/rclone.conf"
+      - name: Select private Google Drive remote
+        shell: bash
+        run: |
           mapfile -t remotes < <(rclone listremotes)
           if printf '%s\n' "${remotes[@]}" | grep -qx 'gdrive:'; then
             remote='gdrive:'
@@ -47,8 +61,11 @@ jobs:
             echo "Expected one rclone remote, or one named gdrive; found: ${remotes[*]:-none}" >&2
             exit 1
           fi
-          rclone lsd "$remote" >/dev/null
+          echo "RCLONE_REMOTE=$remote" >> "$GITHUB_ENV"
           echo "RESTIC_REPOSITORY=rclone:${remote}TraderJournalBackups/restic" >> "$GITHUB_ENV"
+      - name: Verify private Google Drive access
+        shell: bash
+        run: rclone lsd "$RCLONE_REMOTE" >/dev/null
       - name: Register backup run
         shell: bash
         run: |
