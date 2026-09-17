@@ -33,7 +33,7 @@ test('recovery database executes real SQL and protects changes and restore trans
     db = new PGlite();
     await db.exec(await readFile(new URL('./fixtures/recovery_schema.sql', import.meta.url), 'utf8'));
     t.after(() => db.close());
-    for (const filename of ['20260914140339_durable_recovery_sync.sql', '20260914140454_reliable_source_integrations.sql', '20260916191838_fix_recovery_health_snapshot.sql']) {
+    for (const filename of ['20260914140339_durable_recovery_sync.sql', '20260914140454_reliable_source_integrations.sql', '20260916191838_fix_recovery_health_snapshot.sql', '20260917031703_optimize_recovery_query_payloads.sql']) {
         const sql = await readFile(new URL(`../supabase/migrations/${filename}`, import.meta.url), 'utf8');
         try { await db.exec(sql); } catch (error) {
             const position = Number(error.position || 0);
@@ -128,5 +128,17 @@ test('recovery database executes real SQL and protects changes and restore trans
         const audit = await rpc('list_data_history', [null, null, 500], ['uuid','bigint','integer']);
         assert.ok(audit.length >= page.changes.length);
         assert.ok(audit.every(row => row.source && row.created_at));
+    });
+    await t.test('cursor pulls compact repeated settings revisions without skipping their cursor', async () => {
+        await db.exec('reset role');
+        await query(`insert into data_recovery.change_history(user_id,cursor,epoch,table_name,entity_id,domain,new_record,version)
+            values($1::uuid,9001,2,'profiles',$1::text,'settings','{"settings":{"screenMeta":{"old":true}}}',1),
+                  ($1::uuid,9002,2,'profiles',$1::text,'settings','{"settings":{"screenMeta":{"new":true}}}',2)`, [owner]);
+        await query('update data_recovery.owner_state set cursor=9002,epoch=2 where user_id=$1', [owner]);
+        await db.exec('set role authenticated');
+        const page = await rpc('pull_data_changes', [9000, 50], ['bigint', 'integer']);
+        assert.equal(page.cursor, 9002);
+        assert.equal(page.changes.length, 1);
+        assert.equal(page.changes[0].record.screenMeta.new, true);
     });
 });
