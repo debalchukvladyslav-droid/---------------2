@@ -43,7 +43,7 @@ async function metadata(req, res, token) {
 
     console.log('[Sheets service] metadata start', { spreadsheetId });
     const response = await sheetsFetch(encodeURIComponent(spreadsheetId), token, {
-        fields: 'properties(title),sheets.properties(title,sheetId,index)',
+        fields: 'properties(title),sheets.properties(title,sheetId,index,gridProperties.rowCount)',
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {

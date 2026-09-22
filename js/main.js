@@ -2,6 +2,8 @@
 
 // 1. ІМПОРТИ
 import { supabase } from './supabase.js';
+import { loadBootProfile } from './boot_profile.js';
+import { cacheValue, readCachedValue } from './local_data_store.js';
 import { state } from './state.js';
 import { getDefaultDayEntry, resolveMonthlyDayloss } from './data_utils.js';
 import { hasImportedNetPnl } from './trade_filters.js';
@@ -1331,7 +1333,9 @@ async function bootApp(user) {
     let bootProfileError;
     try {
         console.log('[INIT] 1/4 loading profile');
-        const profileResponse = await withBootDeadline(
+        const profileResponse = await loadBootProfile(user.id, {
+            readCached: readCachedValue, cache: cacheValue, online: navigator.onLine !== false,
+            read: () => withBootDeadline(
             supabase
                 .from('profiles')
                 .select('nick, role, mentor_enabled, settings')
@@ -1339,7 +1343,8 @@ async function bootApp(user) {
                 .maybeSingle(),
             'profile load',
             10000,
-        );
+            ),
+        });
         bootProfile = profileResponse.data;
         bootProfileError = profileResponse.error;
         console.log('[INIT] 1/4 profile loaded');
@@ -1578,6 +1583,13 @@ supabase.auth.onAuthStateChange((event, session) => {
         console.log('[AUTH] onAuthStateChange: SIGNED_OUT');
         showLoginScreen();
     }
+});
+
+window.addEventListener('online', () => {
+    if (_appInitialized) return;
+    void supabase.auth.getSession().then(({ data }) => {
+        if (data?.session?.user && !_appInitialized) return bootApp(data.session.user);
+    }).catch(error => console.warn('[Boot reconnect]', error));
 });
 
 window.appendReviewTag = function (chunk) {

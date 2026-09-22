@@ -2,6 +2,14 @@
 export const UPLOAD_CHUNK_BYTES = 6 * 1024 * 1024;
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
+export async function rebaseUploadEpoch(job, epoch, persist) {
+    if (!Number.isSafeInteger(Number(epoch)) || Number(epoch) < 1) throw new Error('Некоректна версія журналу.');
+    if (String(job.epoch) === String(epoch)) return job;
+    const rebased = { ...job, epoch, needsAttention: false, lastError: null, retryAt: 0 };
+    await persist(rebased);
+    return rebased;
+}
+
 export function createUploadStore(indexedDB = globalThis.indexedDB, name = 'strum-upload-data') {
     let connection;
     async function open() {

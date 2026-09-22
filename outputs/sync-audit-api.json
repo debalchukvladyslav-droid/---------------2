@@ -1,0 +1,145 @@
+{
+  "startedAt": "2026-09-22T07:50:24.375Z",
+  "requests": [
+    {
+      "path": "/auth/v1/token",
+      "status": 200,
+      "ms": 448,
+      "bytes": 1922
+    },
+    {
+      "path": "/rest/v1/rpc/get_data_sync_state",
+      "status": 200,
+      "ms": 341,
+      "bytes": 87
+    },
+    {
+      "path": "/rest/v1/rpc/apply_data_operations",
+      "status": 200,
+      "ms": 398,
+      "bytes": 561
+    },
+    {
+      "path": "/rest/v1/rpc/apply_data_operations",
+      "status": 200,
+      "ms": 159,
+      "bytes": 563
+    },
+    {
+      "path": "/rest/v1/rpc/create_restore_point",
+      "status": 200,
+      "ms": 571,
+      "bytes": 818
+    },
+    {
+      "path": "/rest/v1/rpc/list_restore_points",
+      "status": 200,
+      "ms": 89,
+      "bytes": 820
+    },
+    {
+      "path": "/rest/v1/rpc/apply_data_operations",
+      "status": 200,
+      "ms": 199,
+      "bytes": 563
+    },
+    {
+      "path": "/rest/v1/rpc/pull_data_changes",
+      "status": 200,
+      "ms": 92,
+      "bytes": 1248
+    },
+    {
+      "path": "/rest/v1/rpc/apply_data_operations",
+      "status": 200,
+      "ms": 89,
+      "bytes": 618
+    },
+    {
+      "path": "/rest/v1/rpc/resolve_data_conflict",
+      "status": 200,
+      "ms": 87,
+      "bytes": 119
+    },
+    {
+      "path": "/rest/v1/rpc/apply_data_operations",
+      "status": 200,
+      "ms": 173,
+      "bytes": 561
+    },
+    {
+      "path": "/rest/v1/rpc/pull_data_changes",
+      "status": 200,
+      "ms": 84,
+      "bytes": 663
+    },
+    {
+      "path": "/rest/v1/journal_days",
+      "status": 200,
+      "ms": 88,
+      "bytes": 383
+    },
+    {
+      "path": "/rest/v1/rpc/preview_restore",
+      "status": 200,
+      "ms": 82,
+      "bytes": 1378
+    },
+    {
+      "path": "/rest/v1/rpc/restore_data",
+      "status": 200,
+      "ms": 432,
+      "bytes": 599
+    },
+    {
+      "path": "/rest/v1/rpc/pull_data_changes",
+      "status": 200,
+      "ms": 77,
+      "bytes": 876
+    },
+    {
+      "path": "/rest/v1/rpc/get_data_sync_state",
+      "status": 200,
+      "ms": 72,
+      "bytes": 143
+    },
+    {
+      "path": "/rest/v1/journal_days",
+      "status": 200,
+      "ms": 81,
+      "bytes": 383
+    },
+    {
+      "path": "/rest/v1/rpc/pull_data_changes",
+      "status": 200,
+      "ms": 71,
+      "bytes": 82
+    },
+    {
+      "path": "/rest/v1/rpc/apply_data_operations",
+      "status": 200,
+      "ms": 74,
+      "bytes": 573
+    },
+    {
+      "path": "/rest/v1/rpc/pull_data_changes",
+      "status": 200,
+      "ms": 90,
+      "bytes": 675
+    },
+    {
+      "path": "/rest/v1/journal_days",
+      "status": 200,
+      "ms": 68,
+      "bytes": 395
+    }
+  ],
+  "checks": [
+    "apply and duplicate delivery: same cursor",
+    "real API conflict rebase preserves local note and unrelated remote pnl",
+    "restore and reopened queue: local edit automatically resent on restored baseline",
+    "cursor pagination: p_limit=2 drained successfully"
+  ],
+  "auditUserId": "f103a632-3c1a-475e-917f-c1a2e6ee0eb6",
+  "passed": true
+}

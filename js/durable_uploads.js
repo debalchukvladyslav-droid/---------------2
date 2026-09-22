@@ -1,5 +1,5 @@
 import { supabase, SUPABASE_URL } from './supabase.js';
-import { createUploadStore, hashUpload, resumeUpload } from './upload_queue_core.js';
+import { createUploadStore, hashUpload, resumeUpload, rebaseUploadEpoch } from './upload_queue_core.js';
 
 const store = createUploadStore();
 let initialized = false;
@@ -27,19 +27,10 @@ function emit(job, status, detail = {}) {
 
 async function transfer(job) {
     const session = await currentSession(job.userId);
-    const state = await supabase.rpc('get_data_sync_state', { p_user_id: job.userId });
+    const state = await supabase.rpc('get_data_sync_state', { p_user_id: job.userId }).abortSignal(AbortSignal.timeout(25000));
     if (state.error) throw state.error;
-    if (job.epoch != null && Number(state.data.epoch) !== Number(job.epoch)) {
-        const error = new Error('Файл очікує перевірки: дані відновлено з резервної копії.');
-        error.status = 409;
-        throw error;
-    }
-    // A job created before initial bootstrap is not silently assigned a new epoch.
-    if (job.epoch == null) {
-        const error = new Error('Для цього файлу не визначено версію журналу. Відкрийте журнал і додайте файл повторно.');
-        error.status = 409;
-        throw error;
-    }
+    await currentSession(job.userId);
+    job = await rebaseUploadEpoch(job, state.data.epoch, value => store.put(value));
     let token;
     const headers = async () => {
         const auth = await currentSession(job.userId);
@@ -50,6 +41,7 @@ async function transfer(job) {
         const response = await fetch(`/api/storage-upload?${query}`, {
             method: 'POST', headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ size: job.blob.size, contentType: job.contentType, sha256: job.sha256 }),
+            signal: AbortSignal.timeout(25000),
         });
         const signed = await response.json();
         if (!response.ok) throw Object.assign(new Error(signed.error || 'Не вдалося почати завантаження.'), { status: response.status });
@@ -127,7 +119,7 @@ export async function resumePendingUploads() {
     if (drainPromise) return drainPromise;
     drainPromise = (async () => {
         const session = await currentSession();
-        const jobs = (await store.list(session.user.id)).filter(job => (!job.needsAttention || job.lastStatus === 401) && (!job.retryAt || job.retryAt <= Date.now()));
+        const jobs = (await store.list(session.user.id)).filter(job => (!job.needsAttention || [401, 409].includes(job.lastStatus)) && (!job.retryAt || job.retryAt <= Date.now()));
         // Two transfers per tab; Web Locks also coordinate matching uploads across tabs.
         for (let i = 0; i < jobs.length; i += 2) await Promise.allSettled(jobs.slice(i, i + 2).map(processJob));
     })().finally(() => { drainPromise = null; });

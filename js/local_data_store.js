@@ -192,9 +192,18 @@ export async function acknowledgeOperations(userId, results = []) {
             }
             stores[STORES.queue].delete(operation.operationId);
             if (!record) continue;
-            const remote = result.row ? (operation.domain === 'journal' ? canonicalJournalRow(result.row) : result.row) : applyMergePatch(operation.base, operation.patch);
-            Object.assign(record, { serverValue: cloneData(remote), version: result.version, epoch: result.epoch, syncedAt: Date.now() });
-            if (record.localRevision === operation.localRevision) { record.dirty = 0; setValue(record, operation.domain, remote); }
+            const newer = record.serverValue !== undefined && (Number(record.epoch || 0) > Number(result.epoch || 0)
+                || (String(record.epoch) === String(result.epoch) && Number(record.version || 0) > Number(result.version || 0)));
+            const remote = newer ? record.serverValue : result.row
+                ? (operation.domain === 'journal' ? canonicalJournalRow(result.row) : result.row) : applyMergePatch(operation.base, operation.patch);
+            if (!newer) Object.assign(record, { serverValue: cloneData(remote), version: result.version, epoch: result.epoch });
+            record.syncedAt = Date.now();
+            const pending = (await requestValue(stores[STORES.queue].index('user').getAll(userId)) || [])
+                .filter(item => item.domain === operation.domain && item.entityId === operation.entityId).sort((a, b) => a.sequence - b.sequence);
+            let desired = cloneData(remote);
+            for (const item of pending) desired = applyMergePatch(desired, item.patch);
+            record.dirty = pending.length ? 1 : 0;
+            setValue(record, operation.domain, desired);
             store.put(record);
             changed.push({ domain: operation.domain, entityId: operation.entityId, record: cloneData(record), operationId: operation.operationId });
         }
@@ -223,7 +232,7 @@ export async function resolveDataOperation(userId, operationId, choice) {
         const remote = operation.domain === 'journal' ? canonicalJournalRow(remoteValue) : cloneData(remoteValue);
         const others = (await requestValue(stores[STORES.queue].index('user').getAll(userId)) || [])
             .filter(item => item.operationId !== operationId && item.domain === operation.domain && item.entityId === operation.entityId
-                && String(item.epoch) === String(meta.epoch))
+                )
             .sort((a, b) => a.sequence - b.sequence);
         stores[STORES.queue].delete(operationId);
         // Resolve only this edit. Preserve later edits and the server's unrelated fields.
@@ -311,6 +320,28 @@ export async function replaceServerSnapshot(userId, rows, metadata) {
                 if (String(operation.epoch) !== String(metadata.epoch)) { operation.status = 'stale_epoch'; stores[STORES.queue].put(operation); }
             }
         }
+        // Keep the server baseline current even for dirty records and overlay
+        // every durable edit before publishing the replacement snapshot.
+        const pending = (await requestValue(stores[STORES.queue].index('user').getAll(userId)) || []).sort((a, b) => a.sequence - b.sequence);
+        const incomingRows = new Map(rows.map(row => [row.trade_date, row]));
+        const rebased = new Map();
+        for (const operation of pending) {
+            const key = entityKey(userId, operation.domain, operation.entityId);
+            let record = rebased.get(key);
+            if (!record) {
+                const target = stores[entityStore(operation.domain)];
+                record = await requestValue(target.get(key)) || makeRecord(userId, operation.domain, operation.entityId);
+                const row = incomingRows.get(operation.entityId);
+                const remote = operation.domain === 'journal' ? canonicalJournalRow(row || {}) : cloneData(metadata.settings || {});
+                Object.assign(record, { serverValue: remote, version: operation.domain === 'journal' ? row?.sync_version || 0 : metadata.settingsVersion || 0,
+                    epoch: metadata.epoch, dirty: 1, cachedAt: Date.now() });
+                setValue(record, operation.domain, remote);
+                rebased.set(key, record);
+            }
+            setValue(record, operation.domain, applyMergePatch(entityValue(record, operation.domain), operation.patch));
+            record.localRevision = Math.max(record.localRevision || 0, operation.localRevision || 0);
+        }
+        for (const record of rebased.values()) stores[record.tradeDate ? STORES.days : STORES.values].put(record);
         stores[STORES.values].put({ key: `${userId}:sync-meta`, userId, name: 'sync-meta', value: { ...previous?.value, ...metadata } });
         return { epochChanged };
     });

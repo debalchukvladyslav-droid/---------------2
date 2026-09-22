@@ -49,6 +49,10 @@ export function createDataSyncEngine({ transport, store = localStore, onChange =
         while (current(user, version)) {
             const response = await transport.pull(user, metadata.cursor || 0);
             if (!current(user, version)) return;
+            if (!response || !Array.isArray(response.changes) || !Number.isSafeInteger(Number(response.cursor))
+                || response.cursor == null || Number(response.cursor) < 0 || response.epoch == null) {
+                throw syncError('Некоректна відповідь синхронізації.', 'INVALID_SYNC_RESPONSE');
+            }
             if (response.resetRequired || String(response.epoch) !== String(metadata.epoch)) {
                 await snapshot(user, version);
                 metadata = await store.readSyncMetadata(user);
@@ -56,6 +60,7 @@ export function createDataSyncEngine({ transport, store = localStore, onChange =
             }
             if (!Array.isArray(response.changes) || response.cursor == null || response.epoch == null) throw syncError('Неповна відповідь синхронізації.', 'INVALID_SYNC_RESPONSE');
             if (response.hasMore && Number(response.cursor) <= Number(metadata.cursor || 0)) throw syncError('База не просуває курсор синхронізації.', 'INVALID_SYNC_RESPONSE');
+            if (Number(response.cursor) < Number(metadata.cursor || 0)) throw syncError('Курсор синхронізації повернувся назад.', 'INVALID_SYNC_RESPONSE');
             const result = await store.applyRemoteChanges(user, response);
             if (current(user, version) && result.changed.length) await onChange(user, result.changed);
             metadata = { ...metadata, epoch: response.epoch, cursor: response.cursor };
@@ -68,6 +73,25 @@ export function createDataSyncEngine({ transport, store = localStore, onChange =
         await pull(user, version);
         while (current(user, version)) {
             const all = await store.listDataOperations(user);
+            if (!current(user, version)) return;
+            // Conflicts survive reloads, and a snapshot can quarantine operations
+            // without an apply response. Resume both through the same local policy.
+            if (conflictPolicy === 'local') {
+                const unresolved = all.filter(operation => ['conflict', 'stale_epoch'].includes(operation.status));
+                if (unresolved.length) {
+                    const changes = [];
+                    for (const operation of unresolved) {
+                        if (!current(user, version)) return;
+                        const resolved = await store.resolveDataOperation(user, operation.operationId, 'local');
+                        if (resolved.change) changes.push(resolved.change);
+                        if (resolved.conflictId && transport.resolveConflict) {
+                            void transport.resolveConflict(user, resolved.conflictId, 'local').catch(() => {});
+                        }
+                    }
+                    if (current(user, version) && changes.length) await onChange(user, changes);
+                    continue;
+                }
+            }
             const blockedEntities = new Set();
             const eligible = [];
             for (const operation of all) {
@@ -88,6 +112,7 @@ export function createDataSyncEngine({ transport, store = localStore, onChange =
             if (operations.some(operation => operation.status !== 'pending')) break;
             if (operations.length > 2000) throw syncError('Імпорт перевищує 2000 операцій.', 'INVALID_IMPORT');
             await status(user, 'syncing');
+            if (!current(user, version)) return;
             try {
                 const response = await transport.apply(user, operations.map(wire), !!first.batchId);
                 if (!current(user, version)) return;

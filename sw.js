@@ -1,5 +1,5 @@
 const DATA_SYNC_PROTOCOL = 2;
-const CACHE = `strum-shell-v9-data-${DATA_SYNC_PROTOCOL}`;
+const CACHE = `strum-shell-v10-data-${DATA_SYNC_PROTOCOL}`;
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icons/strum-icon.svg', '/css/1_tokens.css', '/css/2_base.css', '/css/10_mobile.css', '/css/24_phase6.css'];
 
 self.addEventListener('install', (event) => {
@@ -19,7 +19,8 @@ self.addEventListener('fetch', (event) => {
     if (request.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/')) return;
 
     if (request.mode === 'navigate') {
-        event.respondWith(fetch(request).then((response) => {
+        event.respondWith(fetch(request, { cache: 'no-cache' }).then((response) => {
+            if (!response.ok) return response;
             const copy = response.clone();
             caches.open(CACHE).then((cache) => cache.put('/index.html', copy));
             return response;
@@ -27,8 +28,8 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    if (request.destination === 'script' || request.destination === 'style') {
-        event.respondWith(fetch(request).then((response) => {
+    if (request.destination === 'script' || request.destination === 'style' || url.pathname.startsWith('/partials/')) {
+        event.respondWith(fetch(request, { cache: 'no-cache' }).then((response) => {
             if (response.ok) {
                 const copy = response.clone();
                 caches.open(CACHE).then((cache) => cache.put(request, copy));

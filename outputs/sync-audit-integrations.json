@@ -1,0 +1,33 @@
+[
+  {
+    "check": "real TUS interrupted acknowledgement and duplicate finalize",
+    "passed": true,
+    "bytes": 430091,
+    "patches": 1,
+    "registryId": "789858b4-4aeb-44fd-850c-73602efb770d"
+  },
+  {
+    "check": "drive",
+    "status": 200,
+    "ok": true,
+    "count": 1,
+    "files": [
+      {
+        "id": "1bWDYJ6cbiZvt1zUavpEolOaEutyzhkdj",
+        "name": "SYNC-AUDIT-2026-09-22-login.png"
+      }
+    ]
+  },
+  {
+    "check": "sheets",
+    "status": 200,
+    "ok": true,
+    "count": 201
+  },
+  {
+    "check": "real Google Sheets paged reader",
+    "passed": true,
+    "pages": 3,
+    "rows": 1201
+  }
+]

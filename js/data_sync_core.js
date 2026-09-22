@@ -49,5 +49,5 @@ export const retryDelay = (attempt = 0, random = Math.random) => Math.round(Math
 export function isRetryableSyncError(error) {
     const status = Number(error?.status || 0);
     return !['PGRST202', '42883', '42501', 'SYNC_SCHEMA_REQUIRED', 'SYNC_CONFLICT', 'STALE_EPOCH', '22023', '23514'].includes(String(error?.code || ''))
-        && status !== 401 && status !== 403 && !(status >= 400 && status < 429);
+        && status !== 401 && status !== 403 && !(status >= 400 && status < 429 && status !== 408);
 }

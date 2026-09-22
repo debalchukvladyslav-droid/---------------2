@@ -122,8 +122,12 @@ export async function resolveViewedUserId(docName = state.CURRENT_VIEWED_USER, o
     return resolvedUserId;
 }
 
-async function getCurrentUserContext() {
-    const user = await getCurrentSupabaseUser();
+async function getCurrentUserContext({ local = false } = {}) {
+    // Local persistence must work without an Auth network round trip. The RPC
+    // validates the session when the durable operations eventually reach it.
+    const session = local ? await supabase.auth.getSession() : null;
+    if (session?.error) throw session.error;
+    const user = local ? session?.data?.session?.user : await getCurrentSupabaseUser();
     return {
         user,
         userId: user?.id || null,
@@ -361,12 +365,13 @@ async function applySynchronizedChanges(userId, changes) {
         if (change.domain === 'journal') {
             const date = change.entityId;
             if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+            if (_dirtyJournalDates.has(date)) continue;
             if (change.deleted && !change.localDirty) delete state.appData.journal[date];
             else if (change.record?.row) {
                 state.appData.journal[date] = markDayEntryDetailsLoaded(journalRowToDayEntry(change.record.row), true);
             }
             journalChanged = true;
-        } else if (change.domain === 'settings' && change.record?.value) {
+        } else if (change.domain === 'settings' && change.record?.value && !_settingsSavePromise && !_settingsSaveRequested) {
             applySettingsPayload(change.record.value);
         }
     }
@@ -386,8 +391,11 @@ setDataSyncHandlers({
         for (const record of records || []) {
             if (record?.tradeDate && record?.row) nextJournal[record.tradeDate] = markDayEntryDetailsLoaded(journalRowToDayEntry(record.row), true);
         }
+        for (const date of _dirtyJournalDates) {
+            if (state.appData.journal[date]) nextJournal[date] = state.appData.journal[date];
+        }
         state.appData.journal = nextJournal;
-        applySettingsPayload(settings);
+        if (!_settingsSavePromise && !_settingsSaveRequested) applySettingsPayload(settings);
         state._availableMonthKeys = getMonthsInJournal(nextJournal);
         state._monthListLoaded = true;
         clearStatsCache(state.USER_DOC_NAME);
@@ -535,7 +543,7 @@ export function markAllJournalDirty() {
 
 async function performSettingsSave(context) {
     try {
-        const { user } = await getCurrentUserContext();
+        const { user } = await getCurrentUserContext({ local: true });
         if (!user || !context || context.generation !== _accountContextGeneration || user.id !== context.userId) return;
         const settingsPayload = {
             ...state.appData.settings,
@@ -592,22 +600,29 @@ export function saveSettings() {
 }
 
 export async function loadSettings() {
+    const generation = _accountContextGeneration;
+    const owner = state.myUserId;
+    const current = () => generation === _accountContextGeneration && owner === state.myUserId;
     try {
-        const { user } = await getCurrentUserContext();
-        if (!user) return;
+        const { user } = await getCurrentUserContext({ local: navigator.onLine === false });
+        if (!user || user.id !== owner || !current()) return;
         const cached = await readCachedValue(user.id, 'settings');
+        if (!current()) return;
         if (cached?.value && typeof cached.value === 'object') {
             applySettingsPayload(cached.value);
         }
+        if (navigator.onLine === false) return;
         const { data, error } = await supabase
             .from('profiles')
             .select('settings')
             .eq('id', user.id)
             .single();
         if (error) throw error;
+        if (!current()) return;
         if (data?.settings && typeof data.settings === 'object') {
             await cacheValue(user.id, 'settings', data.settings);
             const effective = await readCachedValue(user.id, 'settings');
+            if (!current() || _settingsSavePromise || _settingsSaveRequested) return;
             const incoming = { ...(effective?.value || data.settings) };
             if (Array.isArray(incoming.unassignedImages)) {
                 state.appData.unassignedImages = incoming.unassignedImages;
@@ -701,16 +716,18 @@ async function _doSave(opts = {}) {
     }
 
     try {
-        const { user, userId, email } = await getCurrentUserContext();
+        const { user, userId, email } = await getCurrentUserContext({ local: true });
         if (context.generation !== _accountContextGeneration || userId !== context.userId || state.myUserId !== context.userId) {
             console.info('[journal] account changed while save was queued; write discarded');
             return false;
         }
         if (!user || !userId) throw new Error('Немає авторизованого користувача Supabase');
         await ensureDataSyncMetadata(userId);
+        if (context.generation !== _accountContextGeneration || state.myUserId !== context.userId) return false;
 
         const journal = state.appData.journal || {};
         const durableDirty = await readDirtyJournalRows(userId);
+        if (context.generation !== _accountContextGeneration || state.myUserId !== context.userId) return false;
         durableDirty.forEach((record) => {
             if (record?.tradeDate && record?.row && !journal[record.tradeDate]) {
                 journal[record.tradeDate] = markDayEntryDetailsLoaded(journalRowToDayEntry(record.row), true);
@@ -1154,7 +1171,7 @@ export async function initializeApp() {
         }
 
         const [bootstrapLoaded] = await Promise.all([
-            loadBootstrapJournal(nick, viewedUserId, [prevMk, currentMk]),
+            navigator.onLine === false ? Promise.resolve(true) : loadBootstrapJournal(nick, viewedUserId, [prevMk, currentMk]),
             isViewingOwnProfile ? loadSettings() : Promise.resolve(),
         ]);
         if (!bootstrapLoaded) {

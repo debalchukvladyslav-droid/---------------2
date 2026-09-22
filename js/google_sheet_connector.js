@@ -26,6 +26,7 @@ import {
 } from './sheet_table.js';
 import { ensureGoogleApi, ensureGoogleIdentity } from './vendor_loader.js';
 import { state } from './state.js';
+import { readSheetRangePages } from './sheet_range_paging.js';
 
 const appConfig = window.TRADING_JOURNAL_CONFIG || {};
 const SERVICE_ACCOUNT_EMAIL = String(appConfig.googleServiceAccountEmail || '').trim();
@@ -657,6 +658,16 @@ export async function loadSheetHeaders(fileId) {
  * @returns {Promise<string[][]>}
  */
 export async function fetchSpreadsheetValuesRange(spreadsheetId, range, sheetTitle = getSelectedSheetTitle()) {
+    return readSheetRangePages(range, {
+        rowCount: async () => {
+            const response = await fetchSheetsService({ action: 'metadata', spreadsheetId });
+            return response.sheets?.find(sheet => !sheetTitle || sheet.title === sheetTitle)?.gridProperties?.rowCount;
+        },
+        read: page => fetchSpreadsheetValuesPage(spreadsheetId, page, sheetTitle),
+    });
+}
+
+async function fetchSpreadsheetValuesPage(spreadsheetId, range, sheetTitle) {
     const response = await fetchSheetsService({
         action: 'values',
         spreadsheetId,

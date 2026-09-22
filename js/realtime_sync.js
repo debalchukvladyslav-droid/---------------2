@@ -67,6 +67,7 @@ async function replaceSubscription(userId) {
     nextChannel.subscribe(status => {
         if (channel !== nextChannel) return;
         document.documentElement.dataset.realtime = status === 'SUBSCRIBED' ? 'online' : 'connecting';
+        if (status === 'SUBSCRIBED') void syncDataNow().catch(() => {});
     });
 }
 
