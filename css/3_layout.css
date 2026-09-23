@@ -229,6 +229,7 @@
     .app-sidebar.collapsed { width: 60px !important; }
     .app-sidebar.collapsed .brand-text,
     .app-sidebar.collapsed .nav-label,
+    .app-sidebar.collapsed .nav-section,
     .app-sidebar.collapsed .nav-divider {
         opacity: 0; width: 0; overflow: hidden; transition: opacity 0.15s ease-out;
     }
@@ -392,6 +393,36 @@
 
 /* Section divider in nav */
 .nav-divider { height: 1px; background: var(--border); margin: 6px 8px; }
+.news-ticker-bar[hidden] { display: none !important; }
+.nav-section {
+    margin: 14px 12px 4px;
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+.day-mode-switch {
+    display: flex;
+    gap: 6px;
+    margin: 0 0 12px;
+}
+.day-mode-link {
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 650;
+    cursor: pointer;
+}
+.day-mode-link.active {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+}
 
 /* User info in sidebar footer */
 .sidebar-user {

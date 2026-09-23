@@ -477,7 +477,7 @@ function bindDeclarativeActions() {
             return;
         }
 
-        const tabTrigger = event.target?.closest?.('.sidebar-nav-item[data-tab], .mobile-nav-btn[data-tab], .mobile-more-item[data-tab], .dash-open-calendar-tab-btn[data-tab], .recent-trades-link[data-tab], .dashboard-ai-point__action[data-tab], .dashboard-ai-open-chat[data-tab]');
+        const tabTrigger = event.target?.closest?.('.sidebar-nav-item[data-tab], .mobile-nav-btn[data-tab], .mobile-more-item[data-tab], .dash-open-calendar-tab-btn[data-tab], .recent-trades-link[data-tab], .day-mode-link[data-tab], .dashboard-ai-point__action[data-tab], .dashboard-ai-open-chat[data-tab]');
         if (tabTrigger && activateMainTab(tabTrigger)) event.preventDefault();
 
         const formTabTrigger = event.target?.closest?.('.sidebar .tab-btn[data-tab]');
@@ -514,7 +514,7 @@ function bindDeclarativeActions() {
             return;
         }
 
-        const tabTrigger = event.target?.closest?.('.sidebar-nav-item[data-tab], .mobile-nav-btn[data-tab], .mobile-more-item[data-tab], .dash-open-calendar-tab-btn[data-tab], .recent-trades-link[data-tab], .dashboard-ai-point__action[data-tab], .dashboard-ai-open-chat[data-tab]');
+        const tabTrigger = event.target?.closest?.('.sidebar-nav-item[data-tab], .mobile-nav-btn[data-tab], .mobile-more-item[data-tab], .dash-open-calendar-tab-btn[data-tab], .recent-trades-link[data-tab], .day-mode-link[data-tab], .dashboard-ai-point__action[data-tab], .dashboard-ai-open-chat[data-tab]');
         if (tabTrigger?.matches('button, [role="button"]') && activateMainTab(tabTrigger)) event.preventDefault();
 
         const formTabTrigger = event.target?.closest?.('.sidebar .tab-btn[data-tab]');
