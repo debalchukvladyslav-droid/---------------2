@@ -11,11 +11,17 @@ async function deploymentPublicConfig() {
         return publicSupabaseConfig(await readFile(new URL('../config.js', import.meta.url), 'utf8'));
     } catch (error) {
         if (error?.code !== 'ENOENT') throw error;
-        const host = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
-        if (!host) return { url: '', key: '' };
-        const response = await fetch(`https://${host}/config.js`, { signal: AbortSignal.timeout(15_000) });
-        if (!response.ok) throw new Error(`Could not read deployed public config: HTTP ${response.status}`);
-        return publicSupabaseConfig(await response.text());
+        const hosts = [...new Set([
+            process.env.VERCEL_PROJECT_PRODUCTION_URL,
+            'traderjournal-six.vercel.app',
+        ].filter(Boolean))];
+        for (const host of hosts) {
+            const response = await fetch(`https://${host}/config.js`, { signal: AbortSignal.timeout(15_000) });
+            if (!response.ok) continue;
+            const config = publicSupabaseConfig(await response.text());
+            if (config.url && config.key) return config;
+        }
+        return { url: '', key: '' };
     }
 }
 
