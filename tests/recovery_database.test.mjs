@@ -33,7 +33,7 @@ test('recovery database executes real SQL and protects changes and restore trans
     db = new PGlite();
     await db.exec(await readFile(new URL('./fixtures/recovery_schema.sql', import.meta.url), 'utf8'));
     t.after(() => db.close());
-    for (const filename of ['20260914140339_durable_recovery_sync.sql', '20260914140454_reliable_source_integrations.sql', '20260916191838_fix_recovery_health_snapshot.sql', '20260917031703_optimize_recovery_query_payloads.sql', '20260923042623_optimize_data_sync_large_json.sql']) {
+    for (const filename of ['20260914140339_durable_recovery_sync.sql', '20260914140454_reliable_source_integrations.sql', '20260916191838_fix_recovery_health_snapshot.sql', '20260917031703_optimize_recovery_query_payloads.sql', '20260923042623_optimize_data_sync_large_json.sql', '20260923043823_bound_sync_pull_response.sql']) {
         const sql = await readFile(new URL(`../supabase/migrations/${filename}`, import.meta.url), 'utf8');
         try { await db.exec(sql); } catch (error) {
             const position = Number(error.position || 0);
@@ -142,5 +142,24 @@ test('recovery database executes real SQL and protects changes and restore trans
         assert.equal(page.changes.length, 2);
         assert.equal(page.changes.find(row => row.domain === 'settings').record.screenMeta.new, true);
         assert.equal(page.changes.find(row => row.domain === 'restore').record.reason, 'audit');
+    });
+    await t.test('large settings history is emitted once across bounded cursor pages', async () => {
+        await db.exec('reset role');
+        await query(`insert into data_recovery.change_history(user_id,cursor,epoch,table_name,entity_id,domain,new_record,version)
+            select $1::uuid,n,2,'profiles',$1::text,'settings',jsonb_build_object('settings',jsonb_build_object('revision',n)),n
+            from generate_series(9101,9160) n`, [owner]);
+        await query('update data_recovery.owner_state set cursor=9160,epoch=2 where user_id=$1', [owner]);
+        await db.exec('set role authenticated');
+        const pages = [];
+        let cursor = 9100;
+        do {
+            const page = await rpc('pull_data_changes', [cursor, 500], ['bigint', 'integer']);
+            assert.ok(page.cursor > cursor);
+            pages.push(page); cursor = page.cursor;
+        } while (pages.at(-1).hasMore);
+        assert.deepEqual(pages.map(page => page.cursor), [9125, 9150, 9160]);
+        const settings = pages.flatMap(page => page.changes).filter(change => change.domain === 'settings');
+        assert.equal(settings.length, 1);
+        assert.equal(settings[0].record.revision, 9160);
     });
 });
