@@ -53,6 +53,22 @@ test('a new entry after the position is closed is a second trade', () => {
     assert.equal(days['2026-09-23'].trades[1].gross, -50);
 });
 
+test('a cancelled order that already filled still closes the position', () => {
+    const days = buildShsDayMap([
+        order({ position_effect: 'open', side: 'short', filled_size: 4756, avg_filled_price: 1.4206, first_fill_at: '2026-09-11T12:11:45.094000+00:00', status: 'filled' }),
+        order({ position_effect: 'reduce', side: 'buy', filled_size: 500, avg_filled_price: 1.27, first_fill_at: '2026-09-11T12:43:32.230000+00:00', status: 'cancelled' }),
+        order({ position_effect: 'reduce', side: 'buy', filled_size: 2145, avg_filled_price: 1.28, first_fill_at: '2026-09-11T12:46:38.984000+00:00', status: 'filled' }),
+        order({ position_effect: 'reduce', side: 'buy', filled_size: 2111, avg_filled_price: 1.3, first_fill_at: '2026-09-11T12:49:33.556000+00:00', status: 'filled' }),
+        order({ position_effect: 'close', side: 'buy', filled_size: null, avg_filled_price: null, first_fill_at: null, status: 'cancelled' }),
+        order({ position_effect: 'open', side: 'short', filled_size: null, avg_filled_price: null, status: 'submitted', first_fill_at: null }),
+    ], [], 'OLEKPONO');
+    const trade = days['2026-09-11'].trades[0];
+    assert.equal(days['2026-09-11'].trades.length, 1);
+    assert.equal(trade.qty, 4756);
+    assert.equal(trade.type, 'Short');
+    assert.equal(trade.gross, 631.47);
+});
+
 test('locate price is the dollar total and declined rows are not added', () => {
     const days = buildShsDayMap([], [
         { trader: 'OLEKPONO', status: 'accepted', ticker: 'MYSE', size: 1000, price: 1.33, date: '2026-09-23' },

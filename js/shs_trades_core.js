@@ -1,6 +1,5 @@
 import { reconcileDayLocates } from './parser_utils.js';
 
-const DEAD_ORDER = new Set(['cancelled', 'canceled', 'rejected', 'declined', 'expired']);
 const ANNOTATION_KEYS = ['sheet', 'screenshots', 'screenshotPath', 'exitReason', 'notes', 'comment', 'kf', 'stopReview', 'review'];
 
 export function nicksMatch(left, right) {
@@ -71,7 +70,7 @@ function locateNickMatches(row, nick) {
 function classifyFill(order) {
     const effect = String(order?.position_effect || '').toLowerCase();
     const side = String(order?.side || '').toLowerCase();
-    const closing = /close|cover|flatten/.test(effect);
+    const closing = /close|cover|flatten|reduce|exit/.test(effect);
     const opening = /open/.test(effect) && !closing;
     const shortSide = /short|sell/.test(side);
     const longSide = /long|^buy$|cover/.test(side) && !shortSide;
@@ -83,8 +82,7 @@ function classifyFill(order) {
 }
 
 function toFill(order) {
-    const status = String(order?.status || '').toLowerCase();
-    if (DEAD_ORDER.has(status) || order?.is_demo === true) return null;
+    if (order?.is_demo === true) return null;
     const qty = Number(order?.filled_size);
     const price = Number(order?.avg_filled_price);
     if (!Number.isFinite(qty) || qty <= 0 || !Number.isFinite(price)) return null;
