@@ -10,9 +10,28 @@ import { readSheetRangePages } from '../js/sheet_range_paging.js';
 import { isRetryableSyncError } from '../js/data_sync_core.js';
 import { rebaseUploadEpoch } from '../js/upload_queue_core.js';
 import { loadBootProfile } from '../js/boot_profile.js';
+import { createDeferredAuthHandler } from '../js/auth_event_dispatch.js';
 
 Object.assign(globalThis, { indexedDB, IDBKeyRange });
 test.after(() => store.closeLocalDataStore());
+
+test('auth events defer Supabase work until the auth callback releases its lock', async () => {
+    const scheduled = [];
+    const calls = [];
+    const errors = [];
+    let authCallbackActive = true;
+    const listener = createDeferredAuthHandler(async (event, session) => {
+        assert.equal(authCallbackActive, false);
+        calls.push([event, session.user.id]);
+    }, { schedule: callback => scheduled.push(callback), onError: error => errors.push(error) });
+    listener('SIGNED_IN', { user: { id: 'owner' } });
+    assert.deepEqual(calls, []);
+    authCallbackActive = false;
+    scheduled.shift()();
+    await Promise.resolve();
+    assert.deepEqual(calls, [['SIGNED_IN', 'owner']]);
+    assert.deepEqual(errors, []);
+});
 
 test('Realtime reconnect catches missed changes even without a postgres event', async () => {
     let callback;

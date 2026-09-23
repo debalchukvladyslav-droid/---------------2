@@ -3,6 +3,7 @@
 // 1. ІМПОРТИ
 import { supabase } from './supabase.js';
 import { loadBootProfile } from './boot_profile.js';
+import { createDeferredAuthHandler } from './auth_event_dispatch.js';
 import { cacheValue, readCachedValue } from './local_data_store.js';
 import { state } from './state.js';
 import { getDefaultDayEntry, resolveMonthlyDayloss } from './data_utils.js';
@@ -1566,11 +1567,12 @@ showAuthSpinner();
 // ─── КРОК 2: onAuthStateChange — реагуємо на вхід/вихід після старту ─────────
 // Не дублюємо bootApp якщо вже ініціалізовано через getSession.
 // Обробляємо тільки SIGNED_IN (новий логін) та SIGNED_OUT (логаут).
-supabase.auth.onAuthStateChange((event, session) => {
+async function handleAuthStateChange(event, session) {
     if (event === 'PASSWORD_RECOVERY') {
         console.log('[AUTH] onAuthStateChange: PASSWORD_RECOVERY');
         if (session?.user && !_appInitialized) {
-            bootApp(session.user).then(() => showPasswordRecoveryForm());
+            await bootApp(session.user);
+            showPasswordRecoveryForm();
         } else {
             showPasswordRecoveryForm();
         }
@@ -1578,13 +1580,15 @@ supabase.auth.onAuthStateChange((event, session) => {
     }
     if (event === 'SIGNED_IN' && session?.user && !_appInitialized) {
         console.log('[AUTH] onAuthStateChange: SIGNED_IN');
-        bootApp(session.user);
+        await bootApp(session.user);
     }
     if (event === 'SIGNED_OUT') {
         console.log('[AUTH] onAuthStateChange: SIGNED_OUT');
         showLoginScreen();
     }
-});
+}
+
+supabase.auth.onAuthStateChange(createDeferredAuthHandler(handleAuthStateChange));
 
 window.addEventListener('online', () => {
     state.offlineBoot = false;
