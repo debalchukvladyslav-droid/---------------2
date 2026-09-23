@@ -2,9 +2,10 @@ import { state } from './state.js';
 import { callGemini, getGeminiKeys } from './ai.js';
 import { safeExternalUrl, sanitizeHTML } from './sanitize.js';
 import { fetchWithSession } from './authenticated_fetch.js';
+import { fillUkrainianHeadlines, isUkrainianHeadline } from '../lib/news_uk.js';
 
 const CLIENT_CACHE_TTL_MS = 2 * 60 * 1000;
-const NEWS_CACHE_VERSION = 'uk-v7-sheet-tickers';
+const NEWS_CACHE_VERSION = 'uk-v8-uk-headlines';
 const NEWS_PROXY_FALLBACK = 'https://traderjournal-six.vercel.app/api/news';
 let _newsCache = { key: '', ts: 0, payload: null };
 let _newsPromise = null;
@@ -240,10 +241,25 @@ async function fetchDashboardNews(force = false) {
     return translated;
 }
 
+async function attachMachineUkrainianTitles(items) {
+    if (items.every((item) => cleanNewsDisplayTitle(item?.titleUk))) return items;
+    try {
+        const filled = await fillUkrainianHeadlines(items);
+        return filled.map((item) => {
+            const titleUk = cleanNewsDisplayTitle(item.titleUk);
+            return titleUk ? { ...item, titleUk } : { ...item, titleUk: '' };
+        });
+    } catch (error) {
+        console.warn('[News] machine translation failed:', error);
+        return items;
+    }
+}
+
 async function translateNewsPayload(payload) {
     const items = Array.isArray(payload?.items) ? payload.items.slice(0, 24) : [];
     if (!items.length) return payload;
-    if (items.every((item) => cleanNewsDisplayTitle(item?.titleUk))) return payload;
+    const prepared = await attachMachineUkrainianTitles(items);
+    if (prepared.every((item) => cleanNewsDisplayTitle(item?.titleUk))) return { ...payload, items: prepared };
     if (payload?.translation?.ok === false) {
         const reason = String(payload.translation.reason || 'unknown reason');
         console.info('[News] server translation unavailable; feed continues in background mode:', reason);
@@ -252,7 +268,7 @@ async function translateNewsPayload(payload) {
         if (/api key not valid|invalid api key|unauthorized|forbidden|\b401\b|\b403\b/i.test(reason)) {
             return {
                 ...payload,
-                items,
+                items: prepared,
                 translationPending: true,
             };
         }
@@ -262,7 +278,7 @@ async function translateNewsPayload(payload) {
         const key = getGeminiKeys()[0];
         if (!key) throw new Error('AI translation unavailable');
 
-        const source = items.map((item, index) => ({
+        const source = prepared.map((item, index) => ({
             index,
             section: item.section || 'general',
             tickers: Array.isArray(item.related) ? item.related.slice(0, 4) : [],
@@ -293,7 +309,7 @@ async function translateNewsPayload(payload) {
 
         const match = text.match(/\[[\s\S]*\]/);
         const translated = match ? JSON.parse(match[0]) : [];
-        if (!Array.isArray(translated) || translated.length !== items.length) throw new Error('AI returned an incomplete news translation');
+        if (!Array.isArray(translated) || translated.length !== prepared.length) throw new Error('AI returned an incomplete news translation');
 
         const invalidIndexes = translated
             .map((value, index) => cleanNewsDisplayTitle(value) ? -1 : index)
@@ -315,26 +331,23 @@ async function translateNewsPayload(payload) {
 
         return {
             ...payload,
-            items: payload.items.map((item, index) => ({
+            items: prepared.map((item, index) => ({
                 ...item,
-                titleUk: cleanNewsDisplayTitle(translated[index]),
+                titleUk: cleanNewsDisplayTitle(translated[index]) || cleanNewsDisplayTitle(item.titleUk),
             })),
         };
     } catch (error) {
         console.warn('[News] quality translation failed:', error);
         return {
             ...payload,
-            items: payload.items || [],
-            translationPending: true,
+            items: prepared,
+            translationPending: prepared.some((item) => !cleanNewsDisplayTitle(item?.titleUk)),
         };
     }
 }
 
 function displayNewsTitle(item) {
-    const translated = cleanNewsDisplayTitle(item?.titleUk);
-    if (translated) return translated;
-    const original = String(item?.title || '').replace(/\s+/g, ' ').trim();
-    return original && !isLowValueCatalystTitle(original) ? original.slice(0, 140) : '';
+    return cleanNewsDisplayTitle(item?.titleUk);
 }
 
 function cleanNewsDisplayTitle(value) {
@@ -348,15 +361,8 @@ function cleanNewsDisplayTitle(value) {
         .replace(/^ринок\s*:\s*(?:[^:]{1,40}:\s*)?/i, '')
         .trim();
 
-    if (!title || isLowValueCatalystTitle(title) || isLikelyUntranslatedEnglish(title) || !isQualityUkrainian(title)) return '';
+    if (!title || isLowValueCatalystTitle(title) || isLikelyUntranslatedEnglish(title) || !isUkrainianHeadline(title)) return '';
     return title.slice(0, 140);
-}
-
-function isQualityUkrainian(value) {
-    const text = String(value || '');
-    const cyrillic = (text.match(/[А-Яа-яІіЇїЄєҐґ]/g) || []).length;
-    const latin = (text.match(/[A-Za-z]/g) || []).length;
-    return cyrillic >= 8 && cyrillic >= Math.min(24, latin * 0.45);
 }
 
 function hasCyrillic(text) {
@@ -407,6 +413,7 @@ function renderLiveNewsModalList(items = _visibleNewsItems) {
         const source = item.source ? sanitizeHTML(item.source) : '';
         const meta = [source, time].filter(Boolean).join(' • ');
         const title = sanitizeHTML(displayNewsTitle(item));
+        if (!title) return '';
         const summaryText = hasCyrillic(item.summary) ? String(item.summary).slice(0, 260) : '';
         const summary = summaryText ? `<p>${sanitizeHTML(summaryText)}</p>` : '';
         const url = safeExternalUrl(item.url);
@@ -421,7 +428,7 @@ function renderLiveNewsModalList(items = _visibleNewsItems) {
                 ${summary}
             </a>
         `;
-    }).join('');
+    }).filter(Boolean).join('');
 }
 
 export function openLiveNewsModal() {
@@ -446,8 +453,8 @@ function renderTickerNews(payload) {
         return;
     }
 
-    const generalItems = items.filter((item) => item.section === 'general').slice(0, 6);
-    const tickerItems = items.filter((item) => item.section !== 'general').slice(0, 8);
+    const generalItems = items.filter((item) => item.section === 'general' && displayNewsTitle(item)).slice(0, 6);
+    const tickerItems = items.filter((item) => item.section !== 'general' && displayNewsTitle(item)).slice(0, 8);
     const orderedItems = [...generalItems, ...tickerItems];
     _visibleNewsItems = orderedItems;
     if (document.getElementById('live-news-modal')?.style.display === 'flex') {

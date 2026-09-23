@@ -1,3 +1,5 @@
+import { fillUkrainianHeadlines, isUkrainianHeadline } from '../lib/news_uk.js';
+
 const FINNHUB_BASE = 'https://finnhub.io/api/v1';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const GEMINI_NEWS_MODEL = 'gemini-2.5-flash-lite';
@@ -252,55 +254,62 @@ function normalizeHttpUrl(value) {
 
 async function translatePayloadUk(payload) {
     const items = Array.isArray(payload?.items) ? payload.items : [];
-    const apiKey = getGeminiApiKey();
     if (!items.length) return payload;
+
+    let translatedItems = items;
+    let translation = null;
+    const apiKey = getGeminiApiKey();
     if (!apiKey) {
-        return {
-            ...payload,
-            translation: {
-                ok: false,
-                provider: 'gemini',
-                reason: 'Gemini API key is not configured on server',
-            },
+        translation = {
+            ok: false,
+            provider: 'gemini',
+            reason: 'Gemini API key is not configured on server',
         };
-    }
+    } else {
+        try {
+            const source = items.map((item, index) => ({
+                index,
+                section: item.section || 'general',
+                tickers: Array.isArray(item.related) ? item.related.slice(0, 4) : [],
+                source: item.source || '',
+                datetime: item.datetime || null,
+                title: String(item.title || '').slice(0, 260),
+                summary: String(item.summary || '').slice(0, 520),
+            }));
 
-    try {
-        const source = items.map((item, index) => ({
-            index,
-            section: item.section || 'general',
-            tickers: Array.isArray(item.related) ? item.related.slice(0, 4) : [],
-            source: item.source || '',
-            datetime: item.datetime || null,
-            title: String(item.title || '').slice(0, 260),
-            summary: String(item.summary || '').slice(0, 520),
-        }));
-
-        const text = await callGeminiNewsTranslator(apiKey, source);
-        const match = text.match(/\[[\s\S]*\]/);
-        const translated = match ? JSON.parse(match[0]) : [];
-        if (!Array.isArray(translated) || translated.length !== items.length) {
-            return { ...payload, translation: { ok: false, provider: 'gemini', reason: 'Unexpected translation shape' } };
-        }
-
-        return {
-            ...payload,
-            translation: { ok: true, provider: 'gemini', model: GEMINI_NEWS_MODEL },
-            items: items.map((item, index) => ({
-                ...item,
-                titleUk: cleanServerNewsTitle(translated[index]) || item.titleUk || '',
-            })),
-        };
-    } catch (error) {
-        return {
-            ...payload,
-            translation: {
+            const text = await callGeminiNewsTranslator(apiKey, source);
+            const match = text.match(/\[[\s\S]*\]/);
+            const translated = match ? JSON.parse(match[0]) : [];
+            if (!Array.isArray(translated) || translated.length !== items.length) {
+                translation = { ok: false, provider: 'gemini', reason: 'Unexpected translation shape' };
+            } else {
+                translatedItems = items.map((item, index) => ({
+                    ...item,
+                    titleUk: cleanServerNewsTitle(translated[index]) || item.titleUk || '',
+                }));
+                translation = { ok: true, provider: 'gemini', model: GEMINI_NEWS_MODEL };
+            }
+        } catch (error) {
+            translation = {
                 ok: false,
                 provider: 'gemini',
                 reason: error?.message || String(error),
-            },
-        };
+            };
+        }
     }
+
+    try {
+        translatedItems = await fillUkrainianHeadlines(translatedItems);
+    } catch (error) {
+        console.warn('[News API] Ukrainian fallback failed:', error?.message || error);
+    }
+
+    const hasUkrainian = translatedItems.some((item) => isUkrainianHeadline(item.titleUk));
+    if (hasUkrainian && translation?.ok === false) {
+        translation = { ok: true, provider: 'machine-uk', fallbackFrom: translation.reason };
+    }
+
+    return { ...payload, translation, items: translatedItems };
 }
 
 function getGeminiApiKey() {
