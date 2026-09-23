@@ -55,3 +55,11 @@
 - Потрібно розгорнути останні зміни клієнта та повторити короткий production smoke test. Для повного історичного аудиту помилок потрібен доступ до Postgres logs і довшого журналу Vercel.
 
 Тестова таблиця: https://docs.google.com/spreadsheets/d/1SLv1cBy3szGtcgglHWj_Gr6f9mlx19aAfxs2UE2z30E/edit . Дозволена папка: https://drive.google.com/drive/folders/1epkKGJm1aOJmFuVdyM-x7FYpumMauYdO .
+
+## Доповнення 23 вересня: RPC 500 на великих settings
+
+У production відтворено граничне навантаження: найбільший settings-документ займає приблизно 2,29 МБ, а 62 його історичні ревізії — приблизно 141 МБ. Попередній `pull_data_changes` спочатку матеріалізував усі повні JSON, а вже потім залишав останню ревізію. `pg_stat_statements` показав піки 7,62 с для pull і 6,77 с для apply при стандартному timeout authenticated 8 с; конкурентні вкладки додатково серіалізували навіть read-only pull ексклюзивним advisory lock.
+
+Міграція `20260923042623_optimize_data_sync_large_json.sql` розгорнута в Supabase. Вона вибирає курсори до завантаження великих JSON, повертає одну останню settings-ревізію, використовує shared lock для паралельних pull і задає 30 с statement timeout / 20 с lock timeout для двох RPC. Історичні чи користувацькі дані не змінено й не видалено.
+
+Після розгортання pull найбільшого профілю виконався за 295 мс і повернув рівно одну settings-ревізію. REST/JWT smoke test: apply 89 мс, duplicate 72 мс, pull 70 мс; вісім одночасних pull завершилися HTTP 200 за 75–336 мс. Повний набір: 336/336 тестів, статичний аудит без blocking issues.
