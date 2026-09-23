@@ -15,7 +15,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import serviceBotsHandler from './api/admin/service-bots.js';
 import sheetsServiceHandler from './api/sheets-service.js';
-import shsTradesHandler from './api/shs-trades.js';
+import serviceBotEndpointHandler from './api/service-bots/[endpoint].js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
@@ -418,7 +418,8 @@ const server = http.createServer((req, res) => {
         return;
     }
     if (u.pathname === '/api/shs-trades') {
-        handleVercelRoute(shsTradesHandler, req, res, u).catch((e) => {
+        u.searchParams.set('endpoint', 'shs-trades');
+        handleVercelRoute(serviceBotEndpointHandler, req, res, u).catch((e) => {
             console.error('[SHS trades local]', e);
             if (!res.headersSent) sendJson(res, 500, { message: e.message || 'Server error' });
         });

@@ -1,3 +1,4 @@
+import { handleShsTrades } from '../../lib/shs_trades_proxy.js';
 import { handleServiceBotEndpoint, sendJson } from '../../lib/service_bots.js';
 
 const ALLOWED_ENDPOINTS = new Set(['summary', 'tickers', 'locates', 'orders', 'snapshot']);
@@ -46,6 +47,7 @@ function handleClientConfig(req, res) {
 export default function handler(req, res) {
     const endpoint = String(req.query?.endpoint || '').trim();
     if (endpoint === 'client-config') return handleClientConfig(req, res);
+    if (endpoint === 'shs-trades') return handleShsTrades(req, res);
     if (!ALLOWED_ENDPOINTS.has(endpoint)) {
         return sendJson(res, 404, { ok: false, error: 'Service bot endpoint not found' });
     }
