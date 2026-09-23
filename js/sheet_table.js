@@ -1798,9 +1798,6 @@ export function initSheetTableView(options = {}) {
 
     const isImportTabActive = !!el('view-table')?.classList.contains('active');
     if (isImportTabActive) {
-        void import('./shs_sync.js').then((module) => module.loadShsTraderOptions()).catch((error) => {
-            console.warn('[Бот] список імен', error?.message || error);
-        });
         void import('./google_sheet_connector.js')
             .then(async (module) => {
                 const result = await module.autoConnectTraderSheet?.();

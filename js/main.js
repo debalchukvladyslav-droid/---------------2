@@ -70,8 +70,6 @@ import { initPwa, initTradeCardGestures } from './pwa.js';
 import { initRealtimeSync } from './realtime_sync.js';
 import { initDurableUploads } from './durable_uploads.js';
 import { initDataHealth, refreshDataHealth } from './data_health.js';
-import { syncShsIntoJournal } from './shs_sync.js';
-
 let appShellPromise = null;
 let appShellEventsReady = false;
 
@@ -207,7 +205,6 @@ async function manualSyncAll(trigger = null, options = {}) {
             await runManualSyncStep('load-trades', () => startup ? null : loadTradeDays()),
             // Google Sheets must be checked before optional services: a backup or
             // Drive failure must never prevent a new trade from reaching calendar PnL.
-            await runManualSyncStep('shs-bot', () => isOwnProfile ? syncShsIntoJournal() : null),
             await runManualSyncStep('google-sheet', () => isOwnProfile ? window.refreshSheetMatchesAfterTradesImport?.({
                 quiet: true,
                 requireFresh: true,
