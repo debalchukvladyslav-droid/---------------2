@@ -3,6 +3,7 @@ import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { showToast } from './utils.js';
 import { loadTeams } from './teams.js';
+import { cacheValue, readCachedValue } from './local_data_store.js';
 import { deleteFromSupabaseStorage, ensureSupabaseStorageUser, getSupabaseStorageUrl, uploadToSupabaseStorage } from './supabase_storage.js';
 
 const DEFAULT_TEAM_LABEL = 'Без куща';
@@ -422,9 +423,61 @@ export async function refreshSidebarAccount() {
     });
 }
 
+async function applyOwnSettingsPatch(userId, patch) {
+    const current = await supabase.rpc('get_data_sync_state', { p_user_id: userId });
+    if (current.error) throw current.error;
+    const syncState = current.data || {};
+    const applied = await supabase.rpc('apply_data_operations', {
+        p_atomic: true,
+        p_operations: [{
+            operationId: crypto.randomUUID(),
+            userId,
+            domain: 'settings',
+            entityId: userId,
+            epoch: syncState.epoch,
+            baseVersion: syncState.settingsVersion,
+            base: syncState.settings || {},
+            patch,
+        }],
+    });
+    if (applied.error) throw applied.error;
+    const status = applied.data?.results?.[0]?.status;
+    if (status && status !== 'applied' && status !== 'duplicate') {
+        throw new Error('Профіль змінився паралельно. Спробуйте ще раз.');
+    }
+    return syncState.settings && typeof syncState.settings === 'object' ? syncState.settings : {};
+}
+
+async function rememberLocalAvatar(userId, avatarPath, emojiPick) {
+    const cached = await readCachedValue(userId, 'settings');
+    const next = cached?.value && typeof cached.value === 'object'
+        ? { ...cached.value }
+        : { ...(state.appData?.settings || {}) };
+    if (avatarPath) {
+        next.avatar_url = avatarPath;
+        delete next.avatar_emoji;
+    } else {
+        delete next.avatar_url;
+        if (emojiPick) next.avatar_emoji = emojiPick;
+        else delete next.avatar_emoji;
+    }
+    await cacheValue(userId, 'settings', next);
+    if (state.appData?.settings && typeof state.appData.settings === 'object') {
+        if (avatarPath) {
+            state.appData.settings.avatar_url = avatarPath;
+            delete state.appData.settings.avatar_emoji;
+        } else {
+            delete state.appData.settings.avatar_url;
+            if (emojiPick) state.appData.settings.avatar_emoji = emojiPick;
+            else delete state.appData.settings.avatar_emoji;
+        }
+    }
+}
+
 async function saveSidebarProfile() {
     const nick = myNick();
-    if (!nick) return false;
+    const userId = state.myUserId;
+    if (!nick || !userId) return false;
 
     const fname = document.getElementById('sidebar-pf-fname')?.value.trim() || '';
     const lname = document.getElementById('sidebar-pf-lname')?.value.trim() || '';
@@ -436,14 +489,6 @@ async function saveSidebarProfile() {
         return false;
     }
 
-    const { data: existing, error: fetchErr } = await supabase.from('profiles').select('settings').eq('nick', nick).maybeSingle();
-    if (fetchErr) {
-        showToast('Помилка: ' + fetchErr.message);
-        return false;
-    }
-
-    const prevSettings = existing?.settings && typeof existing.settings === 'object' ? existing.settings : {};
-    const settings = { ...prevSettings };
     let avatarPath = urlRaw;
     try {
         const uploadedAvatar = await uploadCroppedAvatar();
@@ -453,32 +498,31 @@ async function saveSidebarProfile() {
         showToast('Could not upload avatar: ' + (uploadErr?.message || uploadErr));
         return false;
     }
-    if (avatarPath) {
-        settings.avatar_url = avatarPath;
-        delete settings.avatar_emoji;
-    } else {
-        delete settings.avatar_url;
-        if (emojiPick) settings.avatar_emoji = emojiPick;
-        else delete settings.avatar_emoji;
-    }
 
-    const { error } = await supabase
+    const { error: nameError } = await supabase
         .from('profiles')
-        .update({
-            first_name: fname,
-            last_name: lname,
-            settings,
-        })
-        .eq('nick', nick);
-
-    if (error) {
-        showToast('Не вдалося зберегти: ' + error.message);
+        .update({ first_name: fname, last_name: lname })
+        .eq('id', userId);
+    if (nameError) {
+        showToast('Не вдалося зберегти: ' + nameError.message);
         return false;
     }
 
-    if (settings.avatar_url
+    const avatarPatch = avatarPath
+        ? { avatar_url: avatarPath, avatar_emoji: null }
+        : { avatar_url: null, avatar_emoji: emojiPick || null };
+    let prevSettings = {};
+    try {
+        prevSettings = await applyOwnSettingsPatch(userId, avatarPatch);
+        await rememberLocalAvatar(userId, avatarPath, emojiPick);
+    } catch (settingsError) {
+        showToast('Не вдалося зберегти: ' + (settingsError?.message || settingsError));
+        return false;
+    }
+
+    if (avatarPath
         && prevSettings.avatar_url
-        && settings.avatar_url !== prevSettings.avatar_url
+        && avatarPath !== prevSettings.avatar_url
         && isManagedAvatarPath(prevSettings.avatar_url)) {
         deleteFromSupabaseStorage(prevSettings.avatar_url)
             .catch((deleteErr) => console.warn('[Avatar] old avatar delete failed', deleteErr?.message || deleteErr));
