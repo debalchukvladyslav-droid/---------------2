@@ -84,30 +84,30 @@ function formatDelta(current, previous) {
     const prev = Number(previous);
     if (!Number.isFinite(now) || !Number.isFinite(prev)) return '';
     const delta = Math.round((now - prev) * 10) / 10;
-    if (Math.abs(delta) < 0.1) return 'flat vs 1W';
-    return `${delta > 0 ? '+' : ''}${delta.toFixed(1)} vs 1W`;
+    if (Math.abs(delta) < 0.1) return 'без змін за тиждень';
+    return `${delta > 0 ? '+' : ''}${delta.toFixed(1)} за тиждень`;
 }
 
 function renderLoading() {
     const root = document.getElementById('market-sentiment-card');
     if (!root) return;
     root.className = 'stat-card-pro market-sentiment-card is-loading';
-    setText('market-sentiment-score', '26');
-    setText('market-sentiment-label', 'Страх');
-    setText('market-sentiment-delta', '-11.6 vs 1W');
+    setText('market-sentiment-score', '—');
+    setText('market-sentiment-label', '');
+    setText('market-sentiment-delta', '');
     setText('market-sentiment-updated', '');
-    setNeedle(26);
+    setNeedle(0);
 }
 
 function renderError(message) {
     const root = document.getElementById('market-sentiment-card');
     if (!root) return;
     root.className = 'stat-card-pro market-sentiment-card is-muted';
-    setText('market-sentiment-score', '26');
-    setText('market-sentiment-label', 'Страх');
-    setText('market-sentiment-delta', '-11.6 vs 1W');
-    setText('market-sentiment-updated', message || 'Try again later');
-    setNeedle(26);
+    setText('market-sentiment-score', '—');
+    setText('market-sentiment-label', 'Немає даних');
+    setText('market-sentiment-delta', '');
+    setText('market-sentiment-updated', message || 'Спробуйте пізніше');
+    setNeedle(0);
 }
 
 function renderSentiment(payload) {
@@ -116,7 +116,7 @@ function renderSentiment(payload) {
 
     const score = Math.round(Number(payload?.score));
     if (payload?.degraded || !Number.isFinite(score)) {
-        renderError(payload?.reason || 'Data temporarily unavailable');
+        renderError(payload?.reason || 'Дані тимчасово недоступні');
         return;
     }
 
@@ -125,7 +125,7 @@ function renderSentiment(payload) {
 
     setText('market-sentiment-score', String(score));
     setText('market-sentiment-label', translateRating(payload.rating));
-    setText('market-sentiment-delta', formatDelta(score, payload.previous?.week) || 'CNN Fear & Greed');
+    setText('market-sentiment-delta', formatDelta(score, payload.previous?.week) || 'індекс CNN');
     setText('market-sentiment-updated', formatTimestamp(payload.timestamp));
     setNeedle(score);
 }
