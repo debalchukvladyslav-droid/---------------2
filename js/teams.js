@@ -66,23 +66,29 @@ function appendTeamAvatar(parent, profile, fallbackNick, { loading = false, ment
     if (url) {
         const img = document.createElement('img');
         img.className = baseClass + ' team-member-avatar-img';
-        const isInlineImage = /^data:image\/(?:png|jpe?g|webp);base64,/i.test(url);
-        const needsResolve = !isInlineImage && (!/^https?:\/\//i.test(url) || url.includes('/storage/v1/object/'));
-        img.src = needsResolve ? '' : url;
         img.alt = '';
         img.referrerPolicy = 'no-referrer';
-        img.loading = 'lazy';
-        img.addEventListener('error', () => {
+        img.decoding = 'async';
+        const isInlineImage = /^data:image\/(?:png|jpe?g|webp);base64,/i.test(url);
+        const needsResolve = !isInlineImage && (!/^https?:\/\//i.test(url) || url.includes('/storage/v1/object/'));
+        const showFallback = () => {
+            if (!img.isConnected) return;
             img.replaceWith(makeTeamAvatarFallback(profile, fallbackNick, baseClass));
-        });
+        };
+        const commitSrc = (resolved) => {
+            if (!img.isConnected) return;
+            if (!resolved) {
+                showFallback();
+                return;
+            }
+            img.addEventListener('error', () => showFallback(), { once: true });
+            img.src = resolved;
+        };
         parent.appendChild(img);
         if (needsResolve) {
-            getSupabaseStorageUrl(url)
-                .then((resolved) => {
-                    if (resolved) img.src = resolved;
-                    else img.replaceWith(makeTeamAvatarFallback(profile, fallbackNick, baseClass));
-                })
-                .catch(() => img.replaceWith(makeTeamAvatarFallback(profile, fallbackNick, baseClass)));
+            getSupabaseStorageUrl(url).then(commitSrc).catch(showFallback);
+        } else {
+            commitSrc(url);
         }
         return;
     }

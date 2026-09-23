@@ -9,6 +9,7 @@ const DEFAULT_TEAM_LABEL = 'Без куща';
 
 let _listenersBound = false;
 let _avatarCrop = null;
+let _avatarPaintGen = 0;
 
 function myNick() {
     return state.USER_DOC_NAME ? state.USER_DOC_NAME.replace('_stats', '') : '';
@@ -27,39 +28,42 @@ function initialsFromProfile(p) {
 
 function paintSidebarAvatar(el, p) {
     if (!el) return;
-    el.innerHTML = '';
+    const gen = ++_avatarPaintGen;
+    const stillCurrent = () => gen === _avatarPaintGen;
+    el.replaceChildren();
     el.classList.remove('sidebar-account-avatar-emoji', 'has-image');
     const st = p?.settings && typeof p.settings === 'object' ? p.settings : {};
     const url = (st.avatar_url || '').trim();
     const emoji = (st.avatar_emoji || '').trim().slice(0, 8);
+    const showInitials = () => {
+        if (!stillCurrent()) return;
+        el.replaceChildren();
+        el.classList.remove('sidebar-account-avatar-emoji', 'has-image');
+        el.textContent = initialsFromProfile(p);
+    };
     if (url) {
         const img = document.createElement('img');
         img.className = 'sidebar-account-avatar-img';
-        const isInlineImage = /^data:image\/(?:png|jpe?g|webp);base64,/i.test(url);
-        const needsResolve = !isInlineImage && (!/^https?:\/\//i.test(url) || url.includes('/storage/v1/object/'));
-        img.src = needsResolve ? '' : url;
         img.alt = '';
         img.referrerPolicy = 'no-referrer';
-        img.loading = 'lazy';
-        img.addEventListener('error', () => {
-            el.innerHTML = '';
-            el.textContent = initialsFromProfile(p);
-        });
+        img.decoding = 'async';
+        const isInlineImage = /^data:image\/(?:png|jpe?g|webp);base64,/i.test(url);
+        const needsResolve = !isInlineImage && (!/^https?:\/\//i.test(url) || url.includes('/storage/v1/object/'));
+        const commitSrc = (resolved) => {
+            if (!stillCurrent()) return;
+            if (!resolved) {
+                showInitials();
+                return;
+            }
+            img.addEventListener('error', () => showInitials(), { once: true });
+            img.src = resolved;
+        };
         el.appendChild(img);
         el.classList.add('has-image');
         if (needsResolve) {
-            getSupabaseStorageUrl(url)
-                .then((resolved) => {
-                    if (resolved) img.src = resolved;
-                    else {
-                        el.innerHTML = '';
-                        el.textContent = initialsFromProfile(p);
-                    }
-                })
-                .catch(() => {
-                    el.innerHTML = '';
-                    el.textContent = initialsFromProfile(p);
-                });
+            getSupabaseStorageUrl(url).then(commitSrc).catch(showInitials);
+        } else {
+            commitSrc(url);
         }
         return;
     }
