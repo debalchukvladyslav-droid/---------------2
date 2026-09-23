@@ -946,7 +946,11 @@ window.openTradesAtDayIndex = openTradesAtDayIndex;
 window.renderSidebarTradesList = renderSidebarTradesList;
 window.renderTeamSidebar = renderTeamSidebar;
 window.switchUser = switchUser;
-window.openTeamSidebar = function() { document.getElementById('team-sidebar').classList.add('open'); document.getElementById('team-sidebar-backdrop').classList.add('visible'); };
+window.openTeamSidebar = function() {
+    document.getElementById('team-sidebar')?.classList.add('open');
+    document.getElementById('team-sidebar-backdrop')?.classList.add('visible');
+    void renderTeamSidebar();
+};
 window.closeTeamSidebar = function() { document.getElementById('team-sidebar').classList.remove('open'); document.getElementById('team-sidebar-backdrop').classList.remove('visible'); };
 window.initSelectors = initSelectors;
 window.activateMentorMode = activateMentorMode;

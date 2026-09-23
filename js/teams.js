@@ -9,6 +9,8 @@ const EXTRA_TEAMS_KEY = 'pj:extra-teams';
 
 let _isSwitching = false;
 let _teamsLoadPromise = null;
+let _teamsLoadToken = 0;
+let _teamsLoadWasAuthenticated = false;
 
 function extractNick(entry = '') {
     return (entry.includes('(') && entry.includes(')'))
@@ -207,7 +209,11 @@ function refreshVisibleTeamUI() {
     if (container && state.USER_DOC_NAME) _renderTeamSidebarDOM(container);
 }
 
-async function performTeamsLoad() {
+function teamsLoadIsCurrent(token) {
+    return token === _teamsLoadToken;
+}
+
+async function performTeamsLoad(token) {
     try {
         const { data: sessionData } = await supabase.auth.getSession();
         if (!sessionData?.session) {
@@ -217,8 +223,12 @@ async function performTeamsLoad() {
             if (state.USER_DOC_NAME) {
                 throw new Error('Сесія тимчасово недоступна під час завантаження команди');
             }
+            const publicNames = await fetchPublicTeamNames();
+            // Login can finish while this guest request is still running.
+            // Do not wipe the signed-in roster with an empty catalogue.
+            if (!teamsLoadIsCurrent(token) || state.USER_DOC_NAME) return;
             state._teamProfiles = {};
-            state.TEAM_GROUPS = buildPublicTeamGroups(await fetchPublicTeamNames());
+            state.TEAM_GROUPS = buildPublicTeamGroups(publicNames);
             fillAuthTeamSelect();
             refreshVisibleTeamUI();
             return;
@@ -226,6 +236,7 @@ async function performTeamsLoad() {
 
         const userId = sessionData.session.user.id;
         const cached = await readCachedValue(userId, 'team-profiles');
+        if (!teamsLoadIsCurrent(token)) return;
         if (Array.isArray(cached?.value) && cached.value.length && !Object.keys(state._teamProfiles || {}).length) {
             state._teamProfiles = Object.fromEntries(cached.value.map(profile => [profile.nick, profile]));
             state.TEAM_GROUPS = buildTeamGroups(cached.value);
@@ -234,6 +245,7 @@ async function performTeamsLoad() {
         }
 
         const profiles = await fetchProfiles();
+        if (!teamsLoadIsCurrent(token)) return;
         if (!profiles.length && state.USER_DOC_NAME) {
             throw new Error('Supabase повернув порожній список профілів');
         }
@@ -244,6 +256,7 @@ async function performTeamsLoad() {
         refreshVisibleTeamUI();
         if (window.renderStatsSourceSelector) window.renderStatsSourceSelector();
     } catch (e) {
+        if (!teamsLoadIsCurrent(token)) return;
         console.error('Помилка завантаження кущів:', e);
         // Тимчасова помилка мережі/RLS не повинна стирати вже показану команду.
         if (!state.TEAM_GROUPS || Object.keys(state.TEAM_GROUPS).length === 0) {
@@ -255,13 +268,18 @@ async function performTeamsLoad() {
 }
 
 export function loadTeams() {
-    // Several views request the same catalogue during boot. Sharing one request
-    // prevents a slower stale response from clearing a newer successful result.
-    if (_teamsLoadPromise) return _teamsLoadPromise;
-    _teamsLoadPromise = performTeamsLoad().finally(() => {
-        _teamsLoadPromise = null;
+    // The login screen asks for team names before a session exists. That guest
+    // request must not satisfy the later signed-in load, or the roster stays empty
+    // until a full page reload.
+    const wantAuthenticated = Boolean(state.USER_DOC_NAME);
+    if (_teamsLoadPromise && (_teamsLoadWasAuthenticated || !wantAuthenticated)) return _teamsLoadPromise;
+    const token = ++_teamsLoadToken;
+    _teamsLoadWasAuthenticated = wantAuthenticated;
+    const run = performTeamsLoad(token).finally(() => {
+        if (_teamsLoadPromise === run) _teamsLoadPromise = null;
     });
-    return _teamsLoadPromise;
+    _teamsLoadPromise = run;
+    return run;
 }
 
 export async function openTeamManager() {
@@ -485,7 +503,7 @@ export async function deleteTraderProfile() {
 export async function renderTeamSidebar() {
     const container = document.getElementById('team-list-container');
     if (!container || !state.USER_DOC_NAME) return;
-    if (!state._teamProfiles) await loadTeams();
+    if (!Object.keys(state._teamProfiles || {}).length) await loadTeams();
     _renderTeamSidebarDOM(container);
 }
 
