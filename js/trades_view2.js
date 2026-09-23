@@ -534,7 +534,7 @@ function renderTradeInfoBar(trades) {
     })();
 
     const items = [
-        { label: 'Net PnL',   value: `${isProfit ? '+' : ''}${totalNet.toFixed(2)}$`,          color: isProfit ? 'var(--profit)' : 'var(--loss)', big: true },
+        { label: 'Результат',   value: `${isProfit ? '+' : ''}${totalNet.toFixed(2)}$`,          color: isProfit ? 'var(--profit)' : 'var(--loss)', big: true },
         { label: 'Gross',     value: `${totalGross >= 0 ? '+' : ''}${totalGross.toFixed(2)}$`,  color: 'var(--text-main)' },
         { label: 'Комісії',   value: `-${totalComm.toFixed(2)}$`,                                color: 'var(--loss)' },
         { label: 'Угод',      value: String(trades.length),                                      color: 'var(--text-muted)' },

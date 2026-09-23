@@ -10,6 +10,7 @@
                             </div>
                             <div class="calendar-view-period">
                                 <button type="button" class="btn-secondary calendar-cumulative-btn" data-action="cumulative-weekly-open">Накопичувальна</button>
+                                <button type="button" class="btn-secondary calendar-session-review-btn" data-action="session-modal-open">Підготувати сесію</button>
                                 <button type="button" class="btn-secondary calendar-session-review-btn" data-action="session-review-open">Закрити сесію</button>
                                 <button type="button" class="btn-secondary recent-trades-link" data-tab="trades">Угоди дня</button>
                                 <div id="winstreak-counter" class="winstreak-counter calendar-winstreak initially-hidden" aria-label="Серія прибуткових днів">
@@ -31,7 +32,7 @@
                     </div>
             </div>
             <div class="panel calendar-rr-row">
-                <p class="calendar-rr-lead">Загальний розбір дня (усі скріни) — запит до ментора вашого куща.</p>
+                <p class="calendar-rr-lead">Один запит ментору на розбір усіх скріншотів цього дня.</p>
                 <button type="button" id="rr-btn-screens-general" class="btn-secondary rr-toggle-btn rr-exempt-access" data-action="review-request" data-review-type="screens_general">Запит: загальний розбір</button>
                 <div id="mentor-rr-panel" class="mentor-rr-panel--calendar initially-hidden">
                     <h4 class="mentor-rr-calendar-title">Запити на вас за цей день</h4>

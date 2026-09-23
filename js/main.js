@@ -440,7 +440,23 @@ window.saveSessionData = function() {
 };
 
 // === SESSION MODAL ===
-let sessionModalSnoozeUntil = 0;
+const SESSION_MODAL_SNOOZE_KEY = 'tj:session-modal-snooze';
+const SESSION_REVIEW_SNOOZE_KEY = 'tj:session-review-snooze';
+
+function readStoredSnooze(key) {
+    try {
+        const value = Number(sessionStorage.getItem(key) || 0);
+        return Number.isFinite(value) ? value : 0;
+    } catch {
+        return 0;
+    }
+}
+
+function writeStoredSnooze(key, until) {
+    try { sessionStorage.setItem(key, String(until)); } catch { /* private mode */ }
+}
+
+let sessionModalSnoozeUntil = readStoredSnooze(SESSION_MODAL_SNOOZE_KEY);
 
 function getTodayEST() {
     const now = new Date();
@@ -494,7 +510,7 @@ function fillSessionModalFromSaved() {
     if (readEl) readEl.value = r;
     if (readValEl) readValEl.textContent = r + '/10';
     const dateEl = document.getElementById('session-modal-date');
-    if (dateEl) dateEl.textContent = '📅 ' + today;
+    if (dateEl) dateEl.textContent = today;
     renderSessionModalPlaybook();
 }
 
@@ -525,9 +541,15 @@ window.saveSessionModal = async function() {
 };
 
 window.snoozeSessionModal = function() {
-    sessionModalSnoozeUntil = Date.now() + 5 * 60 * 1000;
+    sessionModalSnoozeUntil = Date.now() + 12 * 60 * 60 * 1000;
+    writeStoredSnooze(SESSION_MODAL_SNOOZE_KEY, sessionModalSnoozeUntil);
     document.getElementById('session-modal').style.display = 'none';
-    setTimeout(() => checkAndShowSessionModal(), 5 * 60 * 1000);
+};
+
+window.openSessionModalManual = function() {
+    fillSessionModalFromSaved();
+    const modal = document.getElementById('session-modal');
+    if (modal) modal.style.display = 'flex';
 };
 
 window.checkSessionModalReadiness = async function() {
@@ -567,7 +589,7 @@ setInterval(checkAndShowSessionModal, 5 * 60 * 1000);
 window._checkSessionModal = checkAndShowSessionModal;
 
 // === END-OF-SESSION REVIEW ===
-let sessionReviewSnoozeUntil = 0;
+let sessionReviewSnoozeUntil = readStoredSnooze(SESSION_REVIEW_SNOOZE_KEY);
 let sessionReviewScreens = [];
 let sessionReviewScreenIndex = 0;
 let sessionReviewRenderToken = 0;
@@ -719,7 +741,7 @@ function openSessionReview() {
     const today = getTodayEST();
     if (!state.appData.journal[today]) state.appData.journal[today] = getDefaultDayEntry();
     const day = state.appData.journal[today];
-    document.getElementById('session-review-date').textContent = `📅 ${today}`;
+    document.getElementById('session-review-date').textContent = today;
     document.getElementById('session-review-notes').value = day.notes || '';
     document.getElementById('session-review-improvement').value = day.nextSessionImprovement || '';
     document.getElementById('session-review-pnl').value = day.gross_pnl ?? '';
@@ -812,7 +834,8 @@ window.saveSessionReview = async function() {
 };
 
 window.snoozeSessionReview = function() {
-    sessionReviewSnoozeUntil = Date.now() + 10 * 60 * 1000;
+    sessionReviewSnoozeUntil = Date.now() + 12 * 60 * 60 * 1000;
+    writeStoredSnooze(SESSION_REVIEW_SNOOZE_KEY, sessionReviewSnoozeUntil);
     document.getElementById('session-review-modal').style.display = 'none';
 };
 

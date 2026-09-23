@@ -310,7 +310,7 @@ export function updateDashboardWidgets(year, month) {
                     <div class="recent-trade-dir-icon ${isPos ? 'long' : 'short'}">${arrow}</div>
                     <div>
                         <div class="recent-trade-symbol">${safeSym}</div>
-                        <div class="recent-trade-meta">${dateStr}${r.type ? ' · ' + sanitizeHTML(r.type) : ''} · ${hasScreen ? 'скрін є' : 'скріна ще немає'}</div>
+                        <div class="recent-trade-meta">${dateStr}${r.type ? ' · ' + sanitizeHTML(r.type) : ''} · ${hasScreen ? 'є скріншот' : 'без скріншота'}</div>
                     </div>
                 </div>
                 <div class="recent-trade-right">
@@ -881,7 +881,7 @@ function buildDayDetailBody(dateKey, data, currentMonthDayloss) {
     const effectivePnl = calendarResult.value;
     if (effectivePnl !== null) {
         const rp = effectivePnl;
-        lines.push(`${calendarResult.kind === 'gross' ? 'Gross' : 'Net PnL'}: ${rp >= 0 ? '+' : ''}${rp.toFixed(2)}$`);
+        lines.push(`${calendarResult.kind === 'gross' ? 'Брутто' : 'Результат'}: ${rp >= 0 ? '+' : ''}${rp.toFixed(2)}$`);
     }
     if (effectivePnl !== null && effectivePnl <= currentMonthDayloss) {
         lines.push('Увага: день на рівні денного ліміту.');
