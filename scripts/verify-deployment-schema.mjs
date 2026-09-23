@@ -6,6 +6,19 @@ export function publicSupabaseConfig(source = '') {
     return { url: value('supabaseUrl'), key: value('supabaseAnonKey') };
 }
 
+async function deploymentPublicConfig() {
+    try {
+        return publicSupabaseConfig(await readFile(new URL('../config.js', import.meta.url), 'utf8'));
+    } catch (error) {
+        if (error?.code !== 'ENOENT') throw error;
+        const host = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
+        if (!host) return { url: '', key: '' };
+        const response = await fetch(`https://${host}/config.js`, { signal: AbortSignal.timeout(15_000) });
+        if (!response.ok) throw new Error(`Could not read deployed public config: HTTP ${response.status}`);
+        return publicSupabaseConfig(await response.text());
+    }
+}
+
 export function schemaUnavailable(status, payload = {}) {
     return status === 404 || ['PGRST202', 'PGRST205'].includes(String(payload?.code || ''));
 }
@@ -31,7 +44,7 @@ export async function verifyRecoverySchema({ url, key, fetchImpl = fetch } = {})
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
     if (process.env.VERCEL_ENV !== 'production') console.log('Recovery schema gate skipped outside production.');
     else {
-        const publicConfig = publicSupabaseConfig(await readFile(new URL('../config.js', import.meta.url), 'utf8'));
+        const publicConfig = await deploymentPublicConfig();
         await verifyRecoverySchema({
             url: process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || publicConfig.url,
             key: process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || publicConfig.key,
