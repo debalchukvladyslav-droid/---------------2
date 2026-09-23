@@ -15,9 +15,30 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import serviceBotsHandler from './api/admin/service-bots.js';
 import sheetsServiceHandler from './api/sheets-service.js';
+import shsTradesHandler from './api/shs-trades.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
+
+function loadDotEnv() {
+    for (const name of ['.env.local', '.env']) {
+        const file = path.join(ROOT, name);
+        if (!fs.existsSync(file)) continue;
+        for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#')) continue;
+            const eq = trimmed.indexOf('=');
+            if (eq < 1) continue;
+            const key = trimmed.slice(0, eq).trim();
+            let value = trimmed.slice(eq + 1).trim();
+            if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+                value = value.slice(1, -1);
+            }
+            if (!process.env[key]) process.env[key] = value;
+        }
+    }
+}
+loadDotEnv();
 const portArgIndex = process.argv.findIndex((arg) => arg === '--port' || arg === '-p');
 const portArg = portArgIndex >= 0 ? process.argv[portArgIndex + 1] : '';
 const PORT = Number(portArg || process.env.PORT) || 8787;
@@ -393,6 +414,13 @@ const server = http.createServer((req, res) => {
         handleVercelRoute(serviceBotsHandler, req, res, u).catch((e) => {
             console.error(e);
             if (!res.headersSent) sendJson(res, 500, { ok: false, error: e.message || 'Server error' });
+        });
+        return;
+    }
+    if (u.pathname === '/api/shs-trades') {
+        handleVercelRoute(shsTradesHandler, req, res, u).catch((e) => {
+            console.error('[SHS trades local]', e);
+            if (!res.headersSent) sendJson(res, 500, { message: e.message || 'Server error' });
         });
         return;
     }

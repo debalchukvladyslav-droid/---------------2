@@ -1372,3 +1372,28 @@ body[data-theme="light"] .sheet-auto-sync__row select option {
         flex-basis: auto;
     }
 }
+
+.shs-trader-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 320px;
+    margin-top: 12px;
+    font-size: 0.85rem;
+    color: var(--text-main);
+}
+
+.shs-trader-field select {
+    height: 40px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-panel);
+    color: var(--text-main);
+    padding: 0 10px;
+}
+
+.shs-trader-status {
+    margin: 8px 0 0;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}

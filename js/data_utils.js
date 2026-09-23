@@ -23,6 +23,7 @@ export function getDefaultSettings() {
         cumulativeIncludeDemo: true,
         fondexxMonthlyAdjustments: {},
         sheetTradeTypesSyncEnabled: false,
+        shsTraderNick: '',
         dashboardLayout: null
     };
 }
@@ -327,6 +328,7 @@ export function normalizeAppData(rawData) {
             : {};
     normalizedSettings.cumulativeIncludeDemo = normalizedSettings.cumulativeIncludeDemo !== false;
     normalizedSettings.fondexxMonthlyAdjustments = typeof normalizedSettings.fondexxMonthlyAdjustments === 'object' ? normalizedSettings.fondexxMonthlyAdjustments : {};
+    normalizedSettings.shsTraderNick = typeof normalizedSettings.shsTraderNick === 'string' ? normalizedSettings.shsTraderNick.trim() : '';
     
     if (!normalizedSettings.gemini_key && typeof normalizedSettings.openai_key === 'string') {
         normalizedSettings.gemini_key = normalizedSettings.openai_key;

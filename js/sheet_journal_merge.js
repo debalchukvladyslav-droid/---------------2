@@ -6,6 +6,7 @@ import {
 import { isPureGoogleSheetTrade } from './trade_filters.js';
 import { buildAutoTradeTypesData, DEFAULT_TRADE_TYPES, getDefaultDayEntry, isNotTakenTrade } from './data_utils.js';
 import { reconcileDayLocates } from './parser_utils.js';
+import { dayHasPriorityOverSheet } from './shs_trades_core.js';
 
 function sumTradeMoney(trades = []) {
     return trades.reduce((sum, trade) => {
@@ -111,14 +112,15 @@ function syncMainSheetMetricsToCalendar(journal, outByDay, spreadsheetId, markTo
         const wasPreviouslyManaged = previouslyManagedDates.has(dateStr);
         if (!day || (!wasPreviouslyManaged && day.sheetGrossSource !== spreadsheetId && day.sheetPnlSource !== spreadsheetId && day.sheetTradeTypesSource !== spreadsheetId)) return;
         const sheetOnlyDay = day.sheetCalendarOnly === true;
+        const lockedByBroker = dayHasPriorityOverSheet(day);
 
         // Migrate the previous behavior that incorrectly overwrote net day PnL.
         if (day.sheetPnlSource === spreadsheetId || (wasPreviouslyManaged && day.fondexxSource === 'summary-by-date')) {
-            day.pnl = restoreAuthoritativeDayPnl(day);
+            if (!lockedByBroker) day.pnl = restoreAuthoritativeDayPnl(day);
             delete day.sheetPnlSource;
         }
         if (day.sheetGrossSource === spreadsheetId || wasPreviouslyManaged) {
-            if (wasPreviouslyManaged || day.sheetGrossValue === undefined || Number(day.gross_pnl) === Number(day.sheetGrossValue)) day.gross_pnl = null;
+            if (!lockedByBroker && (wasPreviouslyManaged || day.sheetGrossValue === undefined || Number(day.gross_pnl) === Number(day.sheetGrossValue))) day.gross_pnl = null;
             delete day.sheetGrossSource;
             delete day.sheetGrossValue;
         }
@@ -154,7 +156,7 @@ function syncMainSheetMetricsToCalendar(journal, outByDay, spreadsheetId, markTo
 
         const existed = journal[dateStr] && typeof journal[dateStr] === 'object';
         const day = existed ? journal[dateStr] : getDefaultDayEntry();
-        if (pnlRows.length) {
+        if (pnlRows.length && !dayHasPriorityOverSheet(day)) {
             const gross = Number(pnlRows.reduce((sum, trade) => sum + Number(trade.sheet.sheetNet), 0).toFixed(2));
             day.gross_pnl = gross;
             day.sheetGrossSource = spreadsheetId;

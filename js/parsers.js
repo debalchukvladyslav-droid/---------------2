@@ -752,6 +752,11 @@ export function importPPROReport(event) {
                 const dateStr = day.dateStr;
                 if (!state.appData.journal[dateStr]) state.appData.journal[dateStr] = getDefaultDayEntry();
                 const entry = state.appData.journal[dateStr];
+                if (entry.fondexxSource === 'shs-bot') {
+                    entry.fondexx = { gross: 0, net: 0, comm: 0, locates: 0, tickers: [] };
+                    entry.fondexxSource = '';
+                    if (Array.isArray(entry.trades)) entry.trades = entry.trades.filter((trade) => trade?.source !== 'shs-bot');
+                }
                 entry.ppro = { gross: day.gross, net: day.net, comm: day.comm, locates: day.locates, tickers: day.tickers };
                 entry.pproSource = 'ppro-total-report';
                 recalculateDailyTotals(dateStr, { preserveGross: true });

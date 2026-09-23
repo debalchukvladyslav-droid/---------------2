@@ -1,3 +1,4 @@
+import { rememberShsTrader } from './shs_sync.js';
 import { showToast } from './utils.js';
 import { INVALID_IMAGE_FORMAT_MESSAGE, isJpegOrPng } from './image_file_validation.js';
 
@@ -536,6 +537,10 @@ function bindDeclarativeActions() {
         }
         if (target?.matches?.('[data-action="stats-equity-mode"]')) {
             window.toggleStatsEquityMode?.(target.checked, target.id === 'compare-stats-equity-advanced-toggle' ? 'compare' : 'main');
+            return;
+        }
+        if (target?.matches?.('[data-action="shs-trader-pick"]')) {
+            void rememberShsTrader(target.value);
             return;
         }
         if (target?.matches?.('[data-action="sheet-tab-select"]')) {

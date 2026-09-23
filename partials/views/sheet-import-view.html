@@ -9,6 +9,18 @@
                 <h2 class="sheet-zapier-title">Google Sheets</h2>
                 <p class="sheet-zapier-lead">Оберіть потрібну таблицю зі списку або вставте власне посилання. Без вибору статистика не завантажується.</p>
 
+                <section class="sheet-card shs-trader-card" aria-labelledby="shs-trader-title">
+                    <h3 id="shs-trader-title" class="sheet-card-title">Ваш нік</h3>
+                    <p class="sheet-card-desc">Оберіть себе один раз. Кнопка оновлення зверху забере входи, виходи і суму локатів за останній місяць. Комісії звідси не беруться. Якщо за день уже є файл PPRO, він лишається. Якщо бота за цей день немає, лишається таблиця.</p>
+                    <label class="shs-trader-field">
+                        <span>Хто торгує</span>
+                        <select id="shs-trader-nick" data-action="shs-trader-pick" aria-label="Ваш нік у боті">
+                            <option value="">Оберіть себе</option>
+                        </select>
+                    </label>
+                    <p id="shs-trader-status" class="shs-trader-status"></p>
+                </section>
+
                 <section class="sheet-card broker-import-card" aria-labelledby="broker-import-title">
                     <h3 id="broker-import-title" class="sheet-card-title">Імпорт брокерських звітів</h3>
                     <p class="sheet-card-desc">Швидке завантаження файлів з брокерів і торгових звітів без відкриття системних налаштувань.</p>
