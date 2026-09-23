@@ -5111,10 +5111,10 @@ body.is-offline [data-needs-network="true"] {
 .theme-preview-light { color: #00966a; }
 .theme-preview-matrix { color: #00ff41; }
 .theme-preview-dracula { color: #bd93f9; }
-.theme-preview-ocean { color: #22d3ee; }
+.theme-preview-ocean { color: #60a5fa; }
 .theme-preview-nord { color: #88c0d0; }
-.theme-preview-sunset { color: #fb923c; }
-.theme-preview-rose { color: #f472b6; }
+.theme-preview-sunset { color: #f5b942; }
+.theme-preview-rose { color: #e879f9; }
 .theme-preview-obsidian {
     color: #4f8cff;
     background: radial-gradient(circle at 75% 15%, #263b69 0, transparent 36%), linear-gradient(135deg, #07090d 45%, #171d28);
@@ -5133,8 +5133,8 @@ body.is-offline [data-needs-network="true"] {
     border-color: #d9d1c4;
 }
 .theme-preview-nebula { color: #a78bfa; background: radial-gradient(circle at 78% 12%, #7c3aed, transparent 38%), linear-gradient(140deg, #090718 20%, #241447 62%, #101b3c); }
-.theme-preview-lagoon { color: #2dd4bf; background: radial-gradient(circle at 18% 20%, #0f766e, transparent 38%), linear-gradient(140deg, #03171b, #064e5b 55%, #082f49); }
-.theme-preview-ember { color: #fb7185; background: radial-gradient(circle at 78% 18%, #be123c, transparent 38%), linear-gradient(140deg, #1a0c0a, #5c2118 54%, #3b1022); }
+.theme-preview-lagoon { color: #2ee6a6; background: radial-gradient(circle at 18% 20%, #059669, transparent 38%), linear-gradient(140deg, #04211c, #065f46 55%, #064e3b); }
+.theme-preview-ember { color: #ff6a3d; background: radial-gradient(circle at 78% 18%, #ea580c, transparent 38%), linear-gradient(140deg, #1a0b07, #9a3412 54%, #7c2d12); }
 .theme-preview-frost { color: #6366f1; background: radial-gradient(circle at 78% 14%, #c4b5fd, transparent 40%), linear-gradient(140deg, #edf6ff, #dbeafe 52%, #ede9fe); border-color: #cbd5e1; }
 .theme-card-name {
     color: var(--text-main);
@@ -5513,4 +5513,100 @@ body[data-theme="custom"][data-custom-gradient="true"] :is(.panel,.recent-trades
     .theme-card { min-width: 0; padding: 8px; }
     .theme-card-preview { width: 100%; height: 48px; }
     .font-pills { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Each preset paints its own canvas. Motion lives in 6_animations.css. */
+body[data-theme="dark"] {
+    --theme-canvas: radial-gradient(circle at 86% 0%, rgba(0,229,160,.26), transparent 34%), radial-gradient(circle at 8% 100%, rgba(14,165,233,.14), transparent 36%), linear-gradient(165deg, #020617 0%, #07111f 58%, #03150f 100%);
+    --theme-sidebar: linear-gradient(180deg, #04140f 0%, #070a0d 46%, #071018 100%);
+}
+body[data-theme="light"] {
+    --theme-canvas: radial-gradient(circle at 12% 0%, rgba(16,185,129,.18), transparent 32%), radial-gradient(circle at 90% 100%, rgba(59,130,246,.16), transparent 36%), linear-gradient(165deg, #f4fbf8 0%, #eef3fb 52%, #f8fafc 100%);
+    --theme-sidebar: linear-gradient(180deg, #ffffff 0%, #f3faf7 100%);
+}
+body[data-theme="matrix"] {
+    --theme-canvas: radial-gradient(circle at 50% 0%, rgba(0,255,65,.16), transparent 42%), linear-gradient(180deg, #000 0%, #001400 100%);
+    --theme-sidebar: linear-gradient(180deg, #001a00, #000800);
+}
+body[data-theme="dracula"] {
+    --theme-canvas: radial-gradient(circle at 84% 8%, rgba(189,147,249,.34), transparent 32%), radial-gradient(circle at 10% 92%, rgba(255,121,198,.22), transparent 36%), linear-gradient(155deg, #191a21 0%, #282a36 55%, #1d1e2b 100%);
+    --theme-sidebar: linear-gradient(180deg, #1b1c27, #15161e);
+}
+body[data-theme="ocean"] {
+    --theme-canvas: radial-gradient(circle at 10% 12%, rgba(96,165,250,.34), transparent 34%), radial-gradient(circle at 88% 88%, rgba(99,102,241,.28), transparent 38%), linear-gradient(150deg, #07111f 0%, #132a55 52%, #1e1b4b 100%);
+    --theme-sidebar: linear-gradient(180deg, #081428, #101e3d 60%, #16143a);
+}
+body[data-theme="nord"] {
+    --theme-canvas: radial-gradient(circle at 80% 0%, rgba(136,192,208,.2), transparent 34%), radial-gradient(circle at 0% 100%, rgba(129,161,193,.16), transparent 40%), linear-gradient(165deg, #2e3440 0%, #3b4252 50%, #242933 100%);
+    --theme-sidebar: linear-gradient(180deg, #2a303b, #232831);
+}
+body[data-theme="sunset"] {
+    --theme-canvas: radial-gradient(circle at 82% 6%, rgba(245,185,66,.36), transparent 32%), radial-gradient(circle at 8% 94%, rgba(244,63,94,.24), transparent 38%), linear-gradient(150deg, #1c1208 0%, #7c2d12 48%, #831843 100%);
+    --theme-sidebar: linear-gradient(180deg, #2a1608, #3b140f 70%, #3f1024);
+}
+body[data-theme="rose"] {
+    --theme-canvas: radial-gradient(circle at 18% 10%, rgba(232,121,249,.36), transparent 34%), radial-gradient(circle at 86% 90%, rgba(168,85,247,.26), transparent 38%), linear-gradient(150deg, #160818 0%, #701a75 50%, #3b0764 100%);
+    --theme-sidebar: linear-gradient(180deg, #240818, #3b0764 70%, #1e0a28);
+}
+body[data-theme="obsidian"] {
+    --theme-canvas: radial-gradient(circle at 84% 0%, rgba(79,140,255,.3), transparent 30%), linear-gradient(160deg, #05070b 0%, #10192c 55%, #07090d 100%);
+    --theme-sidebar: linear-gradient(180deg, #0c121c, #090c11 60%, #101827);
+}
+body[data-theme="aurora"] {
+    --theme-canvas: radial-gradient(circle at 78% 0%, rgba(167,139,250,.46), transparent 30%), radial-gradient(circle at 8% 100%, rgba(34,211,238,.28), transparent 36%), linear-gradient(150deg, #070817 0%, #1e1648 48%, #062433 100%);
+    --theme-sidebar: linear-gradient(180deg, #120b2e, #0c2430);
+}
+body[data-theme="graphite"] {
+    --theme-canvas: radial-gradient(circle at 100% 0%, rgba(210,255,69,.2), transparent 28%), linear-gradient(160deg, #101114 0%, #1a1c20 55%, #0c0d0f 100%);
+    --theme-sidebar: linear-gradient(180deg, #16180c, #0d0e10 55%, #14160f);
+}
+body[data-theme="ivory"] {
+    --theme-canvas: radial-gradient(circle at 88% 0%, rgba(37,99,235,.12), transparent 32%), radial-gradient(circle at 0% 100%, rgba(217,164,65,.18), transparent 36%), linear-gradient(160deg, #f7f1e6 0%, #fffdf8 48%, #efe6d6 100%);
+    --theme-sidebar: linear-gradient(180deg, #fffdf8, #efe6d6);
+}
+body[data-theme="nebula"] {
+    --theme-canvas: radial-gradient(circle at 80% 6%, rgba(192,132,252,.5), transparent 30%), radial-gradient(circle at 12% 94%, rgba(99,102,241,.32), transparent 36%), linear-gradient(150deg, #090616 0%, #3b1764 50%, #0b1738 100%);
+    --theme-sidebar: linear-gradient(180deg, #1a0b33, #120a28 50%, #0b1228);
+}
+body[data-theme="lagoon"] {
+    --theme-canvas: radial-gradient(circle at 14% 8%, rgba(46,230,166,.4), transparent 32%), radial-gradient(circle at 90% 90%, rgba(16,185,129,.26), transparent 38%), linear-gradient(155deg, #04211c 0%, #065f46 52%, #064e3b 100%);
+    --theme-sidebar: linear-gradient(180deg, #063028, #04241c 60%, #08352a);
+}
+body[data-theme="ember"] {
+    --theme-canvas: radial-gradient(circle at 84% 6%, rgba(255,106,61,.46), transparent 30%), radial-gradient(circle at 8% 96%, rgba(245,158,11,.28), transparent 36%), linear-gradient(150deg, #1a0b07 0%, #9a3412 50%, #431407 100%);
+    --theme-sidebar: linear-gradient(180deg, #3b140c, #1a0b07 55%, #431407);
+}
+body[data-theme="frost"] {
+    --theme-canvas: radial-gradient(circle at 86% 0%, rgba(196,181,253,.45), transparent 32%), radial-gradient(circle at 8% 100%, rgba(125,211,252,.4), transparent 38%), linear-gradient(155deg, #f5f9ff 0%, #d7ecff 48%, #ece7ff 100%);
+    --theme-sidebar: linear-gradient(180deg, #f8fbff, #e4e9ff);
+}
+
+body[data-theme]:not([data-theme="custom"]) {
+    background: var(--theme-canvas) center / cover no-repeat fixed !important;
+}
+body[data-theme]:not([data-theme="custom"]) :is(.main-content, .view-content, .app-main) {
+    background: transparent !important;
+}
+body[data-theme]:not([data-theme="custom"]) :is(.app-sidebar, #form-sidebar) {
+    background-color: var(--sidebar-bg) !important;
+    background-image: var(--theme-sidebar) !important;
+}
+body:is([data-theme="light"], [data-theme="ivory"], [data-theme="frost"]) :is(.panel, .recent-trades-panel, .risk-calc-panel, .week-heatmap-panel, .stat-card) {
+    background-color: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+    background-image: linear-gradient(160deg, color-mix(in srgb, #fff 70%, transparent), color-mix(in srgb, var(--bg-panel) 80%, var(--accent) 6%));
+    backdrop-filter: blur(10px);
+}
+.auth-overlay {
+    background: var(--theme-canvas, #020617) center / cover no-repeat !important;
+}
+.auth-overlay::after {
+    background:
+        linear-gradient(115deg, transparent 0 18%, color-mix(in srgb, var(--accent) 34%, transparent) 18% 18.7%, transparent 18.7% 100%),
+        linear-gradient(128deg, transparent 0 58%, color-mix(in srgb, var(--gold) 28%, transparent) 58% 58.55%, transparent 58.55% 100%),
+        linear-gradient(98deg, transparent 0 72%, color-mix(in srgb, var(--accent) 22%, white 8%) 72% 72.5%, transparent 72.5% 100%);
+}
+
+body[data-theme]:not([data-theme="light"]):not([data-theme="ivory"]):not([data-theme="frost"]):not([data-theme="custom"]) :is(.panel, .recent-trades-panel, .risk-calc-panel, .week-heatmap-panel) {
+    background-color: color-mix(in srgb, var(--bg-panel) 84%, transparent);
+    background-image: linear-gradient(155deg, color-mix(in srgb, var(--bg-panel) 90%, var(--accent) 10%), color-mix(in srgb, var(--bg-panel) 94%, transparent));
 }

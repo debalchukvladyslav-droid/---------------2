@@ -58,3 +58,370 @@
     0%, 100% { opacity: 1; }
     50%       { opacity: 0; }
 }
+
+/* Living themes: ambient color, then small interface details. */
+@keyframes ambient-drift-a {
+    0%   { transform: translate3d(0, 0, 0) scale(1); }
+    50%  { transform: translate3d(-6vw, 8vh, 0) scale(1.12); }
+    100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes ambient-drift-b {
+    0%   { transform: translate3d(0, 0, 0) scale(1); }
+    50%  { transform: translate3d(7vw, -6vh, 0) scale(1.08); }
+    100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes ambient-wave {
+    0%   { transform: translate3d(0, 0, 0) scale(1); }
+    50%  { transform: translate3d(14vw, 2vh, 0) scale(1.05); }
+    100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes ambient-orbit {
+    0%   { transform: translate3d(0, 0, 0) rotate(0deg); }
+    50%  { transform: translate3d(-8vw, 10vh, 0) rotate(12deg); }
+    100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+}
+@keyframes ambient-flicker {
+    0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.55; }
+    40%      { transform: translate3d(-3vw, 4vh, 0) scale(1.16); opacity: 0.9; }
+    70%      { transform: translate3d(2vw, -2vh, 0) scale(0.94); opacity: 0.4; }
+}
+@keyframes matrix-scan {
+    0%   { background-position: 0 0; }
+    100% { background-position: 0 120px; }
+}
+@keyframes matrix-glow {
+    0%, 100% { transform: translate3d(0, 0, 0); opacity: 0.35; }
+    50%      { transform: translate3d(4vw, 10vh, 0); opacity: 0.7; }
+}
+@keyframes header-line {
+    0%   { background-position: -40% 0; }
+    100% { background-position: 140% 0; }
+}
+@keyframes nav-pulse {
+    0%, 100% { opacity: 0.55; transform: scaleY(0.82); }
+    50%      { opacity: 1; transform: scaleY(1); }
+}
+@keyframes brand-glow {
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+    50%      { box-shadow: 0 0 16px 2px color-mix(in srgb, var(--accent) 45%, transparent); }
+}
+@keyframes btn-sheen {
+    from { transform: translateX(-130%); }
+    to   { transform: translateX(130%); }
+}
+@keyframes preview-pan {
+    0%, 100% { background-position: 0% 40%; }
+    50%      { background-position: 100% 60%; }
+}
+@keyframes theme-selected {
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+    50%      { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent); }
+}
+@keyframes cell-sheen {
+    from { transform: translateX(-55%); }
+    to   { transform: translateX(55%); }
+}
+@keyframes tab-glow {
+    0%, 100% { box-shadow: var(--shadow-accent-sm); }
+    50%      { box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 32%, transparent); }
+}
+
+body {
+    isolation: isolate;
+    --ambient-opacity: 0.42;
+    --ambient-a: radial-gradient(circle, color-mix(in srgb, var(--accent) 75%, white 10%), transparent 68%);
+    --ambient-b: radial-gradient(circle, color-mix(in srgb, var(--gold, var(--accent)) 55%, transparent), transparent 70%);
+    --ambient-a-duration: 26s;
+    --ambient-b-duration: 34s;
+}
+
+body::before,
+body::after {
+    content: "";
+    position: fixed;
+    z-index: var(--z-ambient);
+    width: 46vmax;
+    height: 46vmax;
+    border-radius: 50%;
+    pointer-events: none;
+    filter: blur(42px);
+    opacity: var(--ambient-opacity);
+    will-change: transform;
+}
+body::before {
+    top: -18vmax;
+    right: -12vmax;
+    background: var(--ambient-a);
+    animation: ambient-drift-a var(--ambient-a-duration) ease-in-out infinite;
+}
+body::after {
+    left: -14vmax;
+    bottom: -16vmax;
+    width: 38vmax;
+    height: 38vmax;
+    background: var(--ambient-b);
+    animation: ambient-drift-b var(--ambient-b-duration) ease-in-out infinite;
+}
+
+body[data-theme="dark"] {
+    --ambient-a: radial-gradient(circle, #00e5a0, transparent 68%);
+    --ambient-b: radial-gradient(circle, #0ea5e9, transparent 70%);
+    --ambient-opacity: 0.28;
+    --ambient-a-duration: 28s;
+    --ambient-b-duration: 36s;
+}
+body[data-theme="light"] {
+    --ambient-a: radial-gradient(circle, #5eead4, transparent 68%);
+    --ambient-b: radial-gradient(circle, #93c5fd, transparent 70%);
+    --ambient-opacity: 0.34;
+    --ambient-a-duration: 32s;
+    --ambient-b-duration: 40s;
+}
+body[data-theme="matrix"] {
+    --ambient-opacity: 0.9;
+}
+body[data-theme="matrix"]::before {
+    inset: 0;
+    width: auto;
+    height: auto;
+    border-radius: 0;
+    filter: none;
+    opacity: 0.22;
+    background: repeating-linear-gradient(
+        180deg,
+        transparent 0 3px,
+        rgba(0, 255, 65, 0.16) 3px 4px
+    );
+    animation: matrix-scan 9s linear infinite;
+}
+body[data-theme="matrix"]::after {
+    background: radial-gradient(circle, #00ff41, transparent 68%);
+    opacity: 0.28;
+    filter: blur(36px);
+    animation: matrix-glow 6s ease-in-out infinite;
+}
+body[data-theme="dracula"] {
+    --ambient-a: radial-gradient(circle, #bd93f9, transparent 68%);
+    --ambient-b: radial-gradient(circle, #ff79c6, transparent 70%);
+    --ambient-opacity: 0.36;
+}
+body[data-theme="dracula"]::before { animation-name: ambient-orbit; }
+body[data-theme="ocean"] {
+    --ambient-a: radial-gradient(circle, #60a5fa, transparent 66%);
+    --ambient-b: radial-gradient(circle, #22d3ee, transparent 70%);
+    --ambient-opacity: 0.4;
+    --ambient-a-duration: 18s;
+    --ambient-b-duration: 24s;
+}
+body[data-theme="ocean"]::before,
+body[data-theme="ocean"]::after { animation-name: ambient-wave; }
+body[data-theme="nord"] {
+    --ambient-a: radial-gradient(circle, #88c0d0, transparent 70%);
+    --ambient-b: radial-gradient(circle, #81a1c1, transparent 72%);
+    --ambient-opacity: 0.22;
+    --ambient-a-duration: 42s;
+    --ambient-b-duration: 54s;
+}
+body[data-theme="sunset"] {
+    --ambient-a: radial-gradient(circle, #f5b942, transparent 66%);
+    --ambient-b: radial-gradient(circle, #fb7185, transparent 70%);
+    --ambient-opacity: 0.4;
+    --ambient-a-duration: 20s;
+    --ambient-b-duration: 27s;
+}
+body[data-theme="rose"] {
+    --ambient-a: radial-gradient(circle, #e879f9, transparent 66%);
+    --ambient-b: radial-gradient(circle, #f472b6, transparent 70%);
+    --ambient-opacity: 0.38;
+}
+body[data-theme="rose"]::after { animation-name: ambient-orbit; }
+body[data-theme="obsidian"] {
+    --ambient-a: radial-gradient(circle, #4f8cff, transparent 64%);
+    --ambient-b: radial-gradient(circle, #1d4ed8, transparent 72%);
+    --ambient-opacity: 0.3;
+    --ambient-a-duration: 36s;
+    --ambient-b-duration: 48s;
+}
+body[data-theme="aurora"] {
+    --ambient-a: radial-gradient(circle, #a78bfa, transparent 64%);
+    --ambient-b: radial-gradient(circle, #22d3ee, transparent 68%);
+    --ambient-opacity: 0.48;
+    --ambient-a-duration: 16s;
+    --ambient-b-duration: 21s;
+}
+body[data-theme="aurora"]::before { animation-name: ambient-orbit; }
+body[data-theme="aurora"]::after { animation-name: ambient-wave; }
+body[data-theme="graphite"] {
+    --ambient-a: radial-gradient(circle, #d2ff45, transparent 62%);
+    --ambient-b: radial-gradient(circle, #a3e635, transparent 72%);
+    --ambient-opacity: 0.22;
+    --ambient-a-duration: 12s;
+    --ambient-b-duration: 18s;
+}
+body[data-theme="ivory"] {
+    --ambient-a: radial-gradient(circle, #f6d7a8, transparent 68%);
+    --ambient-b: radial-gradient(circle, #93c5fd, transparent 70%);
+    --ambient-opacity: 0.4;
+    --ambient-a-duration: 34s;
+    --ambient-b-duration: 44s;
+}
+body[data-theme="nebula"] {
+    --ambient-a: radial-gradient(circle, #c084fc, transparent 64%);
+    --ambient-b: radial-gradient(circle, #6366f1, transparent 68%);
+    --ambient-opacity: 0.46;
+    --ambient-a-duration: 24s;
+    --ambient-b-duration: 31s;
+}
+body[data-theme="nebula"]::before { animation-name: ambient-orbit; }
+body[data-theme="lagoon"] {
+    --ambient-a: radial-gradient(circle, #2ee6a6, transparent 64%);
+    --ambient-b: radial-gradient(circle, #14b8a6, transparent 70%);
+    --ambient-opacity: 0.4;
+    --ambient-a-duration: 15s;
+    --ambient-b-duration: 22s;
+}
+body[data-theme="lagoon"]::before,
+body[data-theme="lagoon"]::after { animation-name: ambient-wave; }
+body[data-theme="ember"] {
+    --ambient-a: radial-gradient(circle, #ff6a3d, transparent 62%);
+    --ambient-b: radial-gradient(circle, #f59e0b, transparent 68%);
+    --ambient-opacity: 0.5;
+    --ambient-a-duration: 7s;
+    --ambient-b-duration: 11s;
+}
+body[data-theme="ember"]::before { animation-name: ambient-flicker; }
+body[data-theme="frost"] {
+    --ambient-a: radial-gradient(circle, #c4b5fd, transparent 68%);
+    --ambient-b: radial-gradient(circle, #7dd3fc, transparent 70%);
+    --ambient-opacity: 0.45;
+    --ambient-a-duration: 30s;
+    --ambient-b-duration: 38s;
+}
+
+.app-header { position: sticky; }
+.app-header::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    pointer-events: none;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    background-size: 28% 100%;
+    background-repeat: no-repeat;
+    animation: header-line 7.5s linear infinite;
+    opacity: 0.85;
+}
+
+.sidebar-brand-mark {
+    position: relative;
+    animation: brand-glow 3.4s ease-in-out infinite;
+}
+.sidebar-nav-item { position: relative; }
+.sidebar-nav-item .ti-icon,
+.icon-btn,
+.header-btn,
+.date-nav-btn {
+    transition: transform 0.18s ease, background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+.sidebar-nav-item:hover .ti-icon,
+.icon-btn:hover,
+.header-btn:hover,
+.date-nav-btn:hover {
+    transform: translateY(-1px);
+}
+.sidebar-nav-item.active::before {
+    content: "";
+    position: absolute;
+    left: 3px;
+    top: 24%;
+    bottom: 24%;
+    width: 3px;
+    border-radius: 99px;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    transform-origin: center;
+    animation: nav-pulse 2.6s ease-in-out infinite;
+}
+.app-sidebar.collapsed .sidebar-nav-item.active::before {
+    left: 2px;
+    top: 8px;
+    bottom: 8px;
+}
+
+.btn-primary {
+    position: relative;
+    overflow: hidden;
+}
+.btn-primary::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(105deg, transparent 32%, rgba(255, 255, 255, 0.38) 50%, transparent 68%);
+    transform: translateX(-130%);
+}
+.btn-primary:hover::after { animation: btn-sheen 0.65s ease; }
+
+.main-tab-btn.active { animation: tab-glow 3.2s ease-in-out infinite; }
+
+.stat-card::before {
+    opacity: 0.7;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    background-size: 36% 100%;
+    background-repeat: no-repeat;
+    animation: header-line 4.8s linear infinite;
+}
+.stat-card:nth-child(2n)::before { animation-duration: 6.2s; animation-delay: -1.4s; }
+.stat-card:nth-child(3n)::before { animation-duration: 5.4s; animation-delay: -2.2s; }
+
+.day-cell::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    background: linear-gradient(115deg, transparent 36%, color-mix(in srgb, var(--accent) 22%, white) 50%, transparent 64%);
+}
+.day-cell:hover:not(.empty)::after {
+    opacity: 0.9;
+    animation: cell-sheen 0.7s ease;
+}
+
+.theme-card-preview {
+    background-size: 180% 180%;
+    animation: preview-pan 8s ease-in-out infinite;
+}
+.theme-card:nth-child(2n) .theme-card-preview { animation-duration: 10s; animation-delay: -2s; }
+.theme-card:nth-child(3n) .theme-card-preview { animation-duration: 6.5s; animation-delay: -3.5s; }
+.theme-card:has(input:checked) { animation: theme-selected 2.8s ease-in-out infinite; }
+.theme-card:hover .theme-card-preview { animation-duration: 2.8s; }
+
+.auth-overlay::before { animation: matrix-scan 22s linear infinite; }
+.auth-overlay::after { animation: ambient-wave 16s ease-in-out infinite; }
+.auth-card::before {
+    background-size: 46% 100%;
+    background-repeat: no-repeat;
+    animation: header-line 4.2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    body::before,
+    body::after,
+    .app-header::after,
+    .sidebar-brand-mark,
+    .sidebar-nav-item.active::before,
+    .main-tab-btn.active,
+    .stat-card::before,
+    .theme-card-preview,
+    .theme-card:has(input:checked),
+    .auth-overlay::before,
+    .auth-overlay::after,
+    .auth-card::before {
+        animation: none !important;
+    }
+    body::before,
+    body::after { display: none; }
+}

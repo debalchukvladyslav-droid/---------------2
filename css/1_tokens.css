@@ -94,7 +94,8 @@
     --spacing-lg: 24px;
 
     /* === Z-INDEX LAYERS ===
-       sticky < dropdown < FAB < panel < popover < sidebar < modal < preview < toast < onboarding < system */
+       ambient < sticky < dropdown < FAB < panel < popover < sidebar < modal < preview < toast < onboarding < system */
+    --z-ambient: -1;
     --z-base: 1;
     --z-sticky: 50;
     --z-dropdown: 200;
