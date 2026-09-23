@@ -32,9 +32,22 @@ test('settings commit offline without a getUser network request', async () => {
     assert.equal(commits[0][1][0].value.theme, 'local');
 });
 
-test('settings guard blocks a partial runtime from clearing several populated collections', async () => {
+test('an unloaded settings collection is kept instead of being saved as empty', async () => {
+    const previous = { tickers: { AAPL: 1 }, theme: 'dark' };
+    const { api, commits, state } = harness({ readCachedValue: async () => ({ value: previous }) });
+    state.appData.settings = { theme: 'local' };
+    await api.saveSettings();
+    assert.equal(commits.length, 1);
+    assert.equal(commits[0][1][0].value.theme, 'local');
+    assert.deepEqual(commits[0][1][0].value.tickers, { AAPL: 1 });
+});
+
+test('settings guard blocks an explicit clear of several populated collections', async () => {
     const previous = { tickers: { A: 1 }, screenMeta: { shot: {} }, cumulativeSheetRows: { row: {} } };
-    const { api, commits } = harness({ readCachedValue: async () => ({ value: previous }) });
+    const { api, commits, state } = harness({ readCachedValue: async () => ({ value: previous }) });
+    state.appData.tickers = {};
+    state.appData.screenMeta = {};
+    state.appData.cumulativeSheetRows = {};
     await assert.rejects(api.saveSettings(), { code: 'DATA_LOSS_GUARD' });
     assert.equal(commits.length, 0);
 });

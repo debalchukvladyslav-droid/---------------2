@@ -203,8 +203,7 @@ async function manualSyncAll(trigger = null, options = {}) {
             }) : null),
             await runManualSyncStep('backup', () => isOwnProfile ? createCompressedBackup({
                 reason: startup ? 'startup-sync' : 'manual-sync',
-                force: !startup,
-                requireServer: true,
+                minIntervalMs: 6 * 60 * 60 * 1000,
             }) : null),
             await runManualSyncStep('drive-screenshots', () => isOwnProfile ? syncDriveScreenshots(true) : null),
             await runManualSyncStep('background-ocr', () => isOwnProfile ? window.enqueueBackgroundOCRForAllScreens?.() : null),
@@ -956,13 +955,6 @@ function escapeBackupHtml(value) {
         .replace(/"/g, '&quot;');
 }
 
-function formatBackupBytes(bytes) {
-    const n = Number(bytes) || 0;
-    if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
-    if (n >= 1024) return `${Math.round(n / 1024)} KB`;
-    return `${n} B`;
-}
-
 function formatBackupDate(value) {
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return 'unknown date';
@@ -975,11 +967,20 @@ function formatBackupDate(value) {
     });
 }
 
+const BACKUP_REASON_LABELS = {
+    manual: 'вручну',
+    'manual-sync': 'синхронізація',
+    'startup-sync': 'відкриття журналу',
+    'before-restore': 'перед відкатом',
+    'legacy-import': 'імпорт файлу',
+    backup: 'копія',
+};
+
 function renderSettingsBackups() {
     const host = document.getElementById('settings-backup-list');
     if (!host) return;
     const toggle = document.getElementById('settings-backup-toggle');
-    const isHidden = localStorage.getItem('tj:settings-backups:hidden') !== '0';
+    const isHidden = localStorage.getItem('tj:settings-backups:hidden') === '1';
     host.hidden = isHidden;
     if (toggle) {
         toggle.textContent = isHidden ? 'Показати список' : 'Сховати список';
@@ -987,27 +988,30 @@ function renderSettingsBackups() {
     }
     const backups = listCompressedBackups();
     if (!backups.length) {
-        host.innerHTML = '<p class="settings-copy-sm">Бекапів ще немає. Натисніть “Створити зараз” або запустіть синхронізацію.</p>';
+        host.innerHTML = '<p class="settings-copy-sm">Точок ще немає. Натисніть «Створити зараз», щоб зафіксувати журнал.</p>';
         return;
     }
 
     const visibleCount = Math.max(4, Number(localStorage.getItem('tj:settings-backups:visible')) || 4);
     const visibleBackups = backups.slice(0, visibleCount);
-    host.innerHTML = visibleBackups.map((backup) => `
+    host.innerHTML = visibleBackups.map((backup) => {
+        const reason = BACKUP_REASON_LABELS[backup.reason] || backup.reason || 'копія';
+        const days = backup.days || backup.counts?.journal_days || 0;
+        const where = backup.serverBackedUp ? 'сервер · 30 днів' : 'цей браузер';
+        const remove = backup.serverBackedUp ? '' : `<button type="button" class="btn-secondary" data-action="backup-delete" data-backup-id="${escapeBackupHtml(backup.id)}">Видалити</button>`;
+        return `
         <article class="settings-backup-item">
             <div class="settings-backup-meta">
-                <div class="settings-backup-name">${escapeBackupHtml(formatBackupDate(backup.createdAt))} · ${escapeBackupHtml(backup.reason || 'backup')}</div>
-                <div class="settings-backup-sub">
-                    ${escapeBackupHtml(backup.days || 0)} днів · ${escapeBackupHtml(formatBackupBytes(backup.storedBytes))} з ${escapeBackupHtml(formatBackupBytes(backup.rawBytes))} · ${escapeBackupHtml(backup.encoding || '')} · ${backup.serverBackedUp ? 'сервер' : 'локально'}
-                </div>
+                <div class="settings-backup-name">${escapeBackupHtml(formatBackupDate(backup.createdAt))} · ${escapeBackupHtml(reason)}</div>
+                <div class="settings-backup-sub">${escapeBackupHtml(days)} днів · ${escapeBackupHtml(where)}</div>
             </div>
             <div class="settings-backup-actions">
+                <button type="button" class="btn-primary" data-action="backup-restore" data-backup-id="${escapeBackupHtml(backup.id)}">Відкотити сюди</button>
                 <button type="button" class="btn-secondary" data-action="backup-download" data-backup-id="${escapeBackupHtml(backup.id)}">Скачати</button>
-                <button type="button" class="btn-secondary" data-action="backup-restore" data-backup-id="${escapeBackupHtml(backup.id)}">Відновити</button>
-                <button type="button" class="btn-secondary" data-action="backup-delete" data-backup-id="${escapeBackupHtml(backup.id)}">Видалити</button>
+                ${remove}
             </div>
-        </article>
-    `).join('') + (visibleCount < backups.length ? `
+        </article>`;
+    }).join('') + (visibleCount < backups.length ? `
         <button type="button" class="btn-secondary settings-backup-more">Показати ще</button>
     ` : '');
     host.querySelector('.settings-backup-more')?.addEventListener('click', () => {
@@ -1030,6 +1034,19 @@ window.refreshSettingsBackups = async function() {
         renderSettingsBackups();
     } catch (error) {
         console.warn('[Backups] server list failed:', error?.message || error);
+    }
+};
+window.rollbackLatestBackup = async function() {
+    try {
+        await refreshServerBackups();
+        const latest = listCompressedBackups().find(item => item.version === 2 && item.serverBackedUp && !item.incomplete);
+        if (!latest) {
+            showToast('Немає серверної точки для відкату. Створіть її кнопкою «Створити зараз».');
+            return;
+        }
+        await window.restoreSettingsBackup(latest.id);
+    } catch (error) {
+        showToast('Не вдалося відкотити: ' + (error?.message || error));
     }
 };
 window.createSettingsBackup = async function() {

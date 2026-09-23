@@ -25,12 +25,13 @@ async function callNewsAI(key, payload) {
     throw lastError || new Error('AI news translation failed');
 }
 
-function setTickerHTML(html) {
+function setTickerHTML(html, visible = true) {
     const ticker = document.getElementById('news-ticker-text');
-    if (!ticker) return;
-    const content = html || 'Новини завантажуються...';
+    const bar = ticker?.closest('.news-ticker-bar');
+    if (bar) bar.hidden = !visible || !html;
+    if (!ticker || !html) return;
     ticker.style.animation = 'none';
-    ticker.innerHTML = `<span class="news-ticker-segment">${content}</span><span class="news-ticker-segment" aria-hidden="true">${content}</span>`;
+    ticker.innerHTML = `<span class="news-ticker-segment">${html}</span><span class="news-ticker-segment" aria-hidden="true">${html}</span>`;
     ticker.offsetHeight;
     ticker.style.animation = '';
 }
@@ -440,17 +441,8 @@ function renderTickerNews(payload) {
     const tickers = Array.isArray(payload?.tickers) ? payload.tickers : [];
 
     if (!items.length) {
-        if (payload?.degraded) {
-            _visibleNewsItems = [];
-            const reason = String(payload.reason || '').includes('FINNHUB_API_KEY')
-                ? 'додайте FINNHUB_API_KEY у Vercel Environment Variables і зробіть Redeploy'
-                : (payload.reason || 'провайдер новин тимчасово недоступний');
-            setTickerHTML(`Live news тимчасово недоступні: ${sanitizeHTML(reason)}`);
-            return;
-        }
         _visibleNewsItems = [];
-        const scope = tickers.length ? `по ${sanitizeHTML(tickers.join(', '))}` : 'по ринку';
-        setTickerHTML(`Немає свіжих новин ${scope}<span class="news-ticker-sep">•</span>Імпортуйте угоди, щоб стрічка брала ваші тикери`);
+        setTickerHTML('', false);
         return;
     }
 
@@ -491,7 +483,7 @@ export async function renderDashboardNews(options = {}) {
     const force = !!options.force;
 
     if (!_newsPromise || force) {
-        setTickerHTML('Завантаження live news українською...');
+        setTickerHTML('', false);
         _newsPromise = fetchDashboardNews(force);
     }
 

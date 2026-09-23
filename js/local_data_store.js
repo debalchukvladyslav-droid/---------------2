@@ -1,4 +1,4 @@
-import { applyMergePatch, canonicalJournalRow, cloneData, mergePatch, syncError } from './data_sync_core.js';
+import { applyMergePatch, canonicalJournalRow, cloneData, mergePatch, syncError, withoutUnloadedWipes } from './data_sync_core.js';
 
 const DB_NAME = 'strum-local-data';
 const DB_VERSION = 2;
@@ -170,13 +170,32 @@ export async function listDataOperations(userId) {
 // A rejected RPC rolls back the whole batch, including unrelated journal edits.
 // Keep identities and user patches; remove only server-managed account fields.
 export async function repairProtectedSettingsOperations(userId) {
-    return transact([STORES.queue], 'readwrite', async stores => {
-        for (const operation of await requestValue(stores[STORES.queue].index('user').getAll(userId)) || []) {
+    return transact(Object.values(STORES), 'readwrite', async stores => {
+        const operations = await requestValue(stores[STORES.queue].index('user').getAll(userId)) || [];
+        for (const operation of operations) {
             let changed = false;
             if (operation.domain === 'settings') {
                 for (const key of Object.keys(operation.patch || {})) {
                     if (protectedSetting(key)) { delete operation.patch[key]; changed = true; }
                 }
+                const cleaned = withoutUnloadedWipes(operation.base, operation.patch || {});
+                if (Object.keys(cleaned).length !== Object.keys(operation.patch || {}).length) {
+                    operation.patch = cleaned;
+                    changed = true;
+                }
+            }
+            if (operation.domain === 'settings' && !Object.keys(operation.patch || {}).length) {
+                stores[STORES.queue].delete(operation.operationId);
+                const others = operations.filter(item => item.operationId !== operation.operationId && item.domain === 'settings');
+                if (!others.length) {
+                    const record = await requestValue(stores[STORES.values].get(entityKey(userId, 'settings', operation.entityId)));
+                    if (record?.serverValue !== undefined) {
+                        record.value = cloneData(record.serverValue);
+                        record.dirty = 0;
+                        stores[STORES.values].put(record);
+                    }
+                }
+                continue;
             }
             if (operation.status === 'blocked' && operation.lastError?.code === '42501'
                 && operation.lastError?.message === 'Protected account setting') {

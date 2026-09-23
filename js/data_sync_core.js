@@ -28,6 +28,29 @@ export function mergePatch(base = {}, next = {}) {
     return patch;
 }
 
+export const HEAVY_SETTINGS_KEYS = [
+    'tickers', 'screenMeta', 'sheetRows', 'cumulativeSheetRows', 'unassignedImages',
+    'aiChatHistory', 'aiSavedChats', 'weeklyComments', 'monthlyDayloss',
+];
+
+export function collectionEmpty(value) {
+    if (value == null) return true;
+    if (Array.isArray(value)) return value.length === 0;
+    if (typeof value === 'object') return Object.keys(value).length === 0;
+    return false;
+}
+
+export function withoutUnloadedWipes(base, patch) {
+    if (!object(patch)) return patch;
+    const next = { ...patch };
+    for (const key of HEAVY_SETTINGS_KEYS) {
+        if (!Object.hasOwn(next, key)) continue;
+        const merged = applyMergePatch(base?.[key], next[key]);
+        if (!collectionEmpty(base?.[key]) && collectionEmpty(merged)) delete next[key];
+    }
+    return next;
+}
+
 export function applyMergePatch(base, patch) {
     if (!object(patch)) return cloneData(patch);
     const result = object(base) ? cloneData(base) : {};

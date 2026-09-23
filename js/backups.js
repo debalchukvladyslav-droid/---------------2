@@ -30,8 +30,13 @@ function legacyEntry(row) {
 export async function createCompressedBackup(options = {}) {
     const owner = await getServerBackupUserId();
     const reason = options.reason || 'manual';
-    const last = serverBackupsLoadedFor === owner ? serverBackupsCache[0] : null;
-    if (!options.force && last?.version === 2 && Date.now() - Date.parse(last.createdAt) < 120000) return last;
+    const minIntervalMs = Number(options.minIntervalMs) > 0 ? Number(options.minIntervalMs) : 120000;
+    let last = serverBackupsLoadedFor === owner ? serverBackupsCache[0] : null;
+    if (!options.force && !last) {
+        const points = await rpc('list_restore_points', { p_user_id: owner, p_limit: 1 });
+        last = points?.[0] ? pointEntry(points[0]) : null;
+    }
+    if (!options.force && last?.version === 2 && Date.now() - Date.parse(last.createdAt) < minIntervalMs) return last;
     const entry = pointEntry(await rpc('create_restore_point', { p_reason: reason, p_user_id: owner }));
     assertContext(owner);
     if (serverBackupsLoadedFor !== owner) serverBackupsCache = [];

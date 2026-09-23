@@ -894,8 +894,10 @@ export async function switchMainTab(tab, options = {}) {
     document.querySelectorAll('.mobile-more-item').forEach(b => {
         b.classList.toggle('active', b.dataset.tab === tab);
     });
-    // Якщо активна вкладка в more menu — підсвічуємо кнопку Ще
-    const moreTabIds = ['trades', 'datagrid', 'table', 'calendar', 'stop-errors', /* 'playbook', */ 'learn', 'settings', 'mentor-review', 'admin', 'testing'];
+    document.querySelectorAll('.day-mode-link').forEach(b => {
+        b.classList.toggle('active', b.dataset.tab === tab);
+    });
+    const moreTabIds = ['dash', 'datagrid', 'table', 'screens', 'ai', 'stop-errors', /* 'playbook', */ 'learn', 'settings', 'mentor-review', 'admin', 'testing'];
     const moreBtn = document.querySelector('.mobile-nav-more-btn');
     if (moreBtn) moreBtn.classList.toggle('more-open', moreTabIds.includes(tab));
 
