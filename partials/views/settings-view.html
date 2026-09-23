@@ -37,7 +37,7 @@
 
         <div class="panel settings-hub-card">
             <h3 class="settings-title">Дані</h3>
-            <p class="settings-copy">Резервна копія журналу або відновлення з JSON-файлу.</p>
+            <p class="settings-copy">Точки відновлення лежать на сервері. Відкат повертає журнал до обраного моменту, а поточний стан перед цим зберігається окремою точкою.</p>
             <div class="import-export-grid">
                 <button class="btn-secondary flex-fill" data-action="export-xlsx">Excel · 3 вкладки</button>
                 <button class="btn-secondary flex-fill" data-action="export-data">Експорт БД</button>
@@ -46,17 +46,18 @@
             <div class="settings-backup-panel">
                 <div class="settings-backup-head">
                     <div>
-                        <h4 class="settings-backup-title">Автобекапи синхронізації</h4>
-                        <p class="settings-copy-sm">Перед синхронізацією журнал стискається і зберігається локально у цьому браузері.</p>
+                        <h4 class="settings-backup-title">Точки відновлення</h4>
+                        <p class="settings-copy-sm">Нова точка створюється не частіше ніж раз на 6 годин і завжди перед відкатом. Серверні точки зберігаються 30 днів.</p>
                     </div>
                     <div class="settings-backup-actions">
+                        <button class="btn-primary btn-auto" type="button" data-action="backup-rollback-latest">Відкотити останню</button>
                         <button class="btn-secondary btn-auto" data-action="backup-create">Створити зараз</button>
                         <button class="btn-secondary btn-auto" data-action="file-picker" data-target="backup-input">Імпорт backup</button>
                         <button class="btn-secondary btn-auto" id="settings-backup-toggle" data-action="backup-list-toggle" aria-expanded="false" aria-controls="settings-backup-list">Показати список</button>
                     </div>
                 </div>
                 <input type="file" id="backup-input" class="file-input-hidden" accept=".tjbackup.json,.json" data-import="backup">
-                <div id="settings-backup-list" class="settings-backup-list" hidden>
+                <div id="settings-backup-list" class="settings-backup-list">
                     <p class="settings-copy-sm">Бекапів ще немає.</p>
                 </div>
             </div>

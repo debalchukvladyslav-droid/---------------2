@@ -566,31 +566,34 @@ async function performSettingsSave(context) {
     try {
         const { user } = await getCurrentUserContext({ local: true });
         if (!user || !context || context.generation !== _accountContextGeneration || user.id !== context.userId) return;
-        const settingsPayload = {
-            ...state.appData.settings,
-            aiChatHistory: Array.isArray(state.appData.aiChatHistory) ? state.appData.aiChatHistory : [],
-            aiSavedChats: Array.isArray(state.appData.aiSavedChats) ? state.appData.aiSavedChats : [],
-            errorTypes: Array.isArray(state.appData.errorTypes) ? state.appData.errorTypes : [],
-            learnCache: state.appData.learnCache && typeof state.appData.learnCache === 'object' ? state.appData.learnCache : null,
-            tickers: state.appData.tickers && typeof state.appData.tickers === 'object' ? state.appData.tickers : {},
-            screenMeta: state.appData.screenMeta && typeof state.appData.screenMeta === 'object' ? state.appData.screenMeta : {},
-            tradeTypes: Array.isArray(state.appData.tradeTypes) ? state.appData.tradeTypes : [],
-            unassignedImages: Array.isArray(state.appData.unassignedImages) ? state.appData.unassignedImages : [],
-            screenTags: state.appData.screenTags && typeof state.appData.screenTags === 'object' ? state.appData.screenTags : {},
-            screenDiscipline:
-                state.appData.screenDiscipline && typeof state.appData.screenDiscipline === 'object'
-                    ? state.appData.screenDiscipline
-                    : {},
-            sheetRows: state.appData.sheetRows && typeof state.appData.sheetRows === 'object' ? state.appData.sheetRows : {},
-            cumulativeSheetRows:
-                state.appData.cumulativeSheetRows && typeof state.appData.cumulativeSheetRows === 'object'
-                    ? state.appData.cumulativeSheetRows
-                    : {},
-            weeklyComments:
-                state.appData.weeklyComments && typeof state.appData.weeklyComments === 'object' ? state.appData.weeklyComments : {},
-        };
         await ensureDataSyncMetadata(user.id);
-        const previousSettings = (await readCachedValue(user.id, 'settings'))?.value;
+        const previousSettings = (await readCachedValue(user.id, 'settings'))?.value || {};
+        const keep = (current, previous, empty) => current == null ? (previous ?? empty) : current;
+        const settingsPayload = {
+            ...previousSettings,
+            ...state.appData.settings,
+            aiChatHistory: keep(Array.isArray(state.appData.aiChatHistory) ? state.appData.aiChatHistory : null, previousSettings.aiChatHistory, []),
+            aiSavedChats: keep(Array.isArray(state.appData.aiSavedChats) ? state.appData.aiSavedChats : null, previousSettings.aiSavedChats, []),
+            errorTypes: keep(Array.isArray(state.appData.errorTypes) ? state.appData.errorTypes : null, previousSettings.errorTypes, []),
+            learnCache: keep(state.appData.learnCache && typeof state.appData.learnCache === 'object' ? state.appData.learnCache : null, previousSettings.learnCache, null),
+            tickers: keep(state.appData.tickers && typeof state.appData.tickers === 'object' ? state.appData.tickers : null, previousSettings.tickers, {}),
+            screenMeta: keep(state.appData.screenMeta && typeof state.appData.screenMeta === 'object' ? state.appData.screenMeta : null, previousSettings.screenMeta, {}),
+            tradeTypes: keep(Array.isArray(state.appData.tradeTypes) ? state.appData.tradeTypes : null, previousSettings.tradeTypes, []),
+            unassignedImages: keep(Array.isArray(state.appData.unassignedImages) ? state.appData.unassignedImages : null, previousSettings.unassignedImages, []),
+            screenTags: keep(state.appData.screenTags && typeof state.appData.screenTags === 'object' ? state.appData.screenTags : null, previousSettings.screenTags, {}),
+            screenDiscipline: keep(
+                state.appData.screenDiscipline && typeof state.appData.screenDiscipline === 'object' ? state.appData.screenDiscipline : null,
+                previousSettings.screenDiscipline,
+                {},
+            ),
+            sheetRows: keep(state.appData.sheetRows && typeof state.appData.sheetRows === 'object' ? state.appData.sheetRows : null, previousSettings.sheetRows, {}),
+            cumulativeSheetRows: keep(
+                state.appData.cumulativeSheetRows && typeof state.appData.cumulativeSheetRows === 'object' ? state.appData.cumulativeSheetRows : null,
+                previousSettings.cumulativeSheetRows,
+                {},
+            ),
+            weeklyComments: keep(state.appData.weeklyComments && typeof state.appData.weeklyComments === 'object' ? state.appData.weeklyComments : null, previousSettings.weeklyComments, {}),
+        };
         const resetKeys = destructiveSettingsReset(previousSettings, settingsPayload);
         if (resetKeys.length >= 3) {
             throw syncError(`Збереження зупинено: одночасно очищуються важливі дані (${resetKeys.join(', ')}). Оновіть сторінку.`, 'DATA_LOSS_GUARD');

@@ -21,6 +21,18 @@ test.after(async () => {
     });
 });
 
+test('a queued wipe of a loaded settings collection is removed before send', async () => {
+    const account = crypto.randomUUID();
+    await store.saveSyncMetadata(account, { epoch: 1, cursor: 0, initialized: true });
+    await store.cacheValue(account, 'settings', { tickers: { AAPL: { name: 'Apple' } }, theme: 'dark' }, { version: 3 });
+    await store.commitLocalChanges(account, [{ domain: 'settings', entityId: account, value: { tickers: {}, theme: 'light' } }]);
+    await store.repairProtectedSettingsOperations(account);
+    const queued = await store.listDataOperations(account);
+    assert.equal(queued.length, 1);
+    assert.equal(queued[0].patch.tickers, undefined);
+    assert.equal(queued[0].patch.theme, 'light');
+});
+
 test('acknowledging an older save never discards a newer local edit', async () => {
     const first = await store.commitLocalChanges(user, [{
         domain: 'journal', entityId: '2026-09-15', value: { notes: 'first', pnl: 1 },

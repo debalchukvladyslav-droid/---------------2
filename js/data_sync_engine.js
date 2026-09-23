@@ -4,7 +4,8 @@ import { isRetryableSyncError, retryDelay, syncError } from './data_sync_core.js
 // Transport injection makes interruption, duplicate delivery and two-tab behavior testable.
 export function createDataSyncEngine({ transport, store = localStore, onChange = () => {}, onSnapshot = () => {},
     onState = () => {}, online = () => globalThis.navigator?.onLine !== false, now = Date.now,
-    schedule = setTimeout, cancel = clearTimeout, random = Math.random, lock = null, conflictPolicy = 'manual' } = {}) {
+    schedule = setTimeout, cancel = clearTimeout, random = Math.random, lock = null, conflictPolicy = 'manual',
+    idleDelay = 60000 } = {}) {
     let userId = null;
     let generation = 0;
     let activeTask = null;
@@ -185,7 +186,20 @@ export function createDataSyncEngine({ transport, store = localStore, onChange =
                 throw error;
             } finally {
                 activeTask = null;
-                if (userId) wake(current(user, version) ? (failures ? retryDelay(failures - 1, random) : 15000) : 0);
+                if (userId && !current(user, version)) wake(0);
+                else if (userId && failures) wake(retryDelay(failures - 1, random));
+                else if (userId) {
+                    let delay = idleDelay;
+                    try {
+                        const operations = await store.listDataOperations(user);
+                        const pending = (operations || []).filter(operation => operation.status === 'pending');
+                        if (pending.length) {
+                            const waiting = pending.map(operation => Number(operation.nextAttemptAt) || 0).filter(at => at > now());
+                            delay = waiting.length ? Math.max(250, Math.min(...waiting) - now()) : 250;
+                        }
+                    } catch { delay = idleDelay; }
+                    if (userId === user) wake(delay);
+                }
             }
         })();
         return activeTask;

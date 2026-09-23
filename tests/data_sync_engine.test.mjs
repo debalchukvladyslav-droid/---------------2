@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDataSyncEngine } from '../js/data_sync_engine.js';
+import { withoutUnloadedWipes } from '../js/data_sync_core.js';
+
+test('a settings patch cannot delete a collection that was already filled', () => {
+    const cleaned = withoutUnloadedWipes(
+        { tickers: { AAPL: { name: 'Apple' } }, theme: 'dark' },
+        { tickers: { AAPL: null }, theme: 'light' },
+    );
+    assert.deepEqual(cleaned, { theme: 'light' });
+});
 
 test('later edits of a conflicted entity are not sent before resolution', async () => {
     const queue = [1, 2].map(n => ({ operationId: String(n), userId: 'owner', domain: 'journal', entityId: '2026-09-15', status: 'pending' }));
@@ -74,6 +83,25 @@ test('local-first policy automatically rebases a conflicting edit and sends it a
     assert.deepEqual(sent, ['first', 'rebased']);
     assert.deepEqual(audit, [['audit-id', 'local']]);
     assert.deepEqual(queue, []);
+    engine.stop();
+});
+
+test('an idle sync waits a minute instead of polling continuously', async () => {
+    let scheduled;
+    const engine = createDataSyncEngine({
+        store: {
+            readSyncMetadata: async () => ({ epoch: 1, cursor: 0, initialized: true }),
+            listDataOperations: async () => [],
+            applyRemoteChanges: async () => ({ changed: [] }),
+        },
+        transport: { pull: async () => ({ epoch: 1, cursor: 0, changes: [], hasMore: false }) },
+        lock: async (_user, run) => run(),
+        schedule: (_callback, delay) => { scheduled = delay; return 1; },
+        cancel: () => {},
+    });
+    engine.start('owner');
+    await engine.sync();
+    assert.equal(scheduled, 60000);
     engine.stop();
 });
 

@@ -231,6 +231,7 @@ function activateAction(action, trigger, event = null) {
         'dayloss-save': () => window.saveDaylossSetting?.(),
         'dayloss-months-toggle': () => window.toggleDaylossMonthsPanel?.(),
         'dayloss-months-save': () => window.saveAllDaylossMonths?.(),
+        'backup-rollback-latest': () => window.rollbackLatestBackup?.(),
         'backup-create': () => window.createSettingsBackup?.(),
         'backup-download': () => window.downloadSettingsBackup?.(trigger?.dataset?.backupId || ''),
         'backup-restore': () => window.restoreSettingsBackup?.(trigger?.dataset?.backupId || ''),
