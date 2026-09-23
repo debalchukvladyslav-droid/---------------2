@@ -13,8 +13,10 @@ function harness(overrides = {}) {
     const context = vm.createContext({ console, setTimeout, clearTimeout, queueMicrotask, structuredClone,
         navigator: { onLine: true },
         state, cloneData: structuredClone, setDataSyncHandlers: value => { handlers = value; },
+        syncError: (message, code) => Object.assign(new Error(message), { code }),
         supabase: { auth: { getSession: async () => ({ data: { session: { user: { id: 'owner' } } } }), getUser: async () => { throw new Error('Network unavailable'); } } },
         ensureDataSyncMetadata: async () => {}, commitLocalChanges: async (...args) => { commits.push(args); return { pending: 1 }; },
+        readCachedValue: async () => null, readCachedDay: async () => null, readDirtyJournalRows: async () => [],
         publishSyncState() {}, notifyDataSync() {}, clearStatsCache() {},
         ...overrides,
     });
@@ -28,6 +30,19 @@ test('settings commit offline without a getUser network request', async () => {
     assert.equal(commits.length, 1);
     assert.equal(commits[0][0], 'owner');
     assert.equal(commits[0][1][0].value.theme, 'local');
+});
+
+test('settings guard blocks a partial runtime from clearing several populated collections', async () => {
+    const previous = { tickers: { A: 1 }, screenMeta: { shot: {} }, cumulativeSheetRows: { row: {} } };
+    const { api, commits } = harness({ readCachedValue: async () => ({ value: previous }) });
+    await assert.rejects(api.saveSettings(), { code: 'DATA_LOSS_GUARD' });
+    assert.equal(commits.length, 0);
+});
+
+test('a summary-only journal day cannot be marked dirty', () => {
+    const { api, state } = harness();
+    state.appData.journal['2026-09-22'] = { pnl: 10, trades: [], __detailsLoaded: false };
+    assert.equal(api.markJournalDayDirty('2026-09-22'), false);
 });
 
 test('incoming sync cannot overwrite an in-flight settings edit or dirty journal day', async () => {

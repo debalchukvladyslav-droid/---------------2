@@ -426,6 +426,20 @@ const _journalDateRevisions = new Map();
 const _dayDetailsPromises = new Map();
 const _tradeDaysLoadedFor = new Set();
 const _recentlySavedDays = new Map();
+const DESTRUCTIVE_SETTINGS_KEYS = [
+    'tickers', 'screenMeta', 'sheetRows', 'cumulativeSheetRows', 'unassignedImages',
+    'aiChatHistory', 'aiSavedChats', 'weeklyComments', 'monthlyDayloss',
+];
+
+function collectionSize(value) {
+    if (Array.isArray(value)) return value.length;
+    if (value && typeof value === 'object') return Object.keys(value).length;
+    return 0;
+}
+
+function destructiveSettingsReset(previous, next) {
+    return DESTRUCTIVE_SETTINGS_KEYS.filter(key => collectionSize(previous?.[key]) > 0 && collectionSize(next?.[key]) === 0);
+}
 
 export function wasDayRecentlySaved(dateStr, windowMs = 2500) {
     return Date.now() - (_recentlySavedDays.get(dateStr) || 0) < windowMs;
@@ -508,10 +522,17 @@ if (typeof window !== 'undefined') {
 
 export function markJournalDayDirty(dateStr) {
     if (/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || ''))) {
+        const entry = state.appData?.journal?.[dateStr];
+        if (entry?.__detailsLoaded === false) {
+            console.warn(`[journal] partial day ${dateStr} was not marked for saving`);
+            return false;
+        }
         _dirtyJournalDates.add(dateStr);
         _journalDateRevisions.set(dateStr, (_journalDateRevisions.get(dateStr) || 0) + 1);
         publishSyncState('local', { pending: _dirtyJournalDates.size });
+        return true;
     }
+    return false;
 }
 
 const LOCALLY_AUTHORITATIVE_DAY_KEYS = [
@@ -569,6 +590,11 @@ async function performSettingsSave(context) {
                 state.appData.weeklyComments && typeof state.appData.weeklyComments === 'object' ? state.appData.weeklyComments : {},
         };
         await ensureDataSyncMetadata(user.id);
+        const previousSettings = (await readCachedValue(user.id, 'settings'))?.value;
+        const resetKeys = destructiveSettingsReset(previousSettings, settingsPayload);
+        if (resetKeys.length >= 3) {
+            throw syncError(`Збереження зупинено: одночасно очищуються важливі дані (${resetKeys.join(', ')}). Оновіть сторінку.`, 'DATA_LOSS_GUARD');
+        }
         const localResult = await commitLocalChanges(user.id, [{
             domain: 'settings',
             entityId: user.id,
@@ -747,6 +773,16 @@ async function _doSave(opts = {}) {
 
         const entries = sourceEntries
             .filter(([dateStr, entry]) => /^\d{4}-\d{2}-\d{2}$/.test(dateStr) && entry?.__detailsLoaded !== false);
+        const emptiedTradeDays = [];
+        for (const [dateStr, entry] of entries) {
+            if (Array.isArray(entry?.trades) && entry.trades.length > 0) continue;
+            const cached = await readCachedDay(userId, dateStr);
+            const previousTrades = cached?.row?.daily_metrics?.trades;
+            if (Array.isArray(previousTrades) && previousTrades.length > 0) emptiedTradeDays.push(dateStr);
+        }
+        if (emptiedTradeDays.length >= 3) {
+            throw syncError(`Збереження зупинено: зникли угоди одразу у ${emptiedTradeDays.length} днях. Оновіть сторінку.`, 'DATA_LOSS_GUARD');
+        }
         const revisionsAtSave = new Map(entries.map(([dateStr]) => [dateStr, _journalDateRevisions.get(dateStr) || 0]));
 
         const rows = entries.map(([dateStr, entry]) => {
