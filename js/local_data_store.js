@@ -2,6 +2,7 @@ import { applyMergePatch, canonicalJournalRow, cloneData, mergePatch, syncError 
 
 const DB_NAME = 'strum-local-data';
 const DB_VERSION = 2;
+const protectedSetting = key => /^(account_|registration|approved|blocked|role$|mentor_enabled$)/.test(key);
 const STORES = { days: 'journal-days', values: 'values', queue: 'sync-queue' };
 let dbPromise = null;
 function requestValue(request) {
@@ -93,10 +94,13 @@ export async function commitLocalChanges(userId, changes, options = {}) {
             const before = change.baseValue === undefined ? entityValue(record, domain) : cloneData(change.baseValue);
             const value = domain === 'journal' ? canonicalJournalRow(change.value) : cloneData(change.value);
             const patch = mergePatch(before, value);
+            if (domain === 'settings') {
+                for (const key of Object.keys(patch)) if (protectedSetting(key)) delete patch[key];
+            }
             if (!Object.keys(patch).length) continue;
             record.localRevision = (record.localRevision || 0) + 1;
             Object.assign(record, { dirty: 1, epoch: meta.epoch, cachedAt: Date.now() });
-            setValue(record, domain, change.baseValue === undefined ? value : applyMergePatch(entityValue(record, domain), patch));
+            setValue(record, domain, change.baseValue === undefined && domain !== 'settings' ? value : applyMergePatch(entityValue(record, domain), patch));
             meta.nextSequence = (meta.nextSequence || 0) + 1;
             const operationId = options.operationId && changes.length === 1 ? options.operationId : crypto.randomUUID();
             const operation = { key: operationId, operationId, userId, domain, entityId,
@@ -162,6 +166,25 @@ export async function readCachedValue(userId, name) {
 }
 export async function listDataOperations(userId) {
     return transact([STORES.queue], 'readonly', async stores => (await requestValue(stores[STORES.queue].index('user').getAll(userId)) || []).sort((a, b) => a.sequence - b.sequence));
+}
+// A rejected RPC rolls back the whole batch, including unrelated journal edits.
+// Keep identities and user patches; remove only server-managed account fields.
+export async function repairProtectedSettingsOperations(userId) {
+    return transact([STORES.queue], 'readwrite', async stores => {
+        for (const operation of await requestValue(stores[STORES.queue].index('user').getAll(userId)) || []) {
+            let changed = false;
+            if (operation.domain === 'settings') {
+                for (const key of Object.keys(operation.patch || {})) {
+                    if (protectedSetting(key)) { delete operation.patch[key]; changed = true; }
+                }
+            }
+            if (operation.status === 'blocked' && operation.lastError?.code === '42501'
+                && operation.lastError?.message === 'Protected account setting') {
+                operation.status = 'pending'; operation.nextAttemptAt = 0; operation.lastError = null; changed = true;
+            }
+            if (changed) stores[STORES.queue].put(operation);
+        }
+    });
 }
 export async function recordOperationFailure(userId, operationIds, error, nextAttemptAt, blocked = false) {
     return transact([STORES.queue], 'readwrite', async stores => {

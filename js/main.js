@@ -1346,6 +1346,7 @@ async function bootApp(user) {
             ),
         });
         bootProfile = profileResponse.data;
+        state.offlineBoot = profileResponse.offline === true;
         bootProfileError = profileResponse.error;
         console.log('[INIT] 1/4 profile loaded');
     } catch (error) {
@@ -1586,6 +1587,7 @@ supabase.auth.onAuthStateChange((event, session) => {
 });
 
 window.addEventListener('online', () => {
+    state.offlineBoot = false;
     if (_appInitialized) return;
     void supabase.auth.getSession().then(({ data }) => {
         if (data?.session?.user && !_appInitialized) return bootApp(data.session.user);

@@ -13,7 +13,60 @@ import { loadBootProfile } from '../js/boot_profile.js';
 
 Object.assign(globalThis, { indexedDB, IDBKeyRange });
 test.after(() => store.closeLocalDataStore());
+
+test('Realtime reconnect catches missed changes even without a postgres event', async () => {
+    let callback;
+    let pulls = 0;
+    const channel = { on() { return this; }, subscribe(fn) { callback = fn; } };
+    const source = (await readFile(new URL('../js/realtime_sync.js', import.meta.url), 'utf8'))
+        .replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, '');
+    const context = vm.createContext({
+        supabase: { channel: () => channel }, syncDataNow: async () => { pulls++; },
+        createRealtimeEventGate: () => () => true, document: { documentElement: { dataset: {} } },
+    });
+    vm.runInContext(source, context);
+    await vm.runInContext("replaceSubscription('owner')", context);
+    callback('SUBSCRIBED'); callback('CHANNEL_ERROR'); callback('SUBSCRIBED');
+    assert.equal(pulls, 2);
+});
+
+test('malformed or regressing cursor never replaces the saved checkpoint', async () => {
+    for (const cursor of [null, -1, 4, 'invalid']) {
+        const user = crypto.randomUUID();
+        await store.saveSyncMetadata(user, { epoch: 1, cursor: 5, initialized: true });
+        const engine = createDataSyncEngine({ store, schedule: () => 1, cancel() {}, lock: async (_user, run) => run(),
+            transport: { pull: async () => ({ epoch: 1, cursor, changes: [], hasMore: false }) } });
+        engine.start(user);
+        try { await assert.rejects(engine.flush(), { code: 'INVALID_SYNC_RESPONSE' }); }
+        finally { engine.stop(); }
+        assert.equal((await store.readSyncMetadata(user)).cursor, 5);
+    }
+});
 const date = '2026-09-17';
+test('settings omit protected account fields and repair an already rejected batch without losing edits', async () => {
+    const { user, save } = await fixture();
+    await store.cacheValue(user, 'settings', { account_approved: true, theme: 'before' });
+    await store.commitLocalChanges(user, [{ domain: 'settings', entityId: user, value: { theme: 'mine' } }]);
+    await save({ notes: 'keep journal too', pnl: 1 });
+    let operations = await store.listDataOperations(user);
+    const settings = operations.find(op => op.domain === 'settings');
+    assert.deepEqual(settings.patch, { theme: 'mine' });
+    assert.equal((await store.readCachedValue(user, 'settings')).value.account_approved, true);
+    const db = await new Promise(resolve => { const request = indexedDB.open('strum-local-data'); request.onsuccess = () => resolve(request.result); });
+    await new Promise((resolve, reject) => {
+        const tx = db.transaction('sync-queue', 'readwrite');
+        tx.objectStore('sync-queue').put({ ...settings, patch: { ...settings.patch, account_approved: null } });
+        tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+    await store.recordOperationFailure(user, operations.map(op => op.operationId), { code: '42501', message: 'Protected account setting' }, 9999999999999, true);
+    await store.repairProtectedSettingsOperations(user);
+    const repaired = await store.listDataOperations(user);
+    assert.deepEqual(repaired.map(op => op.operationId), operations.map(op => op.operationId));
+    assert.ok(repaired.every(op => op.status === 'pending'));
+    assert.deepEqual(repaired.find(op => op.domain === 'settings').patch, { theme: 'mine' });
+    assert.equal(repaired.find(op => op.domain === 'journal').patch.notes, 'keep journal too');
+});
 async function fixture() {
     const user = crypto.randomUUID();
     await store.saveSyncMetadata(user, { epoch: 1, cursor: 0, initialized: true });
@@ -182,5 +235,8 @@ test('offline restart keeps cached owner profile and network failure never becom
     const offline = await loadBootProfile('owner', { ...options, online: false, read: () => { throw new Error('offline network called'); } });
     assert.equal(offline.data.nick, 'audit');
     await assert.rejects(loadBootProfile('other', { ...options, online: false }));
-    await assert.rejects(loadBootProfile('owner', { ...options, read: async () => ({ error: new Error('Failed to fetch') }) }), /Failed to fetch/);
+    const disconnected = await loadBootProfile('owner', { ...options, read: async () => ({ error: new Error('Failed to fetch') }) });
+    assert.equal(disconnected.offline, true);
+    await assert.rejects(loadBootProfile('other', { ...options, read: async () => ({ error: new Error('Failed to fetch') }) }), /Failed to fetch/);
+    await assert.rejects(loadBootProfile('owner', { ...options, read: async () => { throw Object.assign(new Error('Forbidden'), { status: 403 }); } }), /Forbidden/);
 });

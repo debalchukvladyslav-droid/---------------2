@@ -604,14 +604,14 @@ export async function loadSettings() {
     const owner = state.myUserId;
     const current = () => generation === _accountContextGeneration && owner === state.myUserId;
     try {
-        const { user } = await getCurrentUserContext({ local: navigator.onLine === false });
+        const { user } = await getCurrentUserContext({ local: true });
         if (!user || user.id !== owner || !current()) return;
         const cached = await readCachedValue(user.id, 'settings');
         if (!current()) return;
         if (cached?.value && typeof cached.value === 'object') {
             applySettingsPayload(cached.value);
         }
-        if (navigator.onLine === false) return;
+        if (navigator.onLine === false || state.offlineBoot) return;
         const { data, error } = await supabase
             .from('profiles')
             .select('settings')
@@ -881,6 +881,7 @@ export async function loadMonth(nick, mk, userId = null) {
             state._availableMonthKeys.add(mk);
             console.log(`[LOAD] local ${mk}: ${cachedRows.length} days`);
         }
+        if (navigator.onLine === false || state.offlineBoot) return;
         const { start, end } = getMonthRange(mk);
         const { data, error } = await supabase
             .from('journal_days')
@@ -1152,6 +1153,12 @@ export async function initializeApp() {
             };
         }
         state.appData = normalizeAppData({ ...baseAppData, journal: {} });
+        // Rendering can trigger network reads and autosaves. Restore settings
+        // before rendering, so defaults cannot overwrite a queued offline edit.
+        if (isViewingOwnProfile) {
+            const cachedSettings = await readCachedValue(viewedUserId, 'settings');
+            if (cachedSettings?.value) applySettingsPayload(cachedSettings.value);
+        }
 
         state.loadedMonths[nick] = new Set();
         state._allMonthsLoaded = false;
@@ -1171,7 +1178,7 @@ export async function initializeApp() {
         }
 
         const [bootstrapLoaded] = await Promise.all([
-            navigator.onLine === false ? Promise.resolve(true) : loadBootstrapJournal(nick, viewedUserId, [prevMk, currentMk]),
+            navigator.onLine === false || state.offlineBoot ? Promise.resolve(true) : loadBootstrapJournal(nick, viewedUserId, [prevMk, currentMk]),
             isViewingOwnProfile ? loadSettings() : Promise.resolve(),
         ]);
         if (!bootstrapLoaded) {

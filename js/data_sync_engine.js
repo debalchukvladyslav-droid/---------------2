@@ -71,6 +71,8 @@ export function createDataSyncEngine({ transport, store = localStore, onChange =
     async function synchronize(user, version, requireServer) {
         if (!online()) { await status(user); if (requireServer) throw syncError('Зміни збережено на пристрої. Для цієї дії потрібен інтернет.', 'OFFLINE'); return; }
         await pull(user, version);
+        if (!current(user, version)) return;
+        await store.repairProtectedSettingsOperations?.(user);
         while (current(user, version)) {
             const all = await store.listDataOperations(user);
             if (!current(user, version)) return;

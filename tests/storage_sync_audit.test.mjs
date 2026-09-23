@@ -12,7 +12,7 @@ function harness(overrides = {}) {
     const state = { myUserId: 'owner', USER_DOC_NAME: 'owner_stats', CURRENT_VIEWED_USER: 'owner_stats', appData: { settings: { theme: 'local' }, journal: {} } };
     const context = vm.createContext({ console, setTimeout, clearTimeout, queueMicrotask, structuredClone,
         navigator: { onLine: true },
-        state, setDataSyncHandlers: value => { handlers = value; },
+        state, cloneData: structuredClone, setDataSyncHandlers: value => { handlers = value; },
         supabase: { auth: { getSession: async () => ({ data: { session: { user: { id: 'owner' } } } }), getUser: async () => { throw new Error('Network unavailable'); } } },
         ensureDataSyncMetadata: async () => {}, commitLocalChanges: async (...args) => { commits.push(args); return { pending: 1 }; },
         publishSyncState() {}, notifyDataSync() {}, clearStatsCache() {},
@@ -49,10 +49,19 @@ test('incoming sync cannot overwrite an in-flight settings edit or dirty journal
 test('late settings load is discarded after an account switch', async () => {
     let release;
     const response = new Promise(resolve => { release = resolve; });
-    const { api, state } = harness({ supabase: { auth: { getUser: () => response } } });
+    const { api, state } = harness({ supabase: { auth: { getSession: () => response } } });
     const loading = api.loadSettings();
     state.myUserId = 'other'; state.appData.settings = { theme: 'other-local' };
-    release({ data: { user: { id: 'owner' } } });
+    release({ data: { session: { user: { id: 'owner' } } } });
     await loading;
     assert.equal(state.appData.settings.theme, 'other-local');
+});
+
+test('cached settings load even when navigator reports online during network loss', async () => {
+    const { api, state } = harness({
+        readCachedValue: async () => ({ value: { theme: 'offline-restored' } }),
+        console: { error() {}, warn() {}, log() {} },
+    });
+    await api.loadSettings();
+    assert.equal(state.appData.settings.theme, 'offline-restored');
 });
