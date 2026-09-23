@@ -864,7 +864,10 @@ export async function switchMainTab(tab, options = {}) {
     document.body?.classList.toggle('is-calendar-tab', tab === 'calendar');
     const previousView = document.querySelector('.view-content.active');
     const previousTab = previousView?.id?.replace(/^view-/, '') || '';
-    if (previousTab === tab) return;
+    if (previousTab === tab) {
+        if (tab === 'dash') window.closeDayPanel?.();
+        return;
+    }
     await window.autoSaveCurrentDay?.();
     const switchToken = ++mainTabSwitchToken;
     if (options.updateRoute !== false) updateRouteForTab(tab, options.historyMode);
@@ -906,6 +909,7 @@ export async function switchMainTab(tab, options = {}) {
 
     let activeSosBtn = document.getElementById('sos-btn');
     if (activeSosBtn) activeSosBtn.style.display = tab === 'dash' ? 'flex' : 'none';
+    if (tab === 'dash') window.closeDayPanel?.();
 
     const startedAt = performance.now();
     await nextPaint();

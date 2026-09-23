@@ -186,6 +186,34 @@ function _dashSetBadge(id, text, type) {
 }
 
 /** Картки «Про» та останні угоди на дашборді — тільки для обраного в календарі місяця. */
+function renderDashToday() {
+    const resultEl = document.getElementById('dash-today-result');
+    const statusEl = document.getElementById('dash-today-status');
+    const actionEl = document.getElementById('dash-today-action');
+    if (!resultEl || !statusEl || !actionEl) return;
+
+    const today = new Date().toLocaleString('en-CA', { timeZone: 'America/New_York' }).split(',')[0];
+    const day = state.appData?.journal?.[today];
+    const pnl = day ? getEffectiveDayPnl(day) : null;
+    const trades = day ? visibleTradeRows(day.trades).length : 0;
+    const closed = day?.sessionReviewDone === true;
+
+    if (Number.isFinite(pnl)) {
+        resultEl.textContent = `${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`;
+        resultEl.className = pnl >= 0 ? 'is-profit' : 'is-loss';
+    } else if (trades > 0) {
+        resultEl.textContent = `Угод: ${trades}`;
+        resultEl.className = '';
+    } else {
+        resultEl.textContent = 'Ще немає результату';
+        resultEl.className = '';
+    }
+    statusEl.textContent = closed ? 'Сесію закрито' : 'Сесію не закрито';
+    const toJournal = closed && (Number.isFinite(pnl) || trades > 0);
+    actionEl.dataset.tab = toJournal ? 'trades' : 'calendar';
+    actionEl.textContent = toJournal ? 'Журнал' : 'Календар';
+}
+
 export function updateDashboardWidgets(year, month) {
     const mk = `${year}-${String(month + 1).padStart(2, '0')}`;
     const prefix = `${mk}-`;
@@ -323,15 +351,12 @@ export function updateDashboardWidgets(year, month) {
             list.querySelectorAll('.recent-trade-item').forEach((el) => {
                 el.addEventListener('click', () => {
                     const ds = el.getAttribute('data-recent-date');
-                    const ix = parseInt(el.getAttribute('data-recent-idx') || '0', 10);
-                    const rowIndex = parseInt(el.getAttribute('data-recent-row') || '0', 10);
-                    const selectedRow = top[rowIndex];
-                    const trade = ix >= 0 ? state.appData?.journal?.[ds]?.trades?.[ix] || selectedRow?.trade : selectedRow?.trade;
-                    void openScreenshotForTrade(ds, trade);
+                    if (ds) void openDayEditor(ds);
                 });
             });
         }
     }
+    renderDashToday();
     window.refreshDashboardWidgets?.();
 }
 
@@ -1196,12 +1221,7 @@ export async function renderView() {
         dayPnl.textContent = pnlDisplay;
         cell.appendChild(dayNum);
         cell.appendChild(dayPnl);
-        cell.onclick = () => { void selectDate(dateKey); };
-        cell.ondblclick = (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            void openDayEditor(dateKey);
-        };
+        cell.onclick = () => { void openDayEditor(dateKey); };
         if (dateKey === state.selectedDateStr) cell.classList.add('active-day');
         grid.appendChild(cell);
     }
