@@ -234,7 +234,7 @@ body.stop-review-open {
 .stop-review-workspace.stop-review-fullscreen {
     position: fixed;
     inset: 0;
-    z-index: 2147483000 !important;
+    z-index: var(--z-preview) !important;
     isolation: isolate;
     display: flex;
     flex-direction: column;

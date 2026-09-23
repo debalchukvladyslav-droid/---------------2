@@ -10,7 +10,7 @@
         linear-gradient(135deg, #020617 0%, #082f2b 34%, #101827 68%, #020617 100%);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
-    z-index: 99999;
+    z-index: var(--z-modal);
     display: flex;
     justify-content: center;
     align-items: center;

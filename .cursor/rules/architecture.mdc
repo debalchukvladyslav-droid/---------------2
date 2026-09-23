@@ -1,0 +1,21 @@
+---
+description: Куди класти новий код, хто власник кліків і CSS-шарів
+alwaysApply: true
+---
+
+# Архітектура журналу
+
+Повна карта: `docs/ARCHITECTURE.md`.
+
+- HTML: оболонка лише в `index.html`. Екрани й панелі — у `partials/`.
+- JS екрана — у своєму файлі (`calendar.js`, `stats.js`…). `*_core.js` — без DOM.
+- Нові кнопки: `data-action` у `js/app_enhancements.js`. Не додавати `window.foo`. Легасі-реєстр — `js/app_api.js`.
+- CSS: тематичний файл (`css/4_calendar.css`…). Не писати в `css/13_fixes.css` і не створювати `css/26_*.css`. `z-index` лише через `--z-*` з `css/1_tokens.css`.
+- Порядок шарів: sticky < dropdown < FAB < панель < поповер < сайдбар < модалки < прев’ю < тост < онбординг < системне. Лише токени `--z-*`.
+- Вкладки `dash`, `calendar`, `trades`, `datagrid`, `table` — різні екрани. Не зливати без окремого запиту.
+- Дашборд зараз статичний HTML. `js/dashboard_widgets.js` і `css/20_dashboard_widgets.css` dormant — не підключати тихо.
+
+```html
+<!-- BAD --><button onclick="window.saveEntry()">
+<!-- GOOD --><button type="button" data-action="save-entry">
+```

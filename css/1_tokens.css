@@ -93,6 +93,21 @@
     --spacing-md: 16px;
     --spacing-lg: 24px;
 
+    /* === Z-INDEX LAYERS ===
+       sticky < dropdown < FAB < panel < popover < sidebar < modal < preview < toast < onboarding < system */
+    --z-base: 1;
+    --z-sticky: 50;
+    --z-dropdown: 200;
+    --z-fab: 400;
+    --z-panel: 1000;
+    --z-popover: 1200;
+    --z-sidebar: 5000;
+    --z-modal: 6000;
+    --z-preview: 7000;
+    --z-toast: 7500;
+    --z-onboarding: 8000;
+    --z-system: 9000;
+
     /* === TRANSITIONS === */
     --transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease;
 

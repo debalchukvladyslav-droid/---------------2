@@ -15,7 +15,7 @@
 
     .sidebar {
         position: fixed; top: 0; right: 0; left: auto; width: min(92vw, 420px); min-width: 0; height: 100dvh; max-height: 100dvh;
-        border-radius: 18px 0 0 18px; z-index: 100002; transform: translateX(105%); padding: 18px; box-shadow: -18px 0 40px rgba(0, 0, 0, 0.45);
+        border-radius: 18px 0 0 18px; z-index: calc(var(--z-sidebar) + 1); transform: translateX(105%); padding: 18px; box-shadow: -18px 0 40px rgba(0, 0, 0, 0.45);
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); overflow-y: auto;
         -webkit-overflow-scrolling: touch; padding-bottom: env(safe-area-inset-bottom);
     }

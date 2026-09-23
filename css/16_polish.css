@@ -226,7 +226,7 @@ body {
 
 .journal-score-popover {
     position: absolute;
-    z-index: 250;
+    z-index: calc(var(--z-dropdown) + 50);
     top: calc(100% + 8px);
     right: 10px;
     width: 278px;
@@ -764,7 +764,7 @@ body {
 .app-modal-overlay {
     position: fixed;
     inset: 0;
-    z-index: 99998;
+    z-index: var(--z-modal);
     display: none;
     align-items: center;
     justify-content: center;
@@ -1056,7 +1056,7 @@ body {
 }
 
 .session-modal-overlay {
-    z-index: 99990;
+    z-index: var(--z-modal);
     padding: 16px;
     box-sizing: border-box;
     background: color-mix(in srgb, #020617 78%, transparent);
@@ -3146,7 +3146,7 @@ body {
 .dashboard-ai-history__item.is-good { border-left-color: var(--profit); } .dashboard-ai-history__item.is-attention { border-left-color: var(--gold); } .dashboard-ai-history__item.is-risk { border-left-color: var(--loss); }
 .dashboard-ai-history__item strong { color: var(--text-main); font-size: .76rem; } .dashboard-ai-history__item p { margin: 4px 0 0; color: var(--text-muted); font-size: .74rem; line-height: 1.4; }
 .dashboard-mentor-open { overflow: hidden; }
-.dashboard-mentor-modal { position: fixed; inset: 0; z-index: 10020; display: grid; place-items: center; padding: 18px; background: rgba(5, 9, 15, .68); backdrop-filter: blur(8px); }
+.dashboard-mentor-modal { position: fixed; inset: 0; z-index: var(--z-modal); display: grid; place-items: center; padding: 18px; background: rgba(5, 9, 15, .68); backdrop-filter: blur(8px); }
 .dashboard-mentor-modal[hidden] { display: none; }
 .dashboard-mentor-dialog { display: flex; flex-direction: column; width: min(720px, 100%); height: min(780px, 92vh); overflow: hidden; border: 1px solid var(--border); border-radius: 20px; background: var(--bg-panel); box-shadow: 0 24px 80px rgba(0,0,0,.4); }
 .dashboard-mentor-dialog > header { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 12px; }
@@ -3715,7 +3715,7 @@ body[data-theme="light"] .settings-dayloss-row input[type="month"] {
     position: fixed;
     top: 10px;
     left: 10px;
-    z-index: 100001;
+    z-index: var(--z-system);
     transform: translateY(-140%);
     padding: 9px 12px;
     border-radius: 8px;
@@ -3734,7 +3734,7 @@ body[data-theme="light"] .settings-dayloss-row input[type="month"] {
 .noscript-warning {
     position: fixed;
     inset: 0;
-    z-index: 100000;
+    z-index: var(--z-system);
     display: grid;
     place-items: center;
     padding: 24px;
@@ -3819,7 +3819,7 @@ textarea:disabled {
     position: fixed;
     right: max(22px, env(safe-area-inset-right));
     bottom: max(22px, env(safe-area-inset-bottom));
-    z-index: 9990;
+    z-index: var(--z-fab);
     width: auto;
     min-width: 132px;
     height: 48px;
@@ -4382,7 +4382,7 @@ body[data-theme="light"] #form-sidebar select {
 .zoom-nav-btn {
     position: fixed;
     top: 50%;
-    z-index: 100001;
+    z-index: calc(var(--z-preview) + 1);
     width: 46px;
     height: 64px;
     border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
@@ -4414,7 +4414,7 @@ body[data-theme="light"] #form-sidebar select {
     position: fixed;
     left: 50%;
     bottom: 22px;
-    z-index: 100001;
+    z-index: calc(var(--z-preview) + 1);
     padding: 7px 12px;
     border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
     border-radius: 999px;
@@ -4433,7 +4433,7 @@ body[data-theme="light"] #form-sidebar select {
     position: fixed;
     left: 50%;
     bottom: 18px;
-    z-index: 100000;
+    z-index: var(--z-toast);
     transform: translateX(-50%);
     width: min(520px, calc(100vw - 24px));
     padding: 10px 14px;

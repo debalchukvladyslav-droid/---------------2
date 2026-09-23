@@ -473,7 +473,7 @@
     position: fixed;
     bottom: 28px;
     right: 28px;
-    z-index: 500;
+    z-index: var(--z-fab);
     width: 52px;
     height: 52px;
     border-radius: 50%;
@@ -637,7 +637,7 @@ body.is-calendar-tab .quick-trade-fab {
     position: fixed;
     bottom: 90px;
     right: 28px;
-    z-index: 499;
+    z-index: var(--z-fab);
     width: 44px;
     height: 44px;
     border-radius: 50%;
@@ -663,7 +663,7 @@ body.is-calendar-tab .quick-trade-fab {
     inset: 0;
     background: rgba(0,0,0,0.7);
     backdrop-filter: blur(8px);
-    z-index: 99990;
+    z-index: var(--z-modal);
     justify-content: center;
     align-items: center;
     padding: 16px;
@@ -2566,7 +2566,7 @@ body.is-calendar-tab .quick-trade-fab {
     display: none;
     position: fixed;
     inset: 0;
-    z-index: 9990;
+    z-index: var(--z-popover);
     background: rgba(0, 0, 0, 0.35);
 }
 .notif-dropdown-backdrop.visible {
@@ -2579,7 +2579,7 @@ body.is-calendar-tab .quick-trade-fab {
     right: 16px;
     width: min(380px, calc(100vw - 24px));
     max-height: min(72vh, 520px);
-    z-index: 9991;
+    z-index: calc(var(--z-popover) + 1);
     flex-direction: column;
     background: var(--bg-panel);
     border: 1px solid var(--border);
@@ -2808,7 +2808,7 @@ body.is-calendar-tab .quick-trade-fab {
     position: fixed;
     right: 18px;
     bottom: 18px;
-    z-index: 10020;
+    z-index: var(--z-modal);
     display: grid;
     gap: 7px;
     width: min(300px, calc(100vw - 32px));

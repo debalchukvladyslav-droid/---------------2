@@ -167,7 +167,7 @@
 .stats-bar-item { position: relative; }
 .stats-pro-toolbar:has(.stats-bar-dropdown.open) {
     position: relative;
-    z-index: 1100;
+    z-index: var(--z-popover);
 }
 .stats-bar-trigger {
     display: flex; align-items: center; gap: 7px; padding: 7px 12px;
@@ -182,7 +182,7 @@
 .stats-bar-trigger.open .stats-dropdown-caret { transform: rotate(180deg); }
 .stats-bar-label { font-size: 0.68rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; }
 .stats-bar-value { font-size: 0.82rem; font-weight: 600; color: var(--text-main); }
-.stats-bar-dropdown { position: absolute; top: calc(100% + 5px); left: 0; min-width: 210px; z-index: 1150; padding: 12px; border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--bg-panel); box-shadow: var(--shadow-lg); display: none; overflow: hidden; }
+.stats-bar-dropdown { position: absolute; top: calc(100% + 5px); left: 0; min-width: 210px; z-index: calc(var(--z-popover) + 1); padding: 12px; border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--bg-panel); box-shadow: var(--shadow-lg); display: none; overflow: hidden; }
 .stats-bar-dropdown.open { display: block; }
 .stats-dropdown-caret { transition: transform 0.2s ease; color: var(--accent); font-size: 0.7rem; }
 
@@ -347,7 +347,7 @@
 }
 .team-badge-home { border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); color: var(--accent); }
 .team-badge-mentor { border-color: color-mix(in srgb, var(--gold) 45%, var(--border)); color: var(--gold); background: color-mix(in srgb, var(--gold) 10%, transparent); }
-.team-sidebar-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(2px); z-index: 200001; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+.team-sidebar-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(2px); z-index: var(--z-sidebar); opacity: 0; pointer-events: none; transition: opacity 0.3s; }
 .team-sidebar-backdrop.visible { opacity: 1; pointer-events: auto; }
 
 /* Модалка керування кущами (ментор) */
@@ -355,7 +355,7 @@
     display: none;
     position: fixed;
     inset: 0;
-    z-index: 100001;
+    z-index: var(--z-modal);
     align-items: flex-start;
     justify-content: center;
     overflow-y: auto;

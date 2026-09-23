@@ -420,7 +420,7 @@
     display: none; position: fixed; inset: 0;
     background: rgba(0,0,0,0.6);
     backdrop-filter: blur(2px);
-    z-index: 100001; opacity: 0; pointer-events: none; transition: opacity 0.3s;
+    z-index: var(--z-sidebar); opacity: 0; pointer-events: none; transition: opacity 0.3s;
 }
 .form-sidebar-backdrop.visible { display: block; opacity: 1; pointer-events: auto; }
 @media (min-width: 1025px) { .form-sidebar-backdrop { display: none !important; pointer-events: none !important; } }
@@ -433,7 +433,7 @@
     position: fixed; top: 0; left: -360px;
     width: 340px; height: 100vh;
     border-right: 1px solid var(--border);
-    z-index: 200002;
+    z-index: calc(var(--z-sidebar) + 1);
     transition: 0.32s cubic-bezier(0.4, 0, 0.2, 1);
     padding: 0; box-sizing: border-box;
     box-shadow: 8px 0 40px rgba(0,0,0,0.5);
