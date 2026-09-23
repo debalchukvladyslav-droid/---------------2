@@ -39,6 +39,7 @@ export async function createCompressedBackup(options = {}) {
     if (!options.force && last?.version === 2 && Date.now() - Date.parse(last.createdAt) < minIntervalMs) return last;
     const entry = pointEntry(await rpc('create_restore_point', { p_reason: reason, p_user_id: owner }));
     assertContext(owner);
+    void offloadOneOlderRestorePoint(owner).catch((error) => console.warn('[Backup offload]', error?.message || error));
     if (serverBackupsLoadedFor !== owner) serverBackupsCache = [];
     serverBackupsLoadedFor = owner;
     serverBackupsCache = [entry, ...serverBackupsCache].slice(0, 200);
@@ -90,9 +91,38 @@ async function decodeLegacy(entry) {
     if (!payload?.appData?.journal || typeof payload.appData.journal !== 'object') throw new Error('Файл не містить журналу.');
     return { entry, payload };
 }
+async function stageOffloadedSnapshot(point) {
+    const path = point.snapshot?.storagePath;
+    const owner = point.userId || point.serverUserId;
+    if (!path || !owner) throw new Error('У копії немає файлу в сховищі.');
+    const downloaded = await supabase.storage.from('journal-backups').download(path);
+    if (downloaded.error || !downloaded.data) throw new Error('Не вдалося прочитати файл копії.');
+    const snapshot = JSON.parse(await downloaded.data.text());
+    return rpc('stage_restore_snapshot', { p_restore_point_id: point.id, p_snapshot: snapshot, p_user_id: owner });
+}
+
+async function offloadOneOlderRestorePoint(owner) {
+    const points = await rpc('list_restore_points', { p_user_id: owner, p_limit: 200 });
+    const candidate = (points || []).slice(1).find((point) => point?.offloaded !== true);
+    if (!candidate?.id) return;
+    const full = await rpc('get_restore_point', { p_restore_point_id: candidate.id, p_user_id: owner });
+    if (!full?.snapshot?.tables || full.snapshot?.offloaded) return;
+    const path = `${owner}/${candidate.id}.json`;
+    const uploaded = await supabase.storage.from('journal-backups').upload(path, JSON.stringify(full.snapshot), {
+        upsert: true,
+        contentType: 'application/json',
+    });
+    if (uploaded.error) throw uploaded.error;
+    await rpc('mark_restore_point_offloaded', { p_restore_point_id: candidate.id, p_path: path, p_user_id: owner });
+}
+
 export async function readCompressedBackupEntry(entry) {
     if (entry.version === 2) {
-        const point = entry.snapshot ? entry : await rpc('get_restore_point', { p_restore_point_id: entry.id, p_user_id: entry.serverUserId || entry.userId });
+        let point = entry.snapshot?.tables
+            ? entry
+            : await rpc('get_restore_point', { p_restore_point_id: entry.id, p_user_id: entry.serverUserId || entry.userId });
+        if (point.snapshot?.offloaded) point = await stageOffloadedSnapshot(point);
+        if (!point.snapshot?.tables) throw new Error('Копія ще не підвантажена з файлового сховища.');
         return { entry: { ...entry, ...point }, payload: point.snapshot };
     }
     return decodeLegacy(entry);
