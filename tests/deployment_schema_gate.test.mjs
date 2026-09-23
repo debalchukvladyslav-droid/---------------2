@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { schemaUnavailable, verifyRecoverySchema } from '../scripts/verify-deployment-schema.mjs';
+import { publicSupabaseConfig, schemaUnavailable, verifyRecoverySchema } from '../scripts/verify-deployment-schema.mjs';
+
+test('deployment schema gate can use the public browser config when build env is absent', () => {
+    assert.deepEqual(publicSupabaseConfig("supabaseUrl: 'https://project.supabase.co', supabaseAnonKey: 'publishable'"), {
+        url: 'https://project.supabase.co', key: 'publishable',
+    });
+});
 
 test('deployment schema gate recognizes missing PostgREST objects', () => {
     assert.equal(schemaUnavailable(404, { code: 'PGRST202' }), true);

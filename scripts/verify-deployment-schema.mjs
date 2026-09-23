@@ -1,4 +1,10 @@
 import { pathToFileURL } from 'node:url';
+import { readFile } from 'node:fs/promises';
+
+export function publicSupabaseConfig(source = '') {
+    const value = name => source.match(new RegExp(`${name}\\s*:\\s*['\"]([^'\"]+)`))?.[1] || '';
+    return { url: value('supabaseUrl'), key: value('supabaseAnonKey') };
+}
 
 export function schemaUnavailable(status, payload = {}) {
     return status === 404 || ['PGRST202', 'PGRST205'].includes(String(payload?.code || ''));
@@ -25,9 +31,10 @@ export async function verifyRecoverySchema({ url, key, fetchImpl = fetch } = {})
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
     if (process.env.VERCEL_ENV !== 'production') console.log('Recovery schema gate skipped outside production.');
     else {
+        const publicConfig = publicSupabaseConfig(await readFile(new URL('../config.js', import.meta.url), 'utf8'));
         await verifyRecoverySchema({
-            url: process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
-            key: process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+            url: process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || publicConfig.url,
+            key: process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || publicConfig.key,
         });
         console.log('Recovery schema is ready for this client.');
     }
