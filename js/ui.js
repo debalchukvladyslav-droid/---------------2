@@ -677,10 +677,21 @@ function setViewLoading(view, tab, isLoading) {
     }
 }
 
+let restoreDayModeFocus = false;
+
+function releaseHiddenViewFocus(view) {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement) || !view.contains(active)) return false;
+    const fromMode = Boolean(active.closest('.day-mode-link'));
+    active.blur();
+    return fromMode;
+}
+
 function deactivateMainView(view, nextTab) {
     if (!view) return;
     const prevTab = view.id?.replace(/^view-/, '') || '';
     const wasActive = view.classList.contains('active');
+    if (wasActive && releaseHiddenViewFocus(view)) restoreDayModeFocus = true;
     if (wasActive && prevTab) {
         view.dispatchEvent(new CustomEvent('app:view-leave', {
             bubbles: true,
@@ -703,6 +714,11 @@ function activateMainView(view, tab, previousTab) {
     view.style.display = 'flex';
     view.setAttribute('aria-hidden', 'false');
     view.inert = false;
+    if (restoreDayModeFocus) {
+        restoreDayModeFocus = false;
+        const nextMode = view.querySelector(`.day-mode-link[data-tab="${tab}"]`);
+        if (nextMode) requestAnimationFrame(() => nextMode.focus({ preventScroll: true }));
+    }
     view.dispatchEvent(new CustomEvent('app:view-enter', {
         bubbles: true,
         detail: { tab, previousTab },

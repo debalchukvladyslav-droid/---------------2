@@ -358,24 +358,18 @@ function renderPillNav(dateStr) {
         return;
     }
 
-    // Day summary label
-    const dayNet = tradeRows.reduce((s, row) => s + (Number(row.trade.net) || 0), 0);
-    const dayLabel = document.createElement('span');
-    dayLabel.style.cssText = 'font-size:0.75rem;color:var(--text-muted);white-space:nowrap;margin-right:4px;flex-shrink:0;';
-    dayLabel.textContent = `${dateStr} · ${dayNet >= 0 ? '+' : ''}${dayNet.toFixed(0)}$`;
-    nav.appendChild(dayLabel);
-
-    const sep = document.createElement('div');
-    sep.style.cssText = 'width:1px;height:20px;background:var(--border);flex-shrink:0;margin:0 4px;';
-    nav.appendChild(sep);
-
     tradeRows.forEach(({ trade, index }) => {
-        const isProfit = trade.net >= 0;
+        const isProfit = Number(trade.net) >= 0;
         const timeIn = trade.opened?.split(' ')[1] || trade.opened || '';
         const pill = document.createElement('button');
+        pill.type = 'button';
         pill.className = `trade-pill ${isProfit ? 'profit' : 'loss'}`;
         pill.dataset.idx = index;
-        pill.textContent = `${trade.symbol} ${trade.type === 'Short' ? '▼' : '▲'} ${timeIn} ${isProfit ? '+' : ''}${trade.net.toFixed(0)}$`;
+        const symbol = document.createElement('strong');
+        symbol.textContent = `${trade.symbol || '—'} ${trade.type === 'Short' ? '▼' : '▲'}`;
+        const meta = document.createElement('small');
+        meta.textContent = `${timeIn} ${isProfit ? '+' : ''}${Number(trade.net || 0).toFixed(0)}$`;
+        pill.append(symbol, meta);
         pill.addEventListener('click', () => _selectTrade(dateStr, index));
         nav.appendChild(pill);
     });
@@ -684,8 +678,9 @@ function renderTradeInfoBar(trades) {
         const hasScreen = findScreenshotsForTicker(_activeTrade?.dateStr, trade.symbol).length > 0;
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.style.cssText = `padding:6px 12px;background:${hasScreen ? 'rgba(59,130,246,0.12)' : 'var(--bg-main)'};border:1px solid ${hasScreen ? 'var(--accent)' : 'var(--border)'};border-radius:8px;color:${hasScreen ? 'var(--accent)' : 'var(--text-muted)'};font-weight:700;cursor:pointer;`;
-        btn.textContent = hasScreen ? 'Відкрити скрін' : 'Скріна ще немає';
+        btn.className = 'trade-screen-btn';
+        btn.style.cssText = `margin-left:auto;flex:0 0 auto;padding:6px 12px;background:${hasScreen ? 'rgba(59,130,246,0.12)' : 'var(--bg-main)'};border:1px solid ${hasScreen ? 'var(--accent)' : 'var(--border)'};border-radius:8px;color:${hasScreen ? 'var(--accent)' : 'var(--text-muted)'};font-weight:700;cursor:pointer;`;
+        btn.textContent = hasScreen ? 'Відкрити скріншот' : 'Без скріншота';
         btn.addEventListener('click', () => void openScreenshotForTrade(_activeTrade?.dateStr, trade));
         bar.appendChild(btn);
     }
@@ -735,10 +730,14 @@ async function buildLWChart(symbol, dateStr, trades) {
         container.textContent = '';
         const errDiv = document.createElement('div');
         const isPlanLimit = e?.code === 'POLYGON_PLAN_TIMEFRAME' || /plan doesn't include this data timeframe|тариф Polygon/i.test(String(e?.message || ''));
-        errDiv.style.cssText = `color:${isPlanLimit ? 'var(--text-muted)' : 'var(--loss)'};padding:20px;text-align:center;line-height:1.45;`;
-        errDiv.textContent = isPlanLimit
+        errDiv.style.cssText = `position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;line-height:1.45;color:${isPlanLimit ? 'var(--text-muted)' : 'var(--loss)'};`;
+        if (!isPlanLimit) console.warn('[Trades chart]', e?.message || e);
+        const errText = document.createElement('span');
+        errText.style.cssText = 'max-width:420px;';
+        errText.textContent = isPlanLimit
             ? `Свічки для ${symbol} за ${dateStr} недоступні на поточному тарифі Polygon. Журнал і дані угоди працюють, але для графіка потрібен Polygon-план з хвилинними historical aggregates за цей період.`
-            : `❌ Не вдалось завантажити дані: ${e.message}`;
+            : `Графік ${symbol} зараз недоступний. Результат угоди лишається зверху.`;
+        errDiv.appendChild(errText);
         container.appendChild(errDiv);
         return;
     }

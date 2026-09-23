@@ -2377,6 +2377,32 @@ body {
     overflow: hidden;
 }
 
+.trades-workspace {
+    display: grid;
+    grid-template-columns: 260px minmax(0, 1fr);
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+}
+
+.trades-rail {
+    position: relative;
+    z-index: var(--z-dropdown);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    border-right: 1px solid var(--border);
+    background: var(--bg-panel);
+}
+
+.trades-stage {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+}
+
 .trades-selector-panel,
 .trade-pill-nav,
 .trade-info-bar {
@@ -2622,14 +2648,70 @@ body {
     }
 }
 
-.trade-pill-nav {
+.trade-pill-nav,
+#trade-pill-nav {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    flex-wrap: nowrap;
+    gap: 6px;
+    flex: 1;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 8px;
+    border-bottom: 0;
+    scrollbar-width: thin;
+}
+
+.trade-pill {
     display: flex;
     align-items: center;
-    gap: 6px;
-    min-height: 44px;
-    overflow-x: auto;
-    padding: 6px 12px;
-    scrollbar-width: none;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    border-radius: 8px;
+    text-align: left;
+}
+
+.trade-pill strong,
+.trade-pill small {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.trade-pill small {
+    color: inherit;
+    font-size: 0.72rem;
+    font-weight: 600;
+    opacity: 0.85;
+}
+
+@media (max-width: 900px) {
+    .trades-workspace {
+        grid-template-columns: 1fr;
+    }
+
+    .trades-rail {
+        z-index: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+    }
+
+    #trade-pill-nav {
+        flex-direction: row;
+        align-items: center;
+        max-height: none;
+        overflow-x: auto;
+        overflow-y: hidden;
+    }
+
+    .trade-pill {
+        width: auto;
+        flex-shrink: 0;
+    }
 }
 
 .trade-info-bar {

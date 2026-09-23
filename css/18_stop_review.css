@@ -727,13 +727,31 @@ body.stop-review-open {
 .stop-mistakes-head h2 { margin-top:0; font-size:1.25rem; }
 .stop-mistakes-head p { max-width:560px; font-size:.84rem; line-height:1.45; }
 .stop-mistakes-layout {
-    grid-template-columns:250px minmax(0,1fr);
-    min-height:0;
-    margin-top:14px;
-    border-radius:12px;
-    background:var(--bg-main);
+    display: grid;
+    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+    align-items: stretch;
+    min-height: 420px;
+    margin-top: 14px;
+    border-radius: 12px;
+    background: var(--bg-main);
 }
-.stop-mistakes-list { max-height:520px; padding:8px; overflow-y:auto; }
+.stop-mistakes-list {
+    min-width: 0;
+    max-height: 520px;
+    padding: 8px;
+    overflow: auto;
+    border-right: 1px solid var(--border-color);
+}
+.stop-mistake-list-item > span:first-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.stop-mistake-detail {
+    min-width: 0;
+    overflow: auto;
+}
 .stop-mistake-list-item {
     align-items:center;
     min-height:42px;

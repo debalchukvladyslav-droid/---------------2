@@ -4,6 +4,8 @@
                 <button type="button" class="day-mode-link" data-tab="datagrid" role="tab">Таблиця</button>
                 <button type="button" class="day-mode-link" data-tab="table" role="tab">Імпорт</button>
             </div>
+            <div class="trades-workspace">
+            <aside class="trades-rail">
             <!-- Панель вибору дня -->
             <div id="trades-selector-panel" class="trades-selector-panel">
                 <div class="trades-date-picker" id="trades-date-picker">
@@ -28,9 +30,9 @@
                     <option value="">— Оберіть день —</option>
                 </select>
             </div>
-            <!-- Pill-навігація угод -->
             <div id="trade-pill-nav" class="trade-pill-nav"></div>
-            <!-- Інфо-плашка угоди -->
+            </aside>
+            <div class="trades-stage">
             <div id="trade-info-bar" class="trade-info-bar initially-hidden"></div>
             <!-- Графік -->
             <div id="tv-widget-container" class="tv-widget-container">
@@ -39,5 +41,7 @@
                     <span>Оберіть угоду для перегляду</span>
                 </div>
                 <div id="tradingview-widget" class="tradingview-widget initially-hidden"></div>
+            </div>
+            </div>
             </div>
         </div>
