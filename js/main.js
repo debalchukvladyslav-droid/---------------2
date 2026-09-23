@@ -130,6 +130,16 @@ window.toggleRightSidebar = function() {
 
     setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 320);
 };
+
+window.closeDayPanel = function() {
+    const sidebar = document.getElementById('form-sidebar') || document.querySelector('.sidebar');
+    if (!sidebar) return;
+    if (window.innerWidth <= 1024) {
+        if (sidebar.classList.contains('open') && window.toggleMobileSidebar) window.toggleMobileSidebar(false);
+        return;
+    }
+    if (!sidebar.classList.contains('collapsed')) window.toggleRightSidebar();
+};
 window.getDefaultDayEntry = getDefaultDayEntry;
 window.state = state;
 window.startOnboardingTour = startOnboardingTour;
