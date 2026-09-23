@@ -117,10 +117,6 @@
     0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
     50%      { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent); }
 }
-@keyframes cell-sheen {
-    from { transform: translateX(-55%); }
-    to   { transform: translateX(55%); }
-}
 @keyframes tab-glow {
     0%, 100% { box-shadow: var(--shadow-accent-sm); }
     50%      { box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 32%, transparent); }
@@ -375,20 +371,6 @@ body[data-theme="frost"] {
 }
 .stat-card:nth-child(2n)::before { animation-duration: 6.2s; animation-delay: -1.4s; }
 .stat-card:nth-child(3n)::before { animation-duration: 5.4s; animation-delay: -2.2s; }
-
-.day-cell::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    opacity: 0;
-    background: linear-gradient(115deg, transparent 36%, color-mix(in srgb, var(--accent) 22%, white) 50%, transparent 64%);
-}
-.day-cell:hover:not(.empty)::after {
-    opacity: 0.9;
-    animation: cell-sheen 0.7s ease;
-}
 
 .theme-card-preview {
     background-size: 180% 180%;
