@@ -2,7 +2,7 @@ import { pathToFileURL } from 'node:url';
 import { readFile } from 'node:fs/promises';
 
 export function publicSupabaseConfig(source = '') {
-    const value = name => source.match(new RegExp(`${name}\\s*:\\s*['\"]([^'\"]+)`))?.[1] || '';
+    const value = name => source.match(new RegExp(`['\"]?${name}['\"]?\\s*:\\s*['\"]([^'\"]+)`))?.[1] || '';
     return { url: value('supabaseUrl'), key: value('supabaseAnonKey') };
 }
 

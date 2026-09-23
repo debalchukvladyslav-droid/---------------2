@@ -6,6 +6,9 @@ test('deployment schema gate can use the public browser config when build env is
     assert.deepEqual(publicSupabaseConfig("supabaseUrl: 'https://project.supabase.co', supabaseAnonKey: 'publishable'"), {
         url: 'https://project.supabase.co', key: 'publishable',
     });
+    assert.deepEqual(publicSupabaseConfig('window.TRADING_JOURNAL_CONFIG = {"supabaseUrl":"https://json.supabase.co","supabaseAnonKey":"json-key"};'), {
+        url: 'https://json.supabase.co', key: 'json-key',
+    });
 });
 
 test('deployment schema gate recognizes missing PostgREST objects', () => {
