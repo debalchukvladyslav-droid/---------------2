@@ -11,6 +11,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/aggressiveness",
+      "destination": "/api/fear-greed?gauge=aggressiveness"
+    },
+    {
       "source": "/api/export",
       "destination": "/api/sheets-service?action=export"
     },

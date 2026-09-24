@@ -25,4 +25,5 @@ test('client config and server time share the service-bot dynamic function', asy
     assert.equal(routes.get('/config.js'), '/api/service-bots/client-config');
     assert.match(routes.get('/api/server-time'), /^\/api\/service-bots\/client-config/);
     assert.equal(routes.get('/api/shs-trades'), '/api/service-bots/shs-trades');
+    assert.equal(routes.get('/api/aggressiveness'), '/api/fear-greed?gauge=aggressiveness');
 });

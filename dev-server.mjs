@@ -13,7 +13,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import aggressivenessHandler from './api/aggressiveness.js';
+import aggressivenessHandler from './lib/aggressiveness_http.js';
 import serviceBotsHandler from './api/admin/service-bots.js';
 import sheetsServiceHandler from './api/sheets-service.js';
 import serviceBotEndpointHandler from './api/service-bots/[endpoint].js';
