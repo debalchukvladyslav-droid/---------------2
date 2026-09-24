@@ -1,5 +1,5 @@
 .stats-export-pdf-btn {
-    display: inline-flex; align-items: center; gap: 7px; min-height: 38px; padding: 8px 13px;
+    display: none !important; align-items: center; gap: 7px; min-height: 38px; padding: 8px 13px;
     border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); border-radius: 9px;
     background: var(--accent-glow-08); color: var(--accent); font: 650 .78rem/1 var(--font-main); cursor: pointer;
 }
