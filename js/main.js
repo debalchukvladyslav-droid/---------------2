@@ -42,6 +42,7 @@ import { connectGoogleDrive, syncDriveScreenshots, updateDriveUI, disconnectGoog
 import { initPlaybookChart } from './playbook_chart.js';
 import { renderDashboardNews, refreshDashboardNews, refreshLiveNewsModal, openLiveNewsModal, closeLiveNewsModal } from './news.js';
 import { renderMarketSentiment, refreshMarketSentiment, openMarketSentimentSource } from './market_sentiment.js';
+import { renderMarketAggressiveness } from './market_aggressiveness.js';
 import {
     createCompressedBackup,
     deleteCompressedBackup,
@@ -195,6 +196,7 @@ async function manualSyncAll(trigger = null, options = {}) {
             void Promise.all([
                 runManualSyncStep('dashboard-news', () => renderDashboardNews()),
                 runManualSyncStep('market-sentiment', () => renderMarketSentiment()),
+                runManualSyncStep('market-aggressiveness', () => renderMarketAggressiveness({ force: true })),
             ]).catch((error) => console.warn('[Dashboard feeds]', error?.message || error));
         }
         const steps = [

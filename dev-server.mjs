@@ -13,6 +13,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import aggressivenessHandler from './api/aggressiveness.js';
 import serviceBotsHandler from './api/admin/service-bots.js';
 import sheetsServiceHandler from './api/sheets-service.js';
 import serviceBotEndpointHandler from './api/service-bots/[endpoint].js';
@@ -121,6 +122,7 @@ async function handleVercelRoute(handler, req, res, url) {
         catch { return sendJson(res, 400, { ok: false, error: 'Invalid JSON' }); }
     }
     res.status = (code) => { res.statusCode = code; return res; };
+    res.json = (body) => sendJson(res, res.statusCode || 200, body);
     await handler(req, res);
 }
 
@@ -395,6 +397,13 @@ const server = http.createServer((req, res) => {
         handleGemini(req, res).catch((e) => {
             console.error(e);
             sendJson(res, 500, { message: e.message || 'Server error' });
+        });
+        return;
+    }
+    if (u.pathname === '/api/aggressiveness') {
+        handleVercelRoute(aggressivenessHandler, req, res, u).catch((e) => {
+            console.error('[Aggressiveness]', e);
+            if (!res.headersSent) sendJson(res, 200, { status: 'incomplete', message: 'Data incomplete' });
         });
         return;
     }

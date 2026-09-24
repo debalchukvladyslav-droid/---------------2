@@ -88,10 +88,19 @@ function formatDelta(current, previous) {
     return `${delta > 0 ? '+' : ''}${delta.toFixed(1)} за тиждень`;
 }
 
+const FACE_TONES = ['extreme-fear', 'fear', 'neutral', 'greed', 'extreme-greed'];
+
+function shellClass(stateClass = '') {
+    const root = document.getElementById('market-sentiment-card');
+    if (!root) return;
+    const keep = ['is-flipped', 'is-details-open'].filter((name) => root.classList.contains(name));
+    root.className = ['stat-card-pro', 'market-sentiment-card', 'market-gauge-shell', stateClass, ...keep].filter(Boolean).join(' ');
+}
+
 function renderLoading() {
     const root = document.getElementById('market-sentiment-card');
     if (!root) return;
-    root.className = 'stat-card-pro market-sentiment-card is-loading';
+    shellClass('is-loading');
     setText('market-sentiment-score', '—');
     setText('market-sentiment-label', '');
     setText('market-sentiment-delta', '');
@@ -102,7 +111,7 @@ function renderLoading() {
 function renderError(message) {
     const root = document.getElementById('market-sentiment-card');
     if (!root) return;
-    root.className = 'stat-card-pro market-sentiment-card is-muted';
+    shellClass('is-muted');
     setText('market-sentiment-score', '—');
     setText('market-sentiment-label', 'Немає даних');
     setText('market-sentiment-delta', '');
@@ -121,7 +130,12 @@ function renderSentiment(payload) {
     }
 
     const tone = getTone(score, payload.rating);
-    root.className = `stat-card-pro market-sentiment-card market-sentiment-card--${tone}`;
+    shellClass('');
+    const face = document.getElementById('market-sentiment-face');
+    if (face) {
+        FACE_TONES.forEach((name) => face.classList.remove(`market-gauge-face--${name}`));
+        face.classList.add(`market-gauge-face--${tone}`);
+    }
 
     setText('market-sentiment-score', String(score));
     setText('market-sentiment-label', translateRating(payload.rating));
@@ -137,8 +151,8 @@ function setText(id, value) {
 
 function setNeedle(score) {
     const value = Math.max(0, Math.min(100, Number(score) || 0));
-    const root = document.getElementById('market-sentiment-card');
-    if (root) root.style.setProperty('--market-score', String(value));
+    const face = document.getElementById('market-sentiment-face') || document.getElementById('market-sentiment-card');
+    if (face) face.style.setProperty('--market-score', String(value));
 
     const indicator = document.getElementById('market-sentiment-indicator');
     if (!indicator) return;

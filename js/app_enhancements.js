@@ -1,3 +1,5 @@
+import { flipMarketGauge, toggleAggressivenessDetails } from './market_aggressiveness.js';
+import { renderAggressivenessBacktest } from './aggressiveness_backtest.js';
 import { rememberShsTrader } from './shs_sync.js';
 import { showToast } from './utils.js';
 import { INVALID_IMAGE_FORMAT_MESSAGE, isJpegOrPng } from './image_file_validation.js';
@@ -354,6 +356,9 @@ function activateAction(action, trigger, event = null) {
             return true;
         },
         'market-sentiment-open': () => window.openMarketSentimentSource?.(),
+        'market-gauge-flip': () => flipMarketGauge(),
+        'aggressiveness-details': () => toggleAggressivenessDetails(),
+        'aggressiveness-backtest-refresh': () => renderAggressivenessBacktest(),
         'sos-open': () => window.openSOSModal?.(),
         'sos-close': () => window.closeSOSModal?.(),
         'sos-send': () => window.sendSOSMessage?.(),

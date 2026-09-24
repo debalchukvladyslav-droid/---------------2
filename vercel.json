@@ -58,6 +58,7 @@
     { "source": "/playbook", "destination": "/index.html" },
     { "source": "/learn", "destination": "/index.html" },
     { "source": "/settings", "destination": "/index.html" },
+    { "source": "/admin/aggressiveness-backtest", "destination": "/index.html" },
     { "source": "/admin", "destination": "/index.html" }
   ],
   "headers": [

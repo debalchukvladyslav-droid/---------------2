@@ -3,6 +3,7 @@ import { state } from './state.js';
 import { saveToLocal, saveSettings } from './storage.js';
 import { showToast, showConfirm } from './utils.js';
 import { disposeDashMiniEquityChart, refreshDashMiniEquityChartTheme } from './dash_mini_chart.js';
+import { bindMarketGaugeKeys, renderMarketAggressiveness } from './market_aggressiveness.js';
 import { disposeStatsView } from './stats.js';
 import { disposeTradesView } from './trades_view2.js';
 import { disposeScreensView } from './gallery.js';
@@ -756,6 +757,10 @@ async function runMainTabWork(tab) {
         if (window.renderMarketSentiment) void Promise.resolve(window.renderMarketSentiment()).catch((error) => {
             console.warn('[Market sentiment]', error?.message || error);
         });
+        bindMarketGaugeKeys();
+        void Promise.resolve(renderMarketAggressiveness()).catch((error) => {
+            console.warn('[Aggressiveness]', error?.message || error);
+        });
     }
     if (tab === 'screens') {
         // The screenshots workspace is a daily inbox. Opening it from the main
@@ -848,6 +853,7 @@ const ROUTE_TABS = {
     '/learn': 'learn',
     '/settings': 'settings',
     '/admin': 'admin',
+    '/admin/aggressiveness-backtest': 'admin',
     '/testing': 'testing',
 };
 
