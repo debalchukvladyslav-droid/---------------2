@@ -31,8 +31,8 @@ const steps = [
     { id: 'broker-imports', tab: 'table', target: '.broker-import-card', title: 'Імпорт брокерських звітів', text: 'Summary by date оновлює денні підсумки, Trades додає угоди, а PPRO імпортує денні результати PPRO. Тур не відкриватиме вибір файлу автоматично.' },
     { id: 'sheet-source', tab: 'table', target: '.sheet-preset-picker:not(.sheet-preset-picker--workspace)', title: '1. Оберіть таблицю статистики', text: 'Оберіть готову таблицю своєї групи: «Дебальчук, Валенштак, Семенюк, Кость, Дмитрук, Скіпальський», «Чачанко, Наход» або «Хомік, Mikulich». Власне посилання нижче потрібне лише тоді, коли вашої групи немає у списку.', group: 'mapping', prepare: 'sheet-open', action: '.sheet-preset-picker:not(.sheet-preset-picker--workspace) .sheet-preset-btn, [data-action="sheet-service-load"]', actionLabel: 'Оберіть свою таблицю зі списку', optional: true },
     { id: 'sheet-sheet', tab: 'table', target: '#sheet-tab-picker', title: '2. Оберіть аркуш', text: 'Це аркуш, з якого сайт читатиме статистику. Перевірте, що тут вибране ім’я потрібного трейдера або потрібного листа.', group: 'mapping', prepare: 'sheet-open', optional: true },
-    { id: 'sheet-map', tab: 'table', target: '[data-action="sheet-auto-map"]', title: '3. Запустіть автомапінг', text: 'Автомапінг сам знаходить Дату, Ticker та всі доступні додаткові колонки, зберігає налаштування і запускає синхронізацію. Відсутні необов’язкові колонки не заважають імпорту.', group: 'mapping', prepare: 'sheet-open', action: '[data-action="sheet-auto-map"]', actionLabel: 'Натисніть «Автомапінг»', optional: true },
-    { id: 'sheet-edit', tab: 'table', target: '[data-action="sheet-mapping-edit"]', title: '4. Редагування за потреби', text: 'Якщо автомапінг вибрав не ту колонку, натисніть «Редагувати». Усі ручні налаштування залишаються схованими, доки вони не потрібні.', group: 'mapping', prepare: 'sheet-open', action: '[data-action="sheet-mapping-edit"]', actionLabel: 'Натисніть «Редагувати»', optional: true },
+    { id: 'sheet-map', tab: 'table', target: '[data-action="sheet-auto-map"]', title: '3. Запустіть автомапінг', text: 'Кнопка «Знайти колонки автоматично» сама знаходить Дату, Ticker та всі доступні додаткові колонки, зберігає налаштування і запускає синхронізацію. Відсутні необов’язкові колонки не заважають імпорту.', group: 'mapping', prepare: 'sheet-open', action: '[data-action="sheet-auto-map"]', actionLabel: 'Натисніть «Знайти колонки автоматично»', optional: true },
+    { id: 'sheet-edit', tab: 'table', target: '[data-action="sheet-mapping-edit"]', title: '4. Редагування за потреби', text: 'Якщо автомапінг вибрав не ту колонку, натисніть «Перевірити або змінити вручну». Усі ручні налаштування залишаються схованими, доки вони не потрібні.', group: 'mapping', prepare: 'sheet-open', action: '[data-action="sheet-mapping-edit"]', actionLabel: 'Натисніть «Перевірити або змінити вручну»', optional: true },
     { id: 'sheet-date', tab: 'table', target: '[data-smart-field="date"]', title: '5. Колонка дати', text: 'Тут має бути вибрана колонка з датою. Це одне з двох обов’язкових полів.', group: 'mapping', prepare: 'sheet-edit', highlightField: 'date' },
     { id: 'sheet-symbol', tab: 'table', target: '[data-smart-field="symbol"]', title: '6. Колонка тікера', text: 'Тут має бути колонка з тікерами AAPL, TSLA та іншими символами. Це друге обов’язкове поле.', group: 'mapping', prepare: 'sheet-edit', highlightField: 'symbol' },
     { id: 'sheet-start-row', tab: 'table', target: '#sheet-grid-picker-start-row', title: '7. Стартовий рядок', text: 'Автомапінг знаходить перший рядок з реальним тікером. Якщо номер неправильний, клікніть потрібну клітинку в прев’ю.', group: 'mapping', prepare: 'sheet-edit' },
@@ -175,7 +175,7 @@ function bindRequiredAction(step) {
     actionCleanup = null;
     const next = root.querySelector('.onboarding-next');
     const hint = root.querySelector('.onboarding-action-hint');
-    if (!step.action) {
+    if (!step.action || !visibleElement(step.action)) {
         next.disabled = false;
         hint.hidden = true;
         return;
@@ -222,14 +222,15 @@ async function showStep(index) {
     const card = root.querySelector('.onboarding-card');
     card.classList.remove('is-welcome');
     root.querySelector('.onboarding-spotlight').classList.remove('is-fullscreen');
-    root.querySelector('.onboarding-kicker').textContent = `Крок ${index + 1} із ${steps.length}`;
+    const guidedCount = steps.filter((item) => !item.finish).length;
+    root.querySelector('.onboarding-kicker').textContent = `Крок ${index + 1} із ${guidedCount}`;
     root.querySelector('.onboarding-title').textContent = step.title;
     root.querySelector('.onboarding-text').textContent = step.text;
     root.querySelector('.onboarding-progress').hidden = false;
-    root.querySelector('.onboarding-progress span').style.width = `${((index + 1) / steps.length) * 100}%`;
+    root.querySelector('.onboarding-progress span').style.width = `${((index + 1) / guidedCount) * 100}%`;
     root.querySelector('.onboarding-actions').innerHTML = `
         <button type="button" class="btn-secondary onboarding-back" data-onboarding="back" ${index === 0 ? 'disabled' : ''}>Назад</button>
-        <button type="button" class="btn-secondary onboarding-skip" data-onboarding="skip-step" ${step.optional ? '' : 'hidden'}>Пропустити крок</button>
+        <button type="button" class="btn-secondary onboarding-skip" data-onboarding="skip-step">Пропустити крок</button>
         <button type="button" class="btn-primary onboarding-next" data-onboarding="next">Далі</button>`;
     renderGroupDots(step);
     bindRequiredAction(step);
@@ -306,6 +307,15 @@ function positionTour() {
             .filter((item) => item.width > 0 && item.height > 0);
         const overlapArea = (a, b) => Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left))
             * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+        const nearbyControls = [...document.querySelectorAll('button, a, input, select, textarea')]
+            .filter((element) => element !== target && !target.contains(element) && !root.contains(element))
+            .map((element) => element.getBoundingClientRect())
+            .filter((item) => {
+                if (item.width < 2 || item.height < 2) return false;
+                const verticalGap = Math.max(0, Math.max(item.top - rect.bottom, rect.top - item.bottom));
+                const horizontalGap = Math.max(0, Math.max(item.left - rect.right, rect.left - item.right));
+                return verticalGap < 88 && horizontalGap < 88;
+            });
         const scored = candidates.map((candidate, order) => {
             const box = {
                 left: candidate.left,
@@ -315,7 +325,8 @@ function positionTour() {
             };
             const targetOverlap = overlapArea(box, rect) * 20;
             const interfaceOverlap = blockers.reduce((sum, blocker) => sum + overlapArea(box, blocker), 0);
-            return { ...candidate, score: targetOverlap + interfaceOverlap + order };
+            const controlOverlap = nearbyControls.reduce((sum, control) => sum + overlapArea(box, control), 0);
+            return { ...candidate, score: targetOverlap + interfaceOverlap + controlOverlap + order };
         }).sort((a, b) => a.score - b.score)[0];
         card.style.left = `${scored.left}px`;
         card.style.top = `${scored.top}px`;

@@ -17,6 +17,11 @@
 .onboarding-progress { height: 4px; margin-top: 18px; overflow: hidden; border-radius: 99px; background: var(--border); }
 .onboarding-progress span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width .25s ease; }
 .onboarding-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.onboarding-actions .btn-primary,
+.onboarding-actions .btn-secondary { width: auto; }
+.onboarding-action-hint[hidden],
+.onboarding-progress[hidden],
+.onboarding-actions [hidden] { display: none !important; }
 .onboarding-actions button { min-height: 38px; }
 .onboarding-actions button:disabled { opacity: .45; cursor: not-allowed; }
 .onboarding-back { margin-right: auto; }
