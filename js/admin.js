@@ -467,11 +467,17 @@ async function renderRegistrationRequests(container) {
         const decide = async (action) => {
             card.classList.add('admin-user-busy');
             try {
-                await adminApiFetch('/api/admin/registration-requests', {
+                const payload = await adminApiFetch('/api/admin/registration-requests', {
                     method: 'PATCH',
                     body: JSON.stringify({ user_id: profile.id, action }),
                 });
-                showToast(action === 'approve' ? 'Акаунт схвалено' : 'Заявку відхилено');
+                if (action === 'approve' && payload.email_sent) {
+                    showToast('Акаунт схвалено. Лист надіслано на пошту.');
+                } else if (action === 'approve') {
+                    showToast(`Акаунт схвалено, але лист не надіслано${payload.email_error ? `: ${payload.email_error}` : ''}`);
+                } else {
+                    showToast('Заявку відхилено');
+                }
                 await renderAdminPanel();
             } catch (error) {
                 card.classList.remove('admin-user-busy');
