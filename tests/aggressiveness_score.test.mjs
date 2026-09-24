@@ -172,6 +172,12 @@ test('historical reconstruction ignores same-day and future bars', () => {
     assert.equal(incomplete.complete, false);
     assert.equal(incomplete.message, 'Data incomplete');
     assert.ok(incomplete.missing.includes('OIL'));
+    const zeroed = structuredClone(bars);
+    const prior = zeroed.VIX.at(-2);
+    zeroed.VIX.splice(-2, 1, { date: prior.date, close: 0 });
+    const skipped = scoreSessionFromBars(zeroed, session);
+    assert.equal(skipped.complete, true);
+    assert.ok(!skipped.missing.includes('vix1d'));
 });
 
 test('backtest buckets use R per trade and do not refit weights', () => {
