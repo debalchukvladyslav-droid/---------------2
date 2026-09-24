@@ -35,7 +35,7 @@
             </div>
         </div>
 
-        <div class="panel settings-hub-card">
+        <div class="panel settings-hub-card settings-hub-card--wide">
             <h3 class="settings-title">Дані</h3>
             <p class="settings-copy">Точки відновлення лежать на сервері. Відкат повертає журнал до обраного моменту, а поточний стан перед цим зберігається окремою точкою.</p>
             <div class="import-export-grid">
@@ -71,6 +71,7 @@
             <label class="theme-section-label">Дизайн інтерфейсу</label>
             <p class="theme-section-hint">Кожен пресет має свою палітру, градієнт і характер руху — від тихого світіння до скану термінала.</p>
             <div class="theme-cards" role="radiogroup" aria-label="Дизайн інтерфейсу">
+                <p class="theme-group-label">Базові</p>
                 <label class="theme-card" data-theme="dark">
                     <input type="radio" name="theme" value="dark" id="theme-dark">
                     <span class="theme-card-preview theme-preview-dark"></span>
@@ -111,6 +112,12 @@
                     <span class="theme-card-preview theme-preview-rose"></span>
                     <span class="theme-card-name">Rose</span>
                 </label>
+                <label class="theme-card" data-theme="custom">
+                    <input type="radio" name="theme" value="custom" id="theme-custom">
+                    <span class="theme-card-preview theme-preview-custom">🎨</span>
+                    <span class="theme-card-name">Своя</span>
+                </label>
+                <p class="theme-group-label">Преміальні</p>
                 <label class="theme-card theme-card-featured" data-theme="obsidian">
                     <input type="radio" name="theme" value="obsidian" id="theme-obsidian">
                     <span class="theme-card-preview theme-preview-obsidian"></span>
@@ -135,6 +142,7 @@
                     <span class="theme-card-name">Ivory</span>
                     <span class="theme-card-note">Тепла світла</span>
                 </label>
+                <p class="theme-group-label">Градієнти</p>
                 <label class="theme-card theme-card-featured" data-theme="nebula">
                     <input type="radio" name="theme" value="nebula" id="theme-nebula">
                     <span class="theme-card-badge">GRADIENT</span>
@@ -162,11 +170,6 @@
                     <span class="theme-card-preview theme-preview-frost"></span>
                     <span class="theme-card-name">Frost</span>
                     <span class="theme-card-note">Холодна світла</span>
-                </label>
-                <label class="theme-card" data-theme="custom">
-                    <input type="radio" name="theme" value="custom" id="theme-custom">
-                    <span class="theme-card-preview theme-preview-custom">🎨</span>
-                    <span class="theme-card-name">Своя</span>
                 </label>
             </div>
         </div>

@@ -3436,9 +3436,14 @@ body {
 
 .settings-hub-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: minmax(280px, 0.9fr) minmax(340px, 1.1fr);
     gap: 12px;
     margin-bottom: 14px;
+    align-items: stretch;
+}
+
+.settings-hub-card--wide {
+    grid-column: 1 / -1;
 }
 
 .settings-hub-card {
@@ -5604,6 +5609,105 @@ body[data-theme="custom"][data-custom-gradient="true"] :is(.panel,.recent-trades
     .theme-card { min-width: 0; padding: 8px; }
     .theme-card-preview { width: 100%; height: 48px; }
     .font-pills { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+#view-settings .settings-title,
+#view-settings .theme-settings-panel .panel-title {
+    margin: 0 0 8px;
+    padding: 0;
+    border: 0;
+    color: var(--text-main);
+    font-family: var(--font-head);
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+}
+
+#view-settings .settings-copy,
+#view-settings .theme-section-hint {
+    max-width: 68ch;
+    line-height: 1.45;
+}
+
+#view-settings .onboarding-settings-card {
+    display: flex;
+    flex-direction: column;
+}
+
+#view-settings .onboarding-settings-card .settings-actions {
+    margin-top: auto;
+}
+
+#view-settings .settings-dayloss-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#view-settings .settings-dayloss-row .settings-narrow {
+    max-width: none;
+}
+
+#view-settings .settings-dayloss-actions,
+#view-settings .settings-actions,
+#view-settings .import-export-grid {
+    align-items: center;
+}
+
+#view-settings .settings-dayloss-actions .btn-primary,
+#view-settings .settings-dayloss-actions .btn-secondary,
+#view-settings .settings-actions .btn-secondary,
+#view-settings .import-export-grid .btn-secondary,
+#view-settings .settings-backup-head .settings-backup-actions button,
+#view-settings .btn-save-theme {
+    min-height: 38px;
+}
+
+#view-settings .import-export-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+#view-settings .import-export-grid .btn-secondary {
+    width: 100%;
+}
+
+#view-settings .settings-backup-head {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+#view-settings .settings-backup-head .settings-backup-actions {
+    justify-content: flex-start;
+}
+
+#view-settings .theme-settings-panel {
+    display: flex;
+    flex-direction: column;
+}
+
+#view-settings .theme-group-label {
+    grid-column: 1 / -1;
+    margin: 14px 0 0;
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+#view-settings .theme-group-label:first-child {
+    margin-top: 0;
+}
+
+#view-settings .btn-save-theme {
+    align-self: flex-end;
+    margin-top: 4px;
+}
+
+@media (max-width: 720px) {
+    #view-settings .import-export-grid,
+    #view-settings .settings-dayloss-row {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* Each preset paints its own canvas. Motion lives in 6_animations.css. */
