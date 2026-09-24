@@ -6023,6 +6023,7 @@ button.aggressiveness-ledger-line {
 .aggressiveness-backtest-scroll { overflow-x: auto; }
 
 #view-dash .next-session-card {
+    display: none !important;
     grid-column: 1 / -1;
     text-align: left;
     cursor: pointer;

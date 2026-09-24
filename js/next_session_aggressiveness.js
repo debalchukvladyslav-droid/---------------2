@@ -1,6 +1,7 @@
 import { fetchWithSession } from './authenticated_fetch.js';
 
 const CACHE_KEY = 'pj:next-session:last-valid:v1';
+export const NEXT_SESSION_UI_ENABLED = false;
 
 function setText(id, value) {
     const node = document.getElementById(id);
@@ -199,6 +200,10 @@ export function closeNextSessionDetails() {
 
 export async function renderNextSessionAggressiveness() {
     const card = document.getElementById('next-session-card');
+    if (!NEXT_SESSION_UI_ENABLED) {
+        if (card) card.hidden = true;
+        return;
+    }
     if (!card) return;
     try {
         const response = await fetchWithSession('/api/aggressiveness?view=next');

@@ -1,4 +1,5 @@
 import { fetchWithSession } from './authenticated_fetch.js';
+import { NEXT_SESSION_UI_ENABLED } from './next_session_aggressiveness.js';
 
 function cell(text, tag = 'td') {
     const node = document.createElement(tag);
@@ -48,6 +49,7 @@ function bucketRow(item) {
 }
 
 export async function renderNextSessionBacktest() {
+    if (!NEXT_SESSION_UI_ENABLED) return;
     const host = document.getElementById('next-session-backtest');
     if (!host) return;
     host.hidden = false;

@@ -11,7 +11,10 @@ function sendJson(res, status, body) {
     res.end(JSON.stringify(body));
 }
 
+const NEXT_SESSION_ENABLED = false;
+
 async function storeNextSession() {
+    if (!NEXT_SESSION_ENABLED) return { ok: false, disabled: true };
     try {
         const payload = await buildLiveNextSession();
         return {
