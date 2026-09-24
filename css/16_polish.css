@@ -1596,7 +1596,8 @@ body {
     }
 }
 
-.stats-compare-shell--active .stats-insights-panel,
+.stats-compare-shell--active .stats-equity-insights,
+.stats-compare-shell--active .stats-focus-strip,
 .stats-compare-shell--active .mistake-chart-panel {
     display: none;
 }
@@ -1605,9 +1606,17 @@ body {
     display: block;
 }
 
-.stats-compare-shell--active .stats-summary-grid {
+.stats-compare-shell--active .stats-summary-group {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-content: start;
+}
+
+.stats-compare-shell--active .stats-summary-kicker {
+    grid-column: 1 / -1;
+}
+
+.stats-compare-shell--active .stats-breakdown-grid,
+.stats-compare-shell--active .stats-composition-row {
+    grid-template-columns: 1fr;
 }
 
 .stats-compare-shell--active .stat-card-full {
@@ -1687,12 +1696,29 @@ body {
     width: 100%;
 }
 
+.stats-toolbar-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.stats-pro-toolbar .stats-bar-trigger,
+.stats-toolbar-actions .stats-export-pdf-btn,
+.stats-compare-toolbar-btn {
+    min-height: 38px;
+}
+
+.stats-toolbar-actions .stats-export-pdf-btn {
+    border-radius: 8px;
+}
+
 .stats-compare-toolbar-btn {
     display: inline-flex;
     align-items: center;
     gap: 8px;
     min-height: 38px;
-    margin-left: auto;
+    margin-left: 0;
     padding: 8px 12px;
     border: 1px solid color-mix(in srgb, var(--accent) 44%, var(--border));
     border-radius: 8px;
@@ -1790,14 +1816,31 @@ body {
 }
 
 .stats-chart-title {
-    margin-bottom: 5px;
-    color: var(--accent);
+    margin: 0 0 12px;
+    color: var(--text-main);
+    font-family: var(--font-head);
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.3;
 }
 
 .stats-equity-title {
     margin: 0;
-    color: var(--accent);
-    font-size: 1.1rem;
+    color: var(--text-main);
+    font-family: var(--font-head);
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+}
+
+.stats-equity-title span {
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.stats-equity-panel {
+    box-shadow: var(--shadow-sm);
 }
 
 .stats-charts-row {
@@ -1912,9 +1955,7 @@ body {
 }
 
 .stats-insights-list {
-    max-height: 310px;
-    overflow-y: auto;
-    padding-right: 2px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .stats-insight {
@@ -2344,29 +2385,130 @@ body {
 
 .stats-chart-expand[hidden] { display: none; }
 
+.stats-summary-board {
+    display: grid;
+    gap: 10px;
+}
+
+.stats-summary-group {
+    display: grid;
+    grid-template-columns: 92px repeat(auto-fit, minmax(132px, 1fr));
+    gap: 8px;
+    align-items: stretch;
+}
+
+.stats-summary-kicker {
+    display: flex;
+    align-items: center;
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.stats-summary-group .stat-card {
+    padding: 12px 14px;
+}
+
+.stats-summary-group .stat-card:hover {
+    transform: none;
+}
+
+.stats-summary-group .stat-card .label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.stats-summary-group .stat-card .value {
+    font-size: 1.22rem;
+}
+
+.stats-summary-group .stat-total-value {
+    font-size: 1.45rem;
+}
+
+.stats-equity-insights {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+.stats-focus-strip {
+    display: grid;
+    grid-template-columns: minmax(160px, 200px) minmax(0, 1fr);
+    gap: 14px;
+    align-items: start;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--card);
+    box-shadow: var(--shadow-sm);
+}
+
+.stats-focus-head .stats-insights-title {
+    margin-bottom: 0;
+}
+
+.stats-focus-strip .stats-trade-type-insights-list {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.stats-breakdown-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+    gap: 12px;
+}
+
+.stats-composition-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.8fr) minmax(240px, 0.75fr);
+    gap: 12px;
+    align-items: stretch;
+}
+
+.stats-breakdown-grid > .panel,
+.stats-composition-row > .panel {
+    position: relative;
+    min-width: 0;
+    padding: 16px;
+}
+
+.stats-breakdown-grid .stats-chart-note,
+.stats-composition-row .stats-chart-note {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 .positive { color: var(--profit) !important; }
 .negative { color: var(--loss) !important; }
 .neutral { color: var(--text-main) !important; }
 
-@media (max-width: 1180px) {
-    .stats-summary-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
-    .stats-workspace-grid {
+@media (max-width: 860px) {
+    .stats-summary-group,
+    .stats-breakdown-grid,
+    .stats-composition-row,
+    .stats-focus-strip,
+    .stats-insights-list {
         grid-template-columns: 1fr;
     }
 
-    .stats-insights-panel {
-        position: static;
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+    .stats-summary-group {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-}
 
-@media (max-width: 900px) {
-    .stats-insights-panel {
-        grid-template-columns: 1fr;
+    .stats-summary-kicker,
+    .stats-summary-primary {
+        grid-column: 1 / -1;
     }
 }
 
@@ -4665,10 +4807,17 @@ body.is-offline [data-needs-network="true"] {
         align-items: stretch;
     }
 
+    .stats-toolbar-actions,
     .stats-pro-toolbar .stats-bar-item,
     .stats-pro-toolbar .stats-bar-trigger,
-    .stats-compare-toolbar-btn {
+    .stats-compare-toolbar-btn,
+    .stats-toolbar-actions .stats-export-pdf-btn {
         width: 100%;
+    }
+
+    .stats-toolbar-actions {
+        flex-direction: column;
+        margin-left: 0;
     }
 
     .stats-compare-toolbar-btn {
