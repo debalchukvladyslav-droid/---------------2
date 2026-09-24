@@ -287,6 +287,35 @@ test('daily bars use the polygon edge function when Vercel has no polygon key', 
     assert.deepEqual(quotes.quotes, {});
 });
 
+test('public quotes use Yahoo and keep the 10-year yield in Polygon raw units', async () => {
+    const seen = [];
+    const fetchImpl = async (input) => {
+        const url = String(input);
+        seen.push(url);
+        const symbol = decodeURIComponent(url.split('/chart/')[1]?.split('?')[0] || '');
+        const close = symbol === '^TNX' ? 5.1 : symbol === '^VIX' ? 16 : 100;
+        return new Response(JSON.stringify({
+            chart: {
+                result: [{
+                    timestamp: [Date.parse('2026-09-23T13:30:00Z') / 1000],
+                    indicators: { quote: [{ open: [close], high: [close], low: [close], close: [close] }] },
+                }],
+            },
+        }), { status: 200 });
+    };
+    const { YahooMarketDataProvider, createMarketDataProvider } = await import('../lib/market_data_provider.js');
+    const provider = createMarketDataProvider({}, fetchImpl, { allowPublic: true });
+    assert.ok(provider instanceof YahooMarketDataProvider);
+    const yieldBars = await provider.getDailyBars('I:TNX', '2026-09-01', '2026-09-23');
+    const vixBars = await provider.getDailyBars('I:VIX', '2026-09-01', '2026-09-23');
+    const oilBars = await provider.getDailyBars('I:CL', '2026-09-01', '2026-09-23');
+    assert.equal(yieldBars[0].close, 51);
+    assert.equal(vixBars[0].close, 16);
+    assert.equal(oilBars[0].date, '2026-09-23');
+    assert.ok(seen.some((url) => url.includes('%5EVIX') || url.includes('^VIX')));
+    assert.ok(seen.some((url) => url.includes('CL%3DF') || url.includes('CL=F')));
+});
+
 test('dashboard flip markup and mobile rule exist', async () => {
     const html = await readFile(new URL('../partials/views/dashboard-view.html', import.meta.url), 'utf8');
     const css = await readFile(new URL('../css/16_polish.css', import.meta.url), 'utf8');
