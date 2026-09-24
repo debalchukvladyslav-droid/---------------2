@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
 import { addCalendarDays, isTradingDay, nextTradingDay } from '../lib/aggressiveness_core.js';
 import { nextSessionClock } from '../lib/next_session_service.js';
 import {
@@ -136,4 +137,11 @@ test('fixed weights, premarket cap and recovery state', () => {
     const morning = nextSessionClock(new Date('2026-09-24T14:00:00Z'));
     assert.equal(morning.targetDate, '2026-09-24');
     assert.equal(morning.featureDate, '2026-09-23');
+});
+
+test('next-session load does not page through every journal day', async () => {
+    const source = await readFile(new URL('../lib/next_session_service.js', import.meta.url), 'utf8');
+    assert.doesNotMatch(source, /journal_days\?select=user_id,trade_date,daily_metrics/);
+    assert.match(source, /rpc\/list_mechanical_signals/);
+    assert.match(source, /attempts: 1/);
 });

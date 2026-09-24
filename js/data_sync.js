@@ -19,7 +19,7 @@ async function rpc(name, parameters) {
 
 const transport = {
     metadata: userId => rpc('get_data_sync_state', { p_user_id: userId }),
-    pull: (userId, cursor) => rpc('pull_data_changes', { p_user_id: userId, p_cursor: cursor, p_limit: 25 }),
+    pull: (userId, cursor) => rpc('pull_data_changes', { p_user_id: userId, p_cursor: cursor, p_limit: 8 }),
     apply: (_userId, operations, atomic) => rpc('apply_data_operations', { p_operations: operations, p_atomic: atomic }),
     resolveConflict: (_userId, conflictId, resolution) => rpc('resolve_data_conflict', { p_conflict_id: conflictId, p_resolution: resolution }),
     async snapshot(userId) {
@@ -29,12 +29,12 @@ const transport = {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 25000);
             try {
-                let query = supabase.from('journal_days').select('*').eq('user_id', userId).order('trade_date', { ascending: true }).limit(500);
+                let query = supabase.from('journal_days').select('*').eq('user_id', userId).order('trade_date', { ascending: true }).limit(40);
                 if (after) query = query.gt('trade_date', after);
                 const { data, error } = await query.abortSignal(controller.signal);
                 if (error) throw error;
                 rows.push(...(data || []));
-                if (!data?.length || data.length < 500) break;
+                if (!data?.length || data.length < 40) break;
                 const next = data.at(-1).trade_date;
                 if (next === after) throw syncError('Не вдалося завантажити повний журнал.', 'INVALID_SYNC_RESPONSE');
                 after = next;
