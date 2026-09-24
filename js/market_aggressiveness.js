@@ -5,6 +5,8 @@ const CACHE_KEY = 'pj:market-aggressiveness:last-valid:v1';
 const TONES = ['minimal', 'cautious', 'neutral', 'aggressive', 'maximal'];
 let pendingRequest = null;
 let pollTimer = 0;
+let refillTimer = 0;
+let refillAttempts = 0;
 let shownPayload = null;
 
 function setText(id, value) {
@@ -61,6 +63,10 @@ const WATCH_ROWS = [
     ['Stress safety · 25%', 'VIX, дохідність US10Y і нафта. Стрес знижує оцінку.', 'stress'],
 ];
 
+function finiteText(value) {
+    return value == null || !Number.isFinite(Number(value)) ? '—' : String(Math.round(Number(value)));
+}
+
 function detailCard(title, text, value) {
     const card = document.createElement('article');
     card.className = 'aggressiveness-info-item';
@@ -92,16 +98,19 @@ function renderDetails(payload) {
     if (payload?.incomplete) {
         const note = document.createElement('p');
         note.className = 'aggressiveness-info-note';
-        note.textContent = payload?.message || 'Data incomplete';
+        const waiting = refillAttempts > 0 && refillAttempts < 3;
+        note.textContent = waiting
+            ? 'Частину серій ще довантажую. За хвилину оцінка оновиться сама.'
+            : (payload?.message || 'Data incomplete');
         host.append(note);
     }
 
     const summary = document.createElement('div');
     summary.className = 'aggressiveness-info-summary';
     [
-        ['Оцінка', Number.isFinite(Number(payload?.displayScore)) ? String(Math.round(payload.displayScore)) : '—'],
+        ['Оцінка', finiteText(payload?.displayScore)],
         ['Статус', payload?.label || '—'],
-        ['Base', Number.isFinite(Number(payload?.baseScore)) ? String(Math.round(payload.baseScore)) : '—'],
+        ['Base', finiteText(payload?.baseScore)],
         ['Оновлено', formatEtClock(payload?.updatedAt) || '—'],
     ].forEach(([label, value]) => {
         const cell = document.createElement('div');
@@ -149,8 +158,8 @@ function applyTone(tone, incomplete) {
 }
 
 function renderPayload(payload, { incomplete = false } = {}) {
-    const score = Number(payload?.displayScore);
-    const hasScore = Number.isFinite(score);
+    const score = payload?.displayScore;
+    const hasScore = score != null && Number.isFinite(Number(score));
     setText('market-aggressiveness-score', hasScore ? String(Math.round(score)) : '—');
     setText('market-aggressiveness-label', incomplete ? 'Data incomplete' : (payload?.label || ''));
     setText('market-aggressiveness-delta', formatDelta(payload?.delta));
@@ -225,17 +234,17 @@ export async function renderMarketAggressiveness(options = {}) {
         const payload = await request;
         if (payload?.incomplete) {
             const last = payload.lastValid || readCache();
-            if (last) {
-                renderPayload({
-                    ...last,
-                    incomplete: true,
-                    missing: payload.missing || last.missing || [],
-                    message: 'Data incomplete',
-                }, { incomplete: true });
-            } else {
-                renderPayload({ ...payload, label: 'Data incomplete' }, { incomplete: true });
-            }
+            const view = last ? {
+                ...last,
+                incomplete: true,
+                missing: payload.missing || last.missing || [],
+                providerMissing: payload.providerMissing || [],
+                message: 'Data incomplete',
+            } : { ...payload, label: 'Data incomplete' };
+            scheduleRefill(payload);
+            renderPayload(view, { incomplete: true });
         } else {
+            refillAttempts = 0;
             writeCache(payload);
             renderPayload(payload);
         }
@@ -250,6 +259,16 @@ export async function renderMarketAggressiveness(options = {}) {
         if (pendingRequest === request) pendingRequest = null;
         armPoll();
     }
+}
+
+function scheduleRefill(payload) {
+    const missing = payload?.missing?.length || payload?.providerMissing?.length;
+    if (!missing || refillAttempts >= 2) return;
+    refillAttempts += 1;
+    clearTimeout(refillTimer);
+    refillTimer = setTimeout(() => {
+        void renderMarketAggressiveness({ force: true });
+    }, 65000);
 }
 
 function armPoll() {

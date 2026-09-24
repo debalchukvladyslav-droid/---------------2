@@ -8,6 +8,7 @@ import {
     baseScore,
     broadMarketRegime,
     displaySessionDate,
+    formatEtClock,
     finalAggressiveness,
     isTradingDay,
     linearRelativeFallback,
@@ -85,6 +86,8 @@ test('New York session clock, holidays and live poll window', () => {
     assert.equal(sessionPhase(new Date('2026-09-24T16:00:00Z')), 'frozen');
     assert.equal(nextLivePollDelay(new Date('2026-09-24T16:00:00Z')), null);
     assert.ok(nextLivePollDelay(new Date('2026-09-24T14:00:00Z')) >= 5000);
+    assert.equal(formatEtClock(null), '');
+    assert.equal(formatEtClock(''), '');
 });
 
 function tradingDates(start, count) {
