@@ -20,6 +20,7 @@ import {
     nextLivePollDelay,
     rawLiveAdjustment,
     relativePercentile,
+    recentAggressiveness,
     resolveWeights,
     scoreSessionFromBars,
     sessionPhase,
@@ -230,6 +231,22 @@ test('historical reconstruction ignores same-day and future bars', () => {
     assert.ok(!skipped.missing.includes('vix1d'));
 });
 
+test('recent aggressiveness is the trailing session series', () => {
+    const { dates, bars } = regimeBars({ spy: 0.001, qqq: 0.001, iwm: 0.001, iwc: 0.001, xbi: 0.001, arkk: 0.001, smh: 0.001, oil: 0, yieldStep: 0 });
+    let session = addCalendarDays(dates.at(-1), 1);
+    while (!isTradingDay(session)) session = addCalendarDays(session, 1);
+    const series = recentAggressiveness(bars, session, 14);
+    assert.equal(series.length, 14);
+    assert.equal(series.at(-1).date, session);
+    assert.ok(series[0].date < series.at(-1).date);
+    assert.ok(series.every((point) => point.score >= 0 && point.score <= 100));
+    assert.equal(series.at(-1).score, scoreSessionFromBars(bars, session).displayScore);
+    const leaked = structuredClone(bars);
+    leaked.SPY.push({ date: session, close: leaked.SPY.at(-1).close * 1.2 });
+    const again = recentAggressiveness(leaked, session, 14);
+    assert.equal(again.at(-2).score, series.at(-2).score);
+});
+
 test('backtest buckets use R per trade and do not refit weights', () => {
     const days = [0, 10, 30, 55, 70, 95].map((score, index) => ({
         sessionDate: `2026-0${index + 1}-15`,
@@ -379,7 +396,9 @@ test('dashboard flip markup and mobile rule exist', async () => {
     const gauge = await readFile(new URL('../js/market_aggressiveness.js', import.meta.url), 'utf8');
     assert.match(gauge, /pj:market-gauge-face:v1/);
     assert.match(gauge, /localStorage\.setItem\(FACE_KEY/);
-    assert.match(gauge, /Агресивність на сьогодні, розрахована з ринкової інформації, доступної до поточного моменту/);
+    assert.match(gauge, /Оцінка на сьогодні: наскільки ринок зручний для механічних шортів/);
+    assert.match(gauge, /Дрібні акції/);
+    assert.match(gauge, /Разом/);
     assert.match(gauge, /aggressiveness-row/);
     assert.match(html, /data-action="market-gauge-flip"/);
     assert.match(html, /Агресивність/);

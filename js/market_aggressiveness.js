@@ -58,18 +58,20 @@ function formatSigned(value, digits = 0) {
 }
 
 const openRows = new Set();
+let historyDays = 14;
+const SVG_NS = 'http://www.w3.org/2000/svg';
 const DRILL = {
     microSmall: [
-        ['iwm5', 'IWM vs SPY 5D'],
-        ['iwm10', 'IWM vs SPY 10D'],
-        ['iwc5', 'IWC vs SPY 5D'],
-        ['iwc10', 'IWC vs SPY 10D'],
+        ['iwm5', 'IWM проти SPY, 5 днів'],
+        ['iwm10', 'IWM проти SPY, 10 днів'],
+        ['iwc5', 'IWC проти SPY, 5 днів'],
+        ['iwc10', 'IWC проти SPY, 10 днів'],
     ],
     speculative: [
-        ['xbi5', 'XBI vs SPY 5D'],
-        ['xbi10', 'XBI vs SPY 10D'],
-        ['arkk5', 'ARKK vs SPY 5D'],
-        ['arkk10', 'ARKK vs SPY 10D'],
+        ['xbi5', 'XBI проти SPY, 5 днів'],
+        ['xbi10', 'XBI проти SPY, 10 днів'],
+        ['arkk5', 'ARKK проти SPY, 5 днів'],
+        ['arkk10', 'ARKK проти SPY, 10 днів'],
     ],
 };
 
@@ -112,24 +114,138 @@ function drillList(key, detail) {
         const name = document.createElement('span');
         name.textContent = label;
         const amount = document.createElement('b');
-        if (item?.value == null) amount.textContent = '—';
-        else if (item.method === 'percentile') amount.textContent = `${Math.round(item.value)} percentile`;
-        else amount.textContent = `${Math.round(item.value)} · мало історії`;
+        if (item?.value == null) amount.textContent = 'немає даних';
+        else if (item.method === 'percentile') amount.textContent = `${Math.round(item.value)} зі 100`;
+        else amount.textContent = `${Math.round(item.value)} зі 100 · мало історії`;
         line.append(name, amount);
         list.append(line);
     });
     return list;
 }
 
-function ledgerRow(label, value, { child = false, total = false, rowKey = '', detail = null } = {}) {
+function ledgerRow(label, value, { child = false, total = false, rowKey = '', detail = null, hint = '' } = {}) {
     const row = document.createElement('div');
     row.className = 'aggressiveness-ledger-row';
     if (child) row.classList.add('is-child');
     if (total) row.classList.add('is-total');
     if (rowKey && openRows.has(rowKey)) row.classList.add('is-open');
     row.append(ledgerLine(label, value, { button: Boolean(rowKey), rowKey }));
+    if (hint) {
+        const note = document.createElement('p');
+        note.className = 'aggressiveness-ledger-hint';
+        note.textContent = hint;
+        row.append(note);
+    }
     if (rowKey) row.append(drillList(rowKey, detail));
     return row;
+}
+
+function shortDate(iso) {
+    return `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
+}
+
+function svgEl(name, attrs) {
+    const node = document.createElementNS(SVG_NS, name);
+    Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, String(value)));
+    return node;
+}
+
+function progressionChart(points) {
+    const width = 720;
+    const height = 228;
+    const pad = { left: 44, right: 28, top: 26, bottom: 32 };
+    const innerW = width - pad.left - pad.right;
+    const innerH = height - pad.top - pad.bottom;
+    const svg = svgEl('svg', { viewBox: `0 0 ${width} ${height}`, role: 'img' });
+    const last = [...points].reverse().find((point) => point.score != null);
+    svg.setAttribute('aria-label', last ? `Агресивність за ${points.length} днів, сьогодні ${last.score}` : 'Прогресія агресивності');
+    [0, 20, 40, 60, 80, 100].forEach((level) => {
+        const y = pad.top + (1 - level / 100) * innerH;
+        svg.append(svgEl('line', { x1: pad.left, y1: y, x2: width - pad.right, y2: y, class: 'aggressiveness-chart-grid' }));
+        const label = svgEl('text', { x: pad.left - 8, y: y + 4, class: 'aggressiveness-chart-axis' });
+        label.textContent = String(level);
+        svg.append(label);
+    });
+    const xAt = (index) => pad.left + (points.length === 1 ? innerW / 2 : (index / (points.length - 1)) * innerW);
+    const yAt = (score) => pad.top + (1 - score / 100) * innerH;
+    let run = [];
+    const flush = () => {
+        if (run.length < 2) {
+            run = [];
+            return;
+        }
+        svg.append(svgEl('polyline', {
+            points: run.map((point) => `${xAt(point.index)},${yAt(point.score)}`).join(' '),
+            class: 'aggressiveness-chart-line',
+        }));
+        run = [];
+    };
+    points.forEach((point, index) => {
+        if (point.score == null) flush();
+        else run.push({ ...point, index });
+    });
+    flush();
+    points.forEach((point, index) => {
+        if (point.score == null) return;
+        const cx = xAt(index);
+        const cy = yAt(point.score);
+        const dot = svgEl('circle', {
+            cx, cy, r: index === points.length - 1 ? 4.5 : 3,
+            class: index === points.length - 1 ? 'aggressiveness-chart-dot is-last' : 'aggressiveness-chart-dot',
+        });
+        const title = document.createElementNS(SVG_NS, 'title');
+        title.textContent = `${shortDate(point.date)} · ${point.score}${point.label ? ` · ${point.label}` : ''}`;
+        dot.append(title);
+        svg.append(dot);
+        const edge = index === 0 || index === points.length - 1;
+        if (points.length <= 8 || edge) {
+            const value = svgEl('text', {
+                x: index === 0 ? cx + 8 : (index === points.length - 1 ? cx - 8 : cx),
+                y: Math.max(16, cy - 9),
+                class: 'aggressiveness-chart-value',
+            });
+            value.setAttribute('text-anchor', index === 0 ? 'start' : (index === points.length - 1 ? 'end' : 'middle'));
+            value.textContent = String(point.score);
+            svg.append(value);
+        }
+        if (points.length <= 8 || edge || index % 2 === 0) {
+            const date = svgEl('text', { x: cx, y: height - 8, class: 'aggressiveness-chart-date' });
+            date.setAttribute('text-anchor', index === 0 ? 'start' : (index === points.length - 1 ? 'end' : 'middle'));
+            date.textContent = shortDate(point.date);
+            svg.append(date);
+        }
+    });
+    return svg;
+}
+
+function renderProgression(payload) {
+    const history = Array.isArray(payload?.history) ? payload.history.filter((point) => point?.date) : [];
+    if (history.length < 2) return null;
+    const days = historyDays === 7 ? 7 : 14;
+    const points = history.slice(-days);
+    const block = document.createElement('section');
+    block.className = 'aggressiveness-chart-block';
+    const head = document.createElement('div');
+    head.className = 'aggressiveness-chart-head';
+    const title = document.createElement('span');
+    title.textContent = 'Як змінювалась оцінка';
+    const switches = document.createElement('div');
+    switches.className = 'aggressiveness-range';
+    [7, 14].forEach((count) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.action = 'aggressiveness-range';
+        button.dataset.days = String(count);
+        button.textContent = `${count} днів`;
+        button.setAttribute('aria-pressed', days === count ? 'true' : 'false');
+        switches.append(button);
+    });
+    head.append(title, switches);
+    const frame = document.createElement('div');
+    frame.className = 'aggressiveness-chart';
+    frame.append(progressionChart(points));
+    block.append(head, frame);
+    return block;
 }
 
 function renderDetails(payload) {
@@ -142,7 +258,7 @@ function renderDetails(payload) {
 
     const lead = document.createElement('p');
     lead.className = 'aggressiveness-info-lead';
-    lead.textContent = 'Агресивність на сьогодні, розрахована з ринкової інформації, доступної до поточного моменту. Base — дані до вчорашнього close. Live — сьогоднішня інформація.';
+    lead.textContent = 'Оцінка на сьогодні: наскільки ринок зручний для механічних шортів. Число зверху — підсумок. Нижче видно, з чого він склався: база до вчорашнього закриття, мінус штрафи, плюс сьогоднішній рух.';
     host.append(lead);
 
     if (payload?.incomplete) {
@@ -163,21 +279,57 @@ function renderDetails(payload) {
     status.textContent = payload?.label || '—';
     const confidence = document.createElement('em');
     const confidenceValue = Number(payload?.confidence);
-    confidence.textContent = Number.isFinite(confidenceValue) ? `Впевненість ${Math.round(confidenceValue)}%` : 'Впевненість —';
+    confidence.textContent = Number.isFinite(confidenceValue)
+        ? `Дані на ${Math.round(confidenceValue)}%. Це не змінює оцінку, лише показує, чи вистачає історії.`
+        : 'Повноту даних ще не пораховано.';
     hero.append(score, status, confidence);
     host.append(hero);
 
+    const scale = document.createElement('p');
+    scale.className = 'aggressiveness-info-lead';
+    scale.textContent = '0–19 майже не чіпати · 20–39 обережно · 40–59 звичайний день · 60–79 можна агресивніше · 80–100 найзручніший режим.';
+    host.append(scale);
+    const chart = renderProgression(payload);
+    if (chart) host.append(chart);
+
     const list = document.createElement('div');
     list.className = 'aggressiveness-ledger';
-    list.append(ledgerRow('Base', finiteText(payload?.baseScore)));
-    list.append(ledgerRow('Micro / Small', finiteText(components.microSmall), { child: true, rowKey: 'microSmall', detail }));
-    list.append(ledgerRow('Speculative', finiteText(components.speculative), { child: true, rowKey: 'speculative', detail }));
-    list.append(ledgerRow('Broad Market', finiteText(components.broad), { child: true }));
-    list.append(ledgerRow('Stress Safety', finiteText(components.stress), { child: true }));
-    list.append(ledgerRow('Narrow Leadership', ledgerValue(components.narrowPenalty, { negate: true })));
-    list.append(ledgerRow('Melt-up', ledgerValue(components.meltUpPenalty, { negate: true })));
-    list.append(ledgerRow('Live', formatSigned(components.liveAdjustment ?? payload?.liveAdjustment, 1)));
-    list.append(ledgerRow('Final', finiteText(payload?.displayScore), { total: true }));
+    list.append(ledgerRow('База', finiteText(payload?.baseScore), {
+        hint: 'Усе, що відомо до вчорашнього закриття. З цього числа починається підсумок.',
+    }));
+    list.append(ledgerRow('Дрібні акції', finiteText(components.microSmall), {
+        child: true,
+        rowKey: 'microSmall',
+        detail,
+        hint: 'IWM і IWC проти SPY. Натисни рядок: побачиш, де дрібні були за останні 5 і 10 днів. 0 — у хвості, 100 — серед найсильніших.',
+    }));
+    list.append(ledgerRow('Спекулятивні', finiteText(components.speculative), {
+        child: true,
+        rowKey: 'speculative',
+        detail,
+        hint: 'XBI і ARKK проти SPY. Те саме порівняння, але для історій, де живуть pump and dump.',
+    }));
+    list.append(ledgerRow('Широкий ринок', finiteText(components.broad), {
+        child: true,
+        hint: 'Сам SPY. Дивиться, чи індекс іде рівно, без різкого падіння або перегріву.',
+    }));
+    list.append(ledgerRow('Стрес', finiteText(components.stress), {
+        child: true,
+        hint: 'VIX, ставки і нафта. 100 означає лише одне: штрафу за стрес немає. Це не знак, що ринок хороший.',
+    }));
+    list.append(ledgerRow('Вузьке лідерство', ledgerValue(components.narrowPenalty, { negate: true }), {
+        hint: 'Штраф, якщо Nasdaq або чіпи тягнуть ринок, а дрібні стоять. Самі по собі QQQ і SMH балів не додають.',
+    }));
+    list.append(ledgerRow('Перегрів', ledgerValue(components.meltUpPenalty, { negate: true }), {
+        hint: 'Ще один штраф, якщо індекс уже сильно виріс, волатильність тиха, а дрібні це не підтверджують.',
+    }));
+    list.append(ledgerRow('Сьогодні', formatSigned(components.liveAdjustment ?? payload?.liveAdjustment, 1), {
+        hint: 'Рух SPY, QQQ і IWM сьогодні. З 4:00 до 9:30 — від учорашнього закриття, після 9:30 — від відкриття. О 11:40 цифра заморожується.',
+    }));
+    list.append(ledgerRow('Разом', finiteText(payload?.displayScore), {
+        total: true,
+        hint: 'База мінус два штрафи плюс сьогоднішнє коригування. Саме це число стоїть на шкалі.',
+    }));
     host.append(list);
 
     const updated = document.createElement('p');
@@ -191,6 +343,13 @@ function renderDetails(payload) {
         missing.textContent = `Немає даних: ${payload.missing.join(', ')}`;
         host.append(missing);
     }
+}
+
+export function setAggressivenessRange(days) {
+    const next = Number(days) === 7 ? 7 : 14;
+    if (next === historyDays) return;
+    historyDays = next;
+    if (shownPayload) renderDetails(shownPayload);
 }
 
 export function toggleAggressivenessRow(key) {

@@ -5832,6 +5832,86 @@ body[data-theme]:not([data-theme="light"]):not([data-theme="ivory"]):not([data-t
     font-style: normal;
     font-size: 0.95rem;
 }
+.aggressiveness-chart-block {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.aggressiveness-chart-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.aggressiveness-chart-head > span {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.aggressiveness-range {
+    display: inline-flex;
+    gap: 6px;
+}
+.aggressiveness-range button {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+.aggressiveness-range button[aria-pressed="true"] {
+    color: var(--text-main);
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.aggressiveness-chart {
+    padding: 8px 8px 4px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card);
+}
+.aggressiveness-chart svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+.aggressiveness-chart-grid {
+    stroke: color-mix(in srgb, var(--border) 80%, transparent);
+    stroke-width: 1;
+}
+.aggressiveness-chart-line {
+    fill: none;
+    stroke: color-mix(in srgb, var(--accent) 42%, white);
+    stroke-width: 2.5;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+.aggressiveness-chart-dot {
+    fill: var(--card);
+    stroke: color-mix(in srgb, var(--accent) 42%, white);
+    stroke-width: 2;
+}
+.aggressiveness-chart-dot.is-last {
+    fill: color-mix(in srgb, var(--accent) 42%, white);
+}
+.aggressiveness-chart-axis,
+.aggressiveness-chart-date,
+.aggressiveness-chart-value {
+    fill: var(--text-muted);
+    font-size: 11px;
+    text-anchor: middle;
+}
+.aggressiveness-chart-axis {
+    text-anchor: end;
+}
+.aggressiveness-chart-value {
+    fill: var(--text-main);
+    font-size: 12px;
+}
 .aggressiveness-ledger {
     display: flex;
     flex-direction: column;
@@ -5860,6 +5940,15 @@ button.aggressiveness-ledger-line {
 .aggressiveness-ledger-row.is-child .aggressiveness-ledger-line {
     padding-left: 18px;
     color: var(--text-muted);
+}
+.aggressiveness-ledger-hint {
+    margin: -2px 0 8px;
+    color: var(--text-muted);
+    font-size: 0.84rem;
+    line-height: 1.4;
+}
+.aggressiveness-ledger-row.is-child .aggressiveness-ledger-hint {
+    padding-left: 18px;
 }
 .aggressiveness-ledger-row.is-total .aggressiveness-ledger-line {
     margin-top: 4px;
