@@ -43,6 +43,7 @@ import { initPlaybookChart } from './playbook_chart.js';
 import { renderDashboardNews, refreshDashboardNews, refreshLiveNewsModal, openLiveNewsModal, closeLiveNewsModal } from './news.js';
 import { renderMarketSentiment, refreshMarketSentiment, openMarketSentimentSource } from './market_sentiment.js';
 import { renderMarketAggressiveness } from './market_aggressiveness.js';
+import { renderNextSessionAggressiveness } from './next_session_aggressiveness.js';
 import {
     createCompressedBackup,
     deleteCompressedBackup,
@@ -197,6 +198,7 @@ async function manualSyncAll(trigger = null, options = {}) {
                 runManualSyncStep('dashboard-news', () => renderDashboardNews()),
                 runManualSyncStep('market-sentiment', () => renderMarketSentiment()),
                 runManualSyncStep('market-aggressiveness', () => renderMarketAggressiveness({ force: true })),
+                runManualSyncStep('next-session', () => renderNextSessionAggressiveness()),
             ]).catch((error) => console.warn('[Dashboard feeds]', error?.message || error));
         }
         const steps = [

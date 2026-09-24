@@ -1,4 +1,6 @@
 import { closeAggressivenessInfo, flipMarketGauge, setAggressivenessRange, toggleAggressivenessDetails, toggleAggressivenessRow } from './market_aggressiveness.js';
+import { closeNextSessionDetails, openNextSessionDetails } from './next_session_aggressiveness.js';
+import { renderNextSessionBacktest } from './next_session_backtest.js';
 import { renderAggressivenessBacktest } from './aggressiveness_backtest.js';
 import { rememberShsTrader } from './shs_sync.js';
 import { showToast } from './utils.js';
@@ -361,12 +363,22 @@ function activateAction(action, trigger, event = null) {
         'aggressiveness-row': () => toggleAggressivenessRow(trigger?.dataset?.row),
         'aggressiveness-range': () => setAggressivenessRange(trigger?.dataset?.days),
         'aggressiveness-info-close': () => closeAggressivenessInfo(),
+        'next-session-details': () => openNextSessionDetails(),
+        'next-session-close': () => closeNextSessionDetails(),
+        'next-session-backdrop': () => {
+            if (event?.target !== trigger) return false;
+            closeNextSessionDetails();
+            return true;
+        },
         'aggressiveness-info-backdrop': () => {
             if (event?.target !== trigger) return false;
             closeAggressivenessInfo();
             return true;
         },
-        'aggressiveness-backtest-refresh': () => renderAggressivenessBacktest(),
+        'aggressiveness-backtest-refresh': () => {
+            renderAggressivenessBacktest();
+            renderNextSessionBacktest();
+        },
         'sos-open': () => window.openSOSModal?.(),
         'sos-close': () => window.closeSOSModal?.(),
         'sos-send': () => window.sendSOSMessage?.(),
@@ -502,6 +514,9 @@ function bindDeclarativeActions() {
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape' && document.getElementById('aggressiveness-info-modal')?.style.display === 'flex') {
             closeAggressivenessInfo();
+        }
+        if (event.key === 'Escape' && document.getElementById('next-session-info-modal')?.style.display === 'flex') {
+            closeNextSessionDetails();
         }
         if (event.target?.matches?.('[data-action="tag-search-input"]') && event.key === 'Enter') {
             event.preventDefault();

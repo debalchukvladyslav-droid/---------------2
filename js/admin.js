@@ -8,6 +8,7 @@ import { listServerBackupsForUser, prepareBackupRestore, restorePreparedBackup }
 import { calculatePreMarketVolume } from './polygon_intraday_cache.js';
 import { loadJournalPolygonDay } from './journal_polygon.js';
 import { renderAggressivenessBacktest } from './aggressiveness_backtest.js';
+import { renderNextSessionBacktest } from './next_session_backtest.js';
 
 const ROLES = ['trader', 'mentor', 'admin'];
 const DEFAULT_TEAM = 'Без куща';
@@ -16,7 +17,10 @@ const SERVICE_BOT_DATA_ENDPOINTS = ['snapshot', 'summary', 'tickers', 'orders', 
 
 export async function renderAdminPanel() {
     const container = document.getElementById('admin-users-list');
-    if (state.myRole === 'admin') void renderAggressivenessBacktest();
+    if (state.myRole === 'admin') {
+        void renderNextSessionBacktest();
+        void renderAggressivenessBacktest();
+    }
     if (!container) return;
 
     const refreshUsersBtn = document.getElementById('admin-refresh-users-btn');

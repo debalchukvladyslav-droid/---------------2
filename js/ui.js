@@ -4,6 +4,7 @@ import { saveToLocal, saveSettings } from './storage.js';
 import { showToast, showConfirm } from './utils.js';
 import { disposeDashMiniEquityChart, refreshDashMiniEquityChartTheme } from './dash_mini_chart.js';
 import { bindMarketGaugeKeys, renderMarketAggressiveness } from './market_aggressiveness.js';
+import { renderNextSessionAggressiveness } from './next_session_aggressiveness.js';
 import { disposeStatsView } from './stats.js';
 import { disposeTradesView } from './trades_view2.js';
 import { disposeScreensView } from './gallery.js';
@@ -758,6 +759,7 @@ async function runMainTabWork(tab) {
             console.warn('[Market sentiment]', error?.message || error);
         });
         bindMarketGaugeKeys();
+        void Promise.resolve(renderNextSessionAggressiveness()).catch(() => {});
         void Promise.resolve(renderMarketAggressiveness()).catch((error) => {
             console.warn('[Aggressiveness]', error?.message || error);
         });

@@ -2,12 +2,28 @@ import { runGoogleSheetSync, supabaseRest } from '../../lib/google_sheet_sync.js
 import { processNextLearningJob, runLearningBatch } from '../../lib/ai_learning.js';
 import { runGrandmasterDailyReviews } from '../../lib/grandmaster_review.js';
 import { processSourceJobs } from '../../lib/source_worker.js';
+import { buildLiveNextSession } from '../../lib/next_session_service.js';
 
 export const config = { maxDuration: 300 };
 
 function sendJson(res, status, body) {
     res.status(status).setHeader('Content-Type', 'application/json; charset=utf-8');
     res.end(JSON.stringify(body));
+}
+
+async function storeNextSession() {
+    try {
+        const payload = await buildLiveNextSession();
+        return {
+            ok: payload.complete === true,
+            targetDate: payload.targetDate || null,
+            finalScore: payload.finalScore ?? null,
+            message: payload.message || null,
+        };
+    } catch (error) {
+        console.error('[Next session]', error);
+        return { ok: false, error: error?.message || String(error) };
+    }
 }
 
 function requestBody(req) {
@@ -53,7 +69,8 @@ export default async function handler(req, res) {
         if (String(req.query?.task || '') === 'end-of-day') {
             const grandmaster = await runGrandmasterDailyReviews({ tradeDate: /^\d{4}-\d{2}-\d{2}$/.test(String(req.query?.date || '')) ? String(req.query.date) : undefined });
             const queued = await processNextLearningJob().catch(() => ({ job: null, run: null, status: 'idle' }));
-            return sendJson(res, 200, { ok: grandmaster.failed === 0, task: 'end-of-day', grandmaster, aiLearning: queued });
+            const nextSession = await storeNextSession();
+            return sendJson(res, 200, { ok: grandmaster.failed === 0, task: 'end-of-day', grandmaster, aiLearning: queued, nextSession });
         }
         if (String(req.query?.task || '') === 'ai-learning') {
             const queued = await processNextLearningJob();
@@ -97,10 +114,12 @@ export default async function handler(req, res) {
             }
         }
 
+        const nextSession = await storeNextSession();
         return sendJson(res, 200, {
             ok: true,
             count: results.length,
             results,
+            nextSession,
         });
     } catch (error) {
         return sendJson(res, 500, { ok: false, error: error?.message || String(error) });
