@@ -1016,6 +1016,14 @@ const BACKUP_REASON_LABELS = {
     backup: 'копія',
 };
 
+let settingsBackupsLoading = false;
+let settingsBackupsError = '';
+
+function settingsBackupFetchLimit() {
+    const visibleCount = Math.max(4, Number(localStorage.getItem('tj:settings-backups:visible')) || 4);
+    return visibleCount + 4;
+}
+
 function renderSettingsBackups() {
     const host = document.getElementById('settings-backup-list');
     if (!host) return;
@@ -1028,7 +1036,11 @@ function renderSettingsBackups() {
     }
     const backups = listCompressedBackups();
     if (!backups.length) {
-        host.innerHTML = '<p class="settings-copy-sm">Точок ще немає. Натисніть «Створити зараз», щоб зафіксувати журнал.</p>';
+        host.innerHTML = settingsBackupsLoading
+            ? '<p class="settings-copy-sm">Завантажуємо точки відновлення…</p>'
+            : settingsBackupsError
+                ? '<p class="settings-copy-sm">Список точок зараз не відкрився. Решта налаштувань уже доступна.</p>'
+                : '<p class="settings-copy-sm">Точок ще немає. Натисніть «Створити зараз», щоб зафіксувати журнал.</p>';
         return;
     }
 
@@ -1055,8 +1067,10 @@ function renderSettingsBackups() {
         <button type="button" class="btn-secondary settings-backup-more">Показати ще</button>
     ` : '');
     host.querySelector('.settings-backup-more')?.addEventListener('click', () => {
-        localStorage.setItem('tj:settings-backups:visible', String(visibleCount + 4));
-        renderSettingsBackups();
+        const nextCount = visibleCount + 4;
+        localStorage.setItem('tj:settings-backups:visible', String(nextCount));
+        if (listCompressedBackups().length <= nextCount) void window.refreshSettingsBackups();
+        else renderSettingsBackups();
     });
 }
 
@@ -1069,11 +1083,17 @@ window.toggleSettingsBackupList = function() {
     renderSettingsBackups();
 };
 window.refreshSettingsBackups = async function() {
+    settingsBackupsLoading = true;
+    settingsBackupsError = '';
+    if (!listCompressedBackups().length) renderSettingsBackups();
     try {
-        await refreshServerBackups();
-        renderSettingsBackups();
+        await refreshServerBackups(settingsBackupFetchLimit());
     } catch (error) {
-        console.warn('[Backups] server list failed:', error?.message || error);
+        settingsBackupsError = error?.message || String(error);
+        console.warn('[Backups] server list failed:', settingsBackupsError);
+    } finally {
+        settingsBackupsLoading = false;
+        renderSettingsBackups();
     }
 };
 window.rollbackLatestBackup = async function() {

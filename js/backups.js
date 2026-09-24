@@ -6,9 +6,13 @@ let serverBackupsCache = [];
 let serverBackupsLoadedFor = '';
 function assertContext(userId) { if (state.myUserId !== userId) throw new Error('Обліковий запис змінився. Відкрийте список копій заново.'); }
 async function getServerBackupUserId() {
-    const { data, error } = await supabase.auth.getUser();
-    if (error) throw error;
-    const authenticatedUserId = data?.user?.id || '';
+    const session = await supabase.auth.getSession();
+    let authenticatedUserId = session.data?.session?.user?.id || '';
+    if (!authenticatedUserId) {
+        const { data, error } = await supabase.auth.getUser();
+        if (error) throw error;
+        authenticatedUserId = data?.user?.id || '';
+    }
     if (!authenticatedUserId) throw new Error('Увійдіть, щоб отримати резервні копії.');
     assertContext(authenticatedUserId);
     return authenticatedUserId;
@@ -52,17 +56,26 @@ export function listCompressedBackups() {
 }
 export async function listServerBackupsForUser(userId, limit = 100) {
     if (!userId) return [];
-    const points = await rpc('list_restore_points', { p_user_id: userId, p_limit: Math.min(200, limit) });
-    const legacy = await supabase.from('journal_backups')
-        .select('backup_id,user_id,reason,backup_created_at,created_at,days,encoding,raw_bytes,stored_bytes')
-        .eq('user_id', userId).order('created_at', { ascending: false }).limit(Math.min(200, limit));
-    if (legacy.error && !['42P01', 'PGRST205'].includes(legacy.error.code)) throw legacy.error;
-    return [...(points || []).map(pointEntry), ...(legacy.data || []).map(legacyEntry)]
+    const capped = Math.min(200, limit);
+    const [pointsResult, legacyResult] = await Promise.allSettled([
+        rpc('list_restore_points', { p_user_id: userId, p_limit: capped }),
+        supabase.from('journal_backups')
+            .select('backup_id,user_id,reason,backup_created_at,created_at,days,encoding,raw_bytes,stored_bytes')
+            .eq('user_id', userId).order('created_at', { ascending: false }).limit(capped),
+    ]);
+    const points = pointsResult.status === 'fulfilled' ? pointsResult.value : null;
+    const legacy = legacyResult.status === 'fulfilled' ? legacyResult.value : null;
+    const legacyMissing = legacy?.error && ['42P01', 'PGRST205'].includes(legacy.error.code);
+    if (!points && (legacyResult.status === 'rejected' || (legacy?.error && !legacyMissing))) {
+        throw pointsResult.status === 'rejected' ? pointsResult.reason : (legacyResult.reason || legacy.error);
+    }
+    if (legacy?.error && !legacyMissing) console.warn('[Backups] legacy list skipped:', legacy.error.message || legacy.error);
+    return [...(points || []).map(pointEntry), ...(legacy?.data || []).map(legacyEntry)]
         .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }
-export async function refreshServerBackups() {
+export async function refreshServerBackups(limit = 100) {
     const owner = await getServerBackupUserId();
-    const entries = await listServerBackupsForUser(owner);
+    const entries = await listServerBackupsForUser(owner, limit);
     assertContext(owner); serverBackupsLoadedFor = owner; serverBackupsCache = entries;
     return entries;
 }
