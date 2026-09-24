@@ -11,6 +11,8 @@ import {
     formatEtClock,
     finalAggressiveness,
     isTradingDay,
+    piecewiseLinear,
+    scoreConfidence,
     linearRelativeFallback,
     meltUpPenalty,
     microSmallBreadth,
@@ -35,12 +37,18 @@ test('component weights and status bands', () => {
     assert.equal(microSmallBreadth({ iwm5: 100, iwm10: 0, iwc5: 100, iwc10: 0 }), 55);
     assert.equal(speculativeAppetite({ xbi5: 0, xbi10: 100, arkk5: 0, arkk10: 100 }), 40);
     assert.equal(broadMarketRegime({ spy5d: 0.01, spy10d: 0.02, spy20d: 0.03, spyRv5: 0.008 }), 85);
-    assert.equal(broadMarketRegime({ spy5d: -0.04, spy10d: -0.01, spy20d: -0.02, spyRv5: 0.004 }), 30);
-    assert.equal(broadMarketRegime({ spy5d: 0.06, spy10d: 0.06, spy20d: 0.09, spyRv5: 0.02 }), 15);
-    assert.equal(stressSafety({ vix: 36, vix1d: 0, vix5d: 0, us10y5dBp: 0, oil5d: 0, spy1d: 0, iwm1d: 0 }), 65);
-    assert.equal(stressSafety({ vix: 30, vix1d: 0.08, vix5d: 0.2, us10y5dBp: 30, oil5d: 0.12, spy1d: -0.02, iwm1d: -0.02 }), 0);
+    assert.equal(broadMarketRegime({ spy5d: -0.04, spy10d: -0.01, spy20d: -0.02, spyRv5: 0.004 }), 35);
+    assert.ok(Math.abs(broadMarketRegime({ spy5d: 0.06, spy10d: 0.06, spy20d: 0.09, spyRv5: 0.02 }) - 23.75) < 1e-9);
+    assert.ok(Math.abs(broadMarketRegime({ spy5d: 0.0049, spy10d: 0, spy20d: 0, spyRv5: 0.004 }) - broadMarketRegime({ spy5d: 0.005, spy10d: 0, spy20d: 0, spyRv5: 0.004 })) < 1);
+    assert.equal(stressSafety({ vix: 36, vix1d: 0, vix5d: 0, us10y5dBp: 0, oil5d: 0, spy1d: 0, iwm1d: 0 }), 71);
+    assert.equal(stressSafety({ vix: 16, vix1d: 0.05, vix5d: 0, us10y5dBp: 0, oil5d: 0, spy1d: 0, iwm1d: 0 }), 100);
+    assert.equal(stressSafety({ vix: 16, vix1d: 0.08, vix5d: 0, us10y5dBp: 0, oil5d: 0, spy1d: 0, iwm1d: 0 }), 95);
+    assert.equal(stressSafety({ vix: 16, vix1d: 0.12, vix5d: 0, us10y5dBp: 0, oil5d: 0, spy1d: 0, iwm1d: 0 }), 90);
+    assert.ok(Math.abs(piecewiseLinear(0.079, [[0.05, 0], [0.08, -5], [0.12, -10]]) - piecewiseLinear(0.08, [[0.05, 0], [0.08, -5], [0.12, -10]])) < 1);
+    assert.ok(Math.abs(stressSafety({ vix: 30, vix1d: 0.08, vix5d: 0.2, us10y5dBp: 30, oil5d: 0.12, spy1d: -0.02, iwm1d: -0.02 }) - 12.5) < 1e-9);
     assert.equal(narrowLeadershipPenalty({ qqq5: 0.03, iwm5: -0.02, smh5: 0.04, iwc5: -0.02, xbi5: -0.02 }), 18);
-    assert.equal(meltUpPenalty({ spy20d: 0.09, vixPercentile: 10, iwmRs10: -0.01 }), 10);
+    assert.ok(Math.abs(meltUpPenalty({ spy20d: 0.09, vixPercentile: 10, iwmRs10: -0.01 }) - 7.5) < 1e-9);
+    assert.equal(meltUpPenalty({ spy20d: 0.1, vixPercentile: 10, iwmRs10: -0.02 }), 10);
     assert.equal(meltUpPenalty({ spy20d: 0.09, vixPercentile: null, iwmRs10: -0.01 }), 0);
     const base = baseScore({ microSmall: 22, speculative: 48, broad: 62, stress: 74 });
     assert.ok(Math.abs(base - 47.5) < 1e-9);
@@ -61,11 +69,32 @@ test('percentile fallback and live adjustment clamps', () => {
     assert.equal(relativePercentile([0.01, 0.01]).method, 'linear-fallback');
     const sample = Array.from({ length: 60 }, (_, index) => index);
     assert.equal(trailingPercentile(sample), 100);
-    assert.equal(rawLiveAdjustment({ SPY: 0.005, QQQ: 0.006, IWM: 0.005 }), 4);
+    assert.equal(rawLiveAdjustment({ SPY: 0.005, QQQ: 0.006, IWM: 0.005 }), 3.5);
     assert.equal(rawLiveAdjustment({ SPY: 0.004, QQQ: 0.004, IWM: -0.01 }), 2);
-    assert.equal(rawLiveAdjustment({ SPY: -0.005, QQQ: -0.006, IWM: -0.005 }), -4);
+    assert.equal(rawLiveAdjustment({ SPY: -0.005, QQQ: -0.006, IWM: -0.005 }), -3.5);
     assert.equal(rawLiveAdjustment({ SPY: 0.005, QQQ: 0.006, IWM: 0.005, OIL: 0.02, US10Y_BP: 4 }), 2);
-    assert.equal(rawLiveAdjustment({ VIX_FUTURES: -0.06 }, { priorShock: true }), 2);
+    assert.ok(Math.abs(rawLiveAdjustment({ VIX_FUTURES: -0.06 }, { priorShock: true }) - 1.5) < 1e-9);
+    const premarketQuotes = {
+        SPY: { fromPrevClose: 0.006, fromOpen: -0.01 },
+        QQQ: { fromPrevClose: 0.007, fromOpen: -0.01 },
+        IWM: { fromPrevClose: 0.006, fromOpen: -0.01 },
+    };
+    assert.equal(rawLiveAdjustment(premarketQuotes, { phase: 'premarket' }), 4);
+    assert.equal(rawLiveAdjustment(premarketQuotes, { phase: 'open' }), -4);
+    const fullHistory = Array.from({ length: 8 }, () => ({ method: 'percentile', sample: 126 }));
+    assert.equal(scoreConfidence({ percentiles: fullHistory, microSmall: 50, speculative: 50, broad: 50, stress: 80 }), 100);
+    const doubtful = scoreConfidence({
+        soft: { IWC: 'stale', XBI: 'missing' },
+        percentiles: fullHistory.map((item, index) => (index < 2 ? { method: 'linear-fallback', sample: 40 } : item)),
+        microSmall: 10,
+        speculative: 80,
+        broad: 90,
+        stress: 30,
+        liveActive: true,
+        liveFresh: false,
+    });
+    assert.ok(doubtful < 60);
+    assert.equal(finalAggressiveness(55, 16, 0, 0), 39);
     assert.equal(smoothLiveAdjustment(null, 4), 1.4);
     assert.equal(smoothLiveAdjustment(0, -100), -8);
     assert.equal(systemHealth([{ entries: 2, totalR: 1 }, { entries: 2, totalR: -1 }]).usedInAggressiveness, false);
@@ -85,6 +114,7 @@ test('New York session clock, holidays and live poll window', () => {
     assert.equal(sessionPhase(new Date('2026-09-24T12:00:00Z')), 'premarket');
     assert.equal(sessionPhase(new Date('2026-09-24T16:00:00Z')), 'frozen');
     assert.equal(nextLivePollDelay(new Date('2026-09-24T16:00:00Z')), null);
+    assert.ok(nextLivePollDelay(new Date('2026-09-24T12:00:00Z')) >= 5000);
     assert.ok(nextLivePollDelay(new Date('2026-09-24T14:00:00Z')) >= 5000);
     assert.equal(formatEtClock(null), '');
     assert.equal(formatEtClock(''), '');
@@ -165,7 +195,27 @@ test('historical reconstruction ignores same-day and future bars', () => {
     }
     const reconstructed = scoreSessionFromBars(leaked, session);
     assert.equal(reconstructed.baseScore, original.baseScore);
+    assert.equal(reconstructed.components.microSmall, original.components.microSmall);
+    assert.equal(reconstructed.vixPercentile, original.vixPercentile);
+    assert.equal(reconstructed.liveScore, finalAggressiveness(
+        reconstructed.baseScore,
+        reconstructed.components.narrowPenalty,
+        reconstructed.components.meltUpPenalty,
+        0,
+    ));
     assert.equal(reconstructed.infoThrough, dates.at(-1));
+    const withoutIwc = structuredClone(bars);
+    withoutIwc.IWC = withoutIwc.IWC.filter((bar) => bar.date < dates.at(-8));
+    const softScore = scoreSessionFromBars(withoutIwc, session);
+    assert.equal(softScore.complete, true);
+    assert.equal(softScore.soft.IWC, 'stale');
+    assert.ok(softScore.confidence < original.confidence);
+    assert.equal(softScore.liveScore, finalAggressiveness(
+        softScore.baseScore,
+        softScore.components.narrowPenalty,
+        softScore.components.meltUpPenalty,
+        0,
+    ));
     const stale = structuredClone(bars);
     stale.OIL = stale.OIL.filter((bar) => bar.date < dates.at(-1));
     const incomplete = scoreSessionFromBars(stale, session);
@@ -329,6 +379,8 @@ test('dashboard flip markup and mobile rule exist', async () => {
     const gauge = await readFile(new URL('../js/market_aggressiveness.js', import.meta.url), 'utf8');
     assert.match(gauge, /pj:market-gauge-face:v1/);
     assert.match(gauge, /localStorage\.setItem\(FACE_KEY/);
+    assert.match(gauge, /Агресивність на сьогодні, розрахована з ринкової інформації, доступної до поточного моменту/);
+    assert.match(gauge, /aggressiveness-row/);
     assert.match(html, /data-action="market-gauge-flip"/);
     assert.match(html, /Агресивність/);
     assert.match(html, /market-aggressiveness-score/);

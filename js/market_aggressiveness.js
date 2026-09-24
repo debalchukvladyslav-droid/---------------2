@@ -57,31 +57,79 @@ function formatSigned(value, digits = 0) {
     return `${number > 0 ? '+' : ''}${rounded}`;
 }
 
-const WATCH_ROWS = [
-    ['Micro / Small · 35%', 'IWM і IWC проти SPY за 5 і 10 днів. Це головна ознака, що рух є і в дрібних іменах.', 'microSmall'],
-    ['Speculative · 25%', 'XBI і ARKK: апетит до спекулятивних історій, де живуть pump&dump.', 'speculative'],
-    ['Broad market · 15%', 'Шлях SPY і його короткострокова волатильність.', 'broad'],
-    ['Stress safety · 25%', 'VIX, дохідність US10Y і нафта. Стрес знижує оцінку.', 'stress'],
-];
+const openRows = new Set();
+const DRILL = {
+    microSmall: [
+        ['iwm5', 'IWM vs SPY 5D'],
+        ['iwm10', 'IWM vs SPY 10D'],
+        ['iwc5', 'IWC vs SPY 5D'],
+        ['iwc10', 'IWC vs SPY 10D'],
+    ],
+    speculative: [
+        ['xbi5', 'XBI vs SPY 5D'],
+        ['xbi10', 'XBI vs SPY 10D'],
+        ['arkk5', 'ARKK vs SPY 5D'],
+        ['arkk10', 'ARKK vs SPY 10D'],
+    ],
+};
 
 function finiteText(value) {
     return value == null || !Number.isFinite(Number(value)) ? '—' : String(Math.round(Number(value)));
 }
 
-function detailCard(title, text, value) {
-    const card = document.createElement('article');
-    card.className = 'aggressiveness-info-item';
-    const top = document.createElement('div');
-    top.className = 'aggressiveness-info-item-top';
-    const heading = document.createElement('strong');
-    heading.textContent = title;
-    const score = document.createElement('b');
-    score.textContent = value == null || value === 'NaN' ? '—' : String(value);
-    top.append(heading, score);
-    const copy = document.createElement('p');
-    copy.textContent = text;
-    card.append(top, copy);
-    return card;
+function ledgerValue(value, { negate = false, digits = 0 } = {}) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return '—';
+    const shown = negate ? -number : number;
+    if (!digits) return String(Math.round(shown));
+    const text = shown.toFixed(digits);
+    return shown > 0 ? `+${text}` : text;
+}
+
+function ledgerLine(label, value, { button = false, rowKey = '' } = {}) {
+    const line = document.createElement(button ? 'button' : 'div');
+    line.className = 'aggressiveness-ledger-line';
+    if (button) {
+        line.type = 'button';
+        line.dataset.action = 'aggressiveness-row';
+        line.dataset.row = rowKey;
+        line.setAttribute('aria-expanded', openRows.has(rowKey) ? 'true' : 'false');
+    }
+    const name = document.createElement('span');
+    name.textContent = label;
+    const amount = document.createElement('b');
+    amount.textContent = value;
+    line.append(name, amount);
+    return line;
+}
+
+function drillList(key, detail) {
+    const list = document.createElement('div');
+    list.className = 'aggressiveness-ledger-drill';
+    (DRILL[key] || []).forEach(([field, label]) => {
+        const item = detail?.[field];
+        const line = document.createElement('div');
+        const name = document.createElement('span');
+        name.textContent = label;
+        const amount = document.createElement('b');
+        if (item?.value == null) amount.textContent = '—';
+        else if (item.method === 'percentile') amount.textContent = `${Math.round(item.value)} percentile`;
+        else amount.textContent = `${Math.round(item.value)} · мало історії`;
+        line.append(name, amount);
+        list.append(line);
+    });
+    return list;
+}
+
+function ledgerRow(label, value, { child = false, total = false, rowKey = '', detail = null } = {}) {
+    const row = document.createElement('div');
+    row.className = 'aggressiveness-ledger-row';
+    if (child) row.classList.add('is-child');
+    if (total) row.classList.add('is-total');
+    if (rowKey && openRows.has(rowKey)) row.classList.add('is-open');
+    row.append(ledgerLine(label, value, { button: Boolean(rowKey), rowKey }));
+    if (rowKey) row.append(drillList(rowKey, detail));
+    return row;
 }
 
 function renderDetails(payload) {
@@ -89,11 +137,12 @@ function renderDetails(payload) {
     const host = document.getElementById('aggressiveness-info-body');
     if (!host) return;
     const components = payload?.components || {};
+    const detail = components.detail || {};
     host.replaceChildren();
 
     const lead = document.createElement('p');
     lead.className = 'aggressiveness-info-lead';
-    lead.textContent = 'Наскільки режим сприятливий для механічних pump&dump short. Сесія бере лише дані до вчорашнього close. QQQ і SMH самі оцінку не піднімають: вони лише штраф, якщо лідерство вузьке.';
+    lead.textContent = 'Агресивність на сьогодні, розрахована з ринкової інформації, доступної до поточного моменту. Base — дані до вчорашнього close. Live — сьогоднішня інформація.';
     host.append(lead);
 
     if (payload?.incomplete) {
@@ -106,41 +155,35 @@ function renderDetails(payload) {
         host.append(note);
     }
 
-    const summary = document.createElement('div');
-    summary.className = 'aggressiveness-info-summary';
-    [
-        ['Оцінка', finiteText(payload?.displayScore)],
-        ['Статус', payload?.label || '—'],
-        ['Base', finiteText(payload?.baseScore)],
-        ['Оновлено', formatEtClock(payload?.updatedAt) || '—'],
-    ].forEach(([label, value]) => {
-        const cell = document.createElement('div');
-        const name = document.createElement('span');
-        name.textContent = label;
-        const strong = document.createElement('strong');
-        strong.textContent = value;
-        cell.append(name, strong);
-        summary.append(cell);
-    });
-    host.append(summary);
+    const hero = document.createElement('div');
+    hero.className = 'aggressiveness-hero';
+    const score = document.createElement('strong');
+    score.textContent = finiteText(payload?.displayScore);
+    const status = document.createElement('span');
+    status.textContent = payload?.label || '—';
+    const confidence = document.createElement('em');
+    const confidenceValue = Number(payload?.confidence);
+    confidence.textContent = Number.isFinite(confidenceValue) ? `Впевненість ${Math.round(confidenceValue)}%` : 'Впевненість —';
+    hero.append(score, status, confidence);
+    host.append(hero);
 
     const list = document.createElement('div');
-    list.className = 'aggressiveness-info-list';
-    WATCH_ROWS.forEach(([title, text, key]) => {
-        const raw = components[key];
-        list.append(detailCard(title, text, Number.isFinite(Number(raw)) ? String(Math.round(raw)) : '—'));
-    });
-    list.append(detailCard(
-        'Штраф за вузьке лідерство',
-        'QQQ сильніший за IWM, SMH сильніший за IWC, або слабкий XBI. Штраф не більший за 18.',
-        `-${Math.round(components.narrowPenalty || 0)}`,
-    ));
-    list.append(detailCard(
-        'Live',
-        'Коригування з 09:30 до 11:40 ET, далі значення заморожується. Діапазон від −8 до +8.',
-        formatSigned(components.liveAdjustment ?? payload?.liveAdjustment, 1),
-    ));
+    list.className = 'aggressiveness-ledger';
+    list.append(ledgerRow('Base', finiteText(payload?.baseScore)));
+    list.append(ledgerRow('Micro / Small', finiteText(components.microSmall), { child: true, rowKey: 'microSmall', detail }));
+    list.append(ledgerRow('Speculative', finiteText(components.speculative), { child: true, rowKey: 'speculative', detail }));
+    list.append(ledgerRow('Broad Market', finiteText(components.broad), { child: true }));
+    list.append(ledgerRow('Stress Safety', finiteText(components.stress), { child: true }));
+    list.append(ledgerRow('Narrow Leadership', ledgerValue(components.narrowPenalty, { negate: true })));
+    list.append(ledgerRow('Melt-up', ledgerValue(components.meltUpPenalty, { negate: true })));
+    list.append(ledgerRow('Live', formatSigned(components.liveAdjustment ?? payload?.liveAdjustment, 1)));
+    list.append(ledgerRow('Final', finiteText(payload?.displayScore), { total: true }));
     host.append(list);
+
+    const updated = document.createElement('p');
+    updated.className = 'aggressiveness-info-note';
+    updated.textContent = `Оновлено ${formatEtClock(payload?.updatedAt) || '—'}`;
+    host.append(updated);
 
     if (payload?.missing?.length) {
         const missing = document.createElement('p');
@@ -148,6 +191,13 @@ function renderDetails(payload) {
         missing.textContent = `Немає даних: ${payload.missing.join(', ')}`;
         host.append(missing);
     }
+}
+
+export function toggleAggressivenessRow(key) {
+    if (!key) return;
+    if (openRows.has(key)) openRows.delete(key);
+    else openRows.add(key);
+    if (shownPayload) renderDetails(shownPayload);
 }
 
 function applyTone(tone, incomplete) {
@@ -163,6 +213,8 @@ function renderPayload(payload, { incomplete = false } = {}) {
     const hasScore = score != null && Number.isFinite(Number(score));
     setText('market-aggressiveness-score', hasScore ? String(Math.round(score)) : '—');
     setText('market-aggressiveness-label', incomplete ? 'Data incomplete' : (payload?.label || ''));
+    const confidence = Number(payload?.confidence);
+    setText('market-aggressiveness-confidence', Number.isFinite(confidence) ? `Впевненість ${Math.round(confidence)}%` : '');
     setText('market-aggressiveness-delta', formatDelta(payload?.delta));
     setText('market-aggressiveness-updated', formatEtClock(payload?.updatedAt));
     setNeedle(hasScore ? score : 0);

@@ -14,6 +14,7 @@ export interface AggressivenessComponents {
     narrowPenalty: number;
     meltUpPenalty: number;
     liveAdjustment: number;
+    detail?: Record<string, { value: number | null; method: string; sample: number }>;
 }
 
 export interface AggressivenessResult {
@@ -27,6 +28,7 @@ export interface AggressivenessResult {
     displayScore?: number;
     label?: string;
     tone?: string;
+    confidence?: number | null;
     components?: AggressivenessComponents;
     missing: string[];
     message?: string;
