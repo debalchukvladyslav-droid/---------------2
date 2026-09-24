@@ -1606,12 +1606,9 @@ body {
     display: block;
 }
 
-.stats-compare-shell--active .stats-summary-group {
+.stats-compare-shell--active .stats-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.stats-compare-shell--active .stats-summary-kicker {
-    grid-column: 1 / -1;
+    align-content: start;
 }
 
 .stats-compare-shell--active .stats-breakdown-grid,
@@ -2385,51 +2382,6 @@ body {
 
 .stats-chart-expand[hidden] { display: none; }
 
-.stats-summary-board {
-    display: grid;
-    gap: 10px;
-}
-
-.stats-summary-group {
-    display: grid;
-    grid-template-columns: 92px repeat(auto-fit, minmax(132px, 1fr));
-    gap: 8px;
-    align-items: stretch;
-}
-
-.stats-summary-kicker {
-    display: flex;
-    align-items: center;
-    margin: 0;
-    color: var(--text-muted);
-    font-size: 0.68rem;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-}
-
-.stats-summary-group .stat-card {
-    padding: 12px 14px;
-}
-
-.stats-summary-group .stat-card:hover {
-    transform: none;
-}
-
-.stats-summary-group .stat-card .label {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.stats-summary-group .stat-card .value {
-    font-size: 1.22rem;
-}
-
-.stats-summary-group .stat-total-value {
-    font-size: 1.45rem;
-}
-
 .stats-equity-insights {
     margin-top: 14px;
     padding-top: 12px;
@@ -2494,21 +2446,11 @@ body {
 .neutral { color: var(--text-main) !important; }
 
 @media (max-width: 860px) {
-    .stats-summary-group,
     .stats-breakdown-grid,
     .stats-composition-row,
     .stats-focus-strip,
     .stats-insights-list {
         grid-template-columns: 1fr;
-    }
-
-    .stats-summary-group {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .stats-summary-kicker,
-    .stats-summary-primary {
-        grid-column: 1 / -1;
     }
 }
 
