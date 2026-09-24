@@ -2,6 +2,7 @@ import { fetchWithSession } from './authenticated_fetch.js';
 import { formatEtClock, needlePoint, nextLivePollDelay } from '../lib/aggressiveness_core.js';
 
 const CACHE_KEY = 'pj:market-aggressiveness:last-valid:v1';
+const FACE_KEY = 'pj:market-gauge-face:v1';
 const TONES = ['minimal', 'cautious', 'neutral', 'aggressive', 'maximal'];
 let pendingRequest = null;
 let pollTimer = 0;
@@ -169,11 +170,38 @@ function renderPayload(payload, { incomplete = false } = {}) {
     renderDetails(payload);
 }
 
+function readStoredFace() {
+    try {
+        return localStorage.getItem(FACE_KEY) === 'aggressiveness' ? 'aggressiveness' : 'sentiment';
+    } catch {
+        return 'sentiment';
+    }
+}
+
+function rememberGaugeFace(flipped) {
+    try {
+        localStorage.setItem(FACE_KEY, flipped ? 'aggressiveness' : 'sentiment');
+    } catch {
+        /* private mode */
+    }
+}
+
+export function applyStoredGaugeFace() {
+    const shell = document.getElementById('market-sentiment-card');
+    if (!shell) return;
+    const flipped = readStoredFace() === 'aggressiveness';
+    shell.classList.toggle('is-flipped', flipped);
+    shell.dataset.gaugeFace = flipped ? 'aggressiveness' : 'sentiment';
+    const flip = shell.querySelector('.market-gauge-flip');
+    if (flip) flip.setAttribute('aria-label', flipped ? 'Перемкнути на настрій ринку' : 'Перемкнути на індикатор агресивності');
+}
+
 export function flipMarketGauge() {
     const shell = document.getElementById('market-sentiment-card');
     if (!shell) return;
     const flipped = shell.classList.toggle('is-flipped');
     shell.dataset.gaugeFace = flipped ? 'aggressiveness' : 'sentiment';
+    rememberGaugeFace(flipped);
     if (!flipped) closeAggressivenessInfo();
     const flip = shell.querySelector('.market-gauge-flip');
     if (flip) flip.setAttribute('aria-label', flipped ? 'Перемкнути на настрій ринку' : 'Перемкнути на індикатор агресивності');
@@ -197,6 +225,7 @@ export function openAggressivenessInfo() {
         shell.dataset.gaugeFace = 'aggressiveness';
         const flip = shell.querySelector('.market-gauge-flip');
         if (flip) flip.setAttribute('aria-label', 'Перемкнути на настрій ринку');
+        rememberGaugeFace(true);
     }
     modal.style.display = 'flex';
     syncDetailsButton(shell);
@@ -227,6 +256,7 @@ async function fetchAggressiveness(force) {
 export async function renderMarketAggressiveness(options = {}) {
     const face = document.getElementById('market-aggressiveness-face');
     if (!face) return;
+    applyStoredGaugeFace();
     const force = Boolean(options.force);
     if (!pendingRequest || force) pendingRequest = fetchAggressiveness(force);
     const request = pendingRequest;

@@ -326,6 +326,9 @@ test('dashboard flip markup and mobile rule exist', async () => {
     const html = await readFile(new URL('../partials/views/dashboard-view.html', import.meta.url), 'utf8');
     const css = await readFile(new URL('../css/16_polish.css', import.meta.url), 'utf8');
     const migration = await readFile(new URL('../supabase/migrations/20260924190000_daily_market_regime.sql', import.meta.url), 'utf8');
+    const gauge = await readFile(new URL('../js/market_aggressiveness.js', import.meta.url), 'utf8');
+    assert.match(gauge, /pj:market-gauge-face:v1/);
+    assert.match(gauge, /localStorage\.setItem\(FACE_KEY/);
     assert.match(html, /data-action="market-gauge-flip"/);
     assert.match(html, /Агресивність/);
     assert.match(html, /market-aggressiveness-score/);

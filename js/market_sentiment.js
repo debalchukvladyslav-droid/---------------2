@@ -1,4 +1,5 @@
 import { fetchWithSession } from './authenticated_fetch.js';
+import { applyStoredGaugeFace } from './market_aggressiveness.js';
 
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const CACHE_KEY = 'pj:market-sentiment:fear-greed:v1';
@@ -93,6 +94,7 @@ const FACE_TONES = ['extreme-fear', 'fear', 'neutral', 'greed', 'extreme-greed']
 function shellClass(stateClass = '') {
     const root = document.getElementById('market-sentiment-card');
     if (!root) return;
+    applyStoredGaugeFace();
     const keep = ['is-flipped', 'is-details-open'].filter((name) => root.classList.contains(name));
     root.className = ['stat-card-pro', 'market-sentiment-card', 'market-gauge-shell', stateClass, ...keep].filter(Boolean).join(' ');
 }
