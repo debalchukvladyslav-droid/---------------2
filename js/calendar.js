@@ -186,34 +186,6 @@ function _dashSetBadge(id, text, type) {
 }
 
 /** Картки «Про» та останні угоди на дашборді — тільки для обраного в календарі місяця. */
-function renderDashToday() {
-    const resultEl = document.getElementById('dash-today-result');
-    const statusEl = document.getElementById('dash-today-status');
-    const actionEl = document.getElementById('dash-today-action');
-    if (!resultEl || !statusEl || !actionEl) return;
-
-    const today = new Date().toLocaleString('en-CA', { timeZone: 'America/New_York' }).split(',')[0];
-    const day = state.appData?.journal?.[today];
-    const pnl = day ? getEffectiveDayPnl(day) : null;
-    const trades = day ? visibleTradeRows(day.trades).length : 0;
-    const closed = day?.sessionReviewDone === true;
-
-    if (Number.isFinite(pnl)) {
-        resultEl.textContent = `${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`;
-        resultEl.className = pnl >= 0 ? 'is-profit' : 'is-loss';
-    } else if (trades > 0) {
-        resultEl.textContent = `Угод: ${trades}`;
-        resultEl.className = '';
-    } else {
-        resultEl.textContent = 'Ще немає результату';
-        resultEl.className = '';
-    }
-    statusEl.textContent = closed ? 'Сесію закрито' : 'Сесію не закрито';
-    const toJournal = closed && (Number.isFinite(pnl) || trades > 0);
-    actionEl.dataset.tab = toJournal ? 'trades' : 'calendar';
-    actionEl.textContent = toJournal ? 'Журнал' : 'Календар';
-}
-
 export function updateDashboardWidgets(year, month) {
     const mk = `${year}-${String(month + 1).padStart(2, '0')}`;
     const prefix = `${mk}-`;
@@ -356,7 +328,6 @@ export function updateDashboardWidgets(year, month) {
             });
         }
     }
-    renderDashToday();
     window.refreshDashboardWidgets?.();
 }
 

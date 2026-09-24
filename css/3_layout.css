@@ -477,33 +477,3 @@
 .trader-btn-team { width: 100%; padding: 11px 14px; margin-bottom: 4px; background: transparent; border: 1px solid var(--border); color: var(--text-main); border-radius: 7px; cursor: pointer; text-align: left; font-size: 0.88rem; transition: var(--transition); display: flex; align-items: center; gap: 10px; font-family: inherit; }
 .trader-btn-team:hover { background: var(--bg-hover); border-color: var(--text-muted); }
 .trader-btn-team.active { background: var(--accent-glow-12); border-color: var(--accent); color: var(--accent); font-weight: 600; }
-
-.dash-today {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    margin: 0 0 16px;
-    padding: 14px 16px;
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    background: var(--bg-panel);
-}
-.dash-today-copy {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 8px 14px;
-    min-width: 0;
-}
-.dash-today-kicker {
-    color: var(--text-muted);
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-}
-.dash-today-copy strong { font-size: 1.15rem; }
-.dash-today-copy strong.is-profit { color: var(--profit); }
-.dash-today-copy strong.is-loss { color: var(--loss); }
-#dash-today-status { color: var(--text-muted); font-size: 0.92rem; }
