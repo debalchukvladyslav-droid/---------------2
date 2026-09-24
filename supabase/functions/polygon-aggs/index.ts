@@ -90,11 +90,15 @@ Deno.serve(async (req) => {
         return json({ message: 'Request body is too large' }, 413, req);
     }
 
-    let body: { symbol?: string; fromMs?: number; toMs?: number };
+    let body: { mode?: string; symbol?: string; from?: string; to?: string; fromMs?: number; toMs?: number };
     try {
         body = await req.json();
     } catch {
         return json({ message: 'Invalid JSON' }, 400, req);
+    }
+
+    if (body?.mode === 'daily') {
+        return proxyDailyBars(body, POLYGON_API_KEY, req);
     }
 
     const symbol = String(body?.symbol || '').toUpperCase().trim();
@@ -148,3 +152,42 @@ Deno.serve(async (req) => {
         headers: { ...cors(req), 'Content-Type': 'application/json' },
     });
 });
+
+async function proxyDailyBars(
+    body: { symbol?: string; from?: string; to?: string },
+    apiKey: string,
+    req: Request,
+) {
+    const symbol = String(body.symbol || '').toUpperCase().trim();
+    const from = String(body.from || '');
+    const to = String(body.to || '');
+    if (!/^[A-Z][A-Z0-9.:_-]{0,20}$/.test(symbol)) {
+        return json({ message: 'Invalid symbol' }, 400, req);
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
+        return json({ message: 'Invalid date range' }, 400, req);
+    }
+    const span = Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`);
+    if (!Number.isFinite(span) || span > 800 * 24 * 60 * 60 * 1000) {
+        return json({ message: 'Date range is too large' }, 400, req);
+    }
+
+    const q = new URLSearchParams({
+        adjusted: 'true',
+        sort: 'asc',
+        limit: '50000',
+        apiKey,
+    });
+    const url = `https://api.polygon.io/v2/aggs/ticker/${encodeURIComponent(symbol)}/range/1/day/${from}/${to}?${q}`;
+    let response: Response;
+    try {
+        response = await fetch(url, { signal: AbortSignal.timeout(20000) });
+    } catch (error) {
+        return json({ message: (error as Error).message || 'Polygon fetch failed' }, 502, req);
+    }
+    const data = await response.json().catch(() => ({}));
+    return new Response(JSON.stringify(data), {
+        status: response.ok ? 200 : response.status,
+        headers: { ...cors(req), 'Content-Type': 'application/json' },
+    });
+}

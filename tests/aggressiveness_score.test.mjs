@@ -258,6 +258,32 @@ test('polygon daily bars are cached and yield scale is applied once', async () =
     assert.equal(normalizePolygonAggs({ results: [] }).length, 0);
 });
 
+test('daily bars use the polygon edge function when Vercel has no polygon key', async () => {
+    let requestUrl = '';
+    let requestBody = '';
+    const fetchImpl = async (input, init) => {
+        requestUrl = String(input);
+        requestBody = init?.body || '';
+        return new Response(JSON.stringify({
+            results: [{ t: Date.parse('2026-09-23T00:00:00Z'), o: 1, h: 1, l: 1, c: 10 }],
+        }), { status: 200 });
+    };
+    const { PolygonMarketDataProvider } = await import('../lib/market_data_provider.js');
+    const provider = new PolygonMarketDataProvider({
+        env: { SUPABASE_URL: 'https://example.supabase.co', SUPABASE_ANON_KEY: 'anon' },
+        authToken: 'user-jwt',
+        fetchImpl,
+    });
+    const bars = await provider.getDailyBars('SPY', '2026-01-01', '2026-09-23');
+    assert.match(requestUrl, /\/functions\/v1\/polygon-aggs$/);
+    assert.match(requestBody, /"mode":"daily"/);
+    assert.match(requestBody, /"symbol":"SPY"/);
+    assert.equal(bars[0].close, 10);
+    const quotes = await provider.getLiveQuotes(['SPY']);
+    assert.equal(quotes.incomplete, true);
+    assert.deepEqual(quotes.quotes, {});
+});
+
 test('dashboard flip markup and mobile rule exist', async () => {
     const html = await readFile(new URL('../partials/views/dashboard-view.html', import.meta.url), 'utf8');
     const css = await readFile(new URL('../css/16_polish.css', import.meta.url), 'utf8');
