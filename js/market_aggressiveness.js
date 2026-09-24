@@ -5,6 +5,7 @@ const CACHE_KEY = 'pj:market-aggressiveness:last-valid:v1';
 const TONES = ['minimal', 'cautious', 'neutral', 'aggressive', 'maximal'];
 let pendingRequest = null;
 let pollTimer = 0;
+let shownPayload = null;
 
 function setText(id, value) {
     const el = document.getElementById(id);
@@ -53,42 +54,88 @@ function formatSigned(value, digits = 0) {
     return `${number > 0 ? '+' : ''}${rounded}`;
 }
 
+const WATCH_ROWS = [
+    ['Micro / Small · 35%', 'IWM і IWC проти SPY за 5 і 10 днів. Це головна ознака, що рух є і в дрібних іменах.', 'microSmall'],
+    ['Speculative · 25%', 'XBI і ARKK: апетит до спекулятивних історій, де живуть pump&dump.', 'speculative'],
+    ['Broad market · 15%', 'Шлях SPY і його короткострокова волатильність.', 'broad'],
+    ['Stress safety · 25%', 'VIX, дохідність US10Y і нафта. Стрес знижує оцінку.', 'stress'],
+];
+
+function detailCard(title, text, value) {
+    const card = document.createElement('article');
+    card.className = 'aggressiveness-info-item';
+    const top = document.createElement('div');
+    top.className = 'aggressiveness-info-item-top';
+    const heading = document.createElement('strong');
+    heading.textContent = title;
+    const score = document.createElement('b');
+    score.textContent = value == null || value === 'NaN' ? '—' : String(value);
+    top.append(heading, score);
+    const copy = document.createElement('p');
+    copy.textContent = text;
+    card.append(top, copy);
+    return card;
+}
+
 function renderDetails(payload) {
-    const host = document.getElementById('market-aggressiveness-details');
+    shownPayload = payload;
+    const host = document.getElementById('aggressiveness-info-body');
     if (!host) return;
     const components = payload?.components || {};
-    const rows = [
-        ['Micro/Small', Math.round(components.microSmall)],
-        ['Speculative', Math.round(components.speculative)],
-        ['Broad market', Math.round(components.broad)],
-        ['Stress safety', Math.round(components.stress)],
-        ['Narrow penalty', `-${Math.round(components.narrowPenalty || 0)}`],
-        ['Live adjustment', formatSigned(components.liveAdjustment ?? payload?.liveAdjustment, 1)],
-        ['Base', Math.round(payload?.baseScore)],
-        ['Live', Math.round(payload?.liveScore)],
-        ['Last updated', formatEtClock(payload?.updatedAt)],
-    ];
     host.replaceChildren();
-    const intro = document.createElement('p');
-    intro.textContent = 'Наскільки режим сприятливий для механічних pump&dump short. Лише дані до вчорашнього close: IWM/IWC, XBI/ARKK, SPY, VIX, US10Y, нафта. QQQ і SMH лише як штраф за вузьке лідерство.';
-    host.append(intro);
+
+    const lead = document.createElement('p');
+    lead.className = 'aggressiveness-info-lead';
+    lead.textContent = 'Наскільки режим сприятливий для механічних pump&dump short. Сесія бере лише дані до вчорашнього close. QQQ і SMH самі оцінку не піднімають: вони лише штраф, якщо лідерство вузьке.';
+    host.append(lead);
+
     if (payload?.incomplete) {
-        const note = document.createElement('span');
-        note.textContent = 'Data incomplete';
+        const note = document.createElement('p');
+        note.className = 'aggressiveness-info-note';
+        note.textContent = payload?.message || 'Data incomplete';
         host.append(note);
     }
-    rows.forEach(([label, value]) => {
-        const line = document.createElement('span');
+
+    const summary = document.createElement('div');
+    summary.className = 'aggressiveness-info-summary';
+    [
+        ['Оцінка', Number.isFinite(Number(payload?.displayScore)) ? String(Math.round(payload.displayScore)) : '—'],
+        ['Статус', payload?.label || '—'],
+        ['Base', Number.isFinite(Number(payload?.baseScore)) ? String(Math.round(payload.baseScore)) : '—'],
+        ['Оновлено', formatEtClock(payload?.updatedAt) || '—'],
+    ].forEach(([label, value]) => {
+        const cell = document.createElement('div');
         const name = document.createElement('span');
-        name.textContent = `${label}: `;
+        name.textContent = label;
         const strong = document.createElement('strong');
-        strong.textContent = value == null || value === 'NaN' ? '—' : String(value);
-        line.append(name, strong);
-        host.append(line);
+        strong.textContent = value;
+        cell.append(name, strong);
+        summary.append(cell);
     });
+    host.append(summary);
+
+    const list = document.createElement('div');
+    list.className = 'aggressiveness-info-list';
+    WATCH_ROWS.forEach(([title, text, key]) => {
+        const raw = components[key];
+        list.append(detailCard(title, text, Number.isFinite(Number(raw)) ? String(Math.round(raw)) : '—'));
+    });
+    list.append(detailCard(
+        'Штраф за вузьке лідерство',
+        'QQQ сильніший за IWM, SMH сильніший за IWC, або слабкий XBI. Штраф не більший за 18.',
+        `-${Math.round(components.narrowPenalty || 0)}`,
+    ));
+    list.append(detailCard(
+        'Live',
+        'Коригування з 09:30 до 11:40 ET, далі значення заморожується. Діапазон від −8 до +8.',
+        formatSigned(components.liveAdjustment ?? payload?.liveAdjustment, 1),
+    ));
+    host.append(list);
+
     if (payload?.missing?.length) {
-        const missing = document.createElement('span');
-        missing.textContent = `Missing: ${payload.missing.join(', ')}`;
+        const missing = document.createElement('p');
+        missing.className = 'aggressiveness-info-note';
+        missing.textContent = `Немає даних: ${payload.missing.join(', ')}`;
         host.append(missing);
     }
 }
@@ -118,24 +165,45 @@ export function flipMarketGauge() {
     if (!shell) return;
     const flipped = shell.classList.toggle('is-flipped');
     shell.dataset.gaugeFace = flipped ? 'aggressiveness' : 'sentiment';
-    if (!flipped) shell.classList.remove('is-details-open');
+    if (!flipped) closeAggressivenessInfo();
     const flip = shell.querySelector('.market-gauge-flip');
     if (flip) flip.setAttribute('aria-label', flipped ? 'Перемкнути на настрій ринку' : 'Перемкнути на індикатор агресивності');
     syncDetailsButton(shell);
 }
 
-function syncDetailsButton(shell) {
-    const info = shell.querySelector('.market-gauge-info');
-    if (info) info.setAttribute('aria-expanded', shell.classList.contains('is-details-open') ? 'true' : 'false');
+function syncDetailsButton(shell = document.getElementById('market-sentiment-card')) {
+    const info = shell?.querySelector('.market-gauge-info');
+    if (!info) return;
+    const open = document.getElementById('aggressiveness-info-modal')?.style.display === 'flex';
+    info.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+export function openAggressivenessInfo() {
+    const modal = document.getElementById('aggressiveness-info-modal');
+    const shell = document.getElementById('market-sentiment-card');
+    if (!modal) return;
+    if (shownPayload) renderDetails(shownPayload);
+    if (shell) {
+        shell.classList.add('is-flipped');
+        shell.dataset.gaugeFace = 'aggressiveness';
+        const flip = shell.querySelector('.market-gauge-flip');
+        if (flip) flip.setAttribute('aria-label', 'Перемкнути на настрій ринку');
+    }
+    modal.style.display = 'flex';
+    syncDetailsButton(shell);
+    modal.querySelector('[data-action="aggressiveness-info-close"]')?.focus();
+}
+
+export function closeAggressivenessInfo() {
+    const modal = document.getElementById('aggressiveness-info-modal');
+    if (modal) modal.style.display = 'none';
+    syncDetailsButton();
 }
 
 export function toggleAggressivenessDetails() {
-    const shell = document.getElementById('market-sentiment-card');
-    if (!shell) return;
-    shell.classList.add('is-flipped');
-    shell.dataset.gaugeFace = 'aggressiveness';
-    shell.classList.toggle('is-details-open');
-    syncDetailsButton(shell);
+    const modal = document.getElementById('aggressiveness-info-modal');
+    if (modal?.style.display === 'flex') closeAggressivenessInfo();
+    else openAggressivenessInfo();
 }
 
 async function fetchAggressiveness(force) {

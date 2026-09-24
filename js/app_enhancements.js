@@ -1,4 +1,4 @@
-import { flipMarketGauge, toggleAggressivenessDetails } from './market_aggressiveness.js';
+import { closeAggressivenessInfo, flipMarketGauge, toggleAggressivenessDetails } from './market_aggressiveness.js';
 import { renderAggressivenessBacktest } from './aggressiveness_backtest.js';
 import { rememberShsTrader } from './shs_sync.js';
 import { showToast } from './utils.js';
@@ -358,6 +358,12 @@ function activateAction(action, trigger, event = null) {
         'market-sentiment-open': () => window.openMarketSentimentSource?.(),
         'market-gauge-flip': () => flipMarketGauge(),
         'aggressiveness-details': () => toggleAggressivenessDetails(),
+        'aggressiveness-info-close': () => closeAggressivenessInfo(),
+        'aggressiveness-info-backdrop': () => {
+            if (event?.target !== trigger) return false;
+            closeAggressivenessInfo();
+            return true;
+        },
         'aggressiveness-backtest-refresh': () => renderAggressivenessBacktest(),
         'sos-open': () => window.openSOSModal?.(),
         'sos-close': () => window.closeSOSModal?.(),
@@ -492,6 +498,9 @@ function bindDeclarativeActions() {
     });
 
     document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && document.getElementById('aggressiveness-info-modal')?.style.display === 'flex') {
+            closeAggressivenessInfo();
+        }
         if (event.target?.matches?.('[data-action="tag-search-input"]') && event.key === 'Enter') {
             event.preventDefault();
             window.runTagSearch?.();
