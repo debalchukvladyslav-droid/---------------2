@@ -3,9 +3,8 @@ import { supabase, SUPABASE_URL } from './supabase.js';
 import { state } from './state.js';
 import { copyTextToClipboard, showToast } from './utils.js';
 import { loadTeams } from './teams.js';
-import { exportProfileData, resetProfileData, loadTradeDays, loadAllMonths, loadJournalRange } from './storage.js';
+import { exportProfileData, resetProfileData, loadTradeDays } from './storage.js';
 import { listServerBackupsForUser, prepareBackupRestore, restorePreparedBackup } from './backups.js';
-import { journalDatesInRange } from './market_criteria_analysis.js';
 import { renderAggressivenessBacktest } from './aggressiveness_backtest.js';
 import { renderNextSessionBacktest } from './next_session_backtest.js';
 import { formatClientErrorReport, formatClientErrorTxt } from '../lib/client_error_report.js';
@@ -183,22 +182,6 @@ export function renderTestingPanel() {
         <section class="admin-polygon-panel" data-testing-sheet-import-host></section>
         <section class="testing-loader-grid">
             <div class="admin-polygon-panel" data-testing-polygon-host></div>
-        </section>
-        <section class="testing-analysis" aria-labelledby="testing-analysis-title">
-            <div class="testing-analysis__head">
-                <div><span class="admin-section-subtitle">Експериментальна аналітика</span><h4 id="testing-analysis-title" class="admin-section-title">Період аналізу</h4></div>
-                <div id="testing-analysis-period" class="testing-period-picker">
-                    <label><span>Від</span><input type="date" data-testing-period-from></label>
-                    <label><span>До</span><input type="date" data-testing-period-to></label>
-                    <button type="button" class="btn-admin-action" data-testing-analysis-run>Показати</button>
-                </div>
-            </div>
-            <p class="testing-analysis__status" data-testing-analysis-status>Оберіть період і натисніть «Показати». Критерії паперів тепер у розділі «Дослідження».</p>
-            <article id="stats-best-exit-panel" class="panel stats-chart-panel-wide">
-                <h3 class="stats-chart-title">Кращий вихід закритих short-угод</h3>
-                <p class="stats-chart-note">Порівнює фактичний вихід із Low після входу до 12:00 NY. Polygon запускається лише кнопкою всередині блоку.</p>
-                <div id="stats-best-exit-content"><div class="stats-empty-note">Аналіз ще не запущено.</div></div>
-            </article>
         </section>`;
     void renderPolygonAdminPanel(panel.querySelector('[data-testing-polygon-host]'));
     import('./testing_sheet_import.js').then(({ initIsolatedSheetTest }) => {
@@ -224,37 +207,6 @@ export function renderTestingPanel() {
             button.disabled = false;
         }
     });
-    const journalDates = Object.keys(state.appData?.journal || {}).filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)).sort();
-    const fromInput = panel.querySelector('[data-testing-period-from]');
-    const toInput = panel.querySelector('[data-testing-period-to]');
-    if (fromInput) fromInput.value = journalDates[0] || '';
-    if (toInput) toInput.value = journalDates.at(-1) || '';
-    panel.querySelector('[data-testing-analysis-run]')?.addEventListener('click', async (event) => {
-        const runButton = event.currentTarget;
-        const status = panel.querySelector('[data-testing-analysis-status]');
-        runButton.disabled = true;
-        if (status) status.textContent = 'Завантажуємо дані вибраного періоду…';
-        try {
-            const { from, to, label } = readTestingPeriod(panel);
-            if (from && to) await loadJournalRange(state.CURRENT_VIEWED_USER || state.USER_DOC_NAME, from, to, state.currentViewedUserId || state.myUserId);
-            else await loadAllMonths(state.CURRENT_VIEWED_USER || state.USER_DOC_NAME, state.currentViewedUserId || state.myUserId);
-            const dates = journalDatesInRange(state.appData?.journal || {}, from, to);
-            const { renderBestExitAnalysis } = await import('./best_exit_analysis.js');
-            await renderBestExitAnalysis({ journal: state.appData.journal || {}, periodDates: dates, sourceType: 'current', periodLabel: label });
-            if (status) status.textContent = `Період: ${label} · днів із даними: ${dates.size}`;
-        } catch (error) {
-            if (status) status.textContent = `Помилка: ${error?.message || error}`;
-        } finally {
-            runButton.disabled = false;
-        }
-    });
-}
-
-function readTestingPeriod(panel) {
-    const from = panel?.querySelector('[data-testing-period-from]')?.value || '';
-    const to = panel?.querySelector('[data-testing-period-to]')?.value || '';
-    if (from && to && from > to) throw new Error('Дата «Від» має бути не пізніше за «До»');
-    return { from, to, label: from || to ? `${from || 'початок'} — ${to || 'сьогодні'}` : 'За весь час' };
 }
 
 async function invokePolygonAdmin(action, extra = {}) {

@@ -123,6 +123,24 @@ export function selectResearchTradeType(type = '') {
     if (view()?.dataset.researchReady === '1') void renderPeriod(field('from')?.value || '', field('to')?.value || '');
 }
 
+async function renderExit(period) {
+    const status = field('exit-status');
+    if (status) status.textContent = 'Рахую вихід по часу…';
+    try {
+        const dates = journalDatesInRange(state.appData?.journal || {}, period.from, period.to);
+        const { renderBestExitAnalysis } = await import('./best_exit_analysis.js');
+        await renderBestExitAnalysis({
+            journal: state.appData.journal || {},
+            periodDates: dates,
+            sourceType: 'current',
+            periodLabel: period.label,
+        });
+        if (status) status.textContent = `Період ${period.label}. Якщо цін ще немає, натисніть «Почати» в цій панелі.`;
+    } catch (error) {
+        if (status) status.textContent = `Помилка: ${error?.message || error}`;
+    }
+}
+
 async function renderPeriod(from, to) {
     const dates = journalDatesInRange(state.appData?.journal || {}, from, to);
     const { renderMarketCriteriaAnalysis } = await import('./stats.js');
@@ -142,6 +160,7 @@ export async function showResearch() {
         await renderPeriod(period.from, period.to);
         const coverage = criteriaCoverage(state.appData.journal, { from: period.from, to: period.to });
         if (status) status.textContent = coverageText(period.label, coverage);
+        await renderExit(period);
     } catch (error) {
         if (status) status.textContent = `Помилка: ${error?.message || error}`;
     } finally {

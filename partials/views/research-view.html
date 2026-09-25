@@ -3,7 +3,7 @@
         <header class="research-head">
             <span class="admin-section-subtitle">Розбір</span>
             <h2>Дослідження</h2>
-            <p>Важка аналітика по угодах. Зараз тут один екран: які критерії паперу дають плюс, а які забирають результат.</p>
+            <p>Дві панелі на один період до 6 місяців: критерії паперу і вихід по часу.</p>
         </header>
 
         <article class="research-card">
@@ -14,7 +14,7 @@
                 <button type="button" class="btn-admin-action" data-action="research-preset" data-months="3">3 місяці</button>
                 <button type="button" class="btn-admin-action" data-action="research-preset" data-months="6">6 місяців</button>
             </div>
-            <div class="testing-period-picker">
+            <div id="research-period" class="testing-period-picker">
                 <label><span>Від</span><input type="date" data-research-from></label>
                 <label><span>До</span><input type="date" data-research-to></label>
                 <button type="button" class="btn-primary" data-action="research-show">Показати</button>
@@ -26,6 +26,8 @@
         </article>
 
         <article class="panel stats-market-criteria-panel research-card research-results">
+            <h3>Критерії</h3>
+            <p>Які діапазони паперу дають плюс, а які забирають результат.</p>
             <div class="research-results-layout">
                 <aside class="research-type-column" role="radiogroup" aria-label="Тип угоди">
                     <h3>Тип угоди</h3>
@@ -36,7 +38,7 @@
                     <button type="button" class="research-type is-purple" data-action="research-trade-type" data-trade-type="Фіолетова" aria-pressed="false">Фіолетова</button>
                 </aside>
                 <div class="research-results-main">
-                    <h3 class="stats-chart-title">2. Результат <span data-research-type-label>по всіх типах</span></h3>
+                    <h3 class="stats-chart-title">Результат <span data-research-type-label>по всіх типах</span></h3>
                     <ul class="research-legend">
                         <li><span class="stats-criteria-emphasis is-increase">Збільшити</span> цей діапазон дає плюс, беріть його частіше.</li>
                         <li><span class="stats-criteria-emphasis is-decrease">Зменшити</span> цей діапазон забирає результат, зменшуйте акцент.</li>
@@ -45,6 +47,19 @@
                     <div id="research-criteria-content" class="stats-market-criteria-content"><div class="stats-empty-note">Результат з’явиться після кнопки «Показати».</div></div>
                 </div>
             </div>
+        </article>
+
+        <article class="research-card research-exit-panel">
+            <h3>Вихід по часу</h3>
+            <p>Лише закриті short без Stop і Take. Ваш вихід порівнюється з найнижчою ціною після входу до 12:00 за Нью-Йорком.</p>
+            <ul class="research-legend">
+                <li><strong>Low</strong> найнижча ціна після входу. Чим ближче вихід до неї, тим більше руху забрано.</li>
+                <li><strong>Не забрано</strong> скільки результату лишилось між фактичним виходом і цим low.</li>
+                <li><strong>Час виходу</strong> що вийшло б, якби закрити позицію у вибрану хвилину з 09:00 до 12:00.</li>
+            </ul>
+            <p class="research-note">«Показати» рахує збережені дані. «Почати» всередині панелі довантажує хвилинні ціни лише для цього періоду.</p>
+            <p class="testing-analysis__status" data-research-exit-status>Результат з’явиться після кнопки «Показати».</p>
+            <div id="stats-best-exit-content"><div class="stats-empty-note">Оберіть період зверху і натисніть «Показати».</div></div>
         </article>
     </section>
 </div>

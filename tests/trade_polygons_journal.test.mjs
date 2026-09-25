@@ -81,10 +81,13 @@ test('research screen loads criteria for the selected period and testing no long
     assert.match(view, /data-action="research-show"/);
     assert.match(view, /data-action="research-load"/);
     assert.match(view, /Довантажити критерії/);
+    assert.match(view, /Вихід по часу/);
+    assert.match(view, /id="stats-best-exit-content"/);
+    assert.match(research, /renderBestExitAnalysis/);
     assert.match(research, /sixMonthWindows/);
     assert.match(research, /criteriaCoverage/);
     assert.match(research, /coverage\.pending/);
     assert.match(research, /fetch\('\/api\/trade-polygons'/);
     assert.match(research, /clampResearchPeriod/);
-    assert.doesNotMatch(admin, /data-testing-criteria-host|data-load-all-criteria|stats-market-criteria-panel/);
+    assert.doesNotMatch(admin, /data-testing-criteria-host|data-load-all-criteria|stats-market-criteria-panel|stats-best-exit-content/);
 });

@@ -5538,6 +5538,9 @@ textarea:focus, select:focus,
 .research-legend { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; color: var(--text-muted); font-size: .86rem; }
 .research-legend li { display: flex; gap: 8px; align-items: baseline; }
 .research-card .stats-market-criteria-content { margin-top: 4px; }
+.research-exit-panel #stats-best-exit-content { min-width: 0; }
+.research-exit-panel .best-exit-period-control { margin-top: 4px; }
+.research-legend strong { color: var(--text-main); font-weight: 700; }
 .research-results-layout { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 18px; align-items: start; }
 .research-type-column { display: grid; gap: 8px; position: sticky; top: 12px; }
 .research-type-column h3 { margin: 0 0 2px; color: var(--text-main); font-size: .95rem; }
