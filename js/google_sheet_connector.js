@@ -585,16 +585,24 @@ export async function loadSpreadsheetFromServiceInput(trigger = null) {
 
     setSheetServiceEmail();
     setSheetServiceStatus('Читаємо таблицю через service account...', 'loading');
+    let selectedSheet = '';
     try {
-        const selectedSheet = await loadSpreadsheetSheets(spreadsheetId);
-        await fetchSpreadsheetData(spreadsheetId, selectedSheet);
+        selectedSheet = await loadSpreadsheetSheets(spreadsheetId);
         syncSheetWorkspaceVisibility();
-        setSheetServiceStatus('Таблиця підключена через service account.', 'success');
-        showToast('Google таблицю підключено через service account.');
     } catch (error) {
         console.error('[Google Sheets] service account load failed', error);
         setSheetServiceStatus(`Не вдалося прочитати таблицю: ${error?.message || error}`, 'error');
         showToast('Не вдалося прочитати таблицю: ' + (error?.message || String(error)));
+        return;
+    }
+    try {
+        await fetchSpreadsheetData(spreadsheetId, selectedSheet);
+        setSheetServiceStatus('Таблиця підключена через service account.', 'success');
+        showToast('Google таблицю підключено через service account.');
+    } catch (error) {
+        console.error('[Google Sheets] sheet preview failed', error);
+        setSheetServiceStatus(`Таблицю відкрито. Оберіть аркуш: ${error?.message || error}`, 'error');
+        showToast('Таблицю відкрито. Оберіть потрібний аркуш.');
     }
 }
 

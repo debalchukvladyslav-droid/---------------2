@@ -1301,21 +1301,13 @@ function smartValueToColumnIndex(raw) {
 }
 
 async function deleteJournalDatesFromSupabase(dateStrs = []) {
-    const uniqueDates = [...new Set(dateStrs)].filter((dateStr) => /^\d{4}-\d{2}-\d{2}$/.test(dateStr));
+    const journal = state.appData?.journal || {};
+    const uniqueDates = [...new Set(dateStrs)].filter((dateStr) => /^\d{4}-\d{2}-\d{2}$/.test(dateStr) && !journal[dateStr]);
     if (!uniqueDates.length) return;
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError) throw userError;
-    if (!user?.id) return;
-
-    for (let i = 0; i < uniqueDates.length; i += 100) {
-        const chunk = uniqueDates.slice(i, i + 100);
-        const { error } = await supabase
-            .from('journal_days')
-            .delete()
-            .eq('user_id', user.id)
-            .in('trade_date', chunk);
-        if (error) throw error;
-    }
+    // Direct journal_days deletes are rejected. Days that the merge put back
+    // are saved through the revision-aware queue. Days removed only locally
+    // stay on the server until that same queue can drop them.
+    console.info('[Google Sheets] skipped legacy delete of empty sheet days', uniqueDates.length);
 }
 
 function canMutateSheetSync(opts = {}) {

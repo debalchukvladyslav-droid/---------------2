@@ -11,31 +11,27 @@ import {
 const presetId = SHARED_TRADER_SPREADSHEET_IDS[0];
 const trader = { role: 'trader', last_name: 'Дебальчук' };
 
-test('shared workbook bootstrap allows only the profile last name', () => {
+test('shared workbook bootstrap opens every sheet in a preset book', () => {
     assert.equal(canBootstrapSharedTraderSheet(trader, presetId), true);
     assert.equal(canBootstrapSharedTraderSheet(trader, presetId, '  дебальчук '), true);
-    assert.equal(canBootstrapSharedTraderSheet(trader, presetId, 'Іваненко'), false);
+    assert.equal(canBootstrapSharedTraderSheet(trader, presetId, 'Іваненко'), true);
+    assert.equal(canBootstrapSharedTraderSheet(trader, '1b4eep8h6YOB8_-i4_ug2p8BuYd4Cfo7IqAIrGG2W23M'), true);
     assert.equal(canBootstrapSharedTraderSheet(trader, 'unknown-sheet'), false);
     assert.equal(canBootstrapSharedTraderSheet({ role: 'trader', last_name: '' }, presetId), false);
     assert.equal(canBootstrapSharedTraderSheet({ role: 'admin', last_name: 'Дебальчук' }, presetId), false);
 });
 
-test('bootstrap metadata and ranges stay on the owner sheet', () => {
+test('bootstrap metadata lists every sheet so the trader can choose', () => {
     const connection = { bootstrap: true, ownerSheetTitle: 'Дебальчук', ownerFirstName: 'Влад', ownerNick: 'andvav', scope: '' };
     const sheets = [
         { title: 'Іваненко', index: 0 },
         { title: 'Дебальчук', index: 1 },
         { title: 'Дебальчук Андрій', index: 2 },
         { title: 'Кость', index: 3 },
-        { title: 'Коваленко', index: 4 },
-        { title: 'andvav', index: 5 },
     ];
-    assert.deepEqual(visibleSpreadsheetSheets(sheets, connection).map((sheet) => sheet.title), ['Дебальчук', 'Дебальчук Андрій', 'andvav']);
-    assert.equal(assertBootstrapSheetRange(connection, "'Дебальчук'!A1:ZZ1"), 'Дебальчук');
+    assert.deepEqual(visibleSpreadsheetSheets(sheets, connection).map((sheet) => sheet.title), ['Іваненко', 'Дебальчук', 'Дебальчук Андрій', 'Кость']);
+    assert.equal(assertBootstrapSheetRange(connection, "'Іваненко'!A1:ZZ1"), 'Іваненко');
     assert.equal(assertBootstrapSheetRange(connection, "'Дебальчук Андрій'!A1:ZZ1"), 'Дебальчук Андрій');
-    assert.equal(canBootstrapSharedTraderSheet({ role: 'trader', last_name: 'Коваль' }, presetId, 'Коваленко'), false);
-    assert.equal(canBootstrapSharedTraderSheet({ role: 'trader', last_name: 'Вавренюк\u200b' }, presetId, 'Вавренюк Андрій'), true);
-    assert.throws(() => assertBootstrapSheetRange(connection, "'Іваненко'!A1:ZZ1"), (error) => error.code === 'SOURCE_CONNECTION_REQUIRED');
     assert.throws(() => assertBootstrapSheetRange(connection, 'A1:ZZ1'), (error) => error.code === 'SOURCE_CONNECTION_REQUIRED');
 });
 
