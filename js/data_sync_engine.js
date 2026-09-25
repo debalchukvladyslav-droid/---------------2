@@ -5,7 +5,7 @@ import { isRetryableSyncError, retryDelay, syncError } from './data_sync_core.js
 export function createDataSyncEngine({ transport, store = localStore, onChange = () => {}, onSnapshot = () => {},
     onState = () => {}, online = () => globalThis.navigator?.onLine !== false, now = Date.now,
     schedule = setTimeout, cancel = clearTimeout, random = Math.random, lock = null, conflictPolicy = 'manual',
-    idleDelay = 60000 } = {}) {
+    idleDelay = 300000 } = {}) {
     let userId = null;
     let generation = 0;
     let activeTask = null;
@@ -74,6 +74,7 @@ export function createDataSyncEngine({ transport, store = localStore, onChange =
         await pull(user, version);
         if (!current(user, version)) return;
         await store.repairProtectedSettingsOperations?.(user);
+        let appliedAny = false;
         while (current(user, version)) {
             const all = await store.listDataOperations(user);
             if (!current(user, version)) return;
@@ -141,6 +142,7 @@ export function createDataSyncEngine({ transport, store = localStore, onChange =
                     }
                 }
                 if (current(user, version) && changed.length) await onChange(user, changed);
+                appliedAny = true;
                 // The apply cursor is NOT a pull checkpoint: other users/devices may have changed rows before it.
                 if (conflictPolicy !== 'local' && response.results.some(result => result.status === 'stale_epoch')) await pull(user, version);
             } catch (error) {
@@ -151,7 +153,7 @@ export function createDataSyncEngine({ transport, store = localStore, onChange =
             }
         }
         if (!current(user, version)) return;
-        await pull(user, version);
+        if (appliedAny) await pull(user, version);
         const summary = await status(user);
         if (requireServer && summary?.pending) throw syncError(
             summary.conflicts ? 'Є різні версії правок. Відкрийте Налаштування → Збереження та відновлення й оберіть потрібну версію.'

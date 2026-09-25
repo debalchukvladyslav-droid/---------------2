@@ -86,7 +86,7 @@ test('local-first policy automatically rebases a conflicting edit and sends it a
     engine.stop();
 });
 
-test('an idle sync waits a minute instead of polling continuously', async () => {
+test('an idle sync waits five minutes instead of polling continuously', async () => {
     let scheduled;
     const engine = createDataSyncEngine({
         store: {
@@ -101,7 +101,7 @@ test('an idle sync waits a minute instead of polling continuously', async () => 
     });
     engine.start('owner');
     await engine.sync();
-    assert.equal(scheduled, 60000);
+    assert.equal(scheduled, 300000);
     engine.stop();
 });
 
