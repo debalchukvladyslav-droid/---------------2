@@ -3,7 +3,7 @@
 // 1. ІМПОРТИ
 import { supabase } from './supabase.js';
 import { loadBootProfile } from './boot_profile.js';
-import { createDeferredAuthHandler } from './auth_event_dispatch.js';
+import { createDeferredAuthHandler, shouldRestartForAccountSwitch } from './auth_event_dispatch.js';
 import { cacheValue, readCachedValue } from './local_data_store.js';
 import { state } from './state.js';
 import { getDefaultDayEntry, resolveMonthlyDayloss } from './data_utils.js';
@@ -1501,6 +1501,10 @@ async function bootApp(user) {
     state.CURRENT_VIEWED_USER = state.USER_DOC_NAME;
     state.myUserId = user.id || null;
     setCurrentViewedUserId(user.id || null);
+    if (await reloadIfSignedInAccountChanged(user.id)) {
+        clearInitTimeout();
+        return;
+    }
     syncClientErrorReporter(state.myRole);
     console.log('[INIT] 2/4 profile context ready');
 
@@ -1585,6 +1589,15 @@ function resetRouteForLoginScreen() {
     window.history.replaceState({}, '', cleanPath);
 }
 
+async function reloadIfSignedInAccountChanged(expectedUserId) {
+    if (!expectedUserId) return false;
+    const { data, error } = await supabase.auth.getSession();
+    if (error) return false;
+    if (!shouldRestartForAccountSwitch(data?.session?.user?.id, expectedUserId)) return false;
+    window.location.reload();
+    return true;
+}
+
 function showLoginScreen() {
     _appInitialized = false;
     stopManualSyncScheduler();
@@ -1664,6 +1677,9 @@ async function handleAuthStateChange(event, session) {
     if (event === 'SIGNED_IN' && session?.user && !_appInitialized) {
         console.log('[AUTH] onAuthStateChange: SIGNED_IN');
         await bootApp(session.user);
+    } else if (shouldRestartForAccountSwitch(session?.user?.id, state.myUserId)) {
+        console.log('[AUTH] signed in as a different account, reloading');
+        window.location.reload();
     }
     if (event === 'SIGNED_OUT') {
         console.log('[AUTH] onAuthStateChange: SIGNED_OUT');
