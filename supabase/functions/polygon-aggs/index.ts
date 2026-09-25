@@ -3,6 +3,7 @@
  * Тіло: { symbol: "AAPL", fromMs: number, toMs: number } (unix ms, як у Polygon v2 aggs).
  */
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
+import { createPolygonStore } from '../_shared/polygon_store.js';
 
 const MAX_REQUEST_BYTES = 16 * 1024;
 const MAX_RANGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -42,6 +43,48 @@ function json(body: unknown, status = 200, req?: Request) {
     });
 }
 
+function serviceRest(path: string, init: RequestInit = {}) {
+    const url = Deno.env.get('SUPABASE_URL')?.replace(/\/$/, '');
+    const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!url || !key) return Promise.resolve(new Response(JSON.stringify({ message: 'Supabase service env missing' }), { status: 503 }));
+    return fetch(`${url}/rest/v1/${path}`, {
+        ...init,
+        headers: {
+            apikey: key,
+            Authorization: `Bearer ${key}`,
+            'Content-Type': 'application/json',
+            ...(init.headers || {}),
+        },
+    });
+}
+
+function sharedPolygon() {
+    return createPolygonStore({ rest: serviceRest });
+}
+
+async function fetchPolygonPages(firstUrl: string, apiKey: string) {
+    const results: any[] = [];
+    let next = firstUrl;
+    let status = 502;
+    let payload: any = {};
+    for (let page = 0; page < 10 && next; page += 1) {
+        const response = await fetch(next, { signal: AbortSignal.timeout(12000) });
+        status = response.status;
+        payload = await response.json().catch(() => ({}));
+        if (!response.ok) return { ok: false, status, payload, results, complete: false };
+        if (Array.isArray(payload?.results)) results.push(...payload.results);
+        const nextUrl = typeof payload?.next_url === 'string' ? payload.next_url : '';
+        if (!nextUrl) return { ok: true, status: 200, payload, results, complete: true };
+        const url = new URL(nextUrl);
+        if (url.protocol !== 'https:' || url.hostname !== 'api.polygon.io') {
+            return { ok: true, status: 200, payload, results, complete: false };
+        }
+        if (!url.searchParams.has('apiKey')) url.searchParams.set('apiKey', apiKey);
+        next = url.toString();
+    }
+    return { ok: true, status, payload, results, complete: false };
+}
+
 async function verifyUserJwt(authHeader: string | null): Promise<{ ok: true } | { ok: false; status: number; message: string }> {
     if (!authHeader?.startsWith('Bearer ')) {
         return { ok: false, status: 401, message: 'Missing auth token' };
@@ -72,19 +115,6 @@ Deno.serve(async (req) => {
     const v = await verifyUserJwt(req.headers.get('Authorization'));
     if (!v.ok) return json({ message: v.message }, v.status, req);
 
-    const POLYGON_API_KEY = Deno.env.get('POLYGON_API_KEY');
-    if (!POLYGON_API_KEY) {
-        return json(
-            {
-                message:
-                    'POLYGON_API_KEY не задано. Supabase → Edge Functions → Secrets, або: supabase secrets set POLYGON_API_KEY=...',
-                results: [],
-            },
-            500,
-            req,
-        );
-    }
-
     const contentLength = Number(req.headers.get('content-length') || '0');
     if (contentLength > MAX_REQUEST_BYTES) {
         return json({ message: 'Request body is too large' }, 413, req);
@@ -98,12 +128,12 @@ Deno.serve(async (req) => {
     }
 
     if (body?.mode === 'daily') {
-        return proxyDailyBars(body, POLYGON_API_KEY, req);
+        return proxyDailyBars(body, req);
     }
 
     const symbol = String(body?.symbol || '').toUpperCase().trim();
-    const fromMs = Number(body?.fromMs);
-    const toMs = Number(body?.toMs);
+    const fromMs = Math.trunc(Number(body?.fromMs));
+    const toMs = Math.trunc(Number(body?.toMs));
     if (!symbol || !Number.isFinite(fromMs) || !Number.isFinite(toMs)) {
         return json({ message: 'Missing symbol, fromMs, toMs' }, 400, req);
     }
@@ -118,24 +148,42 @@ Deno.serve(async (req) => {
         return json({ message: 'Date range is too large' }, 400, req);
     }
 
+    const store = sharedPolygon();
+    const stored = await store.read(symbol, 'minute', fromMs, toMs).catch(() => ({ hit: false, results: [] as any[] }));
+    if (stored.hit) {
+        return json({ status: 'OK', results: stored.results, resultsCount: stored.results.length, source: 'database' }, 200, req);
+    }
+
+    const POLYGON_API_KEY = Deno.env.get('POLYGON_API_KEY');
+    if (!POLYGON_API_KEY) {
+        return json(
+            {
+                message:
+                    'POLYGON_API_KEY не задано. Supabase → Edge Functions → Secrets, або: supabase secrets set POLYGON_API_KEY=...',
+                results: [],
+            },
+            500,
+            req,
+        );
+    }
+
     const q = new URLSearchParams({
         adjusted: 'false',
         sort: 'asc',
-        limit: '1000',
+        limit: '50000',
         apiKey: POLYGON_API_KEY,
     });
     const url = `https://api.polygon.io/v2/aggs/ticker/${encodeURIComponent(symbol)}/range/1/minute/${fromMs}/${toMs}?${q}`;
 
-    let pRes: Response;
+    let fetched: Awaited<ReturnType<typeof fetchPolygonPages>>;
     try {
-        pRes = await fetch(url, { signal: AbortSignal.timeout(12000) });
+        fetched = await fetchPolygonPages(url, POLYGON_API_KEY);
     } catch (e) {
         return json({ message: (e as Error).message || 'Polygon fetch failed' }, 502, req);
     }
 
-    const data = await pRes.json();
-    const polygonMessage = typeof data?.message === 'string' ? data.message : '';
-    if (pRes.status === 403 && /plan doesn't include this data timeframe/i.test(polygonMessage)) {
+    const polygonMessage = typeof fetched.payload?.message === 'string' ? fetched.payload.message : '';
+    if (fetched.status === 403 && /plan doesn't include this data timeframe/i.test(polygonMessage)) {
         return json(
             {
                 code: 'POLYGON_PLAN_TIMEFRAME',
@@ -147,15 +195,30 @@ Deno.serve(async (req) => {
             req,
         );
     }
-    return new Response(JSON.stringify(data), {
-        status: pRes.ok ? 200 : pRes.status,
-        headers: { ...cors(req), 'Content-Type': 'application/json' },
-    });
+    if (!fetched.ok) {
+        return new Response(JSON.stringify(fetched.payload), {
+            status: fetched.status,
+            headers: { ...cors(req), 'Content-Type': 'application/json' },
+        });
+    }
+    await store.write({
+        symbol,
+        granularity: 'minute',
+        rangeStart: fromMs,
+        rangeEnd: toMs,
+        results: fetched.results,
+        complete: fetched.complete,
+    }).catch((error) => console.warn(`[Polygon bars] write failed ${symbol}: ${error?.message || error}`));
+    return json({
+        ...fetched.payload,
+        results: fetched.results,
+        resultsCount: fetched.results.length,
+        source: 'polygon',
+    }, 200, req);
 });
 
 async function proxyDailyBars(
     body: { symbol?: string; from?: string; to?: string },
-    apiKey: string,
     req: Request,
 ) {
     const symbol = String(body.symbol || '').toUpperCase().trim();
@@ -172,6 +235,18 @@ async function proxyDailyBars(
         return json({ message: 'Date range is too large' }, 400, req);
     }
 
+    const fromMs = Date.parse(`${from}T00:00:00Z`);
+    const toMs = Date.parse(`${to}T00:00:00Z`);
+    const store = sharedPolygon();
+    const stored = await store.read(symbol, 'day', fromMs, toMs).catch(() => ({ hit: false, results: [] as any[] }));
+    if (stored.hit) {
+        return json({ status: 'OK', results: stored.results, resultsCount: stored.results.length, source: 'database' }, 200, req);
+    }
+
+    const apiKey = Deno.env.get('POLYGON_API_KEY');
+    if (!apiKey) {
+        return json({ message: 'POLYGON_API_KEY не задано.', results: [] }, 500, req);
+    }
     const q = new URLSearchParams({
         adjusted: 'true',
         sort: 'asc',
@@ -179,15 +254,31 @@ async function proxyDailyBars(
         apiKey,
     });
     const url = `https://api.polygon.io/v2/aggs/ticker/${encodeURIComponent(symbol)}/range/1/day/${from}/${to}?${q}`;
-    let response: Response;
+    let fetched: Awaited<ReturnType<typeof fetchPolygonPages>>;
     try {
-        response = await fetch(url, { signal: AbortSignal.timeout(20000) });
+        fetched = await fetchPolygonPages(url, apiKey);
     } catch (error) {
         return json({ message: (error as Error).message || 'Polygon fetch failed' }, 502, req);
     }
-    const data = await response.json().catch(() => ({}));
-    return new Response(JSON.stringify(data), {
-        status: response.ok ? 200 : response.status,
-        headers: { ...cors(req), 'Content-Type': 'application/json' },
-    });
+    if (!fetched.ok) {
+        return new Response(JSON.stringify(fetched.payload), {
+            status: fetched.status,
+            headers: { ...cors(req), 'Content-Type': 'application/json' },
+        });
+    }
+    await store.write({
+        symbol,
+        granularity: 'day',
+        rangeStart: fromMs,
+        rangeEnd: toMs,
+        toDate: to,
+        results: fetched.results,
+        complete: fetched.complete,
+    }).catch((error) => console.warn(`[Polygon bars] daily write failed ${symbol}: ${error?.message || error}`));
+    return json({
+        ...fetched.payload,
+        results: fetched.results,
+        resultsCount: fetched.results.length,
+        source: 'polygon',
+    }, 200, req);
 }

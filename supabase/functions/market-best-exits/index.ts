@@ -1,4 +1,5 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
+import { createPolygonStore } from '../_shared/polygon_store.js';
 
 const DEFAULT_ORIGIN = 'https://traderjournal-six.vercel.app';
 const MAX_ITEMS = 200;
@@ -443,15 +444,19 @@ async function handleMarketBestExits(req: Request) {
     const backgroundWork = Promise.all((claimed || []).slice(0, cronWorker ? 5 : 1).map(async (job: any) => {
         const item = { symbol: String(job.symbol), date: String(job.trade_date) };
         try {
-        let marketResults = await readPolygonArchive(item.symbol, item.date);
-        let marketSource = 'supabase-storage';
+        const offset = nyOffset(item.date);
+        const from = new Date(`${item.date}T04:00:00${offset}`).getTime();
+        const to = new Date(`${item.date}T20:00:00${offset}`).getTime();
+        const sharedPolygon = createPolygonStore({ rest });
+        const shared = await sharedPolygon.read(item.symbol, 'minute', from, to).catch(() => ({ hit: false, results: [] }));
+        let marketResults = shared.hit ? shared.results : null;
+        let marketSource = shared.hit ? 'database' : 'supabase-storage';
         if (!marketResults) {
+            if (!shared.hit) marketResults = await readPolygonArchive(item.symbol, item.date);
+            if (!marketResults) {
             marketResults = await readDatabaseGraph(item.symbol, item.date);
             marketSource = marketResults ? 'supabase-database' : 'polygon';
             if (!marketResults) {
-                const offset = nyOffset(item.date);
-                const from = new Date(`${item.date}T04:00:00${offset}`).getTime();
-                const to = new Date(`${item.date}T20:00:00${offset}`).getTime();
                 const params = new URLSearchParams({ adjusted: 'false', sort: 'asc', limit: '1000', apiKey: polygonKey });
                 const marketRes = await fetch(`https://api.polygon.io/v2/aggs/ticker/${item.symbol}/range/1/minute/${from}/${to}?${params}`, { signal: AbortSignal.timeout(12000) });
                 const market = await marketRes.json().catch(() => ({}));
@@ -460,6 +465,12 @@ async function handleMarketBestExits(req: Request) {
             }
             try { await writePolygonArchive(item.symbol, item.date, marketResults); }
             catch (archiveError) { console.warn(`[Polygon archive] write deferred ${item.symbol} ${item.date}: ${archiveError?.message || archiveError}`); }
+            }
+        }
+        if (!shared.hit && Array.isArray(marketResults) && marketResults.length) {
+            await sharedPolygon.write({
+                symbol: item.symbol, granularity: 'minute', rangeStart: from, rangeEnd: to, results: marketResults, complete: true,
+            }).catch((error) => console.warn(`[Polygon bars] write failed ${item.symbol} ${item.date}: ${error?.message || error}`));
         }
         const minuteFormatter = new Intl.DateTimeFormat('en-US', {
             timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false,

@@ -144,6 +144,7 @@ test('Polygon archive is the active storage cache and Postgres minute rows are b
     ]);
     assert.match(migration, /'polygon-cache'.*false/s);
     assert.doesNotMatch(migration, /create policy/i);
+    assert.match(edge, /sharedPolygon\.read\(item\.symbol, 'minute', from, to\)/);
     assert.match(edge, /readPolygonArchive\(item\.symbol, item\.date\)/);
     assert.match(edge, /response\.status === 400 \|\| response\.status === 404/);
     assert.match(edge, /readDatabaseGraph\(item\.symbol, item\.date\)/);
