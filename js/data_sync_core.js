@@ -77,6 +77,16 @@ export function ensureTradeIds(trades, createId = () => globalThis.crypto.random
     });
 }
 
+export function journalRowKeepingTrades(incoming = {}, existing = {}) {
+    const next = cloneData(incoming) || {};
+    const incomingTrades = next?.daily_metrics?.trades;
+    const existingTrades = existing?.daily_metrics?.trades;
+    if ((!Array.isArray(incomingTrades) || incomingTrades.length === 0) && Array.isArray(existingTrades) && existingTrades.length > 0) {
+        next.daily_metrics = { ...(next.daily_metrics || {}), trades: cloneData(existingTrades) };
+    }
+    return next;
+}
+
 export function journalWithoutTrades(row = {}) {
     const next = cloneData(row) || {};
     if (next.daily_metrics && typeof next.daily_metrics === 'object') delete next.daily_metrics.trades;

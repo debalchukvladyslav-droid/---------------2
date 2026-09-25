@@ -1,4 +1,4 @@
-import { applyMergePatch, canonicalJournalRow, cloneData, ensureTradeIds, journalTradesNeedProjection, journalWithoutTrades, mergePatch, syncError, tradeChangeOperations, withoutUnloadedWipes } from './data_sync_core.js';
+import { applyMergePatch, canonicalJournalRow, cloneData, ensureTradeIds, journalRowKeepingTrades, journalTradesNeedProjection, journalWithoutTrades, mergePatch, syncError, tradeChangeOperations, withoutUnloadedWipes } from './data_sync_core.js';
 
 const DB_NAME = 'strum-local-data';
 const DB_VERSION = 2;
@@ -289,8 +289,9 @@ export async function acknowledgeOperations(userId, results = []) {
             if (!record) continue;
             const newer = record.serverValue !== undefined && (Number(record.epoch || 0) > Number(result.epoch || 0)
                 || (String(record.epoch) === String(result.epoch) && Number(record.version || 0) > Number(result.version || 0)));
-            const remote = newer ? record.serverValue : result.row
+            const remoteValue = newer ? record.serverValue : result.row
                 ? (operation.domain === 'journal' ? canonicalJournalRow(result.row) : result.row) : applyMergePatch(operation.base, operation.patch);
+            const remote = operation.domain === 'journal' ? journalRowKeepingTrades(remoteValue, record.row) : remoteValue;
             if (!newer) Object.assign(record, { serverValue: cloneData(remote), version: result.version, epoch: result.epoch });
             record.syncedAt = Date.now();
             const pending = (await requestValue(stores[STORES.queue].index('user').getAll(userId)) || [])
@@ -443,7 +444,9 @@ export async function applyRemoteChanges(userId, response) {
                 continue;
             }
             const record = existing || makeRecord(userId, change.domain, change.entityId);
-            const incoming = change.domain === 'journal' ? canonicalJournalRow(change.record || {}) : change.record || {};
+            const incoming = change.domain === 'journal'
+                ? journalRowKeepingTrades(canonicalJournalRow(change.record || {}), record.row || record.serverValue || {})
+                : change.record || {};
             const value = change.domain === 'settings' && incoming && typeof incoming === 'object' && !Array.isArray(incoming)
                 ? { ...(record.value && typeof record.value === 'object' ? record.value : {}), ...incoming }
                 : incoming;

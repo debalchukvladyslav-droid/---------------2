@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    ensureTradeIds, journalTradesNeedProjection, journalWithoutTrades, mergePatch, mergeTradeRows, tradeChangeOperations,
+    ensureTradeIds, journalRowKeepingTrades, journalTradesNeedProjection, journalWithoutTrades, mergePatch, mergeTradeRows, tradeChangeOperations,
 } from '../js/data_sync_core.js';
 
 test('one changed trade does not rewrite the day trade list', () => {
@@ -30,6 +30,16 @@ test('legacy trades without ids stay one projection until the server assigns ids
     const [trade] = ensureTradeIds([{ symbol: 'A' }], () => 'generated');
     assert.equal(trade.id, 'generated');
     assert.equal(trade.symbol, 'A');
+});
+
+test('a journal pull without trades keeps the trades already on the device', () => {
+    const kept = journalRowKeepingTrades(
+        { notes: 'updated', daily_metrics: { trades: [], sessionGoal: 'plan' } },
+        { notes: 'old', daily_metrics: { trades: [{ id: 't1', symbol: 'NVDA' }] } },
+    );
+    assert.equal(kept.notes, 'updated');
+    assert.equal(kept.daily_metrics.sessionGoal, 'plan');
+    assert.equal(kept.daily_metrics.trades[0].symbol, 'NVDA');
 });
 
 test('server trade rows replace the embedded list for that day', () => {

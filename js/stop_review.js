@@ -259,7 +259,22 @@ async function urlFor(path) {
     }
 }
 
+function driveFileId(value) {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    if (!/^https?:\/\//i.test(text)) return text;
+    try {
+        const url = new URL(text);
+        const fromQuery = url.searchParams.get('id');
+        if (fromQuery) return fromQuery;
+        const fromPath = url.pathname.match(/\/d\/([^/]+)/);
+        if (fromPath) return fromPath[1];
+    } catch (_) {}
+    return '';
+}
+
 async function drivePreviewUrl(fileId) {
+    fileId = driveFileId(fileId);
     if (!fileId) return '';
     const cacheKey = `drive:${fileId}`;
     if (runtime.imageUrls.has(cacheKey)) return runtime.imageUrls.get(cacheKey);
