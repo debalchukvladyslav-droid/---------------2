@@ -6,6 +6,8 @@ import {
     canBootstrapSharedTraderSheet,
     visibleSpreadsheetSheets,
     assertBootstrapSheetRange,
+    shouldProvisionDriveConnection,
+    sourceAccessError,
 } from '../lib/source_access.js';
 
 const presetId = SHARED_TRADER_SPREADSHEET_IDS[0];
@@ -33,6 +35,16 @@ test('bootstrap metadata lists every sheet so the trader can choose', () => {
     assert.equal(assertBootstrapSheetRange(connection, "'Іваненко'!A1:ZZ1"), 'Іваненко');
     assert.equal(assertBootstrapSheetRange(connection, "'Дебальчук Андрій'!A1:ZZ1"), 'Дебальчук Андрій');
     assert.throws(() => assertBootstrapSheetRange(connection, 'A1:ZZ1'), (error) => error.code === 'SOURCE_CONNECTION_REQUIRED');
+});
+
+test('drive list can confirm a saved folder the service account can already read', () => {
+    const missing = sourceAccessError();
+    const folderId = '1epkKGJm1aOJmFuVdyM-x7FYpumMauYdO';
+    assert.equal(shouldProvisionDriveConnection(missing, { folderId }), true);
+    assert.equal(shouldProvisionDriveConnection(missing, { folderId, write: true }), false);
+    assert.equal(shouldProvisionDriveConnection(missing, { folderId, connectionId: 'conn-1' }), false);
+    assert.equal(shouldProvisionDriveConnection(missing, { folderId: '../secret' }), false);
+    assert.equal(shouldProvisionDriveConnection(new Error('offline'), { folderId }), false);
 });
 
 test('preset ids and sheet read gate stay wired together', async () => {

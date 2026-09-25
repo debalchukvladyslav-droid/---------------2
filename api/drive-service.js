@@ -1,6 +1,6 @@
 import { getGoogleAccessToken, supabaseRest, verifySupabaseUser } from '../lib/google_sheet_sync.js';
 import { fetchWithRetry } from '../lib/integration_io.js';
-import { resolveSourceConnection, saveVerifiedConnection, sourceProfile, sourceAccessError } from '../lib/source_access.js';
+import { resolveSourceConnection, saveVerifiedConnection, sourceProfile, sourceAccessError, shouldProvisionDriveConnection } from '../lib/source_access.js';
 
 const MAX_PROXY_BYTES = 4 * 1024 * 1024;
 const cleanId = value => /^[a-zA-Z0-9_-]+$/.test(String(value || '')) ? String(value) : '';
@@ -21,6 +21,29 @@ async function defaultFolder(userId) {
     return cleanId(profiles?.[0]?.settings?.driveFolderId);
 }
 
+async function assertServiceCanReadFolder(folderId) {
+    const serviceToken = await getGoogleAccessToken('https://www.googleapis.com/auth/drive.readonly');
+    try {
+        const folder = await googleJson(await driveFetch(`files/${folderId}`, serviceToken, { fields: 'id,mimeType,trashed', supportsAllDrives: 'true' }));
+        if (folder.trashed || folder.mimeType !== 'application/vnd.google-apps.folder') throw sourceAccessError('Потрібна доступна папка Google Drive.');
+        return serviceToken;
+    } catch (error) {
+        if (error?.code === 'SOURCE_CONNECTION_REQUIRED') throw error;
+        if (error?.status === 403 || error?.status === 404) throw sourceAccessError('Поширте папку на service account, щоб синхронізація могла її читати.');
+        throw error;
+    }
+}
+
+async function driveConnection(user, folderId, { connectionId = '', write = false } = {}) {
+    try {
+        return await resolveSourceConnection(user, 'drive', folderId, { connectionId, write });
+    } catch (error) {
+        if (!shouldProvisionDriveConnection(error, { folderId, write, connectionId })) throw error;
+        await assertServiceCanReadFolder(folderId);
+        return await saveVerifiedConnection({ userId: user.id, kind: 'drive', resourceId: folderId });
+    }
+}
+
 export default async function handler(req, res) {
     try {
         if (!['GET', 'POST'].includes(req.method)) return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
@@ -33,18 +56,17 @@ export default async function handler(req, res) {
             if (!folderId) return sendJson(res, 400, { ok: false, error: 'Missing folderId' });
             const admin = (await sourceProfile(user.id)).role === 'admin';
             const userGoogleToken = String(req.headers['x-google-access-token'] || '');
-            if (!admin && !userGoogleToken) throw sourceAccessError();
-            const proofToken = userGoogleToken || await getGoogleAccessToken('https://www.googleapis.com/auth/drive.readonly');
-            const folder = await googleJson(await driveFetch(`files/${folderId}`, proofToken, { fields: 'id,mimeType,trashed', supportsAllDrives: 'true' }));
-            if (folder.trashed || folder.mimeType !== 'application/vnd.google-apps.folder') throw sourceAccessError('Потрібна доступна папка Google Drive.');
-            const serviceToken = await getGoogleAccessToken('https://www.googleapis.com/auth/drive.readonly');
-            await googleJson(await driveFetch(`files/${folderId}`, serviceToken, { fields: 'id', supportsAllDrives: 'true' }));
+            if (userGoogleToken) {
+                const folder = await googleJson(await driveFetch(`files/${folderId}`, userGoogleToken, { fields: 'id,mimeType,trashed', supportsAllDrives: 'true' }));
+                if (folder.trashed || folder.mimeType !== 'application/vnd.google-apps.folder') throw sourceAccessError('Потрібна доступна папка Google Drive.');
+            }
+            await assertServiceCanReadFolder(folderId);
             const connection = await saveVerifiedConnection({ userId: admin && body.userId ? body.userId : user.id, kind: 'drive', resourceId: folderId });
             const job = await supabaseRest('rpc/enqueue_source_sync', { method: 'POST', body: JSON.stringify({ p_connection_id: connection.id }) });
             return sendJson(res, 202, { ok: true, connectionId: connection.id, job });
         }
         const folderId = cleanId(req.query?.folderId || body.folderId) || await defaultFolder(user.id);
-        const connection = await resolveSourceConnection(user, 'drive', folderId, { connectionId: req.query?.connectionId || body.connectionId || '', write: req.method === 'POST' });
+        const connection = await driveConnection(user, folderId, { connectionId: req.query?.connectionId || body.connectionId || '', write: req.method === 'POST' });
         if (action === 'queue' && req.method === 'POST') {
             if (!connection.id) throw sourceAccessError('Спочатку підтвердьте підключення папки.');
             const job = await supabaseRest('rpc/enqueue_source_sync', { method: 'POST', body: JSON.stringify({ p_connection_id: connection.id }) });

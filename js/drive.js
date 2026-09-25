@@ -10,7 +10,7 @@ import { ensureGoogleApi, ensureGoogleIdentity } from './vendor_loader.js';
 import { supabase } from './supabase.js';
 import { loadScreenshotRegistry, mergeScreenshotRegistry, registerDriveScreenshot } from './screenshot_registry.js';
 import { normalizeScreenshotTimestamp, selectRegistryBackfills } from './screenshot_registry_core.js';
-import { shouldSkipSilentDriveSync } from './drive_sync_core.js';
+import { isQuietDriveSyncError, shouldSkipSilentDriveSync } from './drive_sync_core.js';
 
 const appConfig = window.TRADING_JOURNAL_CONFIG || {};
 const CLIENT_ID = String(appConfig.googleDriveClientId || appConfig.googleSheetsClientId || '').trim();
@@ -255,6 +255,7 @@ async function fetchServiceDriveJson(params) {
     if (!response.ok || data.ok === false) {
         const error = new Error(data.error || `Drive service ${response.status}`);
         error.status = response.status;
+        error.code = data.code || '';
         throw error;
     }
     return data;
@@ -431,10 +432,12 @@ export async function syncDriveScreenshots(silent = false) {
                         message: error?.message || String(error),
                     });
                     setDriveServiceStatus(`Service account не має доступу: ${error?.message || error}`, 'error');
-                    if (error.status === 403 || error.status === 404) {
+                    if (isQuietDriveSyncError(error)) {
                         const message = 'Google Drive: поширте папку на service account email';
                         if (statusEl) statusEl.textContent = message;
                         if (!silent) showToast(message);
+                        hideGlobalLoader('drive-sync');
+                        return;
                     }
                     throw error;
                 }
@@ -643,15 +646,17 @@ export async function syncDriveScreenshots(silent = false) {
             ? `✅ +${newCount} нових`
             : metaUpdatedCount > 0 ? `✅ Дати +${metaUpdatedCount}` : '✅ Актуально';
     } catch (e) {
-        console.error('Drive sync error:', e);
-        console.error('[Drive test] sync fatal error:', {
+        const quiet = isQuietDriveSyncError(e);
+        const report = quiet ? console.warn : console.error;
+        report('Drive sync error:', e);
+        report('[Drive test] sync fatal error:', {
             message: e?.message || String(e),
             status: e?.status || '',
         });
-        showGlobalLoader('drive-sync', 'Помилка синхронізації', { type: 'error' });
+        showGlobalLoader('drive-sync', quiet ? 'Потрібен доступ до папки' : 'Помилка синхронізації', { type: 'error' });
         hideGlobalLoader('drive-sync', 2600);
-        if (statusEl) statusEl.textContent = '❌ Помилка синхронізації';
-        showToast('❌ Помилка: ' + e.message);
+        if (statusEl) statusEl.textContent = quiet ? 'Google Drive: поширте папку на service account email' : '❌ Помилка синхронізації';
+        if (!silent || !quiet) showToast('❌ Помилка: ' + e.message);
         setDriveServiceStatus(`Помилка синхронізації: ${e.message}`, 'error');
     } finally {
         _syncInProgress = false;
