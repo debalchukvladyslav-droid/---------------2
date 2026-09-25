@@ -3,11 +3,9 @@ import { supabase, SUPABASE_URL } from './supabase.js';
 import { state } from './state.js';
 import { copyTextToClipboard, showToast } from './utils.js';
 import { loadTeams } from './teams.js';
-import { exportProfileData, resetProfileData, loadTradeDays, loadAllMonths } from './storage.js';
+import { exportProfileData, resetProfileData, loadTradeDays, loadAllMonths, loadJournalRange } from './storage.js';
 import { listServerBackupsForUser, prepareBackupRestore, restorePreparedBackup } from './backups.js';
-import { calculatePreMarketVolume } from './polygon_intraday_cache.js';
-import { criteriaPairsFromJournal, journalDatesInRange } from './market_criteria_analysis.js';
-import { loadJournalPolygonDay } from './journal_polygon.js';
+import { journalDatesInRange } from './market_criteria_analysis.js';
 import { renderAggressivenessBacktest } from './aggressiveness_backtest.js';
 import { renderNextSessionBacktest } from './next_session_backtest.js';
 import { formatClientErrorReport, formatClientErrorTxt } from '../lib/client_error_report.js';
@@ -184,7 +182,6 @@ export function renderTestingPanel() {
         <p class="admin-polygon-result" data-test-auto-table-result>Шукає точне прізвище у трьох таблицях і запускає автомапінг.</p>
         <section class="admin-polygon-panel" data-testing-sheet-import-host></section>
         <section class="testing-loader-grid">
-            <div class="admin-polygon-panel" data-testing-criteria-host></div>
             <div class="admin-polygon-panel" data-testing-polygon-host></div>
         </section>
         <section class="testing-analysis" aria-labelledby="testing-analysis-title">
@@ -193,25 +190,16 @@ export function renderTestingPanel() {
                 <div id="testing-analysis-period" class="testing-period-picker">
                     <label><span>Від</span><input type="date" data-testing-period-from></label>
                     <label><span>До</span><input type="date" data-testing-period-to></label>
-                    <button type="button" class="btn-admin-action" data-load-all-criteria>Витягнути критерії</button>
                     <button type="button" class="btn-admin-action" data-testing-analysis-run>Показати</button>
                 </div>
             </div>
-            <p class="testing-analysis__status" data-testing-analysis-status>Оберіть період. «Витягнути критерії» довантажує метрики паперів, «Показати» рахує результат.</p>
-            <progress class="testing-job-progress" data-criteria-progress value="0" max="1"></progress>
-            <p class="admin-polygon-result" data-criteria-result>Витягування критеріїв почнеться після вибору періоду.</p>
+            <p class="testing-analysis__status" data-testing-analysis-status>Оберіть період і натисніть «Показати». Критерії паперів тепер у розділі «Дослідження».</p>
             <article id="stats-best-exit-panel" class="panel stats-chart-panel-wide">
                 <h3 class="stats-chart-title">Кращий вихід закритих short-угод</h3>
                 <p class="stats-chart-note">Порівнює фактичний вихід із Low після входу до 12:00 NY. Polygon запускається лише кнопкою всередині блоку.</p>
                 <div id="stats-best-exit-content"><div class="stats-empty-note">Аналіз ще не запущено.</div></div>
             </article>
-            <article id="stats-market-criteria-panel" class="panel stats-market-criteria-panel">
-                <h3 class="stats-chart-title">Результат залежно від критеріїв паперу</h3>
-                <p class="stats-chart-note">Gross PnL, кількість угод, win rate, profit factor і акцент за вибраний період.</p>
-                <div id="stats-market-criteria-content" class="stats-market-criteria-content"><div class="stats-empty-note">Аналіз ще не запущено.</div></div>
-            </article>
         </section>`;
-    renderMarketCriteriaAdminPanel(panel.querySelector('[data-testing-criteria-host]'));
     void renderPolygonAdminPanel(panel.querySelector('[data-testing-polygon-host]'));
     import('./testing_sheet_import.js').then(({ initIsolatedSheetTest }) => {
         initIsolatedSheetTest(panel.querySelector('[data-testing-sheet-import-host]'));
@@ -247,15 +235,12 @@ export function renderTestingPanel() {
         runButton.disabled = true;
         if (status) status.textContent = 'Завантажуємо дані вибраного періоду…';
         try {
-            await loadAllMonths(state.CURRENT_VIEWED_USER || state.USER_DOC_NAME, state.currentViewedUserId || state.myUserId);
             const { from, to, label } = readTestingPeriod(panel);
+            if (from && to) await loadJournalRange(state.CURRENT_VIEWED_USER || state.USER_DOC_NAME, from, to, state.currentViewedUserId || state.myUserId);
+            else await loadAllMonths(state.CURRENT_VIEWED_USER || state.USER_DOC_NAME, state.currentViewedUserId || state.myUserId);
             const dates = journalDatesInRange(state.appData?.journal || {}, from, to);
-            const [{ renderBestExitAnalysis }, { renderMarketCriteriaAnalysis }] = await Promise.all([
-                import('./best_exit_analysis.js'),
-                import('./stats.js'),
-            ]);
+            const { renderBestExitAnalysis } = await import('./best_exit_analysis.js');
             await renderBestExitAnalysis({ journal: state.appData.journal || {}, periodDates: dates, sourceType: 'current', periodLabel: label });
-            renderMarketCriteriaAnalysis(state.appData.journal || {}, dates, '');
             if (status) status.textContent = `Період: ${label} · днів із даними: ${dates.size}`;
         } catch (error) {
             if (status) status.textContent = `Помилка: ${error?.message || error}`;
@@ -270,92 +255,6 @@ function readTestingPeriod(panel) {
     const to = panel?.querySelector('[data-testing-period-to]')?.value || '';
     if (from && to && from > to) throw new Error('Дата «Від» має бути не пізніше за «До»');
     return { from, to, label: from || to ? `${from || 'початок'} — ${to || 'сьогодні'}` : 'За весь час' };
-}
-
-async function loadCriteriaDayBars(pair, token) {
-    if (!pair.entryMinutes.length) return [];
-    const loaded = await loadJournalPolygonDay(pair.ticker, pair.date, token, { to: '12:01:00' });
-    return loaded.bars;
-}
-
-function renderMarketCriteriaAdminPanel(panel) {
-    if (!panel) return;
-    panel.innerHTML = `
-        <div class="admin-service-bots-head">
-            <div>
-                <h4 class="admin-section-title">Критерії паперів</h4>
-                <p class="admin-section-subtitle">Кнопка «Витягнути критерії» в періоді нижче довантажує ATR, об’єми, VolPlay і Float лише для дат «Від»–«До». Уже заповнені пари пропускаються.</p>
-            </div>
-            <span class="admin-polygon-state is-active">Окремий модуль</span>
-        </div>`;
-    const testing = panel.closest('#testing-tools-panel');
-    const button = testing?.querySelector('[data-load-all-criteria]');
-    const result = testing?.querySelector('[data-criteria-result]');
-    const progress = testing?.querySelector('[data-criteria-progress]');
-    button?.addEventListener('click', async () => {
-        if (button.disabled) return;
-        button.disabled = true;
-        try {
-            const testing = panel.closest('#testing-tools-panel');
-            const { from, to, label } = readTestingPeriod(testing);
-            result.textContent = `Завантажую угоди за період ${label}…`;
-            await loadAllMonths(state.CURRENT_VIEWED_USER || state.USER_DOC_NAME, state.currentViewedUserId || state.myUserId);
-            const all = criteriaPairsFromJournal(state.appData.journal, { from, to });
-            const pending = all.filter((pair) => !pair.loaded);
-            progress.max = Math.max(1, pending.length);
-            progress.value = 0;
-            if (!pending.length) {
-                progress.max = 1;
-                progress.value = 1;
-                result.textContent = all.length
-                    ? `Готово: у періоді ${label} усі ${all.length} ticker + date вже мають критерії.`
-                    : `У періоді ${label} немає угод із тікером.`;
-                const { renderMarketCriteriaAnalysis } = await import('./stats.js');
-                renderMarketCriteriaAnalysis(state.appData.journal || {}, journalDatesInRange(state.appData.journal || {}, from, to), '');
-                return;
-            }
-            const { data: { session } = {} } = await supabase.auth.getSession();
-            if (!session?.access_token) throw new Error('Потрібно увійти в акаунт');
-            let done = 0;
-            let failed = 0;
-            for (const pair of pending) {
-                result.textContent = `Критерії ${pair.ticker} · ${pair.date}: ${done + failed + 1} із ${pending.length}`;
-                try {
-                    const bars = await loadCriteriaDayBars(pair, session.access_token);
-                    const volPreByMinute = Object.fromEntries(pair.entryMinutes.map((minute) => [String(minute), calculatePreMarketVolume(bars, minute)]).filter(([, value]) => value !== null));
-                    const response = await fetch('/api/trade-polygons', {
-                        method: 'POST',
-                        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ticker: pair.ticker, date: pair.date, volPreByMinute }),
-                    });
-                    const payload = await response.json().catch(() => ({}));
-                    if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
-                    const day = state.appData.journal[pair.date];
-                    if (day) {
-                        day.tradePolygons = { ...(day.tradePolygons || {}), [pair.ticker]: payload.metrics };
-                        (day.trades || []).forEach((trade) => {
-                            if (String(trade?.symbol || trade?.ticker || '').trim().toUpperCase() === pair.ticker) trade.marketCriteria = payload.metrics;
-                        });
-                    }
-                    done += 1;
-                } catch (error) {
-                    failed += 1;
-                    console.warn('[Market criteria bulk]', pair.ticker, pair.date, error);
-                }
-                progress.value = done + failed;
-                if (done + failed < pending.length) await new Promise((resolve) => setTimeout(resolve, 1200));
-            }
-            result.textContent = `Період ${label}: завантажено ${done}, помилок ${failed}, раніше були ${all.length - pending.length}.`;
-            const { renderMarketCriteriaAnalysis } = await import('./stats.js');
-            renderMarketCriteriaAnalysis(state.appData.journal || {}, journalDatesInRange(state.appData.journal || {}, from, to), '');
-            showToast(`Критерії за ${label}: завантажено ${done}`);
-        } catch (error) {
-            result.textContent = `Помилка: ${error?.message || error}`;
-            showToast(result.textContent);
-        } finally {
-            button.disabled = false;
-        }
-    });
 }
 
 async function invokePolygonAdmin(action, extra = {}) {

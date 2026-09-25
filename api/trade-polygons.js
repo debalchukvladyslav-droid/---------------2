@@ -24,13 +24,19 @@ export function calculateYahooMetrics(chart, targetDate) {
     const timestamps = result?.timestamp || [];
     if (!quote || !timestamps.length) throw new Error('Yahoo не повернув історичні дані');
 
-    const rows = timestamps.map((timestamp, index) => ({
-        date: nyDate(timestamp),
-        high: Number(quote.high?.[index]),
-        low: Number(quote.low?.[index]),
-        close: Number(quote.close?.[index]),
-        volume: Number(quote.volume?.[index]),
-    })).filter((row) => [row.high, row.low, row.close, row.volume].every(Number.isFinite));
+    const rows = [];
+    timestamps.forEach((timestamp, index) => {
+        const row = {
+            date: nyDate(timestamp),
+            high: Number(quote.high?.[index]),
+            low: Number(quote.low?.[index]),
+            close: Number(quote.close?.[index]),
+            volume: Number(quote.volume?.[index]),
+        };
+        if (![row.high, row.low, row.close, row.volume].every(Number.isFinite) || row.volume <= 0) return;
+        if (rows.at(-1)?.date === row.date) rows.pop();
+        rows.push(row);
+    });
 
     // Критерії входу не повинні бачити результат поточного дня. Беремо останню
     // повністю завершену торгову сесію строго перед датою угоди.
@@ -80,16 +86,47 @@ export function parseFinvizFloat(html) {
     };
 }
 
-async function fetchYahooMetrics(ticker, targetDate) {
-    const target = new Date(`${targetDate}T12:00:00Z`);
-    const period1 = Math.floor((target.getTime() - 90 * 86400000) / 1000);
-    const period2 = Math.floor((target.getTime() + 2 * 86400000) / 1000);
+export function yahooRangeForDates(dates = []) {
+    const sorted = [...dates].filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)).sort();
+    const start = new Date(`${(sorted[0] || '2024-01-01')}T12:00:00Z`);
+    const end = new Date(`${(sorted.at(-1) || sorted[0] || '2024-01-01')}T12:00:00Z`);
+    return {
+        period1: Math.floor((start.getTime() - 180 * 86400000) / 1000),
+        period2: Math.floor((end.getTime() + 2 * 86400000) / 1000),
+    };
+}
+
+function requestDates(body = {}) {
+    const many = Array.isArray(body.dates) ? body.dates : [];
+    const single = body.date ? [body.date] : [];
+    return [...new Set([...many, ...single].map((date) => String(date || '').trim()).filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)))].sort().slice(0, 120);
+}
+
+function cleanVolPre(source) {
+    if (!source || typeof source !== 'object') return {};
+    return Object.fromEntries(Object.entries(source).filter(([minute, value]) => /^\d{3,4}$/.test(minute) && Number.isFinite(Number(value)) && Number(value) >= 0).map(([minute, value]) => [minute, Math.round(Number(value))]));
+}
+
+function volPreForDate(body, date, dates) {
+    const mapped = body?.volPreByDate?.[date];
+    if (mapped && typeof mapped === 'object') return cleanVolPre(mapped);
+    if (dates.length === 1) return cleanVolPre(body?.volPreByMinute);
+    return {};
+}
+
+function isTransientSourceError(error) {
+    const message = String(error?.message || error || '');
+    return error?.name === 'TimeoutError' || error?.name === 'AbortError' || /HTTP (?:429|5\d\d)|не відповіло|Timeout|network|fetch failed/i.test(message);
+}
+
+async function fetchYahooChart(ticker, dates) {
+    const { period1, period2 } = yahooRangeForDates(dates);
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?period1=${period1}&period2=${period2}&interval=1d&events=history`;
     const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, signal: AbortSignal.timeout(12000) });
     const body = await response.json().catch(() => null);
     if (!response.ok) throw new Error(`Yahoo HTTP ${response.status}`);
     if (body?.chart?.error) throw new Error(body.chart.error.description || 'Yahoo ticker error');
-    return calculateYahooMetrics(body, targetDate);
+    return body;
 }
 
 async function fetchFinvizFloat(ticker) {
@@ -126,46 +163,80 @@ export default async function handler(req, res) {
         if (!user) return sendJson(res, 401, { ok: false, error: 'Потрібно увійти в акаунт' });
 
         const ticker = String(req.body?.ticker || '').trim().toUpperCase();
-        const tradeDate = String(req.body?.date || '').trim();
+        const dates = requestDates(req.body);
         if (!TICKER_RE.test(ticker)) return sendJson(res, 400, { ok: false, error: 'Невірний тікер' });
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(tradeDate)) return sendJson(res, 400, { ok: false, error: 'Невірна дата' });
+        if (!dates.length) return sendJson(res, 400, { ok: false, error: 'Невірна дата' });
 
-        const [yahooResult, floatResult] = await Promise.allSettled([
-            fetchYahooMetrics(ticker, tradeDate),
+        const [yahooChartResult, floatResult] = await Promise.allSettled([
+            fetchYahooChart(ticker, dates),
             fetchFinvizFloat(ticker),
         ]);
-        const yahoo = yahooResult.status === 'fulfilled' ? yahooResult.value : {
-            atr: null, avg_vol: null, vol: null, vol_play: null, as_of_date: null, basis: 'unavailable',
-        };
+        if (yahooChartResult.status === 'rejected' && isTransientSourceError(yahooChartResult.reason) && floatResult.status === 'rejected') {
+            throw yahooChartResult.reason;
+        }
         const floatData = floatResult.status === 'fulfilled' ? floatResult.value : {
             shs_float: null, shs_float_display: '', shs_float_raw: '',
         };
-        const requestedVolPre = req.body?.volPreByMinute && typeof req.body.volPreByMinute === 'object'
-            ? Object.fromEntries(Object.entries(req.body.volPreByMinute).filter(([minute, value]) => /^\d{3,4}$/.test(minute) && Number.isFinite(Number(value)) && Number(value) >= 0).map(([minute, value]) => [minute, Math.round(Number(value))]))
-            : {};
-        const metrics = {
-            ...yahoo,
-            ...floatData,
-            vol_pre_by_minute: requestedVolPre,
-            source: 'yahoo+finviz',
-            source_errors: {
-                ...(yahooResult.status === 'rejected' ? { yahoo: yahooResult.reason?.message || String(yahooResult.reason) } : {}),
-                ...(floatResult.status === 'rejected' ? { finviz: floatResult.reason?.message || String(floatResult.reason) } : {}),
-            },
-            updated_at: new Date().toISOString(),
-        };
-        const result = await supabaseRest('rpc/upsert_trade_polygon_metrics', {
-            method: 'POST',
-            body: JSON.stringify({
-                p_user_id: user.id,
-                p_trade_date: tradeDate,
-                p_ticker: ticker,
-                p_metrics: metrics,
-            }),
-        });
-        const archived = await archiveCriteria(ticker, tradeDate, metrics).catch(() => false);
-        return sendJson(res, 200, {
-            ok: true, partial: yahooResult.status === 'rejected' || floatResult.status === 'rejected', ticker, date: tradeDate, matches: Number(result) || 0, archived, metrics,
+        const updatedAt = new Date().toISOString();
+        const results = [];
+        for (const tradeDate of dates) {
+            let yahoo = { atr: null, avg_vol: null, vol: null, vol_play: null, as_of_date: null, basis: 'unavailable' };
+            let yahooError = yahooChartResult.status === 'rejected' ? (yahooChartResult.reason?.message || String(yahooChartResult.reason)) : '';
+            if (!yahooError) {
+                try {
+                    yahoo = calculateYahooMetrics(yahooChartResult.value, tradeDate);
+                } catch (error) {
+                    yahooError = error?.message || String(error);
+                }
+            }
+            if (isTransientSourceError(yahooError)) {
+                results.push({ date: tradeDate, ok: false, error: yahooError });
+                continue;
+            }
+            const metrics = {
+                ...yahoo,
+                ...floatData,
+                vol_pre_by_minute: volPreForDate(req.body, tradeDate, dates),
+                source: 'yahoo+finviz',
+                source_errors: {
+                    ...(yahooError ? { yahoo: yahooError } : {}),
+                    ...(floatResult.status === 'rejected' ? { finviz: floatResult.reason?.message || String(floatResult.reason) } : {}),
+                },
+                updated_at: updatedAt,
+            };
+            try {
+                const matches = await supabaseRest('rpc/upsert_trade_polygon_metrics', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        p_user_id: user.id,
+                        p_trade_date: tradeDate,
+                        p_ticker: ticker,
+                        p_metrics: metrics,
+                    }),
+                });
+                const archived = await archiveCriteria(ticker, tradeDate, metrics).catch(() => false);
+                results.push({
+                    date: tradeDate,
+                    ok: true,
+                    partial: Boolean(yahooError) || floatResult.status === 'rejected',
+                    matches: Number(matches) || 0,
+                    archived,
+                    metrics,
+                });
+            } catch (error) {
+                results.push({ date: tradeDate, ok: false, error: error?.message || String(error) });
+            }
+        }
+        const first = results[0] || {};
+        return sendJson(res, results.some((item) => item.ok) ? 200 : 502, {
+            ok: results.some((item) => item.ok),
+            partial: results.some((item) => item.partial || !item.ok) || floatResult.status === 'rejected',
+            ticker,
+            date: dates.length === 1 ? dates[0] : undefined,
+            matches: first.matches || 0,
+            archived: first.archived || false,
+            metrics: dates.length === 1 ? first.metrics : undefined,
+            results,
         });
     } catch (error) {
         const timeout = error?.name === 'TimeoutError' || error?.name === 'AbortError';

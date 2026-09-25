@@ -1,0 +1,50 @@
+<div id="view-research" class="view-content">
+    <section class="research-shell">
+        <header class="research-head">
+            <span class="admin-section-subtitle">Розбір</span>
+            <h2>Дослідження</h2>
+            <p>Важка аналітика по угодах. Зараз тут один екран: які критерії паперу дають плюс, а які забирають результат.</p>
+        </header>
+
+        <article class="research-card">
+            <h3>1. Оберіть період</h3>
+            <p>Не довше ніж 6 місяців. Якщо обрати більше, дати самі скоротяться.</p>
+            <div class="research-presets" role="group" aria-label="Швидкий період">
+                <button type="button" class="btn-admin-action" data-action="research-preset" data-months="1">1 місяць</button>
+                <button type="button" class="btn-admin-action" data-action="research-preset" data-months="3">3 місяці</button>
+                <button type="button" class="btn-admin-action" data-action="research-preset" data-months="6">6 місяців</button>
+            </div>
+            <div class="testing-period-picker">
+                <label><span>Від</span><input type="date" data-research-from></label>
+                <label><span>До</span><input type="date" data-research-to></label>
+                <button type="button" class="btn-primary" data-action="research-show">Показати</button>
+                <button type="button" class="btn-admin-action" data-action="research-load">Довантажити критерії</button>
+            </div>
+            <p class="research-note" data-research-note>Спочатку показуються вже збережені критерії. Довантаження потрібне лише для угод, де їх ще немає.</p>
+            <progress class="testing-job-progress" data-research-progress value="0" max="1" hidden></progress>
+            <p class="testing-analysis__status" data-research-status>Оберіть період і натисніть «Показати».</p>
+        </article>
+
+        <article class="panel stats-market-criteria-panel research-card research-results">
+            <div class="research-results-layout">
+                <aside class="research-type-column" role="radiogroup" aria-label="Тип угоди">
+                    <h3>Тип угоди</h3>
+                    <button type="button" class="research-type is-all is-active" data-action="research-trade-type" data-trade-type="" aria-pressed="true">Усі</button>
+                    <button type="button" class="research-type is-visual" data-action="research-trade-type" data-trade-type="Візуально" aria-pressed="false">Візуально</button>
+                    <button type="button" class="research-type is-blue" data-action="research-trade-type" data-trade-type="Синя" aria-pressed="false">Синя</button>
+                    <button type="button" class="research-type is-green" data-action="research-trade-type" data-trade-type="Зелена" aria-pressed="false">Зелена</button>
+                    <button type="button" class="research-type is-purple" data-action="research-trade-type" data-trade-type="Фіолетова" aria-pressed="false">Фіолетова</button>
+                </aside>
+                <div class="research-results-main">
+                    <h3 class="stats-chart-title">2. Результат <span data-research-type-label>по всіх типах</span></h3>
+                    <ul class="research-legend">
+                        <li><span class="stats-criteria-emphasis is-increase">Збільшити</span> цей діапазон дає плюс, беріть його частіше.</li>
+                        <li><span class="stats-criteria-emphasis is-decrease">Зменшити</span> цей діапазон забирає результат, зменшуйте акцент.</li>
+                        <li><span class="stats-criteria-emphasis is-watch">Мало даних</span> менше ніж 3 угоди, висновок ще рано робити.</li>
+                    </ul>
+                    <div id="research-criteria-content" class="stats-market-criteria-content"><div class="stats-empty-note">Результат з’явиться після кнопки «Показати».</div></div>
+                </div>
+            </div>
+        </article>
+    </section>
+</div>

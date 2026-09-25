@@ -1131,6 +1131,35 @@ export async function loadAllMonths(nick, userId = null) {
     }
 }
 
+export async function loadJournalRange(nick, from, to, userId = null) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
+        throw new Error('Невірний період журналу');
+    }
+    const targetUserId = getCurrentViewedUserId(userId) || await resolveViewedUserId(nick);
+    if (!targetUserId) throw new Error('Не вдалося визначити профіль для завантаження угод');
+
+    const { data, error } = await supabase
+        .from('journal_days')
+        .select('*')
+        .eq('user_id', targetUserId)
+        .gte('trade_date', from)
+        .lte('trade_date', to)
+        .order('trade_date', { ascending: true });
+    if (error) throw error;
+    const tradeRows = await fetchTradeRows(targetUserId, from, to);
+    const rows = journalDaysWithTradeRows(data || [], tradeRows);
+    if (!isCurrentProfileRequest(nick, targetUserId)) return 0;
+
+    rows.forEach((row) => {
+        const dateStr = row.trade_date;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr) || _dirtyJournalDates.has(dateStr)) return;
+        const current = state.appData.journal[dateStr];
+        const kept = journalRowKeepingTrades(row, { daily_metrics: { trades: Array.isArray(current?.trades) ? current.trades : [] } });
+        state.appData.journal[dateStr] = markDayEntryDetailsLoaded(journalRowToDayEntry(kept), true);
+    });
+    return rows.length;
+}
+
 export async function loadTradeDays(nick = state.CURRENT_VIEWED_USER, userId = null, options = {}) {
     const targetUserId = getCurrentViewedUserId(userId) || await resolveViewedUserId(nick);
     if (!targetUserId) { console.warn('[LOAD] loadTradeDays: currentViewedUserId не встановлено'); return; }

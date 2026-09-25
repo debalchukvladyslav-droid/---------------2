@@ -530,6 +530,7 @@ const TAB_TITLES = {
     dash: 'Головна',
     calendar: 'Календар',
     stats: 'Статистика',
+    research: 'Дослідження',
     trades: 'Угоди',
     datagrid: 'Таблиця Угод',
     table: 'Імпорт Sheets',
@@ -549,6 +550,7 @@ const NAV_TITLES = {
     dash: 'Огляд',
     calendar: 'Календар',
     stats: 'Аналітика',
+    research: 'Дослідження',
     trades: 'Журнал',
     datagrid: 'Таблиця',
     table: 'Імпорт',
@@ -568,6 +570,7 @@ const TAB_ROUTES = {
     dash: '/',
     calendar: '/calendar',
     stats: '/stats',
+    research: '/research',
     trades: '/trades',
     datagrid: '/datagrid',
     table: '/import',
@@ -594,6 +597,7 @@ const TAB_LOADING_TITLES = {
     dash: 'Готуємо головну',
     calendar: 'Готуємо календар',
     stats: 'Готуємо статистику',
+    research: 'Готуємо дослідження',
     trades: 'Готуємо угоди',
     datagrid: 'Готуємо таблицю угод',
     table: 'Готуємо імпорт',
@@ -797,6 +801,7 @@ async function runMainTabWork(tab) {
     if (tab === 'learn' && window.renderLearnCache) tasks.push(Promise.resolve(window.renderLearnCache()));
     if (tab === 'admin' && window.renderAdminPanel) tasks.push(Promise.resolve(window.renderAdminPanel()));
     if (tab === 'testing' && window.renderTestingPanel) tasks.push(Promise.resolve(window.renderTestingPanel()));
+    if (tab === 'research') tasks.push(import('./research.js').then((module) => module.openResearchView()));
     if (tab === 'mentor-review' && window.refreshMentorReviewQueue) tasks.push(Promise.resolve(window.refreshMentorReviewQueue()));
 
     await Promise.allSettled(tasks);
@@ -844,6 +849,7 @@ const ROUTE_TABS = {
     '/dashboard': 'dash',
     '/calendar': 'calendar',
     '/stats': 'stats',
+    '/research': 'research',
     '/trades': 'trades',
     '/datagrid': 'datagrid',
     '/trades-table': 'datagrid',
@@ -929,7 +935,7 @@ export async function switchMainTab(tab, options = {}) {
     document.querySelectorAll('.day-mode-link').forEach(b => {
         b.classList.toggle('active', b.dataset.tab === tab);
     });
-    const moreTabIds = ['dash', 'datagrid', 'table', 'screens', 'ai', 'stop-errors', /* 'playbook', */ 'learn', 'settings', 'mentor-review', 'admin', 'testing'];
+    const moreTabIds = ['dash', 'datagrid', 'table', 'screens', 'ai', 'research', 'stop-errors', /* 'playbook', */ 'learn', 'settings', 'mentor-review', 'admin', 'testing'];
     const moreBtn = document.querySelector('.mobile-nav-more-btn');
     if (moreBtn) moreBtn.classList.toggle('more-open', moreTabIds.includes(tab));
 

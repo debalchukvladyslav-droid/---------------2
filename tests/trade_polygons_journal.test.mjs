@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { calculateYahooMetrics, parseFinvizFloat } from '../api/trade-polygons.js';
+import { calculateYahooMetrics, parseFinvizFloat, yahooRangeForDates } from '../api/trade-polygons.js';
 
 test('Yahoo criteria use only the completed session before the trade date', () => {
     const timestamp = [];
@@ -24,6 +24,13 @@ test('Yahoo criteria use only the completed session before the trade date', () =
         atr: 2, avg_vol: 1750, vol: 2400, vol_play: 1.3714,
         as_of_date: '2026-08-17', basis: 'previous-session',
     });
+});
+
+test('one Yahoo window covers every trade date of a ticker and keeps 180 days of history', () => {
+    const range = yahooRangeForDates(['2026-08-20', '2026-08-01']);
+    const spanDays = (range.period2 - range.period1) / 86400;
+    assert.ok(spanDays > 180);
+    assert.ok(spanDays < 220);
 });
 
 test('Finviz Shs Float is parsed from its snapshot table', () => {
@@ -64,13 +71,19 @@ test('website fetch is manual and RPC writes criteria into journal trade', async
     assert.match(view, /hasMetric\(polygonCriteria\.atr\)/);
 });
 
-test('admin bulk criteria loader is separate from Polygon and skips existing pairs', async () => {
-    const admin = await readFile(new URL('../js/admin.js', import.meta.url), 'utf8');
-    assert.match(admin, /Витягнути критерії/);
-    assert.match(admin, /criteriaPairsFromJournal\(state\.appData\.journal, \{ from, to \}\)/);
-    assert.match(admin, /filter\(\(pair\) => !pair\.loaded\)/);
-    assert.match(admin, /readTestingPeriod/);
-    assert.match(admin, /fetch\('\/api\/trade-polygons'/);
-    assert.match(admin, /data-testing-criteria-host/);
-    assert.doesNotMatch(admin.match(/function renderMarketCriteriaAdminPanel[\s\S]*?\n}\n/)?.[0] || '', /market-best-exits|polygon-aggs/);
+test('research screen loads criteria for the selected period and testing no longer owns that panel', async () => {
+    const [research, view, admin] = await Promise.all([
+        readFile(new URL('../js/research.js', import.meta.url), 'utf8'),
+        readFile(new URL('../partials/views/research-view.html', import.meta.url), 'utf8'),
+        readFile(new URL('../js/admin.js', import.meta.url), 'utf8'),
+    ]);
+    assert.match(view, /Дослідження/);
+    assert.match(view, /data-action="research-show"/);
+    assert.match(view, /data-action="research-load"/);
+    assert.match(view, /Довантажити критерії/);
+    assert.match(research, /criteriaPairsFromJournal\(state\.appData\.journal, \{ from: period\.from, to: period\.to \}\)/);
+    assert.match(research, /filter\(\(pair\) => !pair\.loaded\)/);
+    assert.match(research, /fetch\('\/api\/trade-polygons'/);
+    assert.match(research, /clampResearchPeriod/);
+    assert.doesNotMatch(admin, /data-testing-criteria-host|data-load-all-criteria|stats-market-criteria-panel/);
 });

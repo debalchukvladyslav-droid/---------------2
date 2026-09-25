@@ -3080,12 +3080,14 @@ function renderStatsTradeTypeInsights({ journal, filters, tradeTypes, settings =
     }).join('');
 }
 
-export function renderMarketCriteriaAnalysis(journal, dates, tradeType = '') {
-    const root = document.getElementById('stats-market-criteria-content');
+export function renderMarketCriteriaAnalysis(journal, dates, tradeType = '', rootId = 'research-criteria-content') {
+    const root = document.getElementById(rootId);
     if (!root) return;
     const groups = buildMarketCriteriaGroups(journal, dates, tradeType);
     if (!groups.length) {
-        root.innerHTML = '<div class="stats-empty-note">Ще немає угод із завантаженими критеріями. Адміністратор може завантажити їх у панелі адміністратора.</div>';
+        root.innerHTML = tradeType
+            ? `<div class="stats-empty-note">Для типу «${escapeHtml(tradeType)}» у цьому періоді ще немає угод із критеріями.</div>`
+            : '<div class="stats-empty-note">За цей період ще немає збережених критеріїв. Натисніть «Довантажити критерії».</div>';
         return;
     }
     const money = (value) => `${value >= 0 ? '+' : '−'}$${Math.abs(value).toFixed(2)}`;

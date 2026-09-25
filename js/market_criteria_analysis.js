@@ -1,3 +1,5 @@
+import { classifyTradeTypeGroup } from './data_utils.js';
+
 const DEFINITIONS = [
     { key: 'atr', label: 'ATR', ranges: [[0, .3, '<0.3'], [.3, .5, '0.3–0.5'], [.5, .7, '0.5–0.7'], [.7, 1, '0.7–1'], [1, 2, '1–2'], [2, Infinity, '>2']] },
     { key: 'shs_float', label: 'Shs Float', missingLabel: '— (немає даних)', ranges: [[0, 1e6, '<1M'], [1e6, 2e6, '1–2M'], [2e6, 4e6, '2–4M'], [4e6, 10e6, '4–10M'], [10e6, 50e6, '10–50M'], [50e6, 100e6, '50–100M'], [100e6, Infinity, '>100M']] },
@@ -43,6 +45,32 @@ function priceMatches(price, band) {
     return true;
 }
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+export function shiftIsoMonths(iso, months) {
+    if (!ISO_DATE.test(iso)) return '';
+    const [year, month, day] = iso.split('-').map(Number);
+    const cursor = new Date(Date.UTC(year, month - 1 + Number(months), 1));
+    const lastDay = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0)).getUTCDate();
+    return new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), Math.min(day, lastDay))).toISOString().slice(0, 10);
+}
+
+export function clampResearchPeriod(from, to, edited = 'to') {
+    if (!ISO_DATE.test(from) || !ISO_DATE.test(to)) return { from, to, limited: false, invalid: true };
+    let start = from;
+    let end = to;
+    if (start > end) {
+        if (edited === 'from') end = start;
+        else start = end;
+    }
+    const maxEnd = shiftIsoMonths(start, 6);
+    if (end > maxEnd) {
+        if (edited === 'from') return { from: shiftIsoMonths(end, -6), to: end, limited: true, invalid: false };
+        return { from: start, to: maxEnd, limited: true, invalid: false };
+    }
+    return { from: start, to: end, limited: false, invalid: false };
+}
+
 export function journalDatesInRange(journal = {}, from = '', to = '') {
     return new Set(Object.keys(journal || {}).filter((date) => (
         /^\d{4}-\d{2}-\d{2}$/.test(date) && (!from || date >= from) && (!to || date <= to)
@@ -75,6 +103,33 @@ export function criteriaFocusSummary(group = {}) {
     ].filter(Boolean).join('. ') + '.';
 }
 
+function presentNumber(value) {
+    if (value === null || value === undefined || value === '') return false;
+    return Number.isFinite(Number(value));
+}
+
+export function criteriaMetricsReady(metrics, entryMinutes = []) {
+    if (!metrics || typeof metrics !== 'object') return false;
+    const minutes = Array.isArray(entryMinutes) ? entryMinutes : [...entryMinutes || []];
+    const marketReady = ['atr', 'avg_vol', 'vol', 'vol_play'].every((key) => presentNumber(metrics[key]))
+        || Boolean(metrics.source_errors?.yahoo);
+    if (!marketReady) return false;
+    return minutes.every((minute) => presentNumber(metrics.vol_pre_by_minute?.[String(minute)]));
+}
+
+export function groupCriteriaPairs(pairs = []) {
+    const groups = new Map();
+    for (const pair of pairs) {
+        const list = groups.get(pair.ticker) || [];
+        list.push(pair);
+        groups.set(pair.ticker, list);
+    }
+    return [...groups.entries()].map(([ticker, items]) => ({
+        ticker,
+        pairs: items.sort((a, b) => String(a.date).localeCompare(String(b.date))),
+    }));
+}
+
 export function criteriaPairsFromJournal(journal = {}, range = {}) {
     const allowed = journalDatesInRange(journal, range.from || '', range.to || '');
     const pairs = new Map();
@@ -92,11 +147,14 @@ export function criteriaPairsFromJournal(journal = {}, range = {}) {
             if (Number.isInteger(entryMinute) && entryMinute >= 240 && entryMinute <= 720) pair.entryMinutes.add(entryMinute);
         }
     }
-    return [...pairs.values()].map((pair) => ({
-        ...pair,
-        entryMinutes: [...pair.entryMinutes],
-        loaded: !!pair.existing && [...pair.entryMinutes].every((minute) => Number.isFinite(Number(pair.existing?.vol_pre_by_minute?.[String(minute)]))),
-    }));
+    return [...pairs.values()].map((pair) => {
+        const entryMinutes = [...pair.entryMinutes];
+        return {
+            ...pair,
+            entryMinutes,
+            loaded: criteriaMetricsReady(pair.existing, entryMinutes),
+        };
+    });
 }
 
 export function buildMarketCriteriaGroups(journal = {}, allowedDates = null, tradeType = '') {
@@ -111,7 +169,7 @@ export function buildMarketCriteriaGroups(journal = {}, allowedDates = null, tra
     for (const [date, day] of Object.entries(journal || {})) {
         if (allowedDates && !allowedDates.has(date)) continue;
         for (const trade of Array.isArray(day?.trades) ? day.trades : []) {
-            const type = String(trade?.type ?? trade?.sheet?.tradeType ?? '').trim();
+            const type = classifyTradeTypeGroup(trade);
             if (tradeType && type !== tradeType) continue;
             const pnl = tradeResult(trade);
             const metrics = trade?.marketCriteria || day?.tradePolygons?.[String(trade?.symbol || trade?.ticker || '').toUpperCase()];

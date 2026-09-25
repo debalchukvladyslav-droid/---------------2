@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMarketCriteriaGroups, criteriaBucketEmphasis, criteriaFocusSummary, criteriaPairsFromJournal, journalDatesInRange } from '../js/market_criteria_analysis.js';
+import { buildMarketCriteriaGroups, clampResearchPeriod, criteriaBucketEmphasis, criteriaFocusSummary, criteriaMetricsReady, criteriaPairsFromJournal, groupCriteriaPairs, journalDatesInRange, shiftIsoMonths } from '../js/market_criteria_analysis.js';
 
 test('market criteria are bucketed independently from Polygon and ranked by Gross PnL', () => {
     const journal = {
@@ -75,7 +75,7 @@ test('VolPre at entry is split into the four requested entry-price groups', () =
 test('criteria extraction keeps only ticker and date pairs inside the selected period', () => {
     const journal = {
         '2026-08-01': { trades: [{ symbol: 'OLD', opened: '09:30' }] },
-        '2026-08-20': { trades: [{ symbol: 'NOW', opened: '09:31', marketCriteria: { vol_pre_by_minute: { 571: 1000 } } }] },
+        '2026-08-20': { trades: [{ symbol: 'NOW', opened: '09:31', marketCriteria: { atr: .4, avg_vol: 1e6, vol: 2e6, vol_play: 2, vol_pre_by_minute: { 571: 1000 } } }] },
         '2026-09-02': { trades: [{ symbol: 'later', opened: '10:00' }] },
     };
     const dates = journalDatesInRange(journal, '2026-08-15', '2026-08-31');
@@ -113,4 +113,41 @@ test('each criteria range tells whether to increase or decrease emphasis', () =>
     assert.match(criteriaFocusSummary(atr), /Збільшити: <0\.3/);
     assert.match(criteriaFocusSummary(atr), /Зменшити: 0\.7–1/);
     assert.equal(criteriaBucketEmphasis({ trades: 2, pnl: 10, profitFactor: 2 }).tone, 'watch');
+});
+
+test('criteria follow the selected trade group: visual, blue, green, purple', () => {
+    const journal = { '2026-08-01': { trades: [
+        { symbol: 'BLUE', type: 'Синя', gross: 30, marketCriteria: { atr: .2 } },
+        { symbol: 'VIS', sheet: { tradeType: 'Візуально' }, gross: -10, marketCriteria: { atr: .2 } },
+        { symbol: 'GREEN', type: 'РПзелена', gross: 15, marketCriteria: { atr: .4 } },
+    ] } };
+    const blue = buildMarketCriteriaGroups(journal, null, 'Синя');
+    const visual = buildMarketCriteriaGroups(journal, null, 'Візуально');
+    const green = buildMarketCriteriaGroups(journal, null, 'Зелена');
+    assert.equal(blue.find((group) => group.key === 'atr').buckets[0].pnl, 30);
+    assert.equal(visual.find((group) => group.key === 'atr').buckets[0].pnl, -10);
+    assert.equal(green.find((group) => group.key === 'atr').buckets[0].pnl, 15);
+    assert.equal(buildMarketCriteriaGroups(journal, null, 'Фіолетова').length, 0);
+});
+
+test('research period stays inside six months', () => {
+    assert.equal(shiftIsoMonths('2026-01-31', 1), '2026-02-28');
+    assert.deepEqual(clampResearchPeriod('2026-01-01', '2026-07-01', 'to'), { from: '2026-01-01', to: '2026-07-01', limited: false, invalid: false });
+    assert.deepEqual(clampResearchPeriod('2026-01-01', '2026-08-01', 'to'), { from: '2026-01-01', to: '2026-07-01', limited: true, invalid: false });
+    assert.deepEqual(clampResearchPeriod('2026-01-01', '2026-08-01', 'from'), { from: '2026-02-01', to: '2026-08-01', limited: true, invalid: false });
+    assert.equal(clampResearchPeriod('', '2026-08-01', 'to').invalid, true);
+});
+
+test('a saved pair is complete only when market metrics and every entry VolPre exist', () => {
+    const ready = { atr: .4, avg_vol: 1e6, vol: 2e6, vol_play: 2, vol_pre_by_minute: { 555: 10, 580: 20 } };
+    assert.equal(criteriaMetricsReady(ready, [555, 580]), true);
+    assert.equal(criteriaMetricsReady({ ...ready, atr: null }, [555]), false);
+    assert.equal(criteriaMetricsReady({ source_errors: { yahoo: 'Недостатньо історії' }, vol_pre_by_minute: { 555: 10 } }, [555]), true);
+    const groups = groupCriteriaPairs([
+        { ticker: 'AAA', date: '2026-08-02' },
+        { ticker: 'BBB', date: '2026-08-01' },
+        { ticker: 'AAA', date: '2026-08-01' },
+    ]);
+    assert.deepEqual(groups.map((group) => group.ticker), ['AAA', 'BBB']);
+    assert.deepEqual(groups[0].pairs.map((pair) => pair.date), ['2026-08-01', '2026-08-02']);
 });

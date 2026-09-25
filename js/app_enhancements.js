@@ -192,6 +192,22 @@ function activateAction(action, trigger, event = null) {
         'analytics-preset-save': () => window.saveAnalyticsExportPreset?.(),
         'analytics-preset-load': () => window.loadAnalyticsExportPreset?.(),
         'analytics-export-generate': () => window.generateCurrentAnalyticsPdf?.(),
+        'research-show': () => {
+            void import('./research.js').then((module) => module.showResearch());
+            return true;
+        },
+        'research-load': () => {
+            void import('./research.js').then((module) => module.loadResearchCriteria());
+            return true;
+        },
+        'research-preset': () => {
+            void import('./research.js').then((module) => module.applyResearchPreset(trigger?.dataset?.months));
+            return true;
+        },
+        'research-trade-type': () => {
+            void import('./research.js').then((module) => module.selectResearchTradeType(trigger?.dataset?.tradeType || ''));
+            return true;
+        },
         'right-sidebar-toggle': () => window.toggleRightSidebar?.(),
         'team-sidebar-open': () => window.openTeamSidebar?.(),
         'notifications-toggle': () => window.toggleNotificationPanel?.(),

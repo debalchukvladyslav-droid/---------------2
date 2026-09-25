@@ -5518,6 +5518,50 @@ textarea:focus, select:focus,
     input, select, textarea { font-size: 16px; }
 }
 
+.research-shell { display: grid; gap: 18px; max-width: 1180px; margin: 0 auto; padding: 22px 18px 48px; }
+.research-head h2 { margin: 4px 0 8px; color: var(--text-main); font-size: 1.7rem; }
+.research-head p, .research-card > p, .research-note { margin: 0; color: var(--text-muted); font-size: .9rem; line-height: 1.45; }
+.research-card { display: grid; gap: 12px; padding: 18px; border: 1px solid var(--border); border-radius: 14px; background: color-mix(in srgb, var(--bg-panel) 88%, transparent); }
+.research-card h3 { margin: 0; color: var(--text-main); font-size: 1.05rem; }
+.research-presets { display: flex; flex-wrap: wrap; gap: 8px; }
+.research-presets .btn-admin-action { width: auto; margin-top: 0; padding: 8px 14px; }
+.research-presets .btn-admin-action.is-active { background: var(--accent); border-color: var(--accent); color: var(--primary-foreground); }
+.research-card .testing-period-picker .btn-primary,
+.research-card .testing-period-picker .btn-admin-action { width: auto; margin-top: 0; min-height: 38px; }
+.research-card .testing-period-picker .btn-primary { padding-inline: 18px; }
+@media (max-width: 680px) {
+    .research-presets .btn-admin-action,
+    .research-card .testing-period-picker,
+    .research-card .testing-period-picker label,
+    .research-card .testing-period-picker button { width: 100%; }
+}
+.research-legend { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; color: var(--text-muted); font-size: .86rem; }
+.research-legend li { display: flex; gap: 8px; align-items: baseline; }
+.research-card .stats-market-criteria-content { margin-top: 4px; }
+.research-results-layout { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 18px; align-items: start; }
+.research-type-column { display: grid; gap: 8px; position: sticky; top: 12px; }
+.research-type-column h3 { margin: 0 0 2px; color: var(--text-main); font-size: .95rem; }
+.research-type {
+    display: flex; align-items: center; gap: 8px; width: 100%; margin: 0; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: 9px; background: transparent;
+    color: var(--text-main); font: inherit; font-size: .86rem; font-weight: 600; text-align: left; cursor: pointer;
+}
+.research-type::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--type-color, var(--text-muted)); flex: 0 0 auto; }
+.research-type.is-visual { --type-color: #f59e0b; }
+.research-type.is-blue { --type-color: #3b82f6; }
+.research-type.is-green { --type-color: #22c55e; }
+.research-type.is-purple { --type-color: #a855f7; }
+.research-type.is-all { --type-color: var(--text-muted); }
+.research-type.is-active { background: color-mix(in srgb, var(--type-color, var(--accent)) 24%, transparent); border-color: var(--type-color, var(--accent)); }
+.research-results.is-type-visual { box-shadow: inset 3px 0 0 #f59e0b; }
+.research-results.is-type-blue { box-shadow: inset 3px 0 0 #3b82f6; }
+.research-results.is-type-green { box-shadow: inset 3px 0 0 #22c55e; }
+.research-results.is-type-purple { box-shadow: inset 3px 0 0 #a855f7; }
+@media (max-width: 800px) {
+    .research-results-layout { grid-template-columns: 1fr; }
+    .research-type-column { position: static; grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; }
+    .research-type { width: auto; }
+}
 .stats-market-criteria-panel { margin-top: 16px; }
 .stats-market-criteria-content { display: grid; grid-template-columns: repeat(auto-fit,minmax(440px,1fr)); gap: 18px; margin-top: 18px; }
 .stats-criteria-group { min-width: 0; padding: 18px; border: 1px solid var(--border); border-radius: 12px; background: color-mix(in srgb,var(--bg-main) 72%,transparent); }
@@ -5527,6 +5571,7 @@ textarea:focus, select:focus,
 .stats-criteria-row { display: grid; grid-template-columns: minmax(130px,1.3fr) repeat(4,minmax(76px,.8fr)) minmax(108px,.9fr); gap: 10px; align-items: center; min-height: 38px; padding: 9px 10px; border-radius: 8px; color: var(--text-muted); font-size: .9rem; line-height: 1.3; }
 .stats-criteria-emphasis.is-increase { color: var(--profit); font-weight: 700; }
 .stats-criteria-emphasis.is-decrease { color: var(--loss); font-weight: 700; }
+.stats-criteria-emphasis.is-watch { color: var(--gold); font-weight: 700; }
 .stats-criteria-row strong { color: var(--text-main); font-size: .94rem; }
 .stats-criteria-row.is-head { min-height: 34px; color: var(--text-muted); font-size: .76rem; font-weight: 700; text-transform: uppercase; border-bottom: 1px solid var(--border); border-radius: 0; }
 .stats-criteria-row.is-profit span:nth-child(3) { color: var(--profit); font-weight: 700; }
