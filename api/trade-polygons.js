@@ -18,6 +18,34 @@ function mean(values) {
     return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+function splitJumpRemains(rows, split) {
+    const when = nyDate(split?.date);
+    const expected = Number(split?.denominator) / Number(split?.numerator);
+    if (!(expected > 0)) return true;
+    let before = null;
+    let after = null;
+    rows.forEach((row) => {
+        if (row.date < when) before = row;
+        if (!after && row.date >= when) after = row;
+    });
+    if (!before || !after || !(before.close > 0)) return false;
+    const jump = after.close / before.close;
+    return jump > expected * 0.4 && jump < expected * 2.5;
+}
+
+function laterSplitFactor(splits, rows, targetDate) {
+    let factor = 1;
+    Object.values(splits || {}).forEach((split) => {
+        const when = nyDate(split?.date);
+        const numerator = Number(split?.numerator);
+        const denominator = Number(split?.denominator);
+        if (!(when > targetDate) || !(numerator > 0) || !(denominator > 0)) return;
+        if (splitJumpRemains(rows, split)) return;
+        factor *= denominator / numerator;
+    });
+    return factor;
+}
+
 export function calculateYahooMetrics(chart, targetDate) {
     const result = chart?.chart?.result?.[0];
     const quote = result?.indicators?.quote?.[0];
@@ -38,6 +66,18 @@ export function calculateYahooMetrics(chart, targetDate) {
         rows.push(row);
     });
 
+    // Якщо Yahoo вже переписав старі ціни під пізніший спліт, повертаємо масштаб дня угоди.
+    const splitFactor = laterSplitFactor(result?.events?.splits, rows, targetDate);
+    if (splitFactor !== 1) {
+        rows.forEach((row) => {
+            if (row.date >= targetDate) return;
+            row.high /= splitFactor;
+            row.low /= splitFactor;
+            row.close /= splitFactor;
+            row.volume *= splitFactor;
+        });
+    }
+
     // Критерії входу не повинні бачити результат поточного дня. Беремо останню
     // повністю завершену торгову сесію строго перед датою угоди.
     let targetIndex = -1;
@@ -45,20 +85,18 @@ export function calculateYahooMetrics(chart, targetDate) {
     if (targetIndex < 0) throw new Error(`Немає завершеної сесії перед ${targetDate}`);
     if (targetIndex < 14) throw new Error('Недостатньо історії для ATR 14');
 
+    // Як у таблиці журналу: ATR — середній денний діапазон цих 14 сесій,
+    // середній обсяг — 14 сесій перед ними, VolPlay — обсяг цього дня поділений на середнє разом із ним.
     const sessions = rows.slice(targetIndex - 13, targetIndex + 1);
-    const trueRanges = sessions.map((row, offset) => {
-        const rowIndex = targetIndex - 13 + offset;
-        const previousClose = rows[rowIndex - 1].close;
-        return Math.max(row.high - row.low, Math.abs(row.high - previousClose), Math.abs(row.low - previousClose));
-    });
-    const avgVol = mean(sessions.map((row) => row.volume));
+    const priorSessions = rows.slice(targetIndex - 14, targetIndex);
     const vol = rows[targetIndex].volume;
+    const playAverage = mean(sessions.map((row) => row.volume));
 
     return {
-        atr: Number(mean(trueRanges).toFixed(4)),
-        avg_vol: Math.round(avgVol),
+        atr: Number(mean(sessions.map((row) => row.high - row.low)).toFixed(2)),
+        avg_vol: Math.round(mean(priorSessions.map((row) => row.volume))),
         vol: Math.round(vol),
-        vol_play: Number((vol / avgVol).toFixed(4)),
+        vol_play: Number((vol / playAverage).toFixed(1)),
         as_of_date: rows[targetIndex].date,
         basis: 'previous-session',
     };
@@ -92,7 +130,8 @@ export function yahooRangeForDates(dates = []) {
     const end = new Date(`${(sorted.at(-1) || sorted[0] || '2024-01-01')}T12:00:00Z`);
     return {
         period1: Math.floor((start.getTime() - 180 * 86400000) / 1000),
-        period2: Math.floor((end.getTime() + 2 * 86400000) / 1000),
+        // Вікно до сьогодні, щоб у відповіді були спліти, які сталися вже після угоди.
+        period2: Math.max(Math.floor((end.getTime() + 2 * 86400000) / 1000), Math.floor(Date.now() / 1000) + 86400),
     };
 }
 
@@ -121,7 +160,7 @@ function isTransientSourceError(error) {
 
 async function fetchYahooChart(ticker, dates) {
     const { period1, period2 } = yahooRangeForDates(dates);
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?period1=${period1}&period2=${period2}&interval=1d&events=history`;
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?period1=${period1}&period2=${period2}&interval=1d&events=split`;
     const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, signal: AbortSignal.timeout(12000) });
     const body = await response.json().catch(() => null);
     if (!response.ok) throw new Error(`Yahoo HTTP ${response.status}`);

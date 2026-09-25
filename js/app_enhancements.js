@@ -192,6 +192,10 @@ function activateAction(action, trigger, event = null) {
         'analytics-preset-save': () => window.saveAnalyticsExportPreset?.(),
         'analytics-preset-load': () => window.loadAnalyticsExportPreset?.(),
         'analytics-export-generate': () => window.generateCurrentAnalyticsPdf?.(),
+        'research-exit-show': () => {
+            void import('./research.js').then((module) => module.showResearchExit());
+            return true;
+        },
         'research-show': () => {
             void import('./research.js').then((module) => module.showResearch());
             return true;

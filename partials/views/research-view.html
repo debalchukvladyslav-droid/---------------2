@@ -3,7 +3,7 @@
         <header class="research-head">
             <span class="admin-section-subtitle">Розбір</span>
             <h2>Дослідження</h2>
-            <p>Дві панелі на один період до 6 місяців: критерії паперу і вихід по часу.</p>
+            <p>Дві окремі панелі. Критерії паперу і вихід по часу рахуються незалежно.</p>
         </header>
 
         <article class="research-card">
@@ -51,15 +51,20 @@
 
         <article class="research-card research-exit-panel">
             <h3>Вихід по часу</h3>
-            <p>Лише закриті short без Stop і Take. Ваш вихід порівнюється з найнижчою ціною після входу до 12:00 за Нью-Йорком.</p>
+            <p>Окрема логіка для закритих short без Stop і Take. Рахунок іде зі збережених хвилинних графіків: скільки вийшло б грошей на low і у вибрану хвилину.</p>
+            <div id="research-exit-period" class="testing-period-picker">
+                <label><span>Від</span><input type="date" data-research-exit-from></label>
+                <label><span>До</span><input type="date" data-research-exit-to></label>
+                <button type="button" class="btn-primary" data-action="research-exit-show">Показати збережене</button>
+            </div>
             <ul class="research-legend">
-                <li><strong>Low</strong> найнижча ціна після входу. Чим ближче вихід до неї, тим більше руху забрано.</li>
-                <li><strong>Не забрано</strong> скільки результату лишилось між фактичним виходом і цим low.</li>
-                <li><strong>Час виходу</strong> що вийшло б, якби закрити позицію у вибрану хвилину з 09:00 до 12:00.</li>
+                <li><strong>Low</strong> найнижча ціна після входу до 12:00 за Нью-Йорком. З неї рахується максимальний результат.</li>
+                <li><strong>Не забрано</strong> різниця між фактичним виходом і цим low.</li>
+                <li><strong>Час виходу</strong> теоретичний Gross, якби закрити позицію у вибрану хвилину з 09:00 до 12:00.</li>
             </ul>
-            <p class="research-note">«Показати» рахує збережені дані. «Почати» всередині панелі довантажує хвилинні ціни лише для цього періоду.</p>
-            <p class="testing-analysis__status" data-research-exit-status>Результат з’явиться після кнопки «Показати».</p>
-            <div id="stats-best-exit-content"><div class="stats-empty-note">Оберіть період зверху і натисніть «Показати».</div></div>
+            <p class="research-note">«Показати збережене» тільки рахує те, що вже лежить у кеші. «Почати» довантажує відсутні дні малими кроками і одразу записує їх, щоб наступний рахунок був без Polygon.</p>
+            <p class="testing-analysis__status" data-research-exit-status>Оберіть період цієї панелі і натисніть «Показати збережене».</p>
+            <div id="stats-best-exit-content"><div class="stats-empty-note">Розрахунок ще не запущено.</div></div>
         </article>
     </section>
 </div>

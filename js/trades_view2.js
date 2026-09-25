@@ -543,26 +543,18 @@ function renderTradeInfoBar(trades) {
     if (sheet.exit) items.push({ label: 'Вихід', value: String(sheet.exit), color: 'var(--text-main)' });
     if (sheetException) items.push({ label: 'Виключення', value: sheetException, color: 'var(--loss)' });
     if (polygonCriteria) {
-        const compact = (value) => {
-            if (value === null || value === undefined || value === '') return '—';
-            const number = Number(value);
-            if (!Number.isFinite(number)) return '—';
-            if (number >= 1_000_000_000) return `${(number / 1_000_000_000).toFixed(2)}B`;
-            if (number >= 1_000_000) return `${(number / 1_000_000).toFixed(2)}M`;
-            if (number >= 1_000) return `${(number / 1_000).toFixed(1)}K`;
-            return String(Math.round(number));
-        };
+        const millions = (value, digits) => `${(Number(value) / 1e6).toFixed(digits)}M`;
         const openedMatch = /\b(\d{1,2}):(\d{2})(?::\d{2})?\b/.exec(String(trade?.opened || trade?.entryTime || trade?.time || ''));
         const openedMinute = openedMatch ? Number(openedMatch[1]) * 60 + Number(openedMatch[2]) : null;
         const volPre = openedMinute == null ? null : polygonCriteria.vol_pre_by_minute?.[String(openedMinute)];
-        const hasMetric = (value) => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+        const hasMetric = (value) => !(value === null || value === undefined || value === '') && Number.isFinite(Number(value));
         items.push(
             ...(hasMetric(polygonCriteria.atr) ? [{ label: 'ATR 14 · до входу', value: Number(polygonCriteria.atr).toFixed(2), color: 'var(--accent)' }] : []),
-            ...(hasMetric(polygonCriteria.avg_vol) ? [{ label: 'Avg Vol 14 · до входу', value: compact(polygonCriteria.avg_vol), color: 'var(--text-main)' }] : []),
-            ...(hasMetric(polygonCriteria.vol) ? [{ label: 'Vol · попер. день', value: compact(polygonCriteria.vol), color: 'var(--text-main)' }] : []),
-            ...(hasMetric(polygonCriteria.vol_play) ? [{ label: 'VolPlay · попер. день', value: `${Number(polygonCriteria.vol_play).toFixed(2)}x`, color: 'var(--gold)' }] : []),
-            { label: 'Float', value: polygonCriteria.shs_float_display || polygonCriteria.shs_float_raw || (hasMetric(polygonCriteria.shs_float) ? compact(polygonCriteria.shs_float) : '—'), color: 'var(--text-main)' },
-            ...(Number.isFinite(Number(volPre)) ? [{ label: 'VolPre · на момент входу', value: compact(volPre), color: 'var(--accent)' }] : []),
+            ...(hasMetric(polygonCriteria.avg_vol) ? [{ label: 'Avg Vol 14 · до входу', value: millions(polygonCriteria.avg_vol, 2), color: 'var(--text-main)' }] : []),
+            ...(hasMetric(polygonCriteria.vol) ? [{ label: 'Vol · попер. день', value: millions(polygonCriteria.vol, 2), color: 'var(--text-main)' }] : []),
+            ...(hasMetric(polygonCriteria.vol_play) ? [{ label: 'VolPlay · попер. день', value: `${Number(polygonCriteria.vol_play).toFixed(1)}x`, color: 'var(--gold)' }] : []),
+            { label: 'Float', value: polygonCriteria.shs_float_display || polygonCriteria.shs_float_raw || (hasMetric(polygonCriteria.shs_float) ? millions(polygonCriteria.shs_float, 2) : '—'), color: 'var(--text-main)' },
+            ...(Number.isFinite(Number(volPre)) ? [{ label: 'VolPre · на момент входу', value: millions(volPre, 3), color: 'var(--accent)' }] : []),
             ...(polygonCriteria.as_of_date ? [{ label: 'Дані станом на', value: polygonCriteria.as_of_date, color: 'var(--text-muted)' }] : []),
         );
     }

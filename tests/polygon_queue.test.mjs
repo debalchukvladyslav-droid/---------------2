@@ -56,6 +56,10 @@ test('Polygon selected-time prices are cached independently for every minute', (
     writePolygonTimePrices([{ symbol: 'AAPL', date: '2026-08-19', targetMinute: 600, priceMinute: 600, priceAtTime: 210.5, priceTime: '2026-08-19T14:00:00Z' }]);
     assert.equal(readPolygonTimePrice({ symbol: 'aapl', date: '2026-08-19', targetMinute: 600 })?.priceAtTime, 210.5);
     assert.equal(readPolygonTimePrice({ symbol: 'AAPL', date: '2026-08-19', targetMinute: 601 }), null);
+    writePolygonTimePrices([{ symbol: 'TSLA', date: '2026-08-19', targetMinute: 600, priceMinute: 598, priceAtTime: 180.2 }]);
+    assert.equal(readPolygonTimePrice({ symbol: 'TSLA', date: '2026-08-19', targetMinute: 600 })?.priceAtTime, 180.2);
+    writePolygonTimePrices([{ symbol: 'TSLA', date: '2026-08-19', targetMinute: 605, priceMinute: 610, priceAtTime: 181 }]);
+    assert.equal(readPolygonTimePrice({ symbol: 'TSLA', date: '2026-08-19', targetMinute: 605 }), null);
 });
 
 test('Polygon selected-time cache rejects a later candle or stop from an old calculation', () => {

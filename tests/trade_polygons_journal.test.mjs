@@ -21,16 +21,41 @@ test('Yahoo criteria use only the completed session before the trade date', () =
         indicators: { quote: [{ high, low, close, volume }] },
     }] } }, '2026-08-18');
     assert.deepEqual(metrics, {
-        atr: 2, avg_vol: 1750, vol: 2400, vol_play: 1.3714,
+        atr: 2, avg_vol: 1650, vol: 2400, vol_play: 1.4,
         as_of_date: '2026-08-17', basis: 'previous-session',
     });
+    const afterSplit = calculateYahooMetrics({ chart: { result: [{
+        timestamp,
+        indicators: { quote: [{ high, low, close, volume }] },
+        events: { splits: { 1: { date: Date.UTC(2026, 7, 20, 16) / 1000, numerator: 1, denominator: 10, splitRatio: '1:10' } } },
+    }] } }, '2026-08-18');
+    assert.equal(afterSplit.atr, 0.2);
+    assert.equal(afterSplit.avg_vol, 16500);
+    assert.equal(afterSplit.vol, 24000);
+    assert.equal(afterSplit.vol_play, 1.4);
+    const jumped = high.map((value) => value);
+    const jumpedLow = low.map((value) => value);
+    const jumpedClose = close.map((value) => value);
+    const jumpedVolume = volume.map((value) => value);
+    timestamp.push(Date.UTC(2026, 7, 20, 16) / 1000);
+    jumped.push(210);
+    jumpedLow.push(190);
+    jumpedClose.push(200);
+    jumpedVolume.push(30);
+    const rawSplit = calculateYahooMetrics({ chart: { result: [{
+        timestamp,
+        indicators: { quote: [{ high: jumped, low: jumpedLow, close: jumpedClose, volume: jumpedVolume }] },
+        events: { splits: { 1: { date: Date.UTC(2026, 7, 20, 16) / 1000, numerator: 1, denominator: 10, splitRatio: '1:10' } } },
+    }] } }, '2026-08-18');
+    assert.equal(rawSplit.atr, 2);
+    assert.equal(rawSplit.avg_vol, 1650);
 });
 
 test('one Yahoo window covers every trade date of a ticker and keeps 180 days of history', () => {
     const range = yahooRangeForDates(['2026-08-20', '2026-08-01']);
     const spanDays = (range.period2 - range.period1) / 86400;
     assert.ok(spanDays > 180);
-    assert.ok(spanDays < 220);
+    assert.ok(range.period2 >= Math.floor(Date.now() / 1000));
 });
 
 test('Finviz Shs Float is parsed from its snapshot table', () => {

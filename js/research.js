@@ -63,6 +63,7 @@ export function openResearchView() {
         markPreset(3);
     }
     markTradeType();
+    fillExitPeriod();
     if (root.dataset.periodBound === 'true') return;
     root.dataset.periodBound = 'true';
     root.addEventListener('change', (event) => {
@@ -123,21 +124,41 @@ export function selectResearchTradeType(type = '') {
     if (view()?.dataset.researchReady === '1') void renderPeriod(field('from')?.value || '', field('to')?.value || '');
 }
 
-async function renderExit(period) {
+function fillExitPeriod() {
+    const fromInput = field('exit-from');
+    const toInput = field('exit-to');
+    if (!fromInput || !toInput || fromInput.value) return;
+    const dates = Object.keys(state.appData?.journal || {}).filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)).sort();
+    if (!dates.length) return;
+    fromInput.value = dates[0];
+    toInput.value = dates.at(-1);
+}
+
+export async function showResearchExit() {
     const status = field('exit-status');
-    if (status) status.textContent = 'Рахую вихід по часу…';
+    const button = view()?.querySelector('[data-action="research-exit-show"]');
+    if (button?.disabled) return;
+    if (button) button.disabled = true;
+    if (status) status.textContent = 'Рахую зі збережених графіків. Polygon для цього не викликається.';
     try {
-        const dates = journalDatesInRange(state.appData?.journal || {}, period.from, period.to);
+        const from = field('exit-from')?.value || '';
+        const to = field('exit-to')?.value || '';
+        if (from && to && from > to) throw new Error('Дата «Від» має бути не пізніше за «До»');
+        await ensureJournal(from, to);
+        const dates = journalDatesInRange(state.appData?.journal || {}, from, to);
+        const label = from || to ? `${from || 'початок'} — ${to || 'сьогодні'}` : 'За весь час';
         const { renderBestExitAnalysis } = await import('./best_exit_analysis.js');
         await renderBestExitAnalysis({
             journal: state.appData.journal || {},
             periodDates: dates,
             sourceType: 'current',
-            periodLabel: period.label,
+            periodLabel: label,
         });
-        if (status) status.textContent = `Період ${period.label}. Якщо цін ще немає, натисніть «Почати» в цій панелі.`;
+        if (status) status.textContent = `${label}. Суми взято зі збережених графіків. «Почати» качає лише дні, яких ще немає в кеші.`;
     } catch (error) {
         if (status) status.textContent = `Помилка: ${error?.message || error}`;
+    } finally {
+        if (button) button.disabled = false;
     }
 }
 
@@ -160,7 +181,6 @@ export async function showResearch() {
         await renderPeriod(period.from, period.to);
         const coverage = criteriaCoverage(state.appData.journal, { from: period.from, to: period.to });
         if (status) status.textContent = coverageText(period.label, coverage);
-        await renderExit(period);
     } catch (error) {
         if (status) status.textContent = `Помилка: ${error?.message || error}`;
     } finally {

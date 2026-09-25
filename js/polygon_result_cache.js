@@ -83,7 +83,9 @@ function readTimePriceStore() {
 export function readPolygonTimePrice(value = {}) {
     const row = readTimePriceStore()[timePriceKey(value)];
     const targetMinute = Number(value.targetMinute);
-    if (!row || !(Number(row.priceAtTime) > 0) || Number(row.priceMinute) !== targetMinute) return null;
+    if (!row || !(Number(row.priceAtTime) > 0)) return null;
+    const priceMinute = Number(row.priceMinute);
+    if (Number.isInteger(priceMinute) && priceMinute > targetMinute) return null;
     if (row.stopHit === true && Number(row.stopMinute) > targetMinute) return null;
     return row;
 }
