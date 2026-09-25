@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMarketCriteriaGroups, clampResearchPeriod, criteriaBucketEmphasis, criteriaFocusSummary, criteriaMetricsReady, criteriaPairsFromJournal, groupCriteriaPairs, journalDatesInRange, shiftIsoMonths } from '../js/market_criteria_analysis.js';
+import { buildMarketCriteriaGroups, clampResearchPeriod, criteriaBucketEmphasis, criteriaCoverage, criteriaFocusSummary, criteriaMetricsReady, criteriaPairsFromJournal, groupCriteriaPairs, journalDatesInRange, shiftIsoMonths, sixMonthWindows } from '../js/market_criteria_analysis.js';
 
 test('market criteria are bucketed independently from Polygon and ranked by Gross PnL', () => {
     const journal = {
@@ -128,6 +128,26 @@ test('criteria follow the selected trade group: visual, blue, green, purple', ()
     assert.equal(visual.find((group) => group.key === 'atr').buckets[0].pnl, -10);
     assert.equal(green.find((group) => group.key === 'atr').buckets[0].pnl, 15);
     assert.equal(buildMarketCriteriaGroups(journal, null, 'Фіолетова').length, 0);
+});
+
+test('many trades on one ticker day count as one criteria day, and history splits into six-month windows', () => {
+    const coverage = criteriaCoverage({
+        '2026-01-15': { trades: [
+            { symbol: 'AAA', gross: 10, marketCriteria: { atr: .4, avg_vol: 1, vol: 1, vol_play: 1 } },
+            { symbol: 'AAA', gross: 5, marketCriteria: { atr: .4, avg_vol: 1, vol: 1, vol_play: 1 } },
+            { symbol: 'BBB', gross: -3 },
+        ] },
+        '2026-08-01': { trades: [{ symbol: 'CCC', gross: 1 }] },
+    }, { from: '2026-01-01', to: '2026-09-01' });
+    assert.equal(coverage.trades, 4);
+    assert.equal(coverage.pairs, 3);
+    assert.equal(coverage.ready, 1);
+    assert.equal(coverage.pending.length, 2);
+    assert.deepEqual(sixMonthWindows('2026-01-01', '2026-08-01'), [
+        { from: '2026-01-01', to: '2026-07-01' },
+        { from: '2026-07-02', to: '2026-08-01' },
+    ]);
+    assert.deepEqual(sixMonthWindows('2026-01-01', '2026-07-01'), [{ from: '2026-01-01', to: '2026-07-01' }]);
 });
 
 test('research period stays inside six months', () => {

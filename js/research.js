@@ -3,7 +3,7 @@ import { state } from './state.js';
 import { showToast } from './utils.js';
 import { loadAllMonths, loadJournalRange } from './storage.js';
 import { calculatePreMarketVolume } from './polygon_intraday_cache.js';
-import { clampResearchPeriod, criteriaPairsFromJournal, groupCriteriaPairs, journalDatesInRange, shiftIsoMonths } from './market_criteria_analysis.js';
+import { clampResearchPeriod, criteriaCoverage, groupCriteriaPairs, journalDatesInRange, shiftIsoMonths, sixMonthWindows } from './market_criteria_analysis.js';
 import { loadJournalPolygonDay } from './journal_polygon.js';
 
 const RESEARCH_TRADE_TYPES = ['Візуально', 'Синя', 'Зелена', 'Фіолетова'];
@@ -140,13 +140,8 @@ export async function showResearch() {
         await ensureJournal(period.from, period.to);
         view().dataset.researchReady = '1';
         await renderPeriod(period.from, period.to);
-        const pairs = criteriaPairsFromJournal(state.appData.journal, { from: period.from, to: period.to });
-        const ready = pairs.filter((pair) => pair.loaded).length;
-        if (status) {
-            status.textContent = pairs.length
-                ? `Період ${period.label}, ${selectedTypeLabel()}: критерії є для ${ready} із ${pairs.length} пар.`
-                : `У періоді ${period.label} немає угод із тікером.`;
-        }
+        const coverage = criteriaCoverage(state.appData.journal, { from: period.from, to: period.to });
+        if (status) status.textContent = coverageText(period.label, coverage);
     } catch (error) {
         if (status) status.textContent = `Помилка: ${error?.message || error}`;
     } finally {
@@ -191,6 +186,33 @@ async function mapPool(items, limit, worker) {
     }));
 }
 
+function coverageText(label, coverage) {
+    if (!coverage.trades) return `У періоді ${label} немає угод із тікером.`;
+    const sameDay = coverage.trades === coverage.pairs
+        ? ''
+        : ` ${coverage.trades} угод згортаються в ${coverage.pairs} днів тікера: кілька угод одного паперу за день мають одні критерії.`;
+    return `Період ${label}, ${selectedTypeLabel()}: критерії є для ${coverage.ready} із ${coverage.pairs} днів тікера.${sameDay}`;
+}
+
+async function tradeDateBounds() {
+    const userId = state.currentViewedUserId || state.myUserId;
+    if (!userId) throw new Error('Потрібно увійти в акаунт');
+    const oldest = await supabase.from('trades').select('trade_date').eq('user_id', userId).is('deleted_at', null).order('trade_date', { ascending: true }).limit(1);
+    const newest = await supabase.from('trades').select('trade_date').eq('user_id', userId).is('deleted_at', null).order('trade_date', { ascending: false }).limit(1);
+    if (oldest.error) throw oldest.error;
+    if (newest.error) throw newest.error;
+    return {
+        from: String(oldest.data?.[0]?.trade_date || '').slice(0, 10),
+        to: String(newest.data?.[0]?.trade_date || '').slice(0, 10),
+    };
+}
+
+function chunk(items, size) {
+    const chunks = [];
+    for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size));
+    return chunks;
+}
+
 export async function loadResearchCriteria() {
     const status = field('status');
     const progress = field('progress');
@@ -200,11 +222,25 @@ export async function loadResearchCriteria() {
     if (progress) progress.hidden = false;
     try {
         const period = readPeriod();
-        if (status) status.textContent = `Завантажую угоди за ${period.label}…`;
-        await ensureJournal(period.from, period.to);
+        const bounds = await tradeDateBounds();
+        const windows = sixMonthWindows(bounds.from, bounds.to);
+        if (!windows.length) {
+            if (status) status.textContent = 'У журналі немає угод для критеріїв.';
+            return;
+        }
+        if (status) status.textContent = `Шукаю угоди з ${bounds.from} по ${bounds.to}…`;
+        let journalTrades = 0;
+        let journalPairs = 0;
+        const pending = [];
+        for (const [index, window] of windows.entries()) {
+            if (status) status.textContent = `Читаю журнал ${window.from} — ${window.to} (${index + 1} із ${windows.length})…`;
+            await ensureJournal(window.from, window.to);
+            const coverage = criteriaCoverage(state.appData.journal, window);
+            journalTrades += coverage.trades;
+            journalPairs += coverage.pairs;
+            pending.push(...coverage.pending);
+        }
         view().dataset.researchReady = '1';
-        const all = criteriaPairsFromJournal(state.appData.journal, { from: period.from, to: period.to });
-        const pending = all.filter((pair) => !pair.loaded);
         const groups = groupCriteriaPairs(pending);
         if (progress) {
             progress.max = Math.max(1, pending.length);
@@ -213,9 +249,9 @@ export async function loadResearchCriteria() {
         if (!pending.length) {
             if (progress) progress.value = 1;
             if (status) {
-                status.textContent = all.length
-                    ? `У періоді ${period.label} критерії вже є для всіх ${all.length} пар.`
-                    : `У періоді ${period.label} немає угод із тікером.`;
+                status.textContent = journalTrades
+                    ? `У журналі ${journalTrades} угод і ${journalPairs} днів тікера. Критерії вже є для кожного такого дня, тож повторно нічого не качається. На екрані зараз ${period.label}.`
+                    : 'У журналі немає угод із тікером.';
             }
             await renderPeriod(period.from, period.to);
             return;
@@ -226,34 +262,35 @@ export async function loadResearchCriteria() {
         let failed = 0;
         let finished = 0;
         await mapPool(groups, 2, async (group) => {
-            if (status) status.textContent = `${group.ticker}: ${group.pairs.length} дат · тікер ${finished + 1} із ${groups.length}`;
+            if (status) status.textContent = `${group.ticker}: ${group.pairs.length} дат · тікер ${finished + 1} із ${groups.length} · у журналі ${journalTrades} угод`;
+            const savedDates = new Set();
             try {
-                const volPreByDate = await volPreByDateForPairs(group.pairs, session.access_token);
-                const response = await fetch('/api/trade-polygons', {
-                    method: 'POST',
-                    headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ticker: group.ticker, dates: group.pairs.map((pair) => pair.date), volPreByDate }),
-                });
-                const payload = await response.json().catch(() => ({}));
-                const results = Array.isArray(payload.results) ? payload.results : [];
-                if (!response.ok && !results.some((item) => item.ok)) throw new Error(payload.error || `HTTP ${response.status}`);
-                const savedDates = new Set();
-                results.forEach((item) => {
-                    if (!item?.ok || !item.metrics) return;
-                    rememberCriteria(item.date, group.ticker, item.metrics);
-                    savedDates.add(item.date);
-                    done += 1;
-                });
-                failed += group.pairs.length - savedDates.size;
+                for (const slice of chunk(group.pairs, 80)) {
+                    const volPreByDate = await volPreByDateForPairs(slice, session.access_token);
+                    const response = await fetch('/api/trade-polygons', {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ticker: group.ticker, dates: slice.map((pair) => pair.date), volPreByDate }),
+                    });
+                    const payload = await response.json().catch(() => ({}));
+                    const results = Array.isArray(payload.results) ? payload.results : [];
+                    if (!response.ok && !results.some((item) => item.ok)) throw new Error(payload.error || `HTTP ${response.status}`);
+                    results.forEach((item) => {
+                        if (!item?.ok || !item.metrics) return;
+                        rememberCriteria(item.date, group.ticker, item.metrics);
+                        savedDates.add(item.date);
+                    });
+                }
             } catch (error) {
-                failed += group.pairs.length;
                 console.warn('[Research criteria]', group.ticker, error);
             }
+            done += savedDates.size;
+            failed += group.pairs.length - savedDates.size;
             finished += 1;
             if (progress) progress.value = done + failed;
         });
         await renderPeriod(period.from, period.to);
-        if (status) status.textContent = `Період ${period.label}: завантажено ${done}, помилок ${failed}, уже були ${all.length - pending.length}.`;
+        if (status) status.textContent = `Журнал: ${journalTrades} угод, ${journalPairs} днів тікера. Завантажено ${done}, помилок ${failed}, уже були ${journalPairs - pending.length}. Таблиця показує ${period.label}.`;
         showToast(`Критерії за ${period.label}: завантажено ${done}`);
     } catch (error) {
         if (status) status.textContent = `Помилка: ${error?.message || error}`;

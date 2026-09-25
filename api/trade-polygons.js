@@ -99,7 +99,7 @@ export function yahooRangeForDates(dates = []) {
 function requestDates(body = {}) {
     const many = Array.isArray(body.dates) ? body.dates : [];
     const single = body.date ? [body.date] : [];
-    return [...new Set([...many, ...single].map((date) => String(date || '').trim()).filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)))].sort().slice(0, 120);
+    return [...new Set([...many, ...single].map((date) => String(date || '').trim()).filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)))].sort().slice(0, 200);
 }
 
 function cleanVolPre(source) {

@@ -71,6 +71,27 @@ export function clampResearchPeriod(from, to, edited = 'to') {
     return { from: start, to: end, limited: false, invalid: false };
 }
 
+function nextIsoDay(iso) {
+    const [year, month, day] = iso.split('-').map(Number);
+    return new Date(Date.UTC(year, month - 1, day + 1)).toISOString().slice(0, 10);
+}
+
+export function sixMonthWindows(from, to) {
+    if (!ISO_DATE.test(from) || !ISO_DATE.test(to) || from > to) return [];
+    const windows = [];
+    let start = from;
+    while (start <= to && windows.length < 40) {
+        const end = shiftIsoMonths(start, 6);
+        const toDate = end && end < to ? end : to;
+        windows.push({ from: start, to: toDate });
+        if (toDate >= to) break;
+        const next = nextIsoDay(toDate);
+        if (!next || next <= start) break;
+        start = next;
+    }
+    return windows;
+}
+
 export function journalDatesInRange(journal = {}, from = '', to = '') {
     return new Set(Object.keys(journal || {}).filter((date) => (
         /^\d{4}-\d{2}-\d{2}$/.test(date) && (!from || date >= from) && (!to || date <= to)
@@ -141,8 +162,9 @@ export function criteriaPairsFromJournal(journal = {}, range = {}) {
             const existing = trade?.marketCriteria || day?.tradePolygons?.[ticker];
             const key = `${date}|${ticker}`;
             const entryMinute = openedMinute(trade?.opened || trade?.entryTime || trade?.time);
-            if (!pairs.has(key)) pairs.set(key, { date, ticker, existing, entryMinutes: new Set() });
+            if (!pairs.has(key)) pairs.set(key, { date, ticker, existing, trades: 0, entryMinutes: new Set() });
             const pair = pairs.get(key);
+            pair.trades += 1;
             if (existing) pair.existing = existing;
             if (Number.isInteger(entryMinute) && entryMinute >= 240 && entryMinute <= 720) pair.entryMinutes.add(entryMinute);
         }
@@ -155,6 +177,17 @@ export function criteriaPairsFromJournal(journal = {}, range = {}) {
             loaded: criteriaMetricsReady(pair.existing, entryMinutes),
         };
     });
+}
+
+export function criteriaCoverage(journal = {}, range = {}) {
+    const pairs = criteriaPairsFromJournal(journal, range);
+    const ready = pairs.filter((pair) => pair.loaded).length;
+    return {
+        trades: pairs.reduce((sum, pair) => sum + (pair.trades || 0), 0),
+        pairs: pairs.length,
+        ready,
+        pending: pairs.filter((pair) => !pair.loaded),
+    };
 }
 
 export function buildMarketCriteriaGroups(journal = {}, allowedDates = null, tradeType = '') {
