@@ -152,6 +152,7 @@ export async function showResearchExit() {
         const { renderBestExitAnalysis } = await import('./best_exit_analysis.js');
         await renderBestExitAnalysis({
             journal: state.appData.journal || {},
+            sheetRows: { ...(state.appData.cumulativeSheetRows || {}), ...(state.appData.sheetRows || {}) },
             periodDates: dates,
             sourceType: 'current',
             periodLabel: label,

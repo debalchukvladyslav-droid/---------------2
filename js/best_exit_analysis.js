@@ -177,7 +177,10 @@ function bind(container) {
     container.querySelector('[data-market-open-stops]')?.addEventListener('change', (event) => {
         marketOpenStopsOnly = !!event.currentTarget.checked;
         if (!activeAnalysisContext) return;
-        activeTrades = collectTimedShortTrades(activeAnalysisContext.journal, activeAnalysisContext.periodDates, { marketOpenStopsOnly });
+        activeTrades = collectTimedShortTrades(activeAnalysisContext.journal, activeAnalysisContext.periodDates, {
+            marketOpenStopsOnly,
+            sheetRows: activeAnalysisContext.sheetRows,
+        });
         paint();
     });
     const changeSelectedTime = (nextMinute) => {
@@ -248,7 +251,7 @@ async function downloadMissing() {
     paint();
 }
 
-export async function renderBestExitAnalysis({ journal = {}, periodDates = new Set(), sourceType = 'current', periodLabel = 'За весь час' } = {}) {
+export async function renderBestExitAnalysis({ journal = {}, sheetRows = null, periodDates = new Set(), sourceType = 'current', periodLabel = 'За весь час' } = {}) {
     const container = host();
     if (!container) return;
     analysisAbortController?.abort();
@@ -257,12 +260,12 @@ export async function renderBestExitAnalysis({ journal = {}, periodDates = new S
     downloadPaused = false;
     statusNote = '';
     activePeriodLabel = String(periodLabel || 'За весь час');
-    activeAnalysisContext = { journal, periodDates, sourceType, periodLabel: activePeriodLabel };
+    activeAnalysisContext = { journal, sheetRows, periodDates, sourceType, periodLabel: activePeriodLabel };
     if (!['current', 'trader'].includes(sourceType)) {
         container.innerHTML = '<div class="stats-empty-note">Аналіз доступний для одного трейдера.</div>';
         return;
     }
-    activeTrades = collectTimedShortTrades(journal, periodDates, { marketOpenStopsOnly });
+    activeTrades = collectTimedShortTrades(journal, periodDates, { marketOpenStopsOnly, sheetRows });
     if (!activeTrades.length) {
         container.innerHTML = `<label class="best-exit-market-filter"><input type="checkbox" data-market-open-stops ${marketOpenStopsOnly ? 'checked' : ''}><span>Стопи на маркеті</span></label><div class="stats-empty-note">${marketOpenStopsOnly ? 'У вибраному періоді немає мінусових позицій, перенесених через відкриття маркету 09:30 NY.' : 'У вибраному періоді немає short, закритих по часу.'}</div>`;
         container.querySelector('[data-market-open-stops]')?.addEventListener('change', (event) => {

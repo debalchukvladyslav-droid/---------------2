@@ -36,6 +36,22 @@ test('collects only shorts closed by time', () => {
     assert.deepEqual(collectTimedShortTrades(journal).map((row) => row.symbol), ['TIME']);
 });
 
+test('uses the later time-exit entry instead of the first stop of the same ticker', () => {
+    const journal = { '2026-06-01': { trades: [
+        { symbol: 'GNTA', type: 'Short', opened: '09:31', entry: 1.72, exit: 1.92, qty: 4500, net: -906, sheet: { exit: 'стоп', entryPrice: 1.72, consolidateCents: 20, stopPrice: 1.92 } },
+    ] } };
+    const sheetRows = { main: { '2026-06-01': [
+        { symbol: 'GNTA', net: -906, type: 'Short', sheet: { exit: 'стоп', entryPrice: 1.72, consolidateCents: 20, qtyShares: 4500, sheetNet: -906, sheetRow: 10 } },
+        { symbol: 'GNTA', net: 909.1, type: 'Short', sheet: { exit: 'по часу', entryPrice: 2.77, consolidateCents: 28, qtyShares: 1000, sheetNet: 909.1, sheetRow: 11 } },
+    ] } };
+    const rows = collectTimedShortTrades(journal, null, { sheetRows });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].symbol, 'GNTA');
+    assert.equal(rows[0].entryPrice, 2.77);
+    assert.equal(rows[0].stopPrice, 3.05);
+    assert.ok(Math.abs(rows[0].actualExitPrice - (2.77 - 909.1 / 1000)) < 1e-9);
+});
+
 test('collects short time exits from the selected dates and clamps entry to market open', () => {
     const journal = {
         '2026-07-10': {

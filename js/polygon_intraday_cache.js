@@ -115,7 +115,11 @@ export function analyzePolygonDay(bars, item, targetMinute = null) {
     result.stopPrice = Number(item.stopPrice) || null;
     result.stopEntryMinute = Number(item.stopEntryMinute);
     if (targetMinute < result.stopEntryMinute) return { ...result, notOpened: true, stopHit: false };
-    const stop = result.stopPrice > 0 ? [...byMinute.entries()].find(([minute, bar]) => minute >= result.stopEntryMinute && minute <= targetMinute && Number(bar?.h) >= result.stopPrice) : null;
+    const stop = result.stopPrice > 0
+        ? [...byMinute.entries()]
+            .filter(([minute, bar]) => minute >= result.stopEntryMinute && minute <= targetMinute && Number(bar?.h) >= result.stopPrice)
+            .sort((left, right) => left[0] - right[0])[0]
+        : null;
     if (stop) return { ...result, stopHit: true, stopMinute: stop[0], stopTime: new Date(Number(stop[1].t)).toISOString(), priceMinute: targetMinute, priceAtTime: result.stopPrice, priceTime: new Date(Number(stop[1].t)).toISOString() };
     // Polygon does not emit a minute candle when a thinly traded ticker had no
     // executions in that exact minute. In that case the price at the requested
