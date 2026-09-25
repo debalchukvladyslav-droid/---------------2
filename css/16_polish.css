@@ -5519,6 +5519,7 @@ textarea:focus, select:focus,
 }
 
 .research-shell { display: grid; gap: 18px; max-width: 1180px; margin: 0 auto; padding: 22px 18px 48px; }
+.research-shell[hidden] { display: none; }
 .research-head h2 { margin: 4px 0 8px; color: var(--text-main); font-size: 1.7rem; }
 .research-head p, .research-card > p, .research-note { margin: 0; color: var(--text-muted); font-size: .9rem; line-height: 1.45; }
 .research-card { display: grid; gap: 12px; padding: 18px; border: 1px solid var(--border); border-radius: 14px; background: color-mix(in srgb, var(--bg-panel) 88%, transparent); }

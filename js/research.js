@@ -14,6 +14,18 @@ function view() {
     return document.getElementById('view-research');
 }
 
+function researchInDevelopment() {
+    return state.myRole !== 'admin';
+}
+
+function showResearchAvailability() {
+    const root = view();
+    const developing = researchInDevelopment();
+    root?.querySelector('[data-research-dev]')?.toggleAttribute('hidden', !developing);
+    root?.querySelector('[data-research-work]')?.toggleAttribute('hidden', developing);
+    return developing;
+}
+
 function field(name) {
     return view()?.querySelector(`[data-research-${name}]`);
 }
@@ -52,7 +64,7 @@ function applyClamp(edited) {
 
 export function openResearchView() {
     const root = view();
-    if (!root) return;
+    if (!root || showResearchAvailability()) return;
     const fromInput = field('from');
     const toInput = field('to');
     if (fromInput && toInput && !fromInput.value) {
@@ -75,6 +87,7 @@ export function openResearchView() {
 }
 
 export function applyResearchPreset(months) {
+    if (researchInDevelopment()) return;
     const toInput = field('to');
     const end = toInput?.value || journalEndDate();
     const next = clampResearchPeriod(shiftIsoMonths(end, -Number(months)), end, 'from');
@@ -119,6 +132,7 @@ function markTradeType() {
 }
 
 export function selectResearchTradeType(type = '') {
+    if (researchInDevelopment()) return;
     selectedTradeType = RESEARCH_TRADE_TYPES.includes(type) ? type : '';
     markTradeType();
     if (view()?.dataset.researchReady === '1') void renderPeriod(field('from')?.value || '', field('to')?.value || '');
@@ -137,6 +151,7 @@ function fillExitPeriod() {
 }
 
 export async function showResearchExit() {
+    if (researchInDevelopment()) return;
     const status = field('exit-status');
     const button = view()?.querySelector('[data-action="research-exit-show"]');
     if (button?.disabled) return;
@@ -173,6 +188,7 @@ async function renderPeriod(from, to) {
 }
 
 export async function showResearch() {
+    if (researchInDevelopment()) return;
     const status = field('status');
     const button = view()?.querySelector('[data-action="research-show"]');
     if (button) button.disabled = true;
@@ -256,6 +272,7 @@ function chunk(items, size) {
 }
 
 export async function loadResearchCriteria() {
+    if (researchInDevelopment()) return;
     const status = field('status');
     const progress = field('progress');
     const button = view()?.querySelector('[data-action="research-load"]');
