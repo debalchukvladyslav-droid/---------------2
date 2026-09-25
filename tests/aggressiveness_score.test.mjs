@@ -409,3 +409,14 @@ test('dashboard flip markup and mobile rule exist', async () => {
     assert.match(migration, /protect_daily_market_regime/);
     assert.match(migration, /daily_market_regime_date_idx/);
 });
+
+test('an auth timeout keeps the aggressiveness gauge incomplete instead of failing the request', async () => {
+    const { degradedMarketPayload } = await import('../lib/aggressiveness_http.js');
+    const source = await readFile(new URL('../lib/aggressiveness_http.js', import.meta.url), 'utf8');
+    const payload = degradedMarketPayload(new Date('2026-09-25T14:55:00Z'));
+    assert.equal(payload.status, 'incomplete');
+    assert.equal(payload.incomplete, true);
+    assert.equal(payload.message, 'Data incomplete');
+    assert.match(source, /authDegraded: true/);
+    assert.match(source, /AbortSignal\.timeout\(3000\)/);
+});

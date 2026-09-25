@@ -21,9 +21,12 @@ function button(label, handler) {
     });
     return element;
 }
+function settingsVisible() {
+    return document.getElementById('view-settings')?.classList.contains('active');
+}
 export async function refreshDataHealth() {
     const anchor = document.getElementById('settings-backup-list');
-    if (!anchor || !state.myUserId || refreshing) return;
+    if (!anchor || !state.myUserId || refreshing || !settingsVisible()) return;
     const userId = state.myUserId;
     refreshing = true;
     try {
@@ -37,13 +40,14 @@ export async function refreshDataHealth() {
         panel.replaceChildren(text('h4', 'Збереження та відновлення'));
         panel.appendChild(text('p', `Очікує збереження: ${operations.length} змін · завантаження: ${uploads.length} файлів`));
         const health = healthResult.data;
+        const unavailable = Boolean(healthResult.error || health?.unavailable);
         const copied = health?.offsite?.completedAt;
         const stale = !copied || Date.now() - Date.parse(copied) > 26 * 3600000;
-        panel.appendChild(text('p', healthResult.error ? 'Стан серверних копій наразі недоступний.'
+        panel.appendChild(text('p', unavailable ? 'Стан серверних копій наразі недоступний.'
             : !copied ? 'Незалежну копію ще не підтверджено. Потрібне початкове підключення архіву.'
                 : `${stale ? 'Потрібна увага: ' : ''}Остання незалежна копія: ${new Date(copied).toLocaleString('uk-UA')}`));
-        panel.appendChild(text('p', `Історія змін та кошик: 30 днів. ${health?.lastRestorePointAt ? 'Остання серверна точка: ' + new Date(health.lastRestorePointAt).toLocaleString('uk-UA') : ''}`));
-        if (health?.usage) panel.appendChild(text('p', `Використання: база ${formatBytes(health.usage.databaseBytes)} · файли профілю ${formatBytes(health.usage.storageBytes)}.`));
+        panel.appendChild(text('p', `Історія змін та кошик: 30 днів. ${!unavailable && health?.lastRestorePointAt ? 'Остання серверна точка: ' + new Date(health.lastRestorePointAt).toLocaleString('uk-UA') : ''}`));
+        if (!unavailable && health?.usage) panel.appendChild(text('p', `Використання: база ${formatBytes(health.usage.databaseBytes)} · файли профілю ${formatBytes(health.usage.storageBytes)}.`));
         const failedJobs = (jobsResult.data || []).filter(job => job.status === 'error' || (job.status === 'running' && Date.now() - Date.parse(job.updated_at) > 10 * 60000));
         if (failedJobs.length) panel.appendChild(text('p', `Потребують уваги підключення Google: ${failedJobs.length}. ${failedJobs[0].last_error || 'Завдання затрималося.'}`));
         panel.appendChild(button('Повторити передачу', async () => {
@@ -76,10 +80,15 @@ function formatBytes(value) {
 }
 export function initDataHealth() {
     if (initialized) return; initialized = true;
-    const refresh = () => void refreshDataHealth().catch(error => console.warn('[Data health]', error.message));
-    document.addEventListener('strum:sync-state', () => { if (document.getElementById('view-settings')?.classList.contains('active')) refresh(); });
-    document.addEventListener('strum:upload-state', () => { if (document.getElementById('view-settings')?.classList.contains('active')) refresh(); });
+    const refresh = () => { if (settingsVisible()) void refreshDataHealth().catch(error => console.warn('[Data health]', error.message)); };
+    document.addEventListener('strum:sync-state', refresh);
+    document.addEventListener('strum:upload-state', refresh);
     window.addEventListener('focus', refresh);
-    setInterval(() => { if (!document.hidden && document.getElementById('view-settings')?.classList.contains('active')) refresh(); }, 30000);
-    setTimeout(refresh, 3000);
+    setInterval(() => { if (!document.hidden) refresh(); }, 30000);
+    const view = document.getElementById('view-settings');
+    if (view) {
+        const observer = new MutationObserver(refresh);
+        observer.observe(view, { attributes: true, attributeFilter: ['class'] });
+    }
+    refresh();
 }

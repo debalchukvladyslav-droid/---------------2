@@ -516,9 +516,10 @@ function armPoll() {
     clearTimeout(pollTimer);
     const delay = nextLivePollDelay(new Date());
     if (delay == null) return;
+    const jitter = Math.floor(Math.random() * 15000);
     pollTimer = setTimeout(() => {
         void renderMarketAggressiveness({ force: true });
-    }, delay);
+    }, delay + jitter);
 }
 
 export function bindMarketGaugeKeys() {

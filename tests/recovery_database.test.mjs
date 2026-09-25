@@ -33,7 +33,7 @@ test('recovery database executes real SQL and protects changes and restore trans
     db = new PGlite();
     await db.exec(await readFile(new URL('./fixtures/recovery_schema.sql', import.meta.url), 'utf8'));
     t.after(() => db.close());
-    for (const filename of ['20260914140339_durable_recovery_sync.sql', '20260914140454_reliable_source_integrations.sql', '20260916191838_fix_recovery_health_snapshot.sql', '20260917031703_optimize_recovery_query_payloads.sql', '20260923042623_optimize_data_sync_large_json.sql', '20260923043823_bound_sync_pull_response.sql', '20260923194500_offload_restore_snapshots.sql']) {
+    for (const filename of ['20260914140339_durable_recovery_sync.sql', '20260914140454_reliable_source_integrations.sql', '20260916191838_fix_recovery_health_snapshot.sql', '20260917031703_optimize_recovery_query_payloads.sql', '20260923042623_optimize_data_sync_large_json.sql', '20260923043823_bound_sync_pull_response.sql', '20260923194500_offload_restore_snapshots.sql', '20260925181000_keep_data_health_available.sql']) {
         const sql = await readFile(new URL(`../supabase/migrations/${filename}`, import.meta.url), 'utf8');
         try { await db.exec(sql); } catch (error) {
             const position = Number(error.position || 0);
