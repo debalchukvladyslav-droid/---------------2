@@ -98,7 +98,7 @@ export function collectTimedShortTrades(journal = {}, allowedDates = null, { mar
             const exitReason = tradeExitReason(trade);
             const isMarketOpenStop = isMarketOpenStopTrade(trade, dateStr);
             if (!isShortTrade(trade)) continue;
-            if (marketOpenStopsOnly ? !isMarketOpenStop : (!exitReason || isExcludedStopTakeExit(trade))) continue;
+            if (marketOpenStopsOnly ? !isMarketOpenStop : !isTimeExitTrade(trade)) continue;
             const openedMinute = normalizeTradeClock(trade?.opened);
             const exitMinute = normalizeTradeClock(
                 trade?.closed || trade?.exited || trade?.exitTime || trade?.closeTime || trade?.sheet?.exitTime || ''

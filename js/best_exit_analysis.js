@@ -122,7 +122,7 @@ function paint() {
             <div class="best-exit-run-status__head">
                 <div>
                     <strong>${escapeHtml(activePeriodLabel)}</strong>
-                    <span>${rows.length} short · графіки ${savedDays} із ${savedDays + pending.length} · залишилось ${pending.length}</span>
+                    <span>${rows.length} по часу · графіки ${savedDays} із ${savedDays + pending.length} · залишилось ${pending.length}</span>
                 </div>
                 ${downloadRunning
                     ? '<button type="button" class="btn-secondary" data-best-exit-pause>Пауза</button>'
@@ -152,7 +152,7 @@ function paint() {
                     <td>${row.missingChart ? '—' : (row.notOpened ? 'ще не відкрито' : (row.stopHit ? `стоп ${row.stopMinute == null ? '' : minuteToClock(row.stopMinute)}` : money(row.selectedGross)))}</td>
                     <td class="${Number(row.selectedGrossDiff) > 0 ? 'positive' : (Number(row.selectedGrossDiff) < 0 ? 'negative' : '')}">${row.selectedGrossDiff == null ? '—' : money(row.selectedGrossDiff)}</td>
                     <td>${row.low > 0 ? `${row.low.toFixed(2)}${bestExitWindowNY(row.lowTime) ? ` · ${bestExitWindowNY(row.lowTime)}` : ''}` : (row.sessionEmpty ? 'немає low у сесії' : 'немає свічок')}</td>
-                </tr>`).join('') || '<tr><td colspan="6">У цьому періоді немає підходящих short.</td></tr>'}</tbody>
+                </tr>`).join('') || '<tr><td colspan="6">У цьому періоді немає short, закритих по часу.</td></tr>'}</tbody>
             </table>
         </div>`;
     bind(container);
@@ -264,7 +264,7 @@ export async function renderBestExitAnalysis({ journal = {}, periodDates = new S
     }
     activeTrades = collectTimedShortTrades(journal, periodDates, { marketOpenStopsOnly });
     if (!activeTrades.length) {
-        container.innerHTML = `<label class="best-exit-market-filter"><input type="checkbox" data-market-open-stops ${marketOpenStopsOnly ? 'checked' : ''}><span>Стопи на маркеті</span></label><div class="stats-empty-note">${marketOpenStopsOnly ? 'У вибраному періоді немає мінусових позицій, перенесених через відкриття маркету 09:30 NY.' : 'У вибраному періоді немає закритих short із цінами входу і виходу.'}</div>`;
+        container.innerHTML = `<label class="best-exit-market-filter"><input type="checkbox" data-market-open-stops ${marketOpenStopsOnly ? 'checked' : ''}><span>Стопи на маркеті</span></label><div class="stats-empty-note">${marketOpenStopsOnly ? 'У вибраному періоді немає мінусових позицій, перенесених через відкриття маркету 09:30 NY.' : 'У вибраному періоді немає short, закритих по часу.'}</div>`;
         container.querySelector('[data-market-open-stops]')?.addEventListener('change', (event) => {
             marketOpenStopsOnly = !!event.currentTarget.checked;
             void renderBestExitAnalysis(activeAnalysisContext);
