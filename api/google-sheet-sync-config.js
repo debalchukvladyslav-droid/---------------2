@@ -1,6 +1,6 @@
 import { getGoogleAccessToken, supabaseRest, supabaseRestAll, verifySupabaseUser } from '../lib/google_sheet_sync.js';
 import { migrateLegacyClassificationMapping } from '../js/sheet_auto_mapping.js';
-import { resolveSourceConnection, saveVerifiedConnection, sourceProfile, sourceAccessError } from '../lib/source_access.js';
+import { resolveSourceConnection, saveVerifiedConnection, sourceProfile, sourceAccessError, canBootstrapSharedTraderSheet } from '../lib/source_access.js';
 import { fetchWithRetry } from '../lib/integration_io.js';
 
 function sendJson(res, status, body) {
@@ -43,10 +43,17 @@ export default async function handler(req, res) {
             return sendJson(res, 400, { ok: false, error: 'Missing date/symbol mapping' });
         }
 
-        const admin = (await sourceProfile(user.id)).role === 'admin';
+        const profile = await sourceProfile(user.id);
+        const admin = profile.role === 'admin';
         const ownerId = admin && body.userId ? body.userId : user.id;
         const googleToken = String(req.headers['x-google-access-token'] || '');
-        if (!admin && !googleToken) await resolveSourceConnection(user, 'sheets', spreadsheetId, { scope: sheetTitle, write: true });
+        if (!admin && !googleToken) {
+            try {
+                await resolveSourceConnection(user, 'sheets', spreadsheetId, { scope: sheetTitle, write: true });
+            } catch (error) {
+                if (error?.code !== 'SOURCE_CONNECTION_REQUIRED' || !canBootstrapSharedTraderSheet(profile, spreadsheetId, sheetTitle)) throw error;
+            }
+        }
         if (googleToken) {
             const proof = await fetchWithRetry(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=sheets.properties.title`, { headers: { Authorization: `Bearer ${googleToken}` } });
             const metadata = await proof.json().catch(() => ({}));

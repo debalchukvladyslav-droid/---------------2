@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { getGoogleAccessToken, getGoogleServiceAccountEmail, getSupabaseEnv, supabaseRest, verifySupabaseUser } from '../lib/google_sheet_sync.js';
 import { tradingWorkbookBuffer } from '../lib/trading_export.js';
 import { buildTeamReport } from '../lib/team_report.js';
-import { resolveSourceConnection, assertScopedSheetRange } from '../lib/source_access.js';
+import { resolveSourceConnection, resolveSheetReadAccess, assertScopedSheetRange, assertBootstrapSheetRange, visibleSpreadsheetSheets } from '../lib/source_access.js';
 import { fetchWithRetry } from '../lib/integration_io.js';
 
 function sendJson(res, status, body) {
@@ -55,10 +55,10 @@ async function metadata(req, res, token) {
         return sendJson(res, response.status, { ok: false, error: data.error?.message || response.statusText });
     }
 
-    const sheets = (data.sheets || [])
-        .map(sheet => sheet.properties)
-        .filter(sheet => sheet && (!req.sourceConnection?.scope || sheet.title === req.sourceConnection.scope))
-        .sort((a, b) => Number(a.index || 0) - Number(b.index || 0));
+    const sheets = visibleSpreadsheetSheets(
+        (data.sheets || []).map(sheet => sheet.properties),
+        req.sourceConnection,
+    ).sort((a, b) => Number(a.index || 0) - Number(b.index || 0));
     console.log('[Sheets service] metadata ok', { spreadsheetId, title: data.properties?.title || '', sheets: sheets.length });
     return sendJson(res, 200, {
         ok: true,
@@ -71,9 +71,12 @@ async function metadata(req, res, token) {
 async function values(req, res, token) {
     const spreadsheetId = cleanSpreadsheetId(req.query.spreadsheetId);
     const range = String(req.query.range || '').trim();
-    const sheetTitle = String(req.sourceConnection?.scope || req.query.sheetTitle || '').trim();
+    const explicitTitle = String(req.query.sheetTitle || '').trim();
     if (!spreadsheetId) return sendJson(res, 400, { ok: false, error: 'Missing spreadsheetId' });
     if (!range) return sendJson(res, 400, { ok: false, error: 'Missing range' });
+    const sheetTitle = String(req.sourceConnection?.bootstrap
+        ? assertBootstrapSheetRange(req.sourceConnection, range, explicitTitle)
+        : (req.sourceConnection?.scope || explicitTitle)).trim();
 
     if (req.sourceConnection?.scope) assertScopedSheetRange(range, req.sourceConnection.scope);
     const fullRange = buildRange(range, sheetTitle);
@@ -179,10 +182,14 @@ export default async function handler(req, res) {
         let authMode = token ? 'user' : 'service-account';
         if (!token) {
             const spreadsheetId = cleanSpreadsheetId(action === 'update-values' ? req.body?.spreadsheetId : req.query.spreadsheetId);
-            req.sourceConnection = await resolveSourceConnection(user, 'sheets', spreadsheetId, {
-                scope: String(action === 'update-values' ? req.body?.sheetTitle || '' : req.query.sheetTitle || ''),
-                connectionId: req.query.connectionId || '', write: action === 'update-values',
-            });
+            const scope = String(action === 'update-values' ? req.body?.sheetTitle || '' : req.query.sheetTitle || '');
+            req.sourceConnection = action === 'update-values'
+                ? await resolveSourceConnection(user, 'sheets', spreadsheetId, {
+                    scope, connectionId: req.query.connectionId || '', write: true,
+                })
+                : await resolveSheetReadAccess(user, spreadsheetId, {
+                    scope, connectionId: req.query.connectionId || '',
+                });
             try {
                 token = await getGoogleAccessToken();
             } catch (error) {

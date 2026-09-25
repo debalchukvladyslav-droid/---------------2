@@ -607,6 +607,9 @@ async function loadSpreadsheetSheets(fileId) {
         || (stored && sheets.some(sheet => sheet.title === stored)
         ? stored
         : (sheets[0]?.title || ''));
+    if (!sheets.length) {
+        throw new Error('У цій таблиці немає доступного аркуша.');
+    }
     setSpreadsheetSheets(sheets, selected);
     const defaultTitle = fileId === getDefaultSpreadsheetId() ? getDefaultSpreadsheetTitle() : '';
     if (data.title || defaultTitle) rememberSpreadsheet(fileId, data.title || defaultTitle);
