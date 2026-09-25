@@ -21,14 +21,20 @@ test('shared workbook bootstrap allows only the profile last name', () => {
 });
 
 test('bootstrap metadata and ranges stay on the owner sheet', () => {
-    const connection = { bootstrap: true, ownerSheetTitle: 'Дебальчук', scope: '' };
+    const connection = { bootstrap: true, ownerSheetTitle: 'Дебальчук', ownerFirstName: 'Влад', ownerNick: 'andvav', scope: '' };
     const sheets = [
         { title: 'Іваненко', index: 0 },
         { title: 'Дебальчук', index: 1 },
-        { title: 'Кость', index: 2 },
+        { title: 'Дебальчук Андрій', index: 2 },
+        { title: 'Кость', index: 3 },
+        { title: 'Коваленко', index: 4 },
+        { title: 'andvav', index: 5 },
     ];
-    assert.deepEqual(visibleSpreadsheetSheets(sheets, connection).map((sheet) => sheet.title), ['Дебальчук']);
+    assert.deepEqual(visibleSpreadsheetSheets(sheets, connection).map((sheet) => sheet.title), ['Дебальчук', 'Дебальчук Андрій', 'andvav']);
     assert.equal(assertBootstrapSheetRange(connection, "'Дебальчук'!A1:ZZ1"), 'Дебальчук');
+    assert.equal(assertBootstrapSheetRange(connection, "'Дебальчук Андрій'!A1:ZZ1"), 'Дебальчук Андрій');
+    assert.equal(canBootstrapSharedTraderSheet({ role: 'trader', last_name: 'Коваль' }, presetId, 'Коваленко'), false);
+    assert.equal(canBootstrapSharedTraderSheet({ role: 'trader', last_name: 'Вавренюк\u200b' }, presetId, 'Вавренюк Андрій'), true);
     assert.throws(() => assertBootstrapSheetRange(connection, "'Іваненко'!A1:ZZ1"), (error) => error.code === 'SOURCE_CONNECTION_REQUIRED');
     assert.throws(() => assertBootstrapSheetRange(connection, 'A1:ZZ1'), (error) => error.code === 'SOURCE_CONNECTION_REQUIRED');
 });

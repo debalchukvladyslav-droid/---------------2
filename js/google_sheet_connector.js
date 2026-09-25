@@ -244,7 +244,9 @@ export async function autoConnectTraderSheet(options = {}) {
                 continue;
             }
             const sheets = (metadata.sheets || []).filter((sheet) => sheet?.title).sort((a, b) => Number(a.index || 0) - Number(b.index || 0));
-            const matched = sheets.find((sheet) => normalizeExactSheetTitle(sheet.title) === wanted);
+            const exact = sheets.find((sheet) => normalizeExactSheetTitle(sheet.title) === wanted);
+            const pickedTitle = exact?.title || await pickTraderSheetTitle(sheets);
+            const matched = sheets.find((sheet) => sheet.title === pickedTitle) || (sheets.length === 1 ? sheets[0] : null);
             if (!matched) continue;
 
             setSpreadsheetSheets(sheets, matched.title);
@@ -608,7 +610,11 @@ async function loadSpreadsheetSheets(fileId) {
         ? stored
         : (sheets[0]?.title || ''));
     if (!sheets.length) {
-        throw new Error('У цій таблиці немає доступного аркуша.');
+        const profile = await resolveViewedProfile();
+        const lastName = String(profile?.last_name || '').trim();
+        throw new Error(lastName
+            ? `Аркуш «${lastName}» у цій таблиці не знайдено.`
+            : 'У цій таблиці немає доступного аркуша.');
     }
     setSpreadsheetSheets(sheets, selected);
     const defaultTitle = fileId === getDefaultSpreadsheetId() ? getDefaultSpreadsheetTitle() : '';
