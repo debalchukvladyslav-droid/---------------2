@@ -56,6 +56,10 @@ async function replaceSubscription(userId) {
         .channel(`strum-user-${userId}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'journal_days', filter },
             payload => receive({ ...payload, table: 'journal_days' }, userId))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'trades', filter },
+            payload => receive({ ...payload, table: 'trades' }, userId))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'user_settings', filter },
+            payload => receive({ ...payload, table: 'user_settings' }, userId))
         .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_reviews', filter },
             payload => receive({ ...payload, table: 'daily_reviews' }, userId))
         .on('postgres_changes', { event: '*', schema: 'public', table: 'ai_coach_insights', filter },

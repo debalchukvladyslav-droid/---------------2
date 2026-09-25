@@ -1,7 +1,7 @@
 import { supabase } from './supabase.js';
 import { createDataSyncEngine } from './data_sync_engine.js';
 import { cacheValue, publishSyncState, readSyncMetadata, saveSyncMetadata } from './local_data_store.js';
-import { syncError } from './data_sync_core.js';
+import { mergeTradeRows, syncError } from './data_sync_core.js';
 
 let handlers = {};
 let activeUserId = null;
@@ -19,7 +19,7 @@ async function rpc(name, parameters) {
 
 const transport = {
     metadata: userId => rpc('get_data_sync_state', { p_user_id: userId }),
-    pull: (userId, cursor) => rpc('pull_data_changes', { p_user_id: userId, p_cursor: cursor, p_limit: 8 }),
+    pull: (userId, cursor) => rpc('pull_data_changes', { p_user_id: userId, p_cursor: cursor, p_limit: 40 }),
     apply: (_userId, operations, atomic) => rpc('apply_data_operations', { p_operations: operations, p_atomic: atomic }),
     resolveConflict: (_userId, conflictId, resolution) => rpc('resolve_data_conflict', { p_conflict_id: conflictId, p_resolution: resolution }),
     async snapshot(userId) {
@@ -40,7 +40,19 @@ const transport = {
                 after = next;
             } finally { clearTimeout(timeout); }
         }
-        return rows;
+        const tradeController = new AbortController();
+        const tradeTimeout = setTimeout(() => tradeController.abort(), 25000);
+        try {
+            const { data, error } = await supabase.from('trades')
+                .select('id, trade_date, version, payload, deleted_at')
+                .eq('user_id', userId)
+                .is('deleted_at', null)
+                .order('trade_date', { ascending: true })
+                .limit(5000)
+                .abortSignal(tradeController.signal);
+            if (error) return rows;
+            return mergeTradeRows(rows, data || []);
+        } finally { clearTimeout(tradeTimeout); }
     },
 };
 

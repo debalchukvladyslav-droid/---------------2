@@ -1,4 +1,4 @@
-import { applyMergePatch, canonicalJournalRow, cloneData, mergePatch, syncError, withoutUnloadedWipes } from './data_sync_core.js';
+import { applyMergePatch, canonicalJournalRow, cloneData, ensureTradeIds, journalTradesNeedProjection, journalWithoutTrades, mergePatch, syncError, tradeChangeOperations, withoutUnloadedWipes } from './data_sync_core.js';
 
 const DB_NAME = 'strum-local-data';
 const DB_VERSION = 2;
@@ -61,6 +61,23 @@ function makeRecord(userId, domain, entityId) {
     return { key: entityKey(userId, domain, entityId), userId, localRevision: 0, version: 0,
         ...(domain === 'journal' ? { tradeDate: entityId, month: entityId.slice(0, 7) } : { name: 'settings' }) };
 }
+function tradeDateOf(entityId) {
+    const date = String(entityId || '').slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : '';
+}
+function tradeIdOf(entityId) {
+    return String(entityId || '').slice(11);
+}
+function rowWithTrade(row, tradeId, trade) {
+    const metrics = { ...(row?.daily_metrics || {}) };
+    const trades = Array.isArray(metrics.trades) ? metrics.trades.slice() : [];
+    const index = trades.findIndex(item => item && String(item.id) === String(tradeId));
+    if (!trade) {
+        if (index >= 0) trades.splice(index, 1);
+    } else if (index >= 0) trades[index] = { ...trades[index], ...trade, id: tradeId };
+    else trades.push({ ...trade, id: tradeId });
+    return { ...(row || {}), daily_metrics: { ...metrics, trades } };
+}
 export async function readSyncMetadata(userId) { return (await readCachedValue(userId, 'sync-meta'))?.value || null; }
 export async function saveSyncMetadata(userId, incoming) {
     return transact([STORES.values, STORES.queue], 'readwrite', async stores => {
@@ -86,6 +103,20 @@ export async function commitLocalChanges(userId, changes, options = {}) {
         const meta = metaRecord?.value;
         if (meta?.epoch == null) throw syncError('Потрібне початкове підключення до бази для надійного збереження.', 'SYNC_SCHEMA_REQUIRED');
         const operations = [];
+        const queueOperation = (record, domain, entityId, baseVersion, base, patch) => {
+            if (!patch || !Object.keys(patch).length) return;
+            record.localRevision = (record.localRevision || 0) + 1;
+            meta.nextSequence = (meta.nextSequence || 0) + 1;
+            const operationId = options.operationId && changes.length === 1 && domain === changes[0].domain
+                ? options.operationId : crypto.randomUUID();
+            const operation = { key: operationId, operationId, userId, domain, entityId,
+                baseVersion, epoch: meta.epoch, base, patch,
+                localRevision: record.localRevision, sequence: meta.nextSequence,
+                createdAt: Date.now(), status: 'pending', attempts: 0, nextAttemptAt: 0,
+                ...(options.batchId ? { batchId: options.batchId } : {}), ...(options.source ? { source: options.source } : {}) };
+            stores[STORES.queue].add(operation);
+            operations.push(operation);
+        };
         for (const change of changes) {
             const { domain, entityId } = change;
             if (!['journal', 'settings'].includes(domain)) throw syncError('Невідомий тип даних.', 'INVALID_DOMAIN');
@@ -93,24 +124,26 @@ export async function commitLocalChanges(userId, changes, options = {}) {
             const record = await requestValue(store.get(entityKey(userId, domain, entityId))) || makeRecord(userId, domain, entityId);
             const before = change.baseValue === undefined ? entityValue(record, domain) : cloneData(change.baseValue);
             const value = domain === 'journal' ? canonicalJournalRow(change.value) : cloneData(change.value);
-            const patch = mergePatch(before, value);
+            if (domain === 'journal' && value.daily_metrics && typeof value.daily_metrics === 'object') {
+                value.daily_metrics.trades = ensureTradeIds(value.daily_metrics.trades);
+            }
+            const beforeTrades = domain === 'journal' && Array.isArray(before?.daily_metrics?.trades) ? before.daily_metrics.trades : [];
+            const projectTrades = domain === 'journal' && journalTradesNeedProjection(beforeTrades);
+            let patch = domain === 'journal' && !projectTrades
+                ? mergePatch(journalWithoutTrades(before), journalWithoutTrades(value))
+                : mergePatch(before, value);
+            const tradeOps = domain === 'journal' && !projectTrades
+                ? tradeChangeOperations(entityId, beforeTrades, value.daily_metrics?.trades || [])
+                : [];
             if (domain === 'settings') {
                 for (const key of Object.keys(patch)) if (protectedSetting(key)) delete patch[key];
             }
-            if (!Object.keys(patch).length) continue;
-            record.localRevision = (record.localRevision || 0) + 1;
+            if (!Object.keys(patch).length && !tradeOps.length) continue;
             Object.assign(record, { dirty: 1, epoch: meta.epoch, cachedAt: Date.now() });
             setValue(record, domain, change.baseValue === undefined && domain !== 'settings' ? value : applyMergePatch(entityValue(record, domain), patch));
-            meta.nextSequence = (meta.nextSequence || 0) + 1;
-            const operationId = options.operationId && changes.length === 1 ? options.operationId : crypto.randomUUID();
-            const operation = { key: operationId, operationId, userId, domain, entityId,
-                baseVersion: record.version || 0, epoch: meta.epoch, base: before, patch,
-                localRevision: record.localRevision, sequence: meta.nextSequence,
-                createdAt: Date.now(), status: 'pending', attempts: 0, nextAttemptAt: 0,
-                ...(options.batchId ? { batchId: options.batchId } : {}), ...(options.source ? { source: options.source } : {}) };
+            queueOperation(record, domain, entityId, record.version || 0, projectTrades || domain !== 'journal' ? before : journalWithoutTrades(before), patch);
+            for (const tradeOp of tradeOps) queueOperation(record, tradeOp.domain, tradeOp.entityId, tradeOp.baseVersion, tradeOp.base, tradeOp.patch);
             store.put(record);
-            stores[STORES.queue].add(operation);
-            operations.push(operation);
         }
         stores[STORES.values].put({ ...metaRecord, value: meta });
         return { savedLocally: true, operationIds: operations.map(operation => operation.operationId), pending: operations.length };
@@ -233,6 +266,26 @@ export async function acknowledgeOperations(userId, results = []) {
                 continue;
             }
             stores[STORES.queue].delete(operation.operationId);
+            if (operation.domain === 'trade') {
+                const date = tradeDateOf(operation.entityId);
+                const tradeId = tradeIdOf(operation.entityId);
+                const day = date ? await requestValue(stores[STORES.days].get(`${userId}:${date}`)) : null;
+                if (day && tradeId) {
+                    const removed = operation.patch?.deleted === true;
+                    const version = Number(result.version) || Number(day.row?.daily_metrics?.trades?.find(item => item?.id === tradeId)?.version) || 1;
+                    const trade = removed ? null : { ...applyMergePatch(operation.base, operation.patch), id: tradeId, version };
+                    day.row = rowWithTrade(day.row, tradeId, trade);
+                    if (day.serverValue) day.serverValue = rowWithTrade(day.serverValue, tradeId, trade);
+                    const pending = (await requestValue(stores[STORES.queue].index('user').getAll(userId)) || [])
+                        .some(item => item.domain === 'journal' && item.entityId === date
+                            || item.domain === 'trade' && tradeDateOf(item.entityId) === date);
+                    day.dirty = pending ? 1 : 0;
+                    day.syncedAt = Date.now();
+                    stores[STORES.days].put(day);
+                    changed.push({ domain: 'trade', entityId: operation.entityId, record: cloneData(day), operationId: operation.operationId });
+                }
+                continue;
+            }
             if (!record) continue;
             const newer = record.serverValue !== undefined && (Number(record.epoch || 0) > Number(result.epoch || 0)
                 || (String(record.epoch) === String(result.epoch) && Number(record.version || 0) > Number(result.version || 0)));
@@ -259,6 +312,36 @@ export async function resolveDataOperation(userId, operationId, choice) {
         const operation = await requestValue(stores[STORES.queue].get(operationId));
         if (!operation || operation.userId !== userId) throw syncError('Конфлікт уже вирішено або не знайдено.', 'CONFLICT_NOT_FOUND');
         if (!['conflict', 'stale_epoch', 'blocked'].includes(operation.status)) throw syncError('Ця операція не потребує ручного вирішення.', 'INVALID_RESOLUTION');
+        if (operation.domain === 'trade') {
+            const date = tradeDateOf(operation.entityId);
+            const tradeId = tradeIdOf(operation.entityId);
+            const metaRecord = await requestValue(stores[STORES.values].get(`${userId}:sync-meta`));
+            const meta = metaRecord?.value || {};
+            const record = await requestValue(stores[STORES.days].get(`${userId}:${date}`)) || makeRecord(userId, 'journal', date);
+            stores[STORES.queue].delete(operationId);
+            const remotePayload = operation.remote?.payload && typeof operation.remote.payload === 'object' ? operation.remote.payload : (operation.remote || {});
+            let replacementId = null;
+            if (choice === 'local') {
+                const patch = operation.patch?.deleted === true ? { deleted: true } : mergePatch(remotePayload, applyMergePatch(remotePayload, operation.patch));
+                if (Object.keys(patch).length) {
+                    replacementId = crypto.randomUUID();
+                    stores[STORES.queue].add({ ...operation, key: replacementId, operationId: replacementId,
+                        base: remotePayload, patch, baseVersion: operation.remoteVersion || 0, epoch: meta.epoch,
+                        createdAt: Date.now(), status: 'pending', attempts: 0, nextAttemptAt: 0, conflictId: null, remote: null });
+                }
+                record.row = rowWithTrade(record.row, tradeId, operation.patch?.deleted === true ? null : { ...applyMergePatch(remotePayload, operation.patch), id: tradeId });
+                record.dirty = replacementId ? 1 : 0;
+            } else {
+                const gone = !operation.remote || operation.remote.deleted_at;
+                record.row = rowWithTrade(record.row, tradeId, gone ? null : { ...remotePayload, id: tradeId, version: operation.remoteVersion || 0 });
+                record.serverValue = rowWithTrade(record.serverValue || {}, tradeId, gone ? null : { ...remotePayload, id: tradeId, version: operation.remoteVersion || 0 });
+                record.dirty = 0;
+            }
+            record.epoch = meta.epoch;
+            stores[STORES.days].put(record);
+            return { choice, conflictId: operation.conflictId || null, operationId: replacementId,
+                change: { domain: 'trade', entityId: operation.entityId, record: cloneData(record) } };
+        }
         const metaRecord = await requestValue(stores[STORES.values].get(`${userId}:sync-meta`));
         const meta = metaRecord?.value || {};
         const store = stores[entityStore(operation.domain)];
@@ -314,7 +397,41 @@ export async function applyRemoteChanges(userId, response) {
                 if (String(operation.epoch) !== String(response.epoch)) { operation.status = 'stale_epoch'; stores[STORES.queue].put(operation); }
             }
         }
+        const pendingTrades = new Set(((await requestValue(stores[STORES.queue].index('user').getAll(userId)) || [])
+            .filter(operation => operation.domain === 'trade' && operation.status === 'pending'))
+            .map(operation => operation.entityId));
         for (const change of response.changes || []) {
+            if (change.domain === 'trade') {
+                const date = tradeDateOf(change.entityId);
+                const tradeId = tradeIdOf(change.entityId);
+                if (!date || !tradeId || pendingTrades.has(change.entityId)) {
+                    changed.push({ ...change, localDirty: pendingTrades.has(change.entityId) });
+                    continue;
+                }
+                const key = `${userId}:${date}`;
+                const record = await requestValue(stores[STORES.days].get(key)) || makeRecord(userId, 'journal', date);
+                const trade = change.deleted ? null : { ...(change.record?.payload && typeof change.record.payload === 'object' ? change.record.payload : change.record || {}), id: tradeId, version: change.version || change.record?.version || 1 };
+                if (!record.dirty) record.row = rowWithTrade(record.row, tradeId, trade);
+                record.serverValue = rowWithTrade(record.serverValue || record.row, tradeId, trade);
+                stores[STORES.days].put(record);
+                changed.push({ ...change, record: cloneData(record), localDirty: !!record.dirty });
+                continue;
+            }
+            if (change.domain === 'setting') {
+                const key = `${userId}:settings`;
+                const record = await requestValue(stores[STORES.values].get(key)) || makeRecord(userId, 'settings', userId);
+                if (!record.dirty && change.entityId) {
+                    const value = record.value && typeof record.value === 'object' ? cloneData(record.value) : {};
+                    if (change.deleted) delete value[change.entityId];
+                    else value[change.entityId] = change.record;
+                    record.value = value;
+                    record.serverValue = cloneData(value);
+                    record.cachedAt = Date.now();
+                    stores[STORES.values].put(record);
+                    changed.push({ ...change, record: cloneData(record) });
+                }
+                continue;
+            }
             if (!['journal', 'settings'].includes(change.domain)) continue;
             const store = stores[entityStore(change.domain)];
             const key = entityKey(userId, change.domain, change.entityId);
@@ -326,7 +443,10 @@ export async function applyRemoteChanges(userId, response) {
                 continue;
             }
             const record = existing || makeRecord(userId, change.domain, change.entityId);
-            const value = change.domain === 'journal' ? canonicalJournalRow(change.record || {}) : change.record || {};
+            const incoming = change.domain === 'journal' ? canonicalJournalRow(change.record || {}) : change.record || {};
+            const value = change.domain === 'settings' && incoming && typeof incoming === 'object' && !Array.isArray(incoming)
+                ? { ...(record.value && typeof record.value === 'object' ? record.value : {}), ...incoming }
+                : incoming;
             Object.assign(record, { serverValue: cloneData(value), version: change.version, epoch: change.epoch, cachedAt: Date.now() });
             if (!record.dirty) { setValue(record, change.domain, value); record.dirty = 0; }
             store.put(record);

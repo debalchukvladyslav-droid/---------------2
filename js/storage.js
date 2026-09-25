@@ -9,7 +9,7 @@ import {
     cacheJournalRows, cacheValue, publishSyncState, commitLocalChanges,
     readCachedDay, readCachedMonth, readCachedValue, readDirtyJournalRows, resolveDataOperation,
 } from './local_data_store.js';
-import { canonicalJournalRow, cloneData, syncError } from './data_sync_core.js';
+import { canonicalJournalRow, cloneData, ensureTradeIds, mergeTradeRows, syncError } from './data_sync_core.js';
 import { beginDataSync, stopDataSync, setDataSyncHandlers, notifyDataSync, ensureDataSyncMetadata,
     flushDataSync, syncDataNow as runDataSyncNow, refreshDataSnapshot, getCachedSyncEpoch as readCachedEpoch } from './data_sync.js';
 
@@ -371,6 +371,15 @@ async function applySynchronizedChanges(userId, changes) {
                 state.appData.journal[date] = markDayEntryDetailsLoaded(journalRowToDayEntry(change.record.row), true);
             }
             journalChanged = true;
+        } else if (change.domain === 'trade') {
+            const date = String(change.entityId || '').slice(0, 10);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || _dirtyJournalDates.has(date)) continue;
+            if (change.record?.row) {
+                state.appData.journal[date] = markDayEntryDetailsLoaded(journalRowToDayEntry(change.record.row), true);
+                journalChanged = true;
+            }
+        } else if (change.domain === 'setting' && change.record?.value && !_settingsSavePromise && !_settingsSaveRequested) {
+            applySettingsPayload(change.record.value);
         } else if (change.domain === 'settings' && change.record?.value && !_settingsSavePromise && !_settingsSaveRequested) {
             applySettingsPayload(change.record.value);
         }
@@ -789,6 +798,7 @@ async function _doSave(opts = {}) {
         const revisionsAtSave = new Map(entries.map(([dateStr]) => [dateStr, _journalDateRevisions.get(dateStr) || 0]));
 
         const rows = entries.map(([dateStr, entry]) => {
+            if (Array.isArray(entry?.trades)) entry.trades = ensureTradeIds(entry.trades);
             const row = dayEntryToJournalRow(userId, dateStr, entry);
             row.daily_metrics.user_email = email;
             return row;
@@ -867,7 +877,7 @@ async function loadBootstrapJournal(nick, userId, months) {
         return false;
     }
     if (!isCurrentProfileRequest(nick, userId)) return false;
-    const rows = Array.isArray(data?.journal_days) ? data.journal_days : [];
+    const rows = mergeTradeRows(Array.isArray(data?.journal_days) ? data.journal_days : [], data?.trades);
     await cacheJournalRows(userId, rows.filter((row) => !_dirtyJournalDates.has(row.trade_date)), { dirty: false });
     rows.forEach((row) => {
         const dateStr = row?.trade_date;
@@ -931,14 +941,22 @@ export async function loadMonth(nick, mk, userId = null) {
             .order('trade_date', { ascending: true });
 
         if (error) throw error;
-        await cacheJournalRows(targetUserId, (data || []).filter((row) => !_dirtyJournalDates.has(row.trade_date)), { dirty: false });
+        const tradeResult = await supabase
+            .from('trades')
+            .select('id, trade_date, version, payload, deleted_at')
+            .eq('user_id', targetUserId)
+            .gte('trade_date', start)
+            .lte('trade_date', end)
+            .is('deleted_at', null);
+        const rows = mergeTradeRows(data || [], tradeResult.error ? [] : tradeResult.data || []);
+        await cacheJournalRows(targetUserId, rows.filter((row) => !_dirtyJournalDates.has(row.trade_date)), { dirty: false });
 
         if (!isCurrentProfileRequest(nick, targetUserId)) {
             console.info(`[LOAD] ${mk}: застарілу відповідь іншого профілю пропущено`);
             return;
         }
 
-        (data || []).forEach(row => {
+        rows.forEach(row => {
             const dateStr = row.trade_date;
             if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
                 if (_dirtyJournalDates.has(dateStr)) return;
@@ -955,7 +973,7 @@ export async function loadMonth(nick, mk, userId = null) {
         state.loadedMonths[nick].add(mk);
         if (!state._availableMonthKeys) state._availableMonthKeys = new Set();
         state._availableMonthKeys.add(mk);
-        console.log(`[LOAD] ✅ ${mk}: завантажено ${(data || []).length} днів із Supabase`);
+        console.log(`[LOAD] ✅ ${mk}: завантажено ${rows.length} днів із Supabase`);
     } catch (e) {
         console.error(`❌ Помилка завантаження місяця ${mk}:`, e);
     }
@@ -994,6 +1012,13 @@ export async function loadDayDetails(dateStr, userId = null, options = {}) {
                 .maybeSingle();
 
             if (error) throw error;
+            const tradeResult = await supabase
+                .from('trades')
+                .select('id, trade_date, version, payload, deleted_at')
+                .eq('user_id', targetUserId)
+                .eq('trade_date', dateStr)
+                .is('deleted_at', null);
+            const [hydrated] = mergeTradeRows(data ? [data] : [], tradeResult.error ? [] : tradeResult.data || []);
 
             if (getCurrentViewedUserId() !== targetUserId) {
                 console.info(`[LOAD] ${dateStr}: застарілі деталі іншого профілю пропущено`);
@@ -1007,7 +1032,7 @@ export async function loadDayDetails(dateStr, userId = null, options = {}) {
             }
 
             const fullEntry = {
-                ...journalRowToDayEntry(data),
+                ...journalRowToDayEntry(hydrated || data),
                 id: data?.id ?? null,
                 user_id: data?.user_id ?? null,
                 trade_date: data?.trade_date ?? dateStr,
@@ -1015,7 +1040,7 @@ export async function loadDayDetails(dateStr, userId = null, options = {}) {
             };
 
             if (!_dirtyJournalDates.has(dateStr)) {
-                await cacheJournalRows(targetUserId, [data], { dirty: false });
+                await cacheJournalRows(targetUserId, [hydrated || data], { dirty: false });
             }
 
             const localNow = state.appData.journal[dateStr];

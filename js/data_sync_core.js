@@ -67,6 +67,88 @@ export function canonicalJournalRow(row = {}) {
     for (const key of ['id', 'user_id', 'trade_date', 'created_at', 'updated_at', 'sync_version', '__detailsLoaded']) delete result[key];
     return result;
 }
+
+export function ensureTradeIds(trades, createId = () => globalThis.crypto.randomUUID()) {
+    if (!Array.isArray(trades)) return [];
+    return trades.map(trade => {
+        if (!trade || typeof trade !== 'object') return { id: createId() };
+        if (trade.id) return trade;
+        return { ...trade, id: createId() };
+    });
+}
+
+export function journalWithoutTrades(row = {}) {
+    const next = cloneData(row) || {};
+    if (next.daily_metrics && typeof next.daily_metrics === 'object') delete next.daily_metrics.trades;
+    return next;
+}
+
+export function journalTradesNeedProjection(beforeTrades = []) {
+    return (beforeTrades || []).some(trade => trade && typeof trade === 'object' && !trade.id);
+}
+
+function tradeWire(trade = {}) {
+    const next = cloneData(trade) || {};
+    delete next.version;
+    return next;
+}
+
+export function tradeChangeOperations(date, beforeTrades = [], nextTrades = []) {
+    const before = new Map();
+    for (const trade of beforeTrades || []) if (trade?.id) before.set(String(trade.id), trade);
+    const next = new Map();
+    for (const trade of nextTrades || []) if (trade?.id) next.set(String(trade.id), trade);
+    const operations = [];
+    for (const [id, trade] of next) {
+        const previous = before.get(id);
+        const patch = mergePatch(previous ? tradeWire(previous) : {}, tradeWire(trade));
+        if (previous && !Object.keys(patch).length) continue;
+        operations.push({
+            domain: 'trade',
+            entityId: `${date}:${id}`,
+            baseVersion: Number(previous?.version) || 0,
+            base: previous ? tradeWire(previous) : {},
+            patch,
+        });
+    }
+    for (const [id, trade] of before) {
+        if (next.has(id)) continue;
+        operations.push({
+            domain: 'trade',
+            entityId: `${date}:${id}`,
+            baseVersion: Number(trade.version) || 0,
+            base: tradeWire(trade),
+            patch: { deleted: true },
+        });
+    }
+    return operations;
+}
+
+export function tradeFromServerRow(row = {}) {
+    if (!row || typeof row !== 'object') return null;
+    const payload = row.payload && typeof row.payload === 'object' && !Array.isArray(row.payload) ? row.payload : row;
+    return { ...payload, id: row.id || payload.id, version: row.version || payload.version || 1, trade_date: row.trade_date || payload.trade_date };
+}
+
+export function mergeTradeRows(rows = [], trades = []) {
+    if (!Array.isArray(trades) || !trades.length) return rows;
+    const byDate = new Map();
+    for (const row of trades) {
+        if (!row || row.deleted_at) continue;
+        const date = String(row.trade_date || row.payload?.trade_date || '');
+        const trade = tradeFromServerRow(row);
+        if (!date || !trade?.id) continue;
+        const list = byDate.get(date) || [];
+        list.push(trade);
+        byDate.set(date, list);
+    }
+    if (!byDate.size) return rows;
+    return (rows || []).map(row => {
+        const list = byDate.get(String(row?.trade_date || ''));
+        if (!list) return row;
+        return { ...row, daily_metrics: { ...(row?.daily_metrics || {}), trades: list } };
+    });
+}
 export const syncError = (message, code = 'SYNC_FAILED', detail = {}) => Object.assign(new Error(message), { code, ...detail });
 export const retryDelay = (attempt = 0, random = Math.random) => Math.round(Math.min(60000, 1000 * (2 ** Math.min(attempt, 6))) * (0.75 + random() * 0.5));
 export function isRetryableSyncError(error) {
