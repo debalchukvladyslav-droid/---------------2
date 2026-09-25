@@ -137,7 +137,9 @@ export function tradeChangeOperations(date, beforeTrades = [], nextTrades = []) 
 export function tradeFromServerRow(row = {}) {
     if (!row || typeof row !== 'object') return null;
     const payload = row.payload && typeof row.payload === 'object' && !Array.isArray(row.payload) ? row.payload : row;
-    return { ...payload, id: row.id || payload.id, version: row.version || payload.version || 1, trade_date: row.trade_date || payload.trade_date };
+    const trade = { ...payload, id: row.id || payload.id, version: row.version || payload.version || 1, trade_date: row.trade_date || payload.trade_date };
+    if (!trade.symbol && !trade.ticker && row.ticker) trade.symbol = row.ticker;
+    return trade;
 }
 
 export function mergeTradeRows(rows = [], trades = []) {
@@ -158,6 +160,24 @@ export function mergeTradeRows(rows = [], trades = []) {
         if (!list) return row;
         return { ...row, daily_metrics: { ...(row?.daily_metrics || {}), trades: list } };
     });
+}
+
+export function journalDaysWithTradeRows(days = [], trades = []) {
+    const merged = mergeTradeRows(days, trades);
+    const known = new Set(merged.map((row) => String(row?.trade_date || '')));
+    const orphans = new Map();
+    for (const row of trades || []) {
+        if (!row || row.deleted_at) continue;
+        const date = String(row.trade_date || row.payload?.trade_date || '');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || known.has(date)) continue;
+        const list = orphans.get(date) || [];
+        list.push(row);
+        orphans.set(date, list);
+    }
+    for (const [date, list] of orphans) {
+        merged.push(...mergeTradeRows([{ trade_date: date, daily_metrics: {} }], list));
+    }
+    return merged;
 }
 export const syncError = (message, code = 'SYNC_FAILED', detail = {}) => Object.assign(new Error(message), { code, ...detail });
 export const retryDelay = (attempt = 0, random = Math.random) => Math.round(Math.min(60000, 1000 * (2 ** Math.min(attempt, 6))) * (0.75 + random() * 0.5));

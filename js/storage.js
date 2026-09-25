@@ -9,7 +9,7 @@ import {
     cacheJournalRows, cacheValue, publishSyncState, commitLocalChanges,
     readCachedDay, readCachedMonth, readCachedValue, readDirtyJournalRows, resolveDataOperation,
 } from './local_data_store.js';
-import { canonicalJournalRow, cloneData, ensureTradeIds, mergeTradeRows, syncError } from './data_sync_core.js';
+import { canonicalJournalRow, cloneData, ensureTradeIds, journalDaysWithTradeRows, journalRowKeepingTrades, mergeTradeRows, syncError } from './data_sync_core.js';
 import { beginDataSync, stopDataSync, setDataSyncHandlers, notifyDataSync, ensureDataSyncMetadata,
     flushDataSync, syncDataNow as runDataSyncNow, refreshDataSnapshot, getCachedSyncEpoch as readCachedEpoch } from './data_sync.js';
 
@@ -1063,6 +1063,27 @@ export async function loadDayDetails(dateStr, userId = null, options = {}) {
     return request;
 }
 
+async function fetchTradeRows(userId, from, to) {
+    const rows = [];
+    const pageSize = 1000;
+    for (let offset = 0; ; offset += pageSize) {
+        const { data, error } = await supabase
+            .from('trades')
+            .select('id, trade_date, ticker, version, payload, deleted_at')
+            .eq('user_id', userId)
+            .gte('trade_date', from)
+            .lte('trade_date', to)
+            .is('deleted_at', null)
+            .order('trade_date', { ascending: true })
+            .order('id', { ascending: true })
+            .range(offset, offset + pageSize - 1);
+        if (error) throw error;
+        rows.push(...(data || []));
+        if (!data || data.length < pageSize) break;
+    }
+    return rows;
+}
+
 export async function loadAllMonths(nick, userId = null) {
     const targetUserId = getCurrentViewedUserId(userId) || await resolveViewedUserId(nick);
     if (!targetUserId) { console.warn('[LOAD] loadAllMonths: currentViewedUserId не встановлено'); return; }
@@ -1077,8 +1098,10 @@ export async function loadAllMonths(nick, userId = null) {
             .order('trade_date', { ascending: true });
 
         if (error) throw error;
+        const tradeRows = await fetchTradeRows(targetUserId, '2024-01-01', '2030-12-31');
+        const rows = journalDaysWithTradeRows(data || [], tradeRows);
         const durableDirtyDates = new Set((await readDirtyJournalRows(targetUserId)).map((record) => record.tradeDate));
-        await cacheJournalRows(targetUserId, (data || []).filter((row) => !_dirtyJournalDates.has(row.trade_date) && !durableDirtyDates.has(row.trade_date)), { dirty: false });
+        await cacheJournalRows(targetUserId, rows.filter((row) => !_dirtyJournalDates.has(row.trade_date) && !durableDirtyDates.has(row.trade_date)), { dirty: false });
 
         if (!isCurrentProfileRequest(nick, targetUserId)) {
             console.info('[LOAD] loadAllMonths: застарілу відповідь іншого профілю пропущено');
@@ -1088,12 +1111,14 @@ export async function loadAllMonths(nick, userId = null) {
         if (!state.loadedMonths[nick]) state.loadedMonths[nick] = new Set();
         state._availableMonthKeys = new Set();
 
-        (data || []).forEach(row => {
+        rows.forEach(row => {
             const dateStr = row.trade_date;
             if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
             if (_dirtyJournalDates.has(dateStr) || durableDirtyDates.has(dateStr)) return;
 
-            state.appData.journal[dateStr] = markDayEntryDetailsLoaded(journalRowToDayEntry(row), true);
+            const current = state.appData.journal[dateStr];
+            const kept = journalRowKeepingTrades(row, { daily_metrics: { trades: Array.isArray(current?.trades) ? current.trades : [] } });
+            state.appData.journal[dateStr] = markDayEntryDetailsLoaded(journalRowToDayEntry(kept), true);
             const mk = monthKey(dateStr);
             state.loadedMonths[nick].add(mk);
             state._availableMonthKeys.add(mk);
@@ -1123,8 +1148,10 @@ export async function loadTradeDays(nick = state.CURRENT_VIEWED_USER, userId = n
             .order('trade_date', { ascending: true });
 
         if (error) throw error;
+        const tradeRows = await fetchTradeRows(targetUserId, '2024-01-01', '2030-12-31');
+        const rows = journalDaysWithTradeRows(data || [], tradeRows);
         const durableDirtyDates = new Set((await readDirtyJournalRows(targetUserId)).map((record) => record.tradeDate));
-        await cacheJournalRows(targetUserId, (data || []).filter((row) => !_dirtyJournalDates.has(row.trade_date) && !durableDirtyDates.has(row.trade_date)), { dirty: false });
+        await cacheJournalRows(targetUserId, rows.filter((row) => !_dirtyJournalDates.has(row.trade_date) && !durableDirtyDates.has(row.trade_date)), { dirty: false });
 
         if (!isCurrentProfileRequest(nick, targetUserId)) {
             console.info('[LOAD] loadTradeDays: застарілу відповідь іншого профілю пропущено');
@@ -1134,7 +1161,7 @@ export async function loadTradeDays(nick = state.CURRENT_VIEWED_USER, userId = n
         if (!state.loadedMonths[nick]) state.loadedMonths[nick] = new Set();
         if (!state._availableMonthKeys) state._availableMonthKeys = new Set();
 
-        (data || []).forEach(row => {
+        rows.forEach(row => {
             const dateStr = row.trade_date;
             if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
             if (_dirtyJournalDates.has(dateStr) || durableDirtyDates.has(dateStr)) return;

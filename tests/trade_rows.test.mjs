@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    ensureTradeIds, journalRowKeepingTrades, journalTradesNeedProjection, journalWithoutTrades, mergePatch, mergeTradeRows, tradeChangeOperations,
+    ensureTradeIds, journalDaysWithTradeRows, journalRowKeepingTrades, journalTradesNeedProjection, journalWithoutTrades, mergePatch, mergeTradeRows, tradeChangeOperations,
 } from '../js/data_sync_core.js';
 
 test('one changed trade does not rewrite the day trade list', () => {
@@ -51,4 +51,19 @@ test('server trade rows replace the embedded list for that day', () => {
     assert.equal(rows[0].daily_metrics.trades[0].symbol, 'NVDA');
     assert.equal(rows[0].daily_metrics.trades[0].version, 4);
     assert.equal(rows[0].daily_metrics.notes, 'x');
+});
+
+test('trade rows fill days whose embedded trade list was cleared', () => {
+    const rows = journalDaysWithTradeRows(
+        [{ trade_date: '2026-07-02', daily_metrics: { trades: [] } }],
+        [
+            { id: 't1', trade_date: '2026-07-02', ticker: 'AAA', version: 1, payload: { symbol: 'AAA', net: 8 } },
+            { id: 't2', trade_date: '2026-08-01', ticker: 'BBB', version: 1, payload: { net: -3 } },
+        ],
+    );
+    const july = rows.find((row) => row.trade_date === '2026-07-02');
+    const august = rows.find((row) => row.trade_date === '2026-08-01');
+    assert.equal(july.daily_metrics.trades[0].symbol, 'AAA');
+    assert.equal(august.daily_metrics.trades[0].symbol, 'BBB');
+    assert.equal(august.daily_metrics.trades[0].id, 't2');
 });
