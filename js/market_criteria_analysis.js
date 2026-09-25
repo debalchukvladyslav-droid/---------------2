@@ -43,6 +43,62 @@ function priceMatches(price, band) {
     return true;
 }
 
+export function journalDatesInRange(journal = {}, from = '', to = '') {
+    return new Set(Object.keys(journal || {}).filter((date) => (
+        /^\d{4}-\d{2}-\d{2}$/.test(date) && (!from || date >= from) && (!to || date <= to)
+    )));
+}
+
+export function criteriaBucketEmphasis(bucket = {}) {
+    const trades = Number(bucket.trades) || 0;
+    if (trades < 3) {
+        return { tone: 'watch', label: 'Мало даних', text: 'потрібно щонайменше 3 угоди, акцент не змінювати' };
+    }
+    const factor = bucket.profitFactor;
+    if (bucket.pnl > 0 && (factor === Infinity || factor >= 1.3)) {
+        return { tone: 'increase', label: 'Збільшити', text: 'збільшити акцент на цьому діапазоні' };
+    }
+    if (bucket.pnl < 0) {
+        return { tone: 'decrease', label: 'Зменшити', text: 'зменшити акцент на цьому діапазоні' };
+    }
+    return { tone: 'keep', label: 'Без змін', text: 'результат нейтральний, акцент не змінювати' };
+}
+
+export function criteriaFocusSummary(group = {}) {
+    const labels = (tone) => (group.buckets || []).filter((bucket) => bucket.emphasis?.tone === tone).map((bucket) => bucket.label);
+    const increase = labels('increase');
+    const decrease = labels('decrease');
+    if (!increase.length && !decrease.length) return 'Стійкого сигналу для зміни акценту ще немає.';
+    return [
+        increase.length ? `Збільшити: ${increase.join(', ')}` : '',
+        decrease.length ? `Зменшити: ${decrease.join(', ')}` : '',
+    ].filter(Boolean).join('. ') + '.';
+}
+
+export function criteriaPairsFromJournal(journal = {}, range = {}) {
+    const allowed = journalDatesInRange(journal, range.from || '', range.to || '');
+    const pairs = new Map();
+    for (const [date, day] of Object.entries(journal || {})) {
+        if (!allowed.has(date)) continue;
+        for (const trade of Array.isArray(day?.trades) ? day.trades : []) {
+            const ticker = String(trade?.symbol || trade?.ticker || '').trim().toUpperCase();
+            if (!ticker) continue;
+            const existing = trade?.marketCriteria || day?.tradePolygons?.[ticker];
+            const key = `${date}|${ticker}`;
+            const entryMinute = openedMinute(trade?.opened || trade?.entryTime || trade?.time);
+            if (!pairs.has(key)) pairs.set(key, { date, ticker, existing, entryMinutes: new Set() });
+            const pair = pairs.get(key);
+            if (existing) pair.existing = existing;
+            if (Number.isInteger(entryMinute) && entryMinute >= 240 && entryMinute <= 720) pair.entryMinutes.add(entryMinute);
+        }
+    }
+    return [...pairs.values()].map((pair) => ({
+        ...pair,
+        entryMinutes: [...pair.entryMinutes],
+        loaded: !!pair.existing && [...pair.entryMinutes].every((minute) => Number.isFinite(Number(pair.existing?.vol_pre_by_minute?.[String(minute)]))),
+    }));
+}
+
 export function buildMarketCriteriaGroups(journal = {}, allowedDates = null, tradeType = '') {
     const emptyBucket = (label) => ({ label, trades: 0, pnl: 0, wins: 0, grossProfit: 0, grossLoss: 0 });
     const groups = DEFINITIONS.map((definition) => ({
@@ -86,6 +142,9 @@ export function buildMarketCriteriaGroups(journal = {}, allowedDates = null, tra
             pnl: Number(bucket.pnl.toFixed(2)),
             winRate: Number((bucket.wins / bucket.trades * 100).toFixed(1)),
             profitFactor: bucket.grossLoss ? Number((bucket.grossProfit / bucket.grossLoss).toFixed(2)) : (bucket.grossProfit ? Infinity : 0),
-        })).sort((a, b) => b.pnl - a.pnl),
+        })).sort((a, b) => b.pnl - a.pnl).map((bucket) => ({
+            ...bucket,
+            emphasis: criteriaBucketEmphasis(bucket),
+        })),
     })).filter((group) => group.buckets.length);
 }

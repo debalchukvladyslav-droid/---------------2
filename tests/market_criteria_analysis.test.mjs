@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMarketCriteriaGroups } from '../js/market_criteria_analysis.js';
+import { buildMarketCriteriaGroups, criteriaBucketEmphasis, criteriaFocusSummary, criteriaPairsFromJournal, journalDatesInRange } from '../js/market_criteria_analysis.js';
 
 test('market criteria are bucketed independently from Polygon and ranked by Gross PnL', () => {
     const journal = {
@@ -70,4 +70,47 @@ test('VolPre at entry is split into the four requested entry-price groups', () =
     assert.equal(groups.find((group) => group.key === 'vol_pre_1_5').buckets[0].label, '<1M');
     assert.equal(groups.find((group) => group.key === 'vol_pre_5_10').buckets[0].label, '1–3M');
     assert.equal(groups.find((group) => group.key === 'vol_pre_gt10').buckets[0].label, '6–10M');
+});
+
+test('criteria extraction keeps only ticker and date pairs inside the selected period', () => {
+    const journal = {
+        '2026-08-01': { trades: [{ symbol: 'OLD', opened: '09:30' }] },
+        '2026-08-20': { trades: [{ symbol: 'NOW', opened: '09:31', marketCriteria: { vol_pre_by_minute: { 571: 1000 } } }] },
+        '2026-09-02': { trades: [{ symbol: 'later', opened: '10:00' }] },
+    };
+    const dates = journalDatesInRange(journal, '2026-08-15', '2026-08-31');
+    assert.deepEqual([...dates], ['2026-08-20']);
+    const pairs = criteriaPairsFromJournal(journal, { from: '2026-08-15', to: '2026-08-31' });
+    assert.equal(pairs.length, 1);
+    assert.equal(pairs[0].ticker, 'NOW');
+    assert.equal(pairs[0].date, '2026-08-20');
+    assert.deepEqual(pairs[0].entryMinutes, [571]);
+    assert.equal(pairs[0].loaded, true);
+});
+
+test('a pair stays pending until every entry minute has VolPre', () => {
+    const pairs = criteriaPairsFromJournal({
+        '2026-08-20': { trades: [
+            { symbol: 'AAA', opened: '09:15', marketCriteria: { atr: .4, vol_pre_by_minute: { 555: 10 } } },
+            { symbol: 'AAA', opened: '09:40', marketCriteria: { atr: .4, vol_pre_by_minute: { 555: 10 } } },
+        ] },
+    }, { from: '2026-08-20', to: '2026-08-20' });
+    assert.equal(pairs.length, 1);
+    assert.deepEqual(pairs[0].entryMinutes, [555, 580]);
+    assert.equal(pairs[0].loaded, false);
+});
+
+test('each criteria range tells whether to increase or decrease emphasis', () => {
+    const trades = [
+        ...Array.from({ length: 3 }, () => ({ symbol: 'WIN', gross: 20, marketCriteria: { atr: .2 } })),
+        ...Array.from({ length: 3 }, () => ({ symbol: 'LOSS', gross: -15, marketCriteria: { atr: .8 } })),
+        { symbol: 'THIN', gross: 5, marketCriteria: { atr: 1.2 } },
+    ];
+    const atr = buildMarketCriteriaGroups({ '2026-08-01': { trades } }).find((group) => group.key === 'atr');
+    assert.equal(atr.buckets.find((bucket) => bucket.label === '<0.3').emphasis.label, 'Збільшити');
+    assert.equal(atr.buckets.find((bucket) => bucket.label === '0.7–1').emphasis.label, 'Зменшити');
+    assert.equal(atr.buckets.find((bucket) => bucket.label === '1–2').emphasis.tone, 'watch');
+    assert.match(criteriaFocusSummary(atr), /Збільшити: <0\.3/);
+    assert.match(criteriaFocusSummary(atr), /Зменшити: 0\.7–1/);
+    assert.equal(criteriaBucketEmphasis({ trades: 2, pnl: 10, profitFactor: 2 }).tone, 'watch');
 });

@@ -8,7 +8,7 @@ import { ensureChartJs } from './vendor_loader.js';
 import { buildTradeTypeInsightRows } from './trade_type_analysis.js';
 import { getEffectiveDayPnl } from './trade_filters.js';
 import { buildCalendarWeekdayPnl, buildExceptionKfRows, buildHourlyKfBuckets, buildSheetEntryPriceBuckets, combineStatsSheetRows } from './stats_sheet_metrics.js';
-import { buildMarketCriteriaGroups } from './market_criteria_analysis.js';
+import { buildMarketCriteriaGroups, criteriaFocusSummary } from './market_criteria_analysis.js';
 
 // ─── STATS CACHE ───────────────────────────────────────────────────────────────────────────────
 // Module-level Map survives filter switches and profile switches within the
@@ -3092,10 +3092,11 @@ export function renderMarketCriteriaAnalysis(journal, dates, tradeType = '') {
     root.innerHTML = groups.map((group) => `
         <section class="stats-criteria-group">
             <h4>${escapeHtml(group.label)}</h4>
+            <p class="stats-criteria-focus">${escapeHtml(criteriaFocusSummary(group))}</p>
             <div class="stats-criteria-table">
-                <div class="stats-criteria-row is-head"><span>Діапазон</span><span>Угод</span><span>Gross</span><span>Win rate</span><span>Profit factor</span></div>
+                <div class="stats-criteria-row is-head"><span>Діапазон</span><span>Угод</span><span>Gross</span><span>Win rate</span><span>Profit factor</span><span>Акцент</span></div>
                 ${group.buckets.map((row) => `<div class="stats-criteria-row ${row.pnl >= 0 ? 'is-profit' : 'is-loss'}">
-                    <strong>${escapeHtml(row.label)}</strong><span>${row.trades}</span><span>${money(row.pnl)}</span><span>${row.winRate.toFixed(1)}%</span><span>${row.profitFactor === Infinity ? '∞' : row.profitFactor.toFixed(2)}</span>
+                    <strong>${escapeHtml(row.label)}</strong><span>${row.trades}</span><span>${money(row.pnl)}</span><span>${row.winRate.toFixed(1)}%</span><span>${row.profitFactor === Infinity ? '∞' : row.profitFactor.toFixed(2)}</span><span class="stats-criteria-emphasis is-${escapeHtml(row.emphasis?.tone || 'watch')}">${escapeHtml(row.emphasis?.label || '')}</span>
                 </div>`).join('')}
             </div>
         </section>`).join('');
