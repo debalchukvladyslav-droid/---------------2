@@ -49,6 +49,7 @@
     { "source": "/dashboard", "destination": "/index.html" },
     { "source": "/calendar", "destination": "/index.html" },
     { "source": "/stats", "destination": "/index.html" },
+    { "source": "/research", "destination": "/index.html" },
     { "source": "/trades", "destination": "/index.html" },
     { "source": "/datagrid", "destination": "/index.html" },
     { "source": "/trades-table", "destination": "/index.html" },
@@ -67,7 +68,8 @@
     { "source": "/learn", "destination": "/index.html" },
     { "source": "/settings", "destination": "/index.html" },
     { "source": "/admin/aggressiveness-backtest", "destination": "/index.html" },
-    { "source": "/admin", "destination": "/index.html" }
+    { "source": "/admin", "destination": "/index.html" },
+    { "source": "/testing", "destination": "/index.html" }
   ],
   "headers": [
     {

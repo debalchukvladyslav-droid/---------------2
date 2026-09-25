@@ -1,56 +1,27 @@
 import { supabase } from './supabase.js';
-import { attachBestExitResult, bestExitWindowNY, buildLowTimeFrequencySeries, calculateShortExitComparison, collectTimedShortTrades, summarizeBestExits } from './best_exit_core.js';
-import { readPolygonResult, readPolygonTimePrice, writePolygonResults, writePolygonTimePrices } from './polygon_result_cache.js';
-import { analyzePolygonDay } from './polygon_intraday_cache.js';
+import { attachBestExitResult, bestExitWindowNY, calculateShortExitComparison, collectTimedShortTrades } from './best_exit_core.js';
+import { analyzePolygonDay, readPolygonDay } from './polygon_intraday_cache.js';
 import { loadJournalPolygonDay } from './journal_polygon.js';
 
-const resultCache = new Map();
-let renderRequest = 0;
-const BATCH_SIZE = 5;
-const MAX_ITEMS_PER_PRICE_REQUEST = 20;
-let bestExitRowsExpanded = false;
-let lowChartFromTen = false;
-let silentRefreshTimer = null;
-let activeAnalysisTrades = [];
-let activeAnalysisRequestId = 0;
-let analysisRunning = false;
-let analysisStarted = false;
-let marketOpenStopsOnly = false;
-let activeAnalysisContext = null;
-let activePeriodLabel = 'За весь час';
+const barsByDay = new Map();
 let selectedExitMinute = 600;
+let marketOpenStopsOnly = false;
+let downloadPaused = false;
+let downloadRunning = false;
+let activeTrades = [];
+let activePeriodLabel = 'За весь час';
+let activeAnalysisContext = null;
 let analysisAbortController = null;
-const REFRESH_AFTER_PROGRESS_MS = 3000;
-const REFRESH_WHEN_WAITING_MS = 65000;
-const TIME_EXIT_ANALYSIS_DISABLED = false;
+let statusNote = '';
 
-function marketStopFilterControl() {
-    return `<label class="best-exit-market-filter"><input type="checkbox" data-market-open-stops ${marketOpenStopsOnly ? 'checked' : ''}><span>Стопи на маркеті</span></label>`;
-}
-
-function attachMarketStopFilter(container) {
-    container.querySelector('[data-market-open-stops]')?.addEventListener('change', (event) => {
-        marketOpenStopsOnly = !!event.currentTarget.checked;
-        if (activeAnalysisContext) void renderBestExitAnalysis(activeAnalysisContext);
-    });
-}
-
-function cachedMarketResult(trade) {
-    const key = `${trade.symbol}|${trade.date}|${trade.entryMinute}`;
-    if (!resultCache.has(key)) {
-        const stored = readPolygonResult(trade);
-        if (stored && bestExitWindowNY(stored.lowTime)) resultCache.set(key, stored);
-    }
-    return resultCache.get(key) || null;
-}
-
-function cachedTimePrice(trade, targetMinute = selectedExitMinute) {
-    return readPolygonTimePrice({ symbol: trade.symbol, date: trade.date, targetMinute, stopEntryMinute: trade.stopEntryMinute, stopPrice: trade.stopPrice });
+function dayKey(symbol, date) {
+    return `${symbol}|${date}`;
 }
 
 function money(value) {
-    return Number.isFinite(Number(value))
-        ? `${Number(value).toLocaleString('uk-UA', { maximumFractionDigits: 0 })}$`
+    const number = Number(value);
+    return value != null && Number.isFinite(number)
+        ? `${number.toLocaleString('uk-UA', { maximumFractionDigits: 0 })}$`
         : '—';
 }
 
@@ -66,356 +37,246 @@ function timeOptions() {
     return options.join('');
 }
 
-function bestWindowSummary(rows = []) {
-    const counts = new Map();
-    rows.forEach((row) => {
-        const window = bestExitWindowNY(row?.lowTime);
-        if (window) counts.set(window, (counts.get(window) || 0) + 1);
-    });
-    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0] || null;
-}
-
-function exitTimeChart(rows = []) {
-    const series = buildLowTimeFrequencySeries(rows, { minMinute: lowChartFromTen ? 600 : 570 });
-    const heading = `<div><strong>Коли акції найчастіше роблять low</strong><span>Частка low у кожному 10-хвилинному інтервалі, NY</span></div>`;
-    const filter = `<div class="best-exit-time-chart__filters"><label class="best-exit-time-filter"><input type="checkbox" data-low-chart-from-ten ${lowChartFromTen ? 'checked' : ''}><span>З 10:00</span></label>${marketStopFilterControl()}</div>`;
-    if (!series.length) return `<section class="best-exit-time-chart"><div class="best-exit-time-chart__head">${heading}${filter}</div><div class="stats-empty-note">Для цього діапазону ще немає часу low від Polygon.</div></section>`;
-    const width = 680;
-    const height = 190;
-    const pad = { left: 42, right: 16, top: 18, bottom: 32 };
-    const chartStart = lowChartFromTen ? 600 : 570;
-    const x = (minute) => pad.left + ((minute - chartStart) / (710 - chartStart)) * (width - pad.left - pad.right);
-    const maxPercent = Math.max(10, ...series.map((item) => item.percent));
-    const chartMax = Math.ceil(maxPercent / 5) * 5;
-    const y = (pct) => pad.top + (1 - Math.max(0, Math.min(chartMax, pct)) / chartMax) * (height - pad.top - pad.bottom);
-    const points = series.map((item) => `${x(item.minute).toFixed(1)},${y(item.percent).toFixed(1)}`).join(' ');
-    const best = series.reduce((winner, item) => item.percent > winner.percent ? item : winner, series[0]);
-    const xTicks = lowChartFromTen ? [600, 630, 660, 690, 710] : [570, 600, 630, 660, 690, 710];
-    return `<section class="best-exit-time-chart">
-        <div class="best-exit-time-chart__head">${heading}${filter}<div class="best-exit-time-chart__best"><span>Найчастіший low</span><strong>${best.label} · ${best.percent.toFixed(1)}%</strong><small>${best.count} із ${best.total} угод</small></div></div>
-        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Частота low акцій залежно від часу">
-            ${[0, .25, .5, .75, 1].map((ratio) => { const pct = chartMax * ratio; return `<line x1="${pad.left}" y1="${y(pct)}" x2="${width - pad.right}" y2="${y(pct)}" class="best-exit-chart-grid"/><text x="${pad.left - 8}" y="${y(pct) + 4}" text-anchor="end">${pct.toFixed(0)}%</text>`; }).join('')}
-            ${xTicks.map((minute) => `<text x="${x(minute)}" y="${height - 8}" text-anchor="middle">${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}</text>`).join('')}
-            <polyline points="${points}" class="best-exit-chart-line"/>
-            ${series.map((item) => `<circle cx="${x(item.minute)}" cy="${y(item.percent)}" r="4"><title>${item.label} NY: ${item.percent.toFixed(1)}% · ${item.count} із ${item.total} угод</title></circle>`).join('')}
-        </svg>
-    </section>`;
-}
-
-const POLYGON_DISABLED = false;
-
-async function fetchBatch(items, targetMinute, signal = null) {
-    if (POLYGON_DISABLED) throw new Error('Polygon тимчасово вимкнено адміністратором.');
-    let { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) throw new Error('Потрібно увійти в акаунт');
-    items.forEach((item) => console.info(`[Polygon] переглядається ${item.symbol} · ${item.date} · від ${String(Math.floor(item.entryMinute / 60)).padStart(2, '0')}:${String(item.entryMinute % 60).padStart(2, '0')} NY`));
-    const dayCache = new Map();
-    for (const item of items) {
-        const key = `${item.symbol}|${item.date}`;
-        if (dayCache.has(key)) continue;
-        const loaded = await loadJournalPolygonDay(item.symbol, item.date, session.access_token, { signal });
-        dayCache.set(key, loaded);
-        console.info(`[Polygon IndexedDB] ${item.symbol} · ${item.date}: ${loaded.cached ? 'локальний кеш' : 'завантажено один раз'} · ${loaded.bars.length} свічок`);
-    }
-    const rows = items.map((item) => analyzePolygonDay(dayCache.get(`${item.symbol}|${item.date}`)?.bars || [], item, targetMinute)).filter(Boolean);
-    console.info('[Polygon analysis] browser cache response', { requested: items.length, returned: rows.length });
-    const returnedKeys = new Set(rows.map((row) => `${row.symbol}|${row.date}|${row.entryMinute}`));
-    rows.forEach((row) => console.info(`[Polygon] ${row.symbol} · ${row.date}: Low $${Number(row.low).toFixed(2)} · ${row.lowTime} · IndexedDB`));
-    items.filter((item) => !returnedKeys.has(`${item.symbol}|${item.date}|${item.entryMinute}`)).forEach((item) => console.info(`[Polygon] ${item.symbol} · ${item.date}: очікує в черзі або дані недоступні`));
-    writePolygonTimePrices(rows);
-    return rows;
-}
-
-async function loadMarketResults(trades, onProgress = null, targetMinute = selectedExitMinute, signal = null) {
-    const missing = [];
-    trades.forEach((trade) => {
-        const key = `${trade.symbol}|${trade.date}|${trade.entryMinute}`;
-        if (!cachedMarketResult(trade)) missing.push(trade);
-    });
-    let completed = trades.length - missing.length;
-    onProgress?.(completed, trades.length);
-    if (missing.length) {
-        const chunk = missing.slice(0, BATCH_SIZE);
-        const results = await fetchBatch(chunk.map(({ symbol, date, entryMinute, stopEntryMinute, stopPrice }) => ({ symbol, date, entryMinute, stopEntryMinute, stopPrice })), targetMinute, signal);
-        writePolygonResults(results);
-        results.forEach((row) => {
-            if (!bestExitWindowNY(row?.lowTime)) return;
-            resultCache.set(`${row.symbol}|${row.date}|${row.entryMinute}`, row);
-        });
-        completed = trades.length - countMissingMarketResults(trades);
-        onProgress?.(completed, trades.length);
-    }
-    if (!TIME_EXIT_ANALYSIS_DISABLED) {
-        const missingTimePrices = trades.filter((trade) => !cachedTimePrice(trade, targetMinute));
-        if (missingTimePrices.length) {
-            const priceItems = missingTimePrices.slice(0, MAX_ITEMS_PER_PRICE_REQUEST).map(({ symbol, date, entryMinute, stopEntryMinute, stopPrice }) => ({ symbol, date, entryMinute, stopEntryMinute, stopPrice }));
-            const priceResults = await fetchBatch(priceItems, targetMinute, signal);
-            writePolygonResults(priceResults);
-            completed = trades.length - countMissingMarketResults(trades);
-            onProgress?.(completed, trades.length);
-        }
-    }
-    return buildRowsFromCache(trades, targetMinute);
-}
-
-function buildRowsFromCache(trades = [], targetMinute = selectedExitMinute) {
-    return trades.map((trade) => {
-        const row = attachBestExitResult(trade, cachedMarketResult(trade));
-        if (!row) return null;
-        const timePrice = cachedTimePrice(trade, targetMinute);
-        const selectedPrice = timePrice?.notOpened ? NaN : (timePrice?.stopHit ? Number(timePrice.stopPrice) : Number(timePrice?.priceAtTime));
-        const comparison = calculateShortExitComparison({ entryPrice: row.entryPrice, actualExitPrice: row.actualExitPrice, selectedPrice, qty: row.qty });
-        return { ...row, selectedPrice: selectedPrice > 0 ? selectedPrice : null, selectedPriceMinute: timePrice?.priceMinute ?? null, notOpened: timePrice?.notOpened === true, stopHit: timePrice?.stopHit === true, stopMinute: timePrice?.stopMinute ?? null, stopTime: timePrice?.stopTime || '', actualGross: comparison?.actualGross ?? null, selectedGross: comparison?.selectedGross ?? null, selectedGrossDiff: comparison?.difference ?? null };
-    }).filter(Boolean);
-}
-
-function renderSummary(container, summary, unavailable = 0, logToConsole = true) {
-    const previousScrollTop = container.querySelector('.best-exit-table-wrap')?.scrollTop || 0;
-    const sortedRows = [...(summary.rows || [])].sort((a, b) => {
-        const aCapture = Number.isFinite(Number(a.capturePct)) ? Number(a.capturePct) : -Infinity;
-        const bCapture = Number.isFinite(Number(b.capturePct)) ? Number(b.capturePct) : -Infinity;
-        return bCapture - aCapture || (Number(a.extraPnl) || 0) - (Number(b.extraPnl) || 0);
-    });
-    const compactRows = sortedRows.length <= 6
-        ? sortedRows
-        : [...sortedRows.slice(0, 3), ...sortedRows.slice(-3)];
-    const topRows = bestExitRowsExpanded ? sortedRows : compactRows;
-    const commonWindow = bestWindowSummary(summary.rows);
-    const totalTrades = activeAnalysisTrades.length;
-    const remainingTrades = countMissingMarketResults(activeAnalysisTrades);
-    const completedTrades = Math.max(0, totalTrades - remainingTrades);
-    const progressPercent = totalTrades ? Math.round(completedTrades / totalTrades * 100) : 100;
-    const actualRows = summary.rows.filter((row) => Number.isFinite(Number(row.actualPnl)));
-    const actualGrossTotal = actualRows.reduce((total, row) => total + Number(row.actualPnl), 0);
-    const theoreticalRows = summary.rows.filter((row) => Number.isFinite(Number(row.selectedGross)));
-    const theoreticalGrossTotal = theoreticalRows.reduce((total, row) => total + Number(row.selectedGross), 0);
-    if (logToConsole) {
-        console.groupCollapsed(`[Polygon analysis] кращий вихід: ${summary.count} угод, забрано ${summary.avgCapturePct == null ? '—' : `${summary.avgCapturePct.toFixed(1)}%`} руху`);
-        console.table(summary.rows.map((row) => ({ дата: row.date, тікер: row.symbol, вхід: row.entryPrice, фактичний_вихід: row.actualExitPrice, low: row.low, час_low: row.lowTime, причина_виходу: row.exitReason || 'не вказано', забрано_руху_pct: row.capturePct == null ? null : Number(row.capturePct.toFixed(1)), не_забрано_$: row.extraPnl == null ? null : Number(row.extraPnl.toFixed(2)) })));
-        console.info({ analyzed: summary.count, unavailable, bestPnl: summary.bestPnl, extraPnl: summary.extraPnl, capturedMovementPct: summary.avgCapturePct, commonBestWindow: commonWindow?.[0] || null });
-        console.groupEnd();
-    }
-    container.innerHTML = `
-        <button type="button" class="best-exit-period-control" data-best-exit-period-open>
-            <span>Період</span><strong>${escapeHtml(activePeriodLabel)}</strong><em>${totalTrades} short-угод</em><b aria-hidden="true">▼</b>
-        </button>
-        <div class="best-exit-metrics">
-            <div><span>Закритих угод без Stop/Take</span><strong>${summary.count}</strong></div>
-            <div><span>Макс. результат на low</span><strong>${money(summary.bestPnl)}</strong></div>
-            <div><span>Не забрано до low</span><strong>${money(summary.extraPnl)}</strong></div>
-            <div><span>Забрано руху</span><strong>${summary.avgCapturePct == null ? '—' : `${summary.avgCapturePct.toFixed(0)}%`}</strong></div>
-            <div><span>Найчастіший найкращий час</span><strong>${commonWindow ? `${commonWindow[0]} NY` : '—'}</strong></div>
-        </div>
-        ${unavailable ? `<p class="stats-chart-note">Без market data: ${unavailable}. Перевірте тариф Polygon для historical minute aggregates.</p>` : ''}
-        <div class="best-exit-run-status">
-            <div class="best-exit-run-status__head">
-                <div><strong>Перевірка Polygon</strong><span>Пройдено ${completedTrades} із ${totalTrades} · залишилось ${remainingTrades}</span></div>
-                ${analysisRunning
-                    ? '<span class="best-exit-auto-status">Оновлюється…</span>'
-                    : (analysisStarted
-                        ? '<span class="best-exit-auto-status">Запущено вручну</span>'
-                        : '<button type="button" class="btn-secondary best-exit-start" data-best-exit-start>Почати</button>')}
-            </div>
-            <div class="best-exit-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progressPercent}"><i style="width:${progressPercent}%"></i></div>
-        </div>
-        ${exitTimeChart(summary.rows)}
-        ${!TIME_EXIT_ANALYSIS_DISABLED ? `<div class="best-exit-time-simulator">
-            <div><strong>Результат при виході у вибраний час</strong><span>Gross через entry × shares, час NY</span></div>
-            <div class="best-exit-time-totals">
-                <div><span>Фактичний Gross</span><strong>${actualRows.length ? money(actualGrossTotal) : '—'}</strong></div>
-                <div><span data-best-exit-theoretical-label>Теоретичний Gross · ${minuteToClock(selectedExitMinute)}</span><strong data-best-exit-theoretical-value>${theoreticalRows.length ? money(theoreticalGrossTotal) : '…'}</strong></div>
-            </div>
-            <div class="best-exit-time-picker" aria-label="Час виходу від 09:00 до 12:00">
-                <button type="button" data-best-exit-time-step="-5" aria-label="На 5 хвилин раніше" ${selectedExitMinute <= 540 ? 'disabled' : ''}>‹</button>
-                <label><span>Час виходу</span><select data-best-exit-target-time>${timeOptions()}</select></label>
-                <button type="button" data-best-exit-time-step="5" aria-label="На 5 хвилин пізніше" ${selectedExitMinute >= 720 ? 'disabled' : ''}>›</button>
-            </div>
-        </div>` : ''}
-        <div class="best-exit-table-wrap${bestExitRowsExpanded ? ' is-expanded' : ''}">
-            <table class="best-exit-table">
-                <thead><tr><th>Дата</th><th>Тікер</th><th>Вихід</th><th>Low</th><th>Забрано руху</th><th>Найкращий 10-хв діапазон (NY)</th><th>Макс. P&amp;L</th><th>Не забрано</th><th>Сценарій</th><th data-best-exit-price-heading>Ціна @ ${minuteToClock(selectedExitMinute)}</th><th>Gross @ час</th><th>Δ до факту</th></tr></thead>
-                <tbody>${topRows.map((row) => `<tr>
-                    <td>${row.date}</td><td><button type="button" class="best-exit-trade-link" data-best-exit-date="${escapeHtml(row.date)}" data-best-exit-index="${Number(row.tradeIndex)}" data-best-exit-identity="${escapeHtml(JSON.stringify(row.tradeIdentity || {}))}" title="Відкрити ${escapeHtml(row.symbol)} у журналі">${escapeHtml(row.symbol)}</button></td><td>${row.actualExitPrice.toFixed(2)}</td><td>${row.low.toFixed(2)}</td><td>${row.capturePct == null ? '—' : `${row.capturePct.toFixed(0)}%`}</td>
-                    <td><strong>${bestExitWindowNY(row.lowTime) || '—'}</strong></td><td>${money(row.bestPnl)}</td><td>${money(row.extraPnl)}</td>
-                    <td>${row.notOpened ? '<span class="best-exit-not-opened">Ще не відкрито</span>' : (row.stopHit ? `<span class="best-exit-stop-hit">Стоп ${row.stopMinute == null ? '' : minuteToClock(row.stopMinute)} · $${Number(row.stopPrice).toFixed(2)}</span>` : (row.selectedPrice == null ? '…' : `<span class="best-exit-time-exit">Вихід ${minuteToClock(selectedExitMinute)}</span>`))}</td>
-                    <td>${row.selectedPrice == null ? '…' : row.selectedPrice.toFixed(2)}</td><td>${money(row.selectedGross)}</td><td class="${Number(row.selectedGrossDiff) >= 0 ? 'positive' : 'negative'}">${row.selectedGrossDiff == null ? '—' : money(row.selectedGrossDiff)}</td>
-                </tr>`).join('')}</tbody>
-            </table>
-        </div>
-        ${sortedRows.length > 6 ? `<button type="button" class="stats-chart-expand best-exit-expand" aria-expanded="${bestExitRowsExpanded}">
-            <span aria-hidden="true">${bestExitRowsExpanded ? '⌃' : '⌄'}</span>
-            ${bestExitRowsExpanded ? 'Згорнути' : `Показати всі (${sortedRows.length})`}
-        </button>` : ''}`;
-    container.querySelectorAll('[data-best-exit-date]').forEach((button) => button.addEventListener('click', () => {
-        const date = button.dataset.bestExitDate || '';
-        const tradeIndex = Number(button.dataset.bestExitIndex);
-        console.info(`[Polygon analysis] відкриваю трейд ${button.textContent?.trim() || ''} · ${date} · index ${tradeIndex}`);
-        let identity = null;
-        try { identity = JSON.parse(button.dataset.bestExitIdentity || 'null'); } catch (_) { identity = null; }
-        void window.openTradesAtDayIndex?.(date, tradeIndex, identity);
-    }));
-    container.querySelector('[data-best-exit-period-open]')?.addEventListener('click', () => {
-        const trigger = document.getElementById('research-exit-period') || document.getElementById('stats-period-trigger');
-        trigger?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setTimeout(() => trigger?.click(), 220);
-    });
-    container.querySelector('[data-low-chart-from-ten]')?.addEventListener('change', (event) => {
-        lowChartFromTen = !!event.currentTarget.checked;
-        renderSummary(container, summary, unavailable, false);
-    });
-    attachMarketStopFilter(container);
-    container.querySelector('[data-best-exit-start]')?.addEventListener('click', () => {
-        if (analysisRunning) return;
-        analysisStarted = true;
-        const requestId = ++renderRequest;
-        activeAnalysisRequestId = requestId;
-        analysisAbortController?.abort();
-        analysisAbortController = new AbortController();
-        void runAnalysis(container, activeAnalysisTrades, requestId, selectedExitMinute, analysisAbortController.signal);
-    });
-    const timeSelect = container.querySelector('[data-best-exit-target-time]');
-    const changeSelectedTime = (nextMinute) => {
-        if (TIME_EXIT_ANALYSIS_DISABLED) return;
-        if (!Number.isInteger(nextMinute) || nextMinute < 540 || nextMinute > 720 || nextMinute % 5 !== 0 || nextMinute === selectedExitMinute) return;
-        selectedExitMinute = nextMinute;
-        const clock = minuteToClock(selectedExitMinute);
-        if (timeSelect) timeSelect.value = String(selectedExitMinute);
-        container.querySelectorAll('[data-best-exit-time-step]').forEach((button) => {
-            const step = Number(button.getAttribute('data-best-exit-time-step') || 0);
-            button.disabled = selectedExitMinute + step < 540 || selectedExitMinute + step > 720;
-        });
-        const theoreticalLabel = container.querySelector('[data-best-exit-theoretical-label]');
-        const theoreticalValue = container.querySelector('[data-best-exit-theoretical-value]');
-        const priceHeading = container.querySelector('[data-best-exit-price-heading]');
-        if (theoreticalLabel) theoreticalLabel.textContent = `Теоретичний Gross · ${clock}`;
-        if (theoreticalValue) theoreticalValue.textContent = 'Оновлюється…';
-        if (priceHeading) priceHeading.textContent = `Ціна @ ${clock}`;
-        console.info(`[Polygon analysis] вибрано час виходу ${clock} NY`);
-        if (analysisStarted) {
-            const requestId = ++renderRequest;
-            activeAnalysisRequestId = requestId;
-            analysisAbortController?.abort();
-            analysisAbortController = new AbortController();
-            void runAnalysis(container, activeAnalysisTrades, requestId, selectedExitMinute, analysisAbortController.signal);
-        } else {
-            const rows = buildRowsFromCache(activeAnalysisTrades, selectedExitMinute);
-            renderSummary(container, summarizeBestExits(rows), countMissingMarketResults(activeAnalysisTrades, selectedExitMinute), false);
-        }
-    };
-    timeSelect?.addEventListener('change', (event) => {
-        changeSelectedTime(Number(event.currentTarget.value));
-    });
-    container.querySelectorAll('[data-best-exit-time-step]').forEach((button) => button.addEventListener('click', () => {
-        changeSelectedTime(selectedExitMinute + Number(button.getAttribute('data-best-exit-time-step') || 0));
-    }));
-    const tableWrap = container.querySelector('.best-exit-table-wrap');
-    if (tableWrap && bestExitRowsExpanded) tableWrap.scrollTop = previousScrollTop;
-    container.querySelector('.best-exit-expand')?.addEventListener('click', () => {
-        bestExitRowsExpanded = !bestExitRowsExpanded;
-        renderSummary(container, summary, unavailable);
-    });
-}
-
-function countMissingMarketResults(trades, targetMinute = selectedExitMinute) {
-    return trades.reduce((count, trade) => count + (cachedMarketResult(trade) && cachedTimePrice(trade, targetMinute) ? 0 : 1), 0);
-}
-
-function scheduleSilentRefresh(container, trades, requestId, delay = REFRESH_AFTER_PROGRESS_MS) {
-    clearTimeout(silentRefreshTimer);
-    if (!analysisStarted || requestId !== renderRequest || !container?.isConnected || !countMissingMarketResults(trades)) return;
-    silentRefreshTimer = setTimeout(async () => {
-        if (requestId !== renderRequest || !container?.isConnected) return;
-        if (analysisRunning) {
-            scheduleSilentRefresh(container, trades, requestId, REFRESH_AFTER_PROGRESS_MS);
-            return;
-        }
-        const before = countMissingMarketResults(trades);
-        try {
-            const rows = await loadMarketResults(trades);
-            if (requestId !== renderRequest || !container?.isConnected) return;
-            const after = countMissingMarketResults(trades);
-            if (after < before) {
-                console.info(`[Polygon analysis] тихо додано ${before - after}; готово ${trades.length - after}/${trades.length}`);
-                renderSummary(container, summarizeBestExits(rows), after, false);
-            }
-            scheduleSilentRefresh(container, trades, requestId, after < before ? REFRESH_AFTER_PROGRESS_MS : REFRESH_WHEN_WAITING_MS);
-        } catch (error) {
-            console.warn('[Polygon analysis] фонове оновлення відкладено:', error?.message || error);
-            scheduleSilentRefresh(container, trades, requestId, REFRESH_WHEN_WAITING_MS);
-        }
-    }, delay);
-}
-
 function escapeHtml(value) {
     const node = document.createElement('div');
     node.textContent = String(value ?? '');
     return node.innerHTML;
 }
 
-async function runAnalysis(container, trades, requestId, targetMinute = selectedExitMinute, signal = null) {
-    analysisRunning = true;
-    const updateProgress = (done, total) => {
-        if (requestId !== renderRequest) return;
-        const percent = total ? Math.round(done / total * 100) : 0;
-        const status = container.querySelector('.best-exit-run-status');
-        if (status) {
-            const text = status.querySelector('.best-exit-run-status__head div span');
-            const bar = status.querySelector('.best-exit-progress');
-            if (text) text.textContent = `Пройдено ${done} із ${total} · залишилось ${Math.max(0, total - done)}`;
-            if (bar) {
-                bar.setAttribute('aria-valuenow', String(percent));
-                const fill = bar.querySelector('i');
-                if (fill) fill.style.width = `${percent}%`;
-            }
-            return;
-        }
-        container.innerHTML = `
-            <div class="best-exit-loading"><span></span> Оброблено ${done} із ${total} угод (${percent}%)</div>
-            <div class="best-exit-loading-counts">Пройдено ${done} · залишилось ${Math.max(0, total - done)}</div>
-            <div class="best-exit-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><i style="width:${percent}%"></i></div>
-            <p class="stats-chart-note">Можна перейти на іншу сторінку. Повторний запуск продовжить із кешованих результатів.</p>`;
-    };
-    try {
-        const rows = await loadMarketResults(trades, updateProgress, targetMinute, signal);
-        if (requestId !== renderRequest) return;
-        analysisRunning = false;
-        renderSummary(container, summarizeBestExits(rows), trades.length - rows.length);
-        scheduleSilentRefresh(container, trades, requestId);
-    } catch (error) {
-        if (requestId === renderRequest) analysisRunning = false;
-        if (error?.name === 'AbortError') return;
-        if (requestId !== renderRequest) return;
-        container.innerHTML = `
-            <div class="stats-empty-note">Завантаження зупинилося: ${escapeHtml(error?.message || error)}</div>
-            <button type="button" class="btn-secondary best-exit-retry">Продовжити</button>`;
-        container.querySelector('.best-exit-retry')?.addEventListener('click', () => runAnalysis(container, trades, requestId));
+function host() {
+    return document.getElementById('stats-best-exit-content');
+}
+
+function uniqueDays(trades = activeTrades) {
+    const days = new Map();
+    trades.forEach((trade) => {
+        const key = dayKey(trade.symbol, trade.date);
+        if (!days.has(key)) days.set(key, { symbol: trade.symbol, date: trade.date, entryMinute: trade.entryMinute, stopEntryMinute: trade.stopEntryMinute, stopPrice: trade.stopPrice });
+    });
+    return [...days.entries()];
+}
+
+function missingDays(trades = activeTrades) {
+    return uniqueDays(trades).filter(([key]) => !barsByDay.has(key)).map(([, item]) => item);
+}
+
+function actualGross(trade) {
+    const shares = Number(trade.qty);
+    if (!(trade.entryPrice > 0) || !(trade.actualExitPrice > 0) || !(shares > 0)) return null;
+    return (trade.entryPrice - trade.actualExitPrice) * shares;
+}
+
+function rowFromTrade(trade) {
+    const bars = barsByDay.get(dayKey(trade.symbol, trade.date));
+    const fact = actualGross(trade);
+    if (!bars) {
+        return { ...trade, missingChart: true, low: null, actualGross: fact, selectedGross: null, selectedGrossDiff: null, bestPnl: null };
     }
+    const analyzed = analyzePolygonDay(bars, trade, selectedExitMinute);
+    const priced = analyzed ? attachBestExitResult(trade, analyzed) : null;
+    if (!priced) {
+        return { ...trade, missingChart: true, low: null, actualGross: fact, selectedGross: null, selectedGrossDiff: null, bestPnl: null, sessionEmpty: true };
+    }
+    const selectedPrice = analyzed.notOpened ? NaN : (analyzed.stopHit ? Number(analyzed.stopPrice) : Number(analyzed.priceAtTime));
+    const comparison = calculateShortExitComparison({
+        entryPrice: priced.entryPrice,
+        actualExitPrice: priced.actualExitPrice,
+        selectedPrice,
+        qty: priced.qty,
+    });
+    return {
+        ...priced,
+        missingChart: false,
+        selectedPrice: selectedPrice > 0 ? selectedPrice : null,
+        notOpened: analyzed.notOpened === true,
+        stopHit: analyzed.stopHit === true,
+        stopMinute: analyzed.stopMinute ?? null,
+        actualGross: comparison?.actualGross ?? fact,
+        selectedGross: comparison?.selectedGross ?? null,
+        selectedGrossDiff: comparison?.difference ?? null,
+    };
+}
+
+function sortedRows() {
+    return activeTrades.map(rowFromTrade).sort((a, b) => {
+        if (a.missingChart !== b.missingChart) return a.missingChart ? 1 : -1;
+        return (Number(b.selectedGrossDiff) || 0) - (Number(a.selectedGrossDiff) || 0) || a.date.localeCompare(b.date) || a.symbol.localeCompare(b.symbol);
+    });
+}
+
+function sum(rows, key) {
+    const values = rows.map((row) => row[key]).filter((value) => typeof value === 'number' && Number.isFinite(value));
+    return values.length ? values.reduce((total, value) => total + value, 0) : null;
+}
+
+function paint() {
+    const container = host();
+    if (!container?.isConnected) return;
+    const rows = sortedRows();
+    const pending = missingDays();
+    const savedDays = uniqueDays().length - pending.length;
+    const withMoney = rows.filter((row) => Number.isFinite(row.selectedGross));
+    const clock = minuteToClock(selectedExitMinute);
+    container.innerHTML = `
+        <div class="best-exit-run-status">
+            <div class="best-exit-run-status__head">
+                <div>
+                    <strong>${escapeHtml(activePeriodLabel)}</strong>
+                    <span>${rows.length} short · графіки ${savedDays} із ${savedDays + pending.length} · залишилось ${pending.length}</span>
+                </div>
+                ${downloadRunning
+                    ? '<button type="button" class="btn-secondary" data-best-exit-pause>Пауза</button>'
+                    : (pending.length ? '<button type="button" class="btn-secondary" data-best-exit-download>Довантажити</button>' : '<span class="best-exit-auto-status">Усі дні в кеші</span>')}
+            </div>
+            ${statusNote ? `<p class="stats-chart-note">${escapeHtml(statusNote)}</p>` : ''}
+        </div>
+        <div class="best-exit-metrics">
+            <div><span>Фактичний Gross</span><strong>${money(sum(rows, 'actualGross'))}</strong></div>
+            <div><span>Gross · ${clock}</span><strong>${withMoney.length ? money(sum(rows, 'selectedGross')) : '—'}</strong></div>
+            <div><span>Різниця</span><strong>${withMoney.length ? money(sum(rows, 'selectedGrossDiff')) : '—'}</strong></div>
+            <div><span>Макс. на low</span><strong>${money(sum(rows, 'bestPnl'))}</strong></div>
+        </div>
+        <div class="best-exit-time-picker" aria-label="Час виходу від 09:00 до 12:00">
+            <button type="button" data-best-exit-time-step="-5" aria-label="На 5 хвилин раніше" ${selectedExitMinute <= 540 ? 'disabled' : ''}>‹</button>
+            <label><span>Час виходу</span><select data-best-exit-target-time>${timeOptions()}</select></label>
+            <button type="button" data-best-exit-time-step="5" aria-label="На 5 хвилин пізніше" ${selectedExitMinute >= 720 ? 'disabled' : ''}>›</button>
+            <label class="best-exit-market-filter"><input type="checkbox" data-market-open-stops ${marketOpenStopsOnly ? 'checked' : ''}><span>Стопи на маркеті</span></label>
+        </div>
+        <div class="best-exit-table-wrap is-expanded">
+            <table class="best-exit-table">
+                <thead><tr><th>Дата</th><th>Тікер</th><th>Факт</th><th>На ${clock}</th><th>Різниця</th><th>Low</th></tr></thead>
+                <tbody>${rows.map((row) => `<tr>
+                    <td>${row.date}</td>
+                    <td><button type="button" class="best-exit-trade-link" data-best-exit-date="${escapeHtml(row.date)}" data-best-exit-index="${Number(row.tradeIndex)}" data-best-exit-identity="${escapeHtml(JSON.stringify(row.tradeIdentity || {}))}">${escapeHtml(row.symbol)}</button></td>
+                    <td>${money(row.actualGross)}</td>
+                    <td>${row.missingChart ? '—' : (row.notOpened ? 'ще не відкрито' : (row.stopHit ? `стоп ${row.stopMinute == null ? '' : minuteToClock(row.stopMinute)}` : money(row.selectedGross)))}</td>
+                    <td class="${Number(row.selectedGrossDiff) > 0 ? 'positive' : (Number(row.selectedGrossDiff) < 0 ? 'negative' : '')}">${row.selectedGrossDiff == null ? '—' : money(row.selectedGrossDiff)}</td>
+                    <td>${row.low > 0 ? `${row.low.toFixed(2)}${bestExitWindowNY(row.lowTime) ? ` · ${bestExitWindowNY(row.lowTime)}` : ''}` : (row.sessionEmpty ? 'немає low у сесії' : 'немає свічок')}</td>
+                </tr>`).join('') || '<tr><td colspan="6">У цьому періоді немає підходящих short.</td></tr>'}</tbody>
+            </table>
+        </div>`;
+    bind(container);
+}
+
+function bind(container) {
+    container.querySelectorAll('[data-best-exit-date]').forEach((button) => button.addEventListener('click', () => {
+        const date = button.dataset.bestExitDate || '';
+        const tradeIndex = Number(button.dataset.bestExitIndex);
+        let identity = null;
+        try { identity = JSON.parse(button.dataset.bestExitIdentity || 'null'); } catch { identity = null; }
+        void window.openTradesAtDayIndex?.(date, tradeIndex, identity);
+    }));
+    container.querySelector('[data-best-exit-download]')?.addEventListener('click', () => { void downloadMissing(); });
+    container.querySelector('[data-best-exit-pause]')?.addEventListener('click', () => {
+        downloadPaused = true;
+        analysisAbortController?.abort();
+        statusNote = 'Пауза. Вже збережені дні лишаються, продовження візьме лише відсутні.';
+        downloadRunning = false;
+        paint();
+    });
+    container.querySelector('[data-market-open-stops]')?.addEventListener('change', (event) => {
+        marketOpenStopsOnly = !!event.currentTarget.checked;
+        if (!activeAnalysisContext) return;
+        activeTrades = collectTimedShortTrades(activeAnalysisContext.journal, activeAnalysisContext.periodDates, { marketOpenStopsOnly });
+        paint();
+    });
+    const changeSelectedTime = (nextMinute) => {
+        if (!Number.isInteger(nextMinute) || nextMinute < 540 || nextMinute > 720 || nextMinute % 5 !== 0 || nextMinute === selectedExitMinute) return;
+        selectedExitMinute = nextMinute;
+        paint();
+    };
+    container.querySelector('[data-best-exit-target-time]')?.addEventListener('change', (event) => {
+        changeSelectedTime(Number(event.currentTarget.value));
+    });
+    container.querySelectorAll('[data-best-exit-time-step]').forEach((button) => button.addEventListener('click', () => {
+        changeSelectedTime(selectedExitMinute + Number(button.getAttribute('data-best-exit-time-step') || 0));
+    }));
+}
+
+async function hydrateCachedDays(trades) {
+    const pending = uniqueDays(trades).filter(([key]) => !barsByDay.has(key));
+    await Promise.all(pending.map(async ([key, item]) => {
+        const bars = await readPolygonDay(item.symbol, item.date);
+        if (bars?.length) barsByDay.set(key, bars);
+    }));
+}
+
+async function downloadMissing() {
+    if (downloadRunning) return;
+    const queue = missingDays();
+    if (!queue.length) {
+        statusNote = 'Усі дні цього періоду вже збережені. Час виходу рахується локально.';
+        paint();
+        return;
+    }
+    let session = (await supabase.auth.getSession()).data?.session;
+    if (!session?.access_token) {
+        statusNote = 'Потрібно увійти в акаунт, щоб довантажити відсутні дні.';
+        paint();
+        return;
+    }
+    downloadPaused = false;
+    downloadRunning = true;
+    analysisAbortController?.abort();
+    analysisAbortController = new AbortController();
+    const signal = analysisAbortController.signal;
+    statusNote = `Довантажую ${queue.length} днів по одному. Збережені графіки не запитуються знову.`;
+    paint();
+    for (const item of queue) {
+        if (signal.aborted || downloadPaused) break;
+        console.info(`[Polygon] переглядається ${item.symbol} · ${item.date} · від ${minuteToClock(item.entryMinute)} NY`);
+        try {
+            const loaded = await loadJournalPolygonDay(item.symbol, item.date, session.access_token, { signal });
+            if (loaded?.bars?.length) barsByDay.set(dayKey(item.symbol, item.date), loaded.bars);
+            else console.info(`[Polygon] ${item.symbol} · ${item.date}: очікує в черзі або дані недоступні`);
+        } catch (error) {
+            if (error?.name === 'AbortError' || signal.aborted) break;
+            console.info(`[Polygon] ${item.symbol} · ${item.date}: очікує в черзі або дані недоступні`);
+            statusNote = error?.message || 'Не вдалося довантажити день. Уже збережені графіки на місці.';
+            if (/увійти|401|403/i.test(String(error?.message || ''))) break;
+        }
+        if (!signal.aborted && !downloadPaused) {
+            statusNote = `Залишилось ${missingDays().length}. Час виходу можна міняти, Polygon для цього не потрібен.`;
+            paint();
+        }
+    }
+    downloadRunning = false;
+    if (!signal.aborted && !downloadPaused) {
+        const left = missingDays().length;
+        statusNote = left ? `Залишилось ${left} днів. «Довантажити» продовжить із них.` : 'Усі дні збережені. Зміна часу рахується локально.';
+    }
+    paint();
 }
 
 export async function renderBestExitAnalysis({ journal = {}, periodDates = new Set(), sourceType = 'current', periodLabel = 'За весь час' } = {}) {
-    const container = document.getElementById('stats-best-exit-content');
+    const container = host();
     if (!container) return;
-    const requestId = ++renderRequest;
     analysisAbortController?.abort();
     analysisAbortController = new AbortController();
-    clearTimeout(silentRefreshTimer);
-    bestExitRowsExpanded = false;
+    downloadRunning = false;
+    downloadPaused = false;
+    statusNote = '';
     activePeriodLabel = String(periodLabel || 'За весь час');
     activeAnalysisContext = { journal, periodDates, sourceType, periodLabel: activePeriodLabel };
     if (!['current', 'trader'].includes(sourceType)) {
-        container.innerHTML = '<div class="stats-empty-note">Аналіз доступний для одного трейдера, а не для об’єднаного куща.</div>';
+        container.innerHTML = '<div class="stats-empty-note">Аналіз доступний для одного трейдера.</div>';
         return;
     }
-    const trades = collectTimedShortTrades(journal, periodDates, { marketOpenStopsOnly });
-    activeAnalysisTrades = trades;
-    activeAnalysisRequestId = requestId;
-    analysisRunning = false;
-    analysisStarted = false;
-    if (!trades.length) {
-        container.innerHTML = `${marketStopFilterControl()}<div class="stats-empty-note">${marketOpenStopsOnly ? 'У вибраному періоді немає мінусових позицій, перенесених через відкриття маркету 09:30 NY.' : 'У вибраному періоді немає закритих short-угод із коректними цінами входу/виходу після виключення Stop і Take.'}</div>`;
-        attachMarketStopFilter(container);
+    activeTrades = collectTimedShortTrades(journal, periodDates, { marketOpenStopsOnly });
+    if (!activeTrades.length) {
+        container.innerHTML = `<label class="best-exit-market-filter"><input type="checkbox" data-market-open-stops ${marketOpenStopsOnly ? 'checked' : ''}><span>Стопи на маркеті</span></label><div class="stats-empty-note">${marketOpenStopsOnly ? 'У вибраному періоді немає мінусових позицій, перенесених через відкриття маркету 09:30 NY.' : 'У вибраному періоді немає закритих short із цінами входу і виходу.'}</div>`;
+        container.querySelector('[data-market-open-stops]')?.addEventListener('change', (event) => {
+            marketOpenStopsOnly = !!event.currentTarget.checked;
+            void renderBestExitAnalysis(activeAnalysisContext);
+        });
         return;
     }
-    const initialRows = buildRowsFromCache(trades);
-    renderSummary(container, summarizeBestExits(initialRows), countMissingMarketResults(trades), false);
+    container.innerHTML = '<div class="stats-empty-note">Читаю збережені графіки…</div>';
+    await hydrateCachedDays(activeTrades);
+    if (analysisAbortController.signal.aborted) return;
+    const pending = missingDays().length;
+    statusNote = pending
+        ? 'Суми взято зі збережених графіків. «Довантажити» качає лише дні без свічок, по одному.'
+        : 'Усі дні вже в кеші. Зміна часу рахується локально.';
+    paint();
 }

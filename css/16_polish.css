@@ -5149,7 +5149,7 @@ body.is-offline [data-needs-network="true"] {
 .best-exit-chart-grid { stroke: color-mix(in srgb, var(--border) 72%, transparent); stroke-width: 1; }
 .best-exit-chart-line { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 2px 5px color-mix(in srgb, var(--accent) 30%, transparent)); }
 .best-exit-time-chart circle { fill: var(--bg-panel); stroke: var(--accent); stroke-width: 2.5; }
-.best-exit-table-wrap { overflow-x: auto; }
+.best-exit-table-wrap { max-height: 440px; overflow: auto; }
 .best-exit-table-wrap.is-expanded { max-height: 440px; overflow-y: auto; scrollbar-gutter: stable; }
 .best-exit-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
 .best-exit-table th,

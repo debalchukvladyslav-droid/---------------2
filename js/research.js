@@ -130,8 +130,10 @@ function fillExitPeriod() {
     if (!fromInput || !toInput || fromInput.value) return;
     const dates = Object.keys(state.appData?.journal || {}).filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)).sort();
     if (!dates.length) return;
-    fromInput.value = dates[0];
-    toInput.value = dates.at(-1);
+    const end = dates.at(-1);
+    const start = shiftIsoMonths(end, -1);
+    fromInput.value = start && start > dates[0] ? start : dates[0];
+    toInput.value = end;
 }
 
 export async function showResearchExit() {
@@ -154,7 +156,7 @@ export async function showResearchExit() {
             sourceType: 'current',
             periodLabel: label,
         });
-        if (status) status.textContent = `${label}. Суми взято зі збережених графіків. «Почати» качає лише дні, яких ще немає в кеші.`;
+        if (status) status.textContent = `${label}. Суми взято зі збережених графіків. «Довантажити» качає лише дні без свічок.`;
     } catch (error) {
         if (status) status.textContent = `Помилка: ${error?.message || error}`;
     } finally {
