@@ -8,14 +8,14 @@
 import { showToast } from './utils.js';
 import { state } from './state.js';
 import { supabase } from './supabase.js';
-import { saveJournalData, saveSettings, markJournalDayDirty } from './storage.js';
+import { saveJournalData, saveSettings, markJournalDayDirty, loadAllMonths } from './storage.js';
 import { syncFondexxFromTradesForDay, logTradesImportConsole } from './parsers.js';
 import { clearStatsCache } from './stats.js';
 import { isPureGoogleSheetTrade } from './trade_filters.js';
 import {
     parseSheetGridToTrades as parseSheetGridToTradesCore,
 } from './sheet_sync_core.js';
-import { mergeGoogleSheetTradesIntoJournal as mergeSheetTradesIntoJournal } from './sheet_journal_merge.js';
+import { mergeGoogleSheetTradesIntoJournal as mergeSheetTradesIntoJournal, fillEmptyCalendarDaysFromCumulativeStore, cumulativeStoreSignature } from './sheet_journal_merge.js';
 import {
     duplicateSheetMappingConfig,
     getCumulativeArchiveSchedule,
@@ -1397,7 +1397,14 @@ async function executeSyncWithCfg(cfg, options = {}) {
         const values = fullValues.slice(startRow - 1);
         if (Array.isArray(fullValues.hyperlinks)) values.hyperlinks = fullValues.hyperlinks.slice(startRow - 1);
         const parsedSmart = normalizeSmartColumnsForCore(smart);
-        const { outByDay, dateAnchors, stats } = parseSheetGridToTradesCore(values, parsedSmart, spreadsheetId, startRow);
+        const { outByDay, dateAnchors, stats } = parseSheetGridToTradesCore(values, parsedSmart, spreadsheetId, startRow, {
+            chronological: cumulative,
+        });
+        let journalComplete = true;
+        if (cumulative) {
+            await loadAllMonths(state.CURRENT_VIEWED_USER);
+            journalComplete = state._monthListLoaded === true;
+        }
 
         if (!quiet) {
             console.group('[Google Sheets] Синхронізація');
@@ -1418,6 +1425,7 @@ async function executeSyncWithCfg(cfg, options = {}) {
             warnInvalidDate: (dateStr) => console.warn('[Google Sheets] Пропущено невалідну дату (не пишемо в журнал):', dateStr),
             tradeTypesSyncEnabled: state.appData?.settings?.sheetTradeTypesSyncEnabled === true,
             tradeTypesMonth: state.appData?.settings?.sheetTradeTypesSyncMonth || '',
+            allowCreateMissingDays: !cumulative || journalComplete,
         });
         if (cumulative) {
             const archiveSchedule = getCumulativeArchiveSchedule();
@@ -1431,6 +1439,9 @@ async function executeSyncWithCfg(cfg, options = {}) {
                 sheetTitle: cfg.sheetTitle || getSelectedSheetTitle(mode) || '',
                 rows: mergeResult.importedSheetRows,
             };
+            if (journalComplete) {
+                state.appData.settings.cumulativeCalendarBackfillSignature = cumulativeStoreSignature(state.appData.cumulativeSheetRows);
+            }
         }
         await deleteJournalDatesFromSupabase(mergeResult.deletedDates);
         await saveJournalData({ skipEmbedding: true });
@@ -1449,7 +1460,7 @@ async function executeSyncWithCfg(cfg, options = {}) {
                     `[Google Sheets] Imported ${mergeResult.importedSheetRows} sheet rows as auxiliary criteria; ${mergeResult.matchedSheetRows} matched Trades; ${mergeResult.skippedSheetRows} stored without Trades.`,
                 );
                 showToast(cumulative
-                    ? `Накопичувальна імпортована: ${mergeResult.importedSheetRows}. Оновлено Trades: ${mergeResult.matchedSheetRows}. Без Trades: ${mergeResult.skippedSheetRows}.`
+                    ? `Накопичувальна імпортована: ${mergeResult.importedSheetRows}. У календар додано днів: ${mergeResult.filledCalendarDates?.length || 0}. Існуючі дні не змінено. Оновлено Trades: ${mergeResult.matchedSheetRows}.`
                     : `Таблиця імпортована: ${mergeResult.importedSheetRows}. Оновлено Trades: ${mergeResult.matchedSheetRows}. Без Trades збережено допоміжно: ${mergeResult.skippedSheetRows}.`);
             } else {
                 console.warn(
@@ -2015,6 +2026,38 @@ export async function saveSheetMapping() {
             btn.textContent = prevText || BTN_DEFAULT;
         }
     }
+}
+
+export async function backfillCumulativeCalendarGaps() {
+    if (state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) return { ok: false, reason: 'other-profile' };
+    const store = state.appData?.cumulativeSheetRows;
+    if (!store || typeof store !== 'object' || !Object.keys(store).length) return { ok: false, reason: 'empty' };
+
+    const settings = state.appData.settings && typeof state.appData.settings === 'object'
+        ? state.appData.settings
+        : (state.appData.settings = {});
+    const signature = cumulativeStoreSignature(store);
+    if (settings.cumulativeCalendarBackfillSignature === signature) return { ok: true, skipped: true };
+
+    await loadAllMonths(state.CURRENT_VIEWED_USER);
+    if (state._monthListLoaded !== true) return { ok: false, reason: 'journal-incomplete' };
+
+    const filled = fillEmptyCalendarDaysFromCumulativeStore(state.appData.journal || (state.appData.journal = {}), store, {
+        markTouched: (dateStr) => markJournalDayDirty(dateStr),
+        tradeTypesSyncEnabled: settings.sheetTradeTypesSyncEnabled === true,
+        tradeTypesMonth: settings.sheetTradeTypesSyncMonth || '',
+    });
+    if (filled.length) {
+        const saved = await saveJournalData({ skipEmbedding: true });
+        if (saved === false) return { ok: false, reason: 'save-failed', filled };
+    }
+    settings.cumulativeCalendarBackfillSignature = signature;
+    await saveSettings();
+    if (filled.length) {
+        showToast(`З накопичувальної таблиці додано в календар днів: ${filled.length}. Існуючі записи не змінено.`);
+        if (window.renderView) await window.renderView();
+    }
+    return { ok: true, filled };
 }
 
 window.toggleMappingMode = toggleMappingMode;

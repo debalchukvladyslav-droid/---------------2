@@ -249,6 +249,45 @@ test('sheet date sequence still reads both 23/07 and 07/23 around month markers'
     );
 });
 
+test('cumulative dates stay in order: day 23 cannot be followed by day 4 of the same month', () => {
+    assert.deepEqual(
+        parseSheetDateCellsToIsoSequence(['23.04.2026', '24.04.2026', '4.05.2026'], { chronological: true }),
+        ['2026-04-23', '2026-04-24', '2026-05-04'],
+    );
+    assert.deepEqual(
+        parseSheetDateCellsToIsoSequence(['23.04.2026', '4.04.2026', '5.05.2026'], { chronological: true }),
+        ['2026-04-23', '2026-05-04', '2026-05-05'],
+    );
+    assert.deepEqual(
+        parseSheetDateCellsToIsoSequence(['23.12.2025', '4.01.2025', '5.01.2026'], { chronological: true }),
+        ['2025-12-23', '2026-01-04', '2026-01-05'],
+    );
+    assert.deepEqual(
+        parseSheetDateCellsToIsoSequence(['23.04.2026', '21.04.2026'], { chronological: true }),
+        ['2026-04-23', '2026-04-21'],
+    );
+});
+
+test('cumulative import does not attach a backwards date to the previous day', () => {
+    const parsed = parseSheetGridToTrades(
+        [
+            ['23.04.2026', 'AAPL', '10'],
+            ['2.03.2026', 'MSFT', '5'],
+            ['', 'NVDA', '1'],
+            ['4.05.2026', 'TSLA', '7'],
+        ],
+        { date: 'A', symbol: 'B', profit: 'C' },
+        'archive-order',
+        8,
+        { chronological: true },
+    );
+
+    assert.deepEqual(Object.keys(parsed.outByDay).sort(), ['2026-04-23', '2026-05-04']);
+    assert.equal(parsed.outByDay['2026-04-23'][0].symbol, 'AAPL');
+    assert.equal(parsed.outByDay['2026-05-04'][0].symbol, 'TSLA');
+    assert.equal(parsed.stats.tradeCount, 2);
+});
+
 test('PPRO report dates are parsed as month/day/year', () => {
     assert.equal(parsePPROReportDate('03/02/2026'), '2026-03-02');
     assert.equal(parsePPROReportDate('03/13/2026'), '2026-03-13');
@@ -1109,9 +1148,13 @@ test('cumulative sheet import stores invisible rows and enriches only existing T
     assert.equal(journal['2026-01-10'].trades.length, 1);
     assert.equal(journal['2026-01-10'].trades[0].net, 25);
     assert.equal(journal['2026-01-10'].pnl, 25);
+    assert.equal(journal['2026-01-10'].gross_pnl, undefined);
     assert.equal(journal['2026-01-10'].trades[0].type, 'Archive Setup');
     assert.equal(journal['2026-01-10'].trades[0].sheet.pv, 'old-ok');
     assert.equal(journal['2026-01-11'].trades.length, 0);
+    assert.equal(journal['2026-01-11'].pnl, null);
+    assert.equal(journal['2026-01-11'].gross_pnl, 5);
+    assert.deepEqual(result.filledCalendarDates, ['2026-01-11']);
     assert.equal(cumulativeSheetRows['archive-1']['2026-01-11'][0].symbol, 'TSLA');
 
     const grid = collectDatagridRows({ journal, cumulativeSheetRows });
@@ -1149,6 +1192,69 @@ test('main sheet context wins over cumulative overlap', () => {
     assert.equal(journal['2026-04-01'].trades[0].type, 'Main Setup');
     assert.equal(journal['2026-04-01'].trades[0].sheet.pv, 'main');
     assert.equal(cumulativeSheetRows['archive-1']['2026-04-01'][0].sheet.matchedTradeIndex, undefined);
+});
+
+test('cumulative archive fills calendar days that have no records and leaves existing days unchanged', () => {
+    const journal = {
+        '2026-02-02': {
+            pnl: 40,
+            gross_pnl: 44,
+            notes: 'вже є запис',
+            trades: [{ symbol: 'AAPL', opened: '2026-02-02 09:31:00', net: 40, type: 'Short' }],
+        },
+        '2026-02-03': {
+            pnl: null,
+            gross_pnl: null,
+            notes: 'лише нотатка',
+            trades: [],
+        },
+    };
+    const result = mergeGoogleSheetTradesIntoJournal(journal, {
+        '2026-02-02': [
+            { symbol: 'AAPL', net: 99, sheet: { source: 'google', spreadsheetId: 'archive-1', sheetNet: 99, tradeType: 'синя%' } },
+        ],
+        '2026-02-03': [
+            { symbol: 'MSFT', net: 7, sheet: { source: 'google', spreadsheetId: 'archive-1', sheetNet: 7, tradeType: 'синя%' } },
+        ],
+        '2026-02-04': [
+            { symbol: 'NVDA', net: 3, sheet: { source: 'google', spreadsheetId: 'archive-1', sheetNet: 3, tradeType: 'зелена' } },
+            { symbol: 'AMD', net: -1, sheet: { source: 'google', spreadsheetId: 'archive-1', sheetNet: -1, tradeType: 'не брав' } },
+        ],
+    }, 'archive-1', {
+        mode: 'cumulative',
+        sheetRowsStore: {},
+        tradeTypesSyncEnabled: true,
+        tradeTypesMonth: '2026-02',
+    });
+
+    assert.equal(journal['2026-02-02'].pnl, 40);
+    assert.equal(journal['2026-02-02'].gross_pnl, 44);
+    assert.equal(journal['2026-02-02'].notes, 'вже є запис');
+    assert.equal(journal['2026-02-02'].trades[0].net, 40);
+    assert.equal(journal['2026-02-03'].notes, 'лише нотатка');
+    assert.equal(journal['2026-02-03'].gross_pnl, null);
+    assert.equal(journal['2026-02-04'].pnl, null);
+    assert.equal(journal['2026-02-04'].gross_pnl, 3);
+    assert.equal(journal['2026-02-04'].trades.length, 0);
+    assert.equal(journal['2026-02-04'].sheetGrossSource, 'cumulative:archive-1');
+    assert.deepEqual(journal['2026-02-04'].tradeTypesData['Зелена'], { pnl: 3, kf: '' });
+    assert.deepEqual(result.filledCalendarDates, ['2026-02-04']);
+});
+
+test('cumulative calendar fill can be limited to days already present in the journal', () => {
+    const journal = {};
+    const result = mergeGoogleSheetTradesIntoJournal(journal, {
+        '2026-03-01': [
+            { symbol: 'AAPL', net: 8, sheet: { source: 'google', spreadsheetId: 'archive-1', sheetNet: 8 } },
+        ],
+    }, 'archive-1', {
+        mode: 'cumulative',
+        sheetRowsStore: {},
+        allowCreateMissingDays: false,
+    });
+
+    assert.equal(journal['2026-03-01'], undefined);
+    assert.deepEqual(result.filledCalendarDates, []);
 });
 
 test('duplicating sheet mapping copies columns and anchors but not source file', () => {

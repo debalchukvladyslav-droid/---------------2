@@ -216,7 +216,7 @@ export function enrichTradeWithSheet(existingTrade = {}, incomingTrade = {}) {
     };
 }
 
-export function parseSheetGridToTrades(values, smartColumns, spreadsheetId, startRow = SHEET_DATA_FIRST_ROW) {
+export function parseSheetGridToTrades(values, smartColumns, spreadsheetId, startRow = SHEET_DATA_FIRST_ROW, options = {}) {
     const dateIdx = smartValueToColumnIndex(smartColumns.date || '');
     const symIdx = smartValueToColumnIndex(smartColumns.symbol || '');
     const profitIdx = smartValueToColumnIndex(smartColumns.profit || '');
@@ -244,22 +244,25 @@ export function parseSheetGridToTrades(values, smartColumns, spreadsheetId, star
     const dateAnchors = {};
     const outByDay = {};
     let activeDate = null;
+    const chronological = options.chronological === true;
 
     if (!Array.isArray(values)) {
         return { outByDay, dateAnchors, stats: { tradeCount: 0, dayCount: 0 } };
     }
 
-    const parsedDatesByRow = parseSheetDateCellsToIsoSequence(
-        values.map((row) => getCell(row || [], dateIdx))
-    );
+    const rawDates = values.map((row) => getCell(row || [], dateIdx));
+    const parsedDatesByRow = parseSheetDateCellsToIsoSequence(rawDates, { chronological });
 
     for (let i = 0; i < values.length; i++) {
         const row = values[i] || [];
         const excelRow = startRow + i;
         const parsedDate = parsedDatesByRow[i];
+        const hasDateCell = String(rawDates[i] ?? '').trim() !== '';
         if (parsedDate) {
             activeDate = parsedDate;
             if (dateAnchors[parsedDate] == null) dateAnchors[parsedDate] = excelRow;
+        } else if (chronological && hasDateCell) {
+            activeDate = null;
         }
 
         const symRaw = getCell(row, symIdx);

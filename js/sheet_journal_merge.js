@@ -196,6 +196,110 @@ export function isDayEmptyAfterSheetCleanup(day) {
     return true;
 }
 
+function hasStoredNumber(value) {
+    if (value === null || value === undefined || value === '') return false;
+    return Number.isFinite(Number(value));
+}
+
+export function calendarDayHasRecords(day) {
+    if (!day || typeof day !== 'object') return false;
+    if (hasStoredNumber(day.pnl) || hasStoredNumber(day.gross_pnl) || hasStoredNumber(day.commissions) || hasStoredNumber(day.locates) || hasStoredNumber(day.kf)) return true;
+    if (Array.isArray(day.trades) && day.trades.length > 0) return true;
+    if (String(day.notes || '').trim() || String(day.mentor_comment || '').trim() || String(day.ai_advice || '').trim()) return true;
+    if (hasAnyScreenshot(day)) return true;
+    if (Array.isArray(day.errors) && day.errors.length > 0) return true;
+    if (Array.isArray(day.checkedParams) && day.checkedParams.length > 0) return true;
+    if (Array.isArray(day.traded_tickers) && day.traded_tickers.length > 0) return true;
+    if (hasNonEmptyObject(day.sliders) || hasNonEmptyObject(day.tradeTypesData) || hasNonEmptyObject(day.review_requests) || hasNonEmptyObject(day.tickers)) return true;
+    if (String(day.sessionGoal || '').trim() || String(day.sessionPlan || '').trim() || day.sessionDone || day.sessionStartRecorded) return true;
+    if (day.traderAbsent === true || day.demoTrading === true) return true;
+    if (String(day.fondexxSource || '').trim() || String(day.pproSource || '').trim()) return true;
+    const fondexx = day.fondexx && typeof day.fondexx === 'object' ? day.fondexx : {};
+    if (Number(fondexx.net) || Number(fondexx.gross) || Number(fondexx.comm) || Number(fondexx.locates)) return true;
+    const ppro = day.ppro && typeof day.ppro === 'object' ? day.ppro : {};
+    if (Number(ppro.net) || Number(ppro.gross) || Number(ppro.comm) || Number(ppro.locates)) return true;
+    return false;
+}
+
+function rowArchiveProfit(trade) {
+    const sheet = trade?.sheet && typeof trade.sheet === 'object' ? trade.sheet : {};
+    const hasSheetNet = sheet.sheetNet !== undefined && sheet.sheetNet !== null && sheet.sheetNet !== '';
+    const raw = hasSheetNet ? sheet.sheetNet : trade?.net;
+    if (raw === undefined || raw === null || raw === '') return null;
+    const num = Number(raw);
+    return Number.isFinite(num) ? num : null;
+}
+
+function cumulativeSourceId(spreadsheetId, rows) {
+    if (spreadsheetId) return String(spreadsheetId);
+    const fromRow = (Array.isArray(rows) ? rows : []).find((row) => row?.sheet?.spreadsheetId);
+    return fromRow?.sheet?.spreadsheetId ? String(fromRow.sheet.spreadsheetId) : '';
+}
+
+export function fillEmptyCalendarDaysFromCumulative(journal, outByDay, spreadsheetId, markTouched, options = {}) {
+    const filledDates = [];
+    const allowCreateMissingDays = options.allowCreateMissingDays !== false;
+    const tradeTypesSyncEnabled = options.tradeTypesSyncEnabled === true;
+    const tradeTypesMonth = /^\d{4}-\d{2}$/.test(String(options.tradeTypesMonth || '')) ? String(options.tradeTypesMonth) : '';
+    const touch = typeof markTouched === 'function' ? markTouched : () => {};
+
+    Object.entries(outByDay || {}).forEach(([dateStr, rows]) => {
+        if (!isValidIsoDateString(dateStr) || !Array.isArray(rows) || !rows.length) return;
+        const existing = journal?.[dateStr];
+        const existed = existing && typeof existing === 'object';
+        if (!existed && !allowCreateMissingDays) return;
+        if (calendarDayHasRecords(existing)) return;
+
+        const executedRows = rows.filter((trade) => !isNotTakenTrade(trade));
+        const profits = executedRows.map(rowArchiveProfit).filter((value) => value !== null);
+        const syncTradeTypes = tradeTypesSyncEnabled && (!tradeTypesMonth || dateStr.startsWith(`${tradeTypesMonth}-`));
+        const tradeTypesData = syncTradeTypes ? buildAutoTradeTypesData(executedRows) : {};
+        if (!profits.length && !Object.keys(tradeTypesData).length) return;
+
+        const day = existed ? existing : getDefaultDayEntry();
+        const sourceId = cumulativeSourceId(spreadsheetId, rows);
+        const source = sourceId ? `cumulative:${sourceId}` : 'cumulative';
+        if (profits.length) {
+            const gross = Number(profits.reduce((sum, value) => sum + value, 0).toFixed(2));
+            day.gross_pnl = gross;
+            day.sheetGrossSource = source;
+            day.sheetGrossValue = gross;
+        }
+        if (Object.keys(tradeTypesData).length) {
+            day.tradeTypesData = tradeTypesData;
+            day.sheetTradeTypesSource = source;
+        }
+        journal[dateStr] = day;
+        touch(dateStr, day);
+        filledDates.push(dateStr);
+    });
+    return filledDates;
+}
+
+export function fillEmptyCalendarDaysFromCumulativeStore(journal, store, options = {}) {
+    const monthKey = /^\d{4}-\d{2}$/.test(String(options.monthKey || '')) ? String(options.monthKey) : '';
+    const outByDay = {};
+    Object.entries(store || {}).forEach(([, byDay]) => {
+        if (!byDay || typeof byDay !== 'object' || Array.isArray(byDay)) return;
+        Object.entries(byDay).forEach(([dateStr, rows]) => {
+            if (!isValidIsoDateString(dateStr) || !Array.isArray(rows) || !rows.length) return;
+            if (monthKey && dateStr.slice(0, 7) !== monthKey) return;
+            if (!outByDay[dateStr]) outByDay[dateStr] = [];
+            outByDay[dateStr].push(...rows);
+        });
+    });
+    return fillEmptyCalendarDaysFromCumulative(journal, outByDay, '', options.markTouched, options);
+}
+
+export function cumulativeStoreSignature(store = {}) {
+    return Object.keys(store || {}).sort().map((spreadsheetId) => {
+        const byDay = store[spreadsheetId] && typeof store[spreadsheetId] === 'object' ? store[spreadsheetId] : {};
+        const dates = Object.keys(byDay).filter((dateStr) => Array.isArray(byDay[dateStr]) && byDay[dateStr].length).sort();
+        const rows = dates.reduce((count, dateStr) => count + byDay[dateStr].length, 0);
+        return `${spreadsheetId}:${dates.length}:${rows}`;
+    }).join('|');
+}
+
 export function mergeGoogleSheetTradesIntoJournal(journal = {}, outByDay = {}, spreadsheetId = '', options = {}) {
     const syncDayTotals = typeof options.syncDayTotals === 'function' ? options.syncDayTotals : () => {};
     const markTouched = typeof options.markTouched === 'function' ? options.markTouched : () => {};
@@ -213,6 +317,7 @@ export function mergeGoogleSheetTradesIntoJournal(journal = {}, outByDay = {}, s
     let skippedSheetRows = 0;
     let importedSheetRows = 0;
     let syncedPnlDates = [];
+    let filledCalendarDates = [];
 
     const previouslyManagedDates = new Set(
         sheetRowsStore && spreadsheetId && sheetRowsStore[spreadsheetId] && typeof sheetRowsStore[spreadsheetId] === 'object'
@@ -305,6 +410,15 @@ export function mergeGoogleSheetTradesIntoJournal(journal = {}, outByDay = {}, s
             touchedDates.delete(dateStr);
             if (!deletedDates.includes(dateStr)) deletedDates.push(dateStr);
         });
+    } else {
+        filledCalendarDates = fillEmptyCalendarDaysFromCumulative(journal, outByDay, spreadsheetId, (dateStr, day) => {
+            touchedDates.add(dateStr);
+            markTouched(dateStr, day);
+        }, {
+            tradeTypesSyncEnabled,
+            tradeTypesMonth,
+            allowCreateMissingDays: options.allowCreateMissingDays !== false,
+        });
     }
 
     return {
@@ -314,5 +428,6 @@ export function mergeGoogleSheetTradesIntoJournal(journal = {}, outByDay = {}, s
         matchedSheetRows,
         skippedSheetRows,
         syncedPnlDates,
+        filledCalendarDates,
     };
 }

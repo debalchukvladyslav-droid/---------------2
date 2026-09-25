@@ -91,6 +91,98 @@ function parseSheetDateCellCandidates(value, options = {}) {
     });
 }
 
+function splitIsoDate(iso) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+    if (!match) return null;
+    return { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) };
+}
+
+function isoFromPartsIfPast(year, month, day) {
+    if (!calendarYmdValid(year, month, day)) return null;
+    const iso = toIsoFromParts(year, month, day);
+    return isFutureIsoDateString(iso) ? null : iso;
+}
+
+function shiftMonth(year, month, day, offset) {
+    const shifted = new Date(Date.UTC(year, month - 1 + offset, 1));
+    return isoFromPartsIfPast(shifted.getUTCFullYear(), shifted.getUTCMonth() + 1, day);
+}
+
+const CHRONOLOGICAL_BACKSTEP_DAYS = 7;
+
+function isApproximatelyChronological(iso, previous) {
+    if (!previous) return true;
+    return dateOrdinal(iso) - dateOrdinal(previous) >= -CHRONOLOGICAL_BACKSTEP_DAYS;
+}
+
+function sameMonthDayReset(iso, previous) {
+    const current = splitIsoDate(iso);
+    const prior = splitIsoDate(previous);
+    if (!current || !prior) return false;
+    return current.year === prior.year
+        && current.month === prior.month
+        && prior.day >= 13
+        && current.day <= 12
+        && current.day < prior.day;
+}
+
+function forwardDateRepairs(iso, previous) {
+    const current = splitIsoDate(iso);
+    const prior = splitIsoDate(previous);
+    if (!current || !prior || !(iso < previous)) return [];
+    const repairs = [];
+    const push = (next) => {
+        if (next && next >= previous) repairs.push(next);
+    };
+
+    if (sameMonthDayReset(iso, previous)) push(shiftMonth(current.year, current.month, current.day, 1));
+    if (current.year < prior.year) {
+        push(isoFromPartsIfPast(prior.year, current.month, current.day));
+        push(isoFromPartsIfPast(prior.year + 1, current.month, current.day));
+        if (current.month === prior.month && prior.day >= 13 && current.day <= 12 && current.day < prior.day) {
+            push(shiftMonth(prior.year, current.month, current.day, 1));
+        }
+    } else if (current.year === prior.year && prior.month >= 11 && current.month <= 2) {
+        push(isoFromPartsIfPast(current.year + 1, current.month, current.day));
+    }
+    return repairs;
+}
+
+function selectChronologicalDate(preferredIso, alternateIsos, previous) {
+    const pool = [...new Set([preferredIso, ...(alternateIsos || [])].filter(Boolean))];
+    if (!previous) return preferredIso || pool[0] || null;
+    if (preferredIso && isApproximatelyChronological(preferredIso, previous)) return preferredIso;
+
+    const nearby = pool.filter((iso) => isApproximatelyChronological(iso, previous));
+    if (nearby.length) {
+        nearby.sort((a, b) => {
+            const behindA = previous && a < previous ? 1 : 0;
+            const behindB = previous && b < previous ? 1 : 0;
+            if (behindA !== behindB) return behindA - behindB;
+            return Math.abs(dateOrdinal(a) - dateOrdinal(previous)) - Math.abs(dateOrdinal(b) - dateOrdinal(previous));
+        });
+        return nearby[0];
+    }
+
+    const repaired = [...new Set(pool.flatMap((iso) => forwardDateRepairs(iso, previous)))];
+    repaired.sort((a, b) => a.localeCompare(b));
+    return repaired[0] || null;
+}
+
+function applyChronologicalDateGuard(resolved, candidateRows) {
+    let previous = null;
+    return resolved.map((preferredIso, index) => {
+        if (!preferredIso && !(candidateRows[index] || []).length) return null;
+        const chosen = selectChronologicalDate(
+            preferredIso,
+            (candidateRows[index] || []).map((candidate) => candidate.iso),
+            previous,
+        );
+        if (chosen && (!previous || chosen > previous)) previous = chosen;
+        return chosen;
+    });
+}
+
 function scoreDateSequence(isos) {
     const ordinals = isos.map(dateOrdinal).filter(Number.isFinite);
     if (!ordinals.length) return -Infinity;
@@ -166,12 +258,14 @@ export function parseSheetDateCellsToIsoSequence(values, options = {}) {
     }
     const preferredMode = (modeScores.get('MDY') > modeScores.get('DMY')) ? 'MDY' : 'DMY';
 
-    return candidateRows.map((candidates, index) => {
+    const resolved = candidateRows.map((candidates, index) => {
         if (!candidates.length) return null;
         return candidates.find((candidate) => candidate.mode === 'fixed')?.iso
             || candidates.find((candidate) => candidate.mode === preferredMode)?.iso
             || candidates[0].iso;
     }).map((parsed, index) => parsed || contextualDates[index] || null);
+    if (options.chronological !== true) return resolved;
+    return applyChronologicalDateGuard(resolved, candidateRows);
 }
 
 /**

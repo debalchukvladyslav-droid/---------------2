@@ -33,7 +33,7 @@ import { initSidebarAccount, refreshSidebarAccount } from './sidebar_account.js'
 import { initMentorReviewUI, refreshMentorReviewQueue, setMentorReviewNavBadges } from './mentor_review.js';
 
 import { initTradesView, populateDateSelect, populateSymbolSelect, loadTradeChart, openTradesAtDayIndex } from './trades_view2.js';
-import { initSheetTableView, saveSheetMapping } from './sheet_table.js';
+import { initSheetTableView, saveSheetMapping, backfillCumulativeCalendarGaps } from './sheet_table.js';
 import { renderTradesDatagrid, disposeTradesDatagrid, TRADE_TYPES } from './trades_datagrid.js';
 import { initNotifications } from './notifications.js';
 import { submitReviewRequest, refreshReviewRequestButtons } from './review_requests.js';
@@ -1520,6 +1520,9 @@ async function bootApp(user) {
         await withBootDeadline(initializeApp(), 'journal load', 25000);
         console.log('[INIT] boot completed');
         initTerminalShortcuts();
+        void backfillCumulativeCalendarGaps().catch((error) => {
+            console.warn('[cumulative calendar] backfill failed', error?.message || error);
+        });
 
         if (canAccessMentorReviewQueue()) {
             document.querySelectorAll('.mentor-review-nav-item').forEach((el) => {
