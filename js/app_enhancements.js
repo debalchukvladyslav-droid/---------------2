@@ -5,6 +5,7 @@ import { renderAggressivenessBacktest } from './aggressiveness_backtest.js';
 import { rememberShsTrader } from './shs_sync.js';
 import { showToast } from './utils.js';
 import { INVALID_IMAGE_FORMAT_MESSAGE, isJpegOrPng } from './image_file_validation.js';
+import { copyClientErrorReport, downloadClientErrorReports, refreshClientErrorReports } from './admin.js';
 
 const MAX_IMPORT_SIZE_MB = 35;
 let dayFormDirty = false;
@@ -321,6 +322,9 @@ function activateAction(action, trigger, event = null) {
         'file-picker': () => document.getElementById(trigger?.dataset?.target || '')?.click(),
         'logout': () => window.logout?.(),
         'admin-refresh': () => window.renderAdminPanel?.(),
+        'admin-errors-refresh': () => refreshClientErrorReports(),
+        'admin-errors-download': () => downloadClientErrorReports(),
+        'admin-errors-copy': () => copyClientErrorReport(trigger?.dataset?.errorId || ''),
         'admin-session-review-test': () => window.openSessionReviewTest?.(),
         'team-manager-open': () => window.openTeamManager?.(),
         'profile-name-save': () => window.saveProfileName?.(),

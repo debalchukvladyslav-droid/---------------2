@@ -10,11 +10,99 @@ import { criteriaPairsFromJournal, journalDatesInRange } from './market_criteria
 import { loadJournalPolygonDay } from './journal_polygon.js';
 import { renderAggressivenessBacktest } from './aggressiveness_backtest.js';
 import { renderNextSessionBacktest } from './next_session_backtest.js';
+import { formatClientErrorReport, formatClientErrorTxt } from '../lib/client_error_report.js';
 
 const ROLES = ['trader', 'mentor', 'admin'];
 const DEFAULT_TEAM = 'Без куща';
+let clientErrorReports = [];
 let serviceBotSecretInMemory = '';
 const SERVICE_BOT_DATA_ENDPOINTS = ['snapshot', 'summary', 'tickers', 'orders', 'locates'];
+
+function hideClientErrorReports() {
+    const panel = document.getElementById('admin-client-errors');
+    if (panel) panel.hidden = true;
+}
+
+function clientErrorView(row) {
+    return {
+        happenedAt: row.happened_at || row.created_at,
+        nick: row.nick,
+        email: row.email,
+        userId: row.user_id,
+        tab: row.tab,
+        page: row.page,
+        kind: row.kind,
+        message: row.message,
+        location: row.location,
+        scenario: Array.isArray(row.scenario) ? row.scenario : [],
+        stack: row.stack,
+        userAgent: row.user_agent,
+    };
+}
+
+export async function renderClientErrorReports() {
+    const panel = document.getElementById('admin-client-errors');
+    const list = document.getElementById('admin-client-errors-list');
+    if (!panel || !list || state.myRole !== 'admin') return;
+    panel.hidden = false;
+    list.textContent = 'Завантаження…';
+    const { data, error } = await supabase
+        .from('client_error_reports')
+        .select('id, created_at, happened_at, kind, message, stack, page, tab, location, scenario, nick, email, user_id, user_agent')
+        .order('created_at', { ascending: false })
+        .limit(30);
+    if (error) {
+        clientErrorReports = [];
+        list.textContent = 'Список ще не відкривається. Лист на пошту все одно піде, а після міграції client_error_reports помилки з’являться тут.';
+        return;
+    }
+    clientErrorReports = data || [];
+    if (!clientErrorReports.length) {
+        list.textContent = 'Поки немає помилок від інших акаунтів.';
+        return;
+    }
+    list.innerHTML = clientErrorReports.map((row) => {
+        const text = formatClientErrorReport(clientErrorView(row));
+        return `<article class="admin-client-error">
+            <div class="admin-client-error-head">
+                <strong>${escapeHtml(row.nick || row.email || 'гість')}</strong>
+                <span>${escapeHtml(row.message || '')}</span>
+                <button type="button" class="btn-secondary" data-action="admin-errors-copy" data-error-id="${escapeHtml(row.id)}">Копіювати сценарій</button>
+            </div>
+            <pre>${escapeHtml(text)}</pre>
+        </article>`;
+    }).join('');
+}
+
+export function refreshClientErrorReports() {
+    return renderClientErrorReports();
+}
+
+export async function copyClientErrorReport(id) {
+    const row = clientErrorReports.find((item) => item.id === id);
+    if (!row) return;
+    const ok = await copyTextToClipboard(formatClientErrorReport(clientErrorView(row)));
+    showToast(ok ? 'Сценарій скопійовано — можна вставити в чат' : 'Не вдалося скопіювати');
+}
+
+export function downloadClientErrorReports() {
+    if (!clientErrorReports.length) {
+        showToast('Немає помилок для файлу');
+        return;
+    }
+    const blob = new Blob(
+        [formatClientErrorTxt(clientErrorReports.map(clientErrorView))],
+        { type: 'text/plain;charset=utf-8' },
+    );
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'journal-errors.txt';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+}
 
 export async function renderAdminPanel() {
     const container = document.getElementById('admin-users-list');
@@ -34,6 +122,7 @@ export async function renderAdminPanel() {
     if (!dataManager) {
         if (refreshUsersBtn) refreshUsersBtn.style.display = 'none';
         if (botsPanel) botsPanel.innerHTML = '';
+        hideClientErrorReports();
         container.innerHTML =
             '<p class="admin-empty">Повний список профілів і зміна ролей доступні лише адміністратору. Для кущів використайте блок вище або «Команда» в шапці.</p>';
         return;
@@ -47,6 +136,7 @@ export async function renderAdminPanel() {
         .select('id, nick, email, first_name, last_name, team, role, mentor_enabled, settings')
         .order('nick', { ascending: true });
 
+    if (fullAdmin) void renderClientErrorReports();
     if (error) {
         container.innerHTML = `<p class="admin-error">Помилка: ${escapeHtml(error.message)}</p>`;
         return;
@@ -70,6 +160,7 @@ export async function renderAdminPanel() {
 
     container.innerHTML = '';
     if (fullAdmin) await renderRegistrationRequests(container);
+    else hideClientErrorReports();
     if (fullAdmin) renderServiceBotsPanel(profiles || []);
     visibleProfiles.forEach((p) => container.appendChild(buildUserCard(p, teamChoices, { fullAdmin, dataManager })));
 }

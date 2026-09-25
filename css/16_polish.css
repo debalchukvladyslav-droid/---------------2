@@ -3882,6 +3882,60 @@ body[data-theme="light"] .settings-dayloss-row input[type="month"] {
     line-height: 1.45;
 }
 
+.admin-client-errors {
+    margin: 0 0 18px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+}
+
+.admin-client-errors-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+
+.admin-client-errors-head h4 {
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+.admin-client-errors .admin-lead {
+    margin-bottom: 8px;
+}
+
+.admin-client-error {
+    padding: 10px 0;
+    border-top: 1px solid var(--border);
+}
+
+.admin-client-error-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.admin-client-error-head span {
+    flex: 1;
+    min-width: 160px;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+
+.admin-client-error pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 240px;
+    overflow: auto;
+    margin: 8px 0 0;
+    font-size: 0.75rem;
+    line-height: 1.45;
+}
+
 .skip-link {
     position: fixed;
     top: 10px;

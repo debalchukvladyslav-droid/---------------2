@@ -72,6 +72,7 @@ import { initPwa, initTradeCardGestures } from './pwa.js';
 import { initRealtimeSync } from './realtime_sync.js';
 import { initDurableUploads } from './durable_uploads.js';
 import { initDataHealth, refreshDataHealth } from './data_health.js';
+import { syncClientErrorReporter } from './client_error_report.js';
 let appShellPromise = null;
 let appShellEventsReady = false;
 
@@ -1500,6 +1501,7 @@ async function bootApp(user) {
     state.CURRENT_VIEWED_USER = state.USER_DOC_NAME;
     state.myUserId = user.id || null;
     setCurrentViewedUserId(user.id || null);
+    syncClientErrorReporter(state.myRole);
     console.log('[INIT] 2/4 profile context ready');
 
     try {
@@ -1590,6 +1592,7 @@ function showLoginScreen() {
     state.CURRENT_VIEWED_USER = '';
     state.myUserId = null;
     state.myRole = 'trader';
+    syncClientErrorReporter(null);
     state.IS_MENTOR_MODE = false;
     state.authProvider = 'email';
     setCurrentViewedUserId(null);
