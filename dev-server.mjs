@@ -17,7 +17,6 @@ import aggressivenessHandler from './lib/aggressiveness_http.js';
 import serviceBotsHandler from './api/admin/service-bots.js';
 import sheetsServiceHandler from './api/sheets-service.js';
 import serviceBotEndpointHandler from './api/service-bots/[endpoint].js';
-import clientErrorsHandler from './api/client-errors.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
@@ -436,7 +435,8 @@ const server = http.createServer((req, res) => {
         return;
     }
     if (u.pathname === '/api/client-errors') {
-        handleVercelRoute(clientErrorsHandler, req, res, u).catch((e) => {
+        u.searchParams.set('endpoint', 'client-errors');
+        handleVercelRoute(serviceBotEndpointHandler, req, res, u).catch((e) => {
             console.error('[Client errors]', e);
             if (!res.headersSent) sendJson(res, 500, { ok: false, error: e.message || 'Server error' });
         });

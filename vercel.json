@@ -39,6 +39,10 @@
       "destination": "/api/service-bots/shs-trades"
     },
     {
+      "source": "/api/client-errors",
+      "destination": "/api/service-bots/client-errors"
+    },
+    {
       "source": "/api/admin/registration-requests",
       "destination": "/api/admin/service-bots?resource=registration-requests"
     },
