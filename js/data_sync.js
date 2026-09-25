@@ -87,8 +87,16 @@ if (channel) channel.onmessage = event => {
     if (event.data.type === 'changed') void handlers.onOtherTab?.(activeUserId);
 };
 if (typeof window !== 'undefined') {
+    let lastPassiveSyncAt = 0;
+    const passiveSync = () => {
+        if (!activeUserId) return;
+        const now = Date.now();
+        if (now - lastPassiveSyncAt < 120000) return;
+        lastPassiveSyncAt = now;
+        engine.notify();
+    };
     window.addEventListener('online', () => { if (activeUserId) engine.notify(); });
     window.addEventListener('offline', () => void engine.status().catch(() => {}));
-    window.addEventListener('focus', () => { if (activeUserId) engine.notify(); });
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && activeUserId) engine.notify(); });
+    window.addEventListener('focus', passiveSync);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') passiveSync(); });
 }

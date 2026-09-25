@@ -47,3 +47,14 @@ test('realtime ignores the echo of a just-confirmed local write', () => {
     assert.match(realtime, /await syncDataNow\(\)/);
     assert.ok(realtime.indexOf(".on('postgres_changes'") < realtime.indexOf('.subscribe('));
 });
+
+test('boot and focus do not reread settings for every open tab', async () => {
+    const [sync, slimBoot] = await Promise.all([
+        readFile(new URL('../js/data_sync.js', import.meta.url), 'utf8'),
+        readFile(new URL('../supabase/migrations/20260925114000_share_boot_load.sql', import.meta.url), 'utf8'),
+    ]);
+    assert.match(sync, /now - lastPassiveSyncAt < 120000/);
+    assert.match(slimBoot, /jsonb_build_object\('id', p\.id, 'nick', p\.nick, 'role', p\.role\)/);
+    assert.doesNotMatch(slimBoot, /to_jsonb\(p\)/);
+    assert.match(slimBoot, /if settings_cursor is not null then/);
+});
