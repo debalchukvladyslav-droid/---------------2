@@ -754,7 +754,6 @@ async function runMainTabWork(tab) {
     if (tab === 'table' && window.initSheetTableView) tasks.push(Promise.resolve(window.initSheetTableView()));
     if (tab === 'datagrid' && window.renderTradesDatagrid) tasks.push(Promise.resolve(window.renderTradesDatagrid()));
     if (tab === 'dash') {
-        renderDashQuote();
         tasks.push(Promise.resolve(refreshDashMiniEquityChartTheme()));
         // Network widgets must never keep the dashboard loading overlay active.
         // They update their own placeholders when the responses arrive.
@@ -899,13 +898,12 @@ export async function switchMainTab(tab, options = {}) {
         tab = 'dash';
     }
     document.body?.classList.toggle('is-calendar-tab', tab === 'calendar');
+    if (document.body) document.body.dataset.mainTab = tab;
     const previousView = document.querySelector('.view-content.active');
     const previousTab = previousView?.id?.replace(/^view-/, '') || '';
+    renderDashQuote();
     if (previousTab === tab) {
-        if (tab === 'dash') {
-            window.closeDayPanel?.();
-            renderDashQuote();
-        }
+        if (tab === 'dash') window.closeDayPanel?.();
         return;
     }
     await window.autoSaveCurrentDay?.();
