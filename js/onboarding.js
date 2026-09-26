@@ -206,6 +206,7 @@ function renderGroupDots(step) {
 
 async function showStep(index) {
     if (!active) return;
+    cancelAnimationFrame(layoutFrame);
     actionCleanup?.();
     const step = steps[index];
     if (!step) return finishTour(false);
@@ -256,18 +257,27 @@ function renderFinish() {
         <button type="button" class="btn-primary" data-onboarding="home">Перейти на головну</button>`;
 }
 
+export function retainedTourTarget(current, scheduled) {
+    if (!current || current !== scheduled || current.isConnected === false) return null;
+    return current;
+}
+
 function positionTour() {
-    if (!active || !target || !root) return;
+    if (!active || !retainedTourTarget(target, target) || !root?.isConnected) return;
+    const element = target;
+    const host = root;
     cancelAnimationFrame(layoutFrame);
     layoutFrame = requestAnimationFrame(() => {
-        const rect = target.getBoundingClientRect();
-        const spot = root.querySelector('.onboarding-spotlight');
+        if (!retainedTourTarget(target, element) || !host.isConnected) return;
+        const rect = element.getBoundingClientRect();
+        const spot = host.querySelector('.onboarding-spotlight');
+        const card = host.querySelector('.onboarding-card');
+        if (!spot || !card) return;
         const pad = 8;
         spot.style.left = `${Math.max(4, rect.left - pad)}px`;
         spot.style.top = `${Math.max(4, rect.top - pad)}px`;
         spot.style.width = `${Math.min(innerWidth - 8, rect.width + pad * 2)}px`;
         spot.style.height = `${Math.min(innerHeight - 8, rect.height + pad * 2)}px`;
-        const card = root.querySelector('.onboarding-card');
         const cardWidth = Math.min(390, innerWidth - 24);
         card.style.width = `${cardWidth}px`;
         const estimatedHeight = Math.min(card.offsetHeight || 320, innerHeight - 24);
@@ -302,13 +312,13 @@ function positionTour() {
             '.mobile-more-menu.open',
             '.app-modal-overlay[style*="display: flex"]',
         ].flatMap((selector) => [...document.querySelectorAll(selector)])
-            .filter((element) => !root.contains(element) && element !== target)
-            .map((element) => element.getBoundingClientRect())
+            .filter((node) => !host.contains(node) && node !== element)
+            .map((node) => node.getBoundingClientRect())
             .filter((item) => item.width > 0 && item.height > 0);
         const overlapArea = (a, b) => Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left))
             * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
         const nearbyControls = [...document.querySelectorAll('button, a, input, select, textarea')]
-            .filter((element) => element !== target && !target.contains(element) && !root.contains(element))
+            .filter((node) => node !== element && !element.contains(node) && !host.contains(node))
             .map((element) => element.getBoundingClientRect())
             .filter((item) => {
                 if (item.width < 2 || item.height < 2) return false;
@@ -339,6 +349,7 @@ async function nextStep() {
 
 function stopTour(status = 'later') {
     if (!active) return;
+    cancelAnimationFrame(layoutFrame);
     active = false;
     actionCleanup?.();
     target?.classList.remove('onboarding-target');
@@ -351,6 +362,7 @@ function stopTour(status = 'later') {
 
 function finishTour(goHome) {
     writeState('completed', { stepId: 'finish', completedAt: new Date().toISOString() });
+    cancelAnimationFrame(layoutFrame);
     active = false;
     target?.classList.remove('onboarding-target');
     root.hidden = true;
@@ -375,6 +387,7 @@ export function startOnboardingTour(options = {}) {
 }
 
 export function resetOnboardingRuntime() {
+    cancelAnimationFrame(layoutFrame);
     active = false;
     actionCleanup?.();
     actionCleanup = null;
