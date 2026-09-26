@@ -9,6 +9,7 @@ import { disposeStatsView } from './stats.js';
 import { disposeTradesView } from './trades_view2.js';
 import { disposeScreensView } from './gallery.js';
 import { disposeTradesDatagrid } from './trades_datagrid.js';
+import { renderDashQuote } from './dash_quotes.js';
 
 let isThemeUIInitialized = false;
 let selectedDashGreetingIndex = null;
@@ -753,6 +754,7 @@ async function runMainTabWork(tab) {
     if (tab === 'table' && window.initSheetTableView) tasks.push(Promise.resolve(window.initSheetTableView()));
     if (tab === 'datagrid' && window.renderTradesDatagrid) tasks.push(Promise.resolve(window.renderTradesDatagrid()));
     if (tab === 'dash') {
+        renderDashQuote();
         tasks.push(Promise.resolve(refreshDashMiniEquityChartTheme()));
         // Network widgets must never keep the dashboard loading overlay active.
         // They update their own placeholders when the responses arrive.
@@ -900,7 +902,10 @@ export async function switchMainTab(tab, options = {}) {
     const previousView = document.querySelector('.view-content.active');
     const previousTab = previousView?.id?.replace(/^view-/, '') || '';
     if (previousTab === tab) {
-        if (tab === 'dash') window.closeDayPanel?.();
+        if (tab === 'dash') {
+            window.closeDayPanel?.();
+            renderDashQuote();
+        }
         return;
     }
     await window.autoSaveCurrentDay?.();

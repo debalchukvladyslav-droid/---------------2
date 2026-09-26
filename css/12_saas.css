@@ -669,3 +669,52 @@ body[data-theme="light"] .sidebar-nav-item.active .ti-icon { background-color: v
     color: var(--text-main);
     margin: 0;
 }
+
+.dash-quote {
+    margin: 0;
+    padding: 2px 18px 0;
+    border: 0;
+    background: transparent;
+    text-align: center;
+}
+.dash-quote[hidden] { display: none !important; }
+.dash-quote:not([hidden]) { animation: dash-quote-in 0.4s ease; }
+.dash-quote blockquote { margin: 0; padding: 0; border: 0; }
+.dash-quote-text {
+    margin: 0 auto;
+    max-width: 46rem;
+    color: color-mix(in srgb, var(--text-main) 86%, var(--gold));
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", Palatino, serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: clamp(0.98rem, 1.35vw, 1.16rem);
+    line-height: 1.45;
+    text-wrap: balance;
+}
+.dash-quote-by {
+    margin: 8px 0 0;
+    color: var(--text-muted);
+    font-family: var(--font-main);
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}
+.dash-quote-by cite { font-style: normal; }
+.dash-quote-by cite::before {
+    content: "— ";
+    letter-spacing: 0;
+    font-weight: 500;
+}
+@keyframes dash-quote-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: none; }
+}
+@media (max-width: 640px) {
+    .dash-quote { padding-inline: 4px; }
+    .dash-quote-text { font-size: 0.92rem; }
+    .dash-quote-by { letter-spacing: 0.1em; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .dash-quote:not([hidden]) { animation: none; }
+}

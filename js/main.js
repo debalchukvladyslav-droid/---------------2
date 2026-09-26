@@ -41,6 +41,7 @@ import { parseDecimalInput, showToast } from './utils.js';
 import { connectGoogleDrive, syncDriveScreenshots, updateDriveUI, disconnectGoogleDrive, startDriveAutoSync, tryRestoreDriveToken } from './drive.js';
 import { initPlaybookChart } from './playbook_chart.js';
 import { renderDashboardNews, refreshDashboardNews, refreshLiveNewsModal, openLiveNewsModal, closeLiveNewsModal } from './news.js';
+import { renderDashQuote } from './dash_quotes.js';
 import { renderMarketSentiment, refreshMarketSentiment, openMarketSentimentSource } from './market_sentiment.js';
 import { renderMarketAggressiveness } from './market_aggressiveness.js';
 import { renderNextSessionAggressiveness } from './next_session_aggressiveness.js';
@@ -83,6 +84,7 @@ async function ensureAppShellLoaded() {
         appShellPromise = (async () => {
             showGlobalLoader('app-shell', 'Завантаження інтерфейсу...');
             await loadPartials();
+            renderDashQuote();
             initBackgroundControls();
             if (!appShellEventsReady) {
                 initGlobalAppEvents({ shiftDate, closeSOSModal });
