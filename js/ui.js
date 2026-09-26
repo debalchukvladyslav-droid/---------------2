@@ -898,7 +898,6 @@ export async function switchMainTab(tab, options = {}) {
         tab = 'dash';
     }
     document.body?.classList.toggle('is-calendar-tab', tab === 'calendar');
-    if (document.body) document.body.dataset.mainTab = tab;
     const previousView = document.querySelector('.view-content.active');
     const previousTab = previousView?.id?.replace(/^view-/, '') || '';
     renderDashQuote();

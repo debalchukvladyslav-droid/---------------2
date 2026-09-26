@@ -70,6 +70,11 @@ export function localDateKey(date = new Date()) {
     return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
 }
 
+export function monthDateKey(date = new Date()) {
+    const parts = calendarParts(date);
+    return `${parts.year}-${String(parts.month).padStart(2, '0')}-01`;
+}
+
 export function pickDashQuote({ userId = 'guest', date = new Date(), quotes = DASH_QUOTES } = {}) {
     if (!quotes.length) return null;
     const parts = calendarParts(date);

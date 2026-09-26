@@ -1,18 +1,12 @@
 import { state } from './state.js';
-import { localDateKey, pickDashQuote } from './dash_quotes_core.js';
+import { monthDateKey, pickDashQuote } from './dash_quotes_core.js';
 
 export function renderDashQuote() {
     const block = document.getElementById('dash-quote');
     if (!block) return null;
-    const tab = document.body?.dataset.mainTab;
-    const onDash = tab ? tab === 'dash' : !!document.getElementById('view-dash')?.classList.contains('active');
-    if (!onDash) {
-        block.hidden = true;
-        return null;
-    }
     const quote = pickDashQuote({
         userId: state.myUserId || state.USER_DOC_NAME || 'guest',
-        date: localDateKey(),
+        date: monthDateKey(),
     });
     if (!quote) return null;
     const text = document.getElementById('dash-quote-text');

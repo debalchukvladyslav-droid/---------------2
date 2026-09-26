@@ -137,10 +137,6 @@ body {
     gap: 12px;
 }
 
-.app-header .header-left {
-    flex: 0 1 auto;
-}
-
 .header-right {
     gap: 8px;
 }
