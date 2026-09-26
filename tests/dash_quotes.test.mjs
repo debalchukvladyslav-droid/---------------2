@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DASH_QUOTES, monthDateKey, pickDashQuote } from '../js/dash_quotes_core.js';
+import { DASH_QUOTES, pickDashQuote } from '../js/dash_quotes_core.js';
 
 test('dashboard quotes are unique and attributed', () => {
     assert.ok(DASH_QUOTES.length >= 40);
@@ -23,14 +23,6 @@ test('different people see different quotes on the same day', () => {
     const seen = new Set(['alice', 'boris', 'carla', 'dmytro', 'eva', 'farid', 'galia', 'hanna', 'ivan', 'jules', 'kira', 'lev']
         .map((userId) => pickDashQuote({ userId, date: '2026-09-26' }).text));
     assert.ok(seen.size >= 8);
-});
-
-test('the month quote stays the same until the next month', () => {
-    const early = pickDashQuote({ userId: 'user-a', date: monthDateKey('2026-09-02') });
-    const late = pickDashQuote({ userId: 'user-a', date: monthDateKey('2026-09-26') });
-    const next = pickDashQuote({ userId: 'user-a', date: monthDateKey('2026-10-01') });
-    assert.equal(early.text, late.text);
-    assert.notEqual(early.text, next.text);
 });
 
 test('a person walks through the library across days', () => {

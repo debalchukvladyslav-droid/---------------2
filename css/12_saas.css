@@ -672,10 +672,10 @@ body[data-theme="light"] .sidebar-nav-item.active .ti-icon { background-color: v
 
 .dash-quote {
     flex: 0 0 auto;
+    width: 100%;
+    box-sizing: border-box;
     margin: 0;
-    padding: 2px 8px 0;
-    border: 0;
-    background: transparent;
+    padding: 10px 12px 9px;
     text-align: center;
 }
 .dash-quote[hidden] { display: none !important; }
