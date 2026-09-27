@@ -13,6 +13,7 @@ export function renderDashQuote() {
     const author = document.getElementById('dash-quote-author');
     if (text) text.textContent = quote.text;
     if (author) author.textContent = quote.author;
+    block.classList.toggle('is-rule', quote.kind === 'rule');
     block.title = `${quote.text} — ${quote.author}`;
     block.hidden = false;
     return quote;

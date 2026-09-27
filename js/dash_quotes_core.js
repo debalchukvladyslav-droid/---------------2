@@ -53,7 +53,40 @@ export const DASH_QUOTES = [
     { text: '«Характер людини — її доля.»', author: 'Геракліт' },
     { text: '«Недосліджене життя не варте того, щоб його прожити.»', author: 'Сократ' },
     { text: '«Вбирай корисне, відкидай зайве і додай те, що твоє.»', author: 'Брюс Лі' },
+    { text: '«На ринку немає нічого нового. Спекуляція стара, як світ.»', author: 'Джессі Лівермор' },
+    { text: '«Ринок не перемагає трейдера. Найчастіше трейдер перемагає сам себе.»', author: 'Джессі Лівермор' },
+    { text: '«Можна мати рацію і все одно не заробити, якщо не вистачить терпіння.»', author: 'Джессі Лівермор' },
+    { text: '«Будь-що може статися.»', author: 'Марк Дуглас' },
+    { text: '«Тобі не потрібно знати, що станеться далі, щоб заробляти.»', author: 'Марк Дуглас' },
+    { text: '«Перевага — це лише більша ймовірність одного результату над іншим.»', author: 'Марк Дуглас' },
+    { text: '«Кожен момент на ринку унікальний.»', author: 'Марк Дуглас' },
+    { text: '«Прийми ризик до входу — або не входь.»', author: 'Марк Дуглас' },
+    { text: '«Дій за своєю перевагою без вагань.»', author: 'Марк Дуглас' },
+    { text: '«Новачки зазвичай торгують у три-п’ять разів більшим розміром, ніж потрібно.»', author: 'Брюс Ковнер' },
+    { text: '«Стоп визначає розмір позиції, а не бажаний прибуток.»', author: 'Брюс Ковнер' },
+    { text: '«Якщо ти персоналізуєш збитки, ти не зможеш нормально торгувати.»', author: 'Брюс Ковнер' },
+    { text: '«Тренд — твій друг, доки наприкінці не зігнеться.»', author: 'Ед Сейкота' },
+    { text: '«Виграєш чи програєш — зрештою кожен отримує від ринку те, чого хоче.»', author: 'Ед Сейкота' },
 ];
+
+export const TRADER_RULES = [
+    { text: '«Результат однієї угоди нічого не доводить.»' },
+    { text: '«Не плутай хорошу угоду з прибутковою угодою.»' },
+    { text: '«Одна угода — випадковість. Серія угод — статистика.»' },
+    { text: '«Твоя задача — не вгадати наступну угоду. Твоя задача — виконати систему.»' },
+    { text: '«Пропущена угода коштує нуль. Погана угода коштує грошей.»' },
+    { text: '«Немає сетапу — немає угоди.»' },
+    { text: '«Не торгувати — теж позиція.»' },
+    { text: '«Капітал, який ти зберіг сьогодні, дає тобі право торгувати завтра.»' },
+    { text: '«Дисципліна особливо важлива тоді, коли здається, що вона вже не потрібна.»' },
+    { text: '«Не змінюй систему через останню угоду.»' },
+    { text: '«Хороший процес може дати поганий результат. Поганий процес може випадково дати хороший.»' },
+    { text: '«Не оцінюй рішення за одним результатом.»' },
+    { text: '«Коли хочеться відігратися — це вже не сетап.»' },
+    { text: '«Ринок буде відкритий і завтра. Твій капітал має дожити до завтра.»' },
+];
+
+export const TRADER_RULE_LABEL = 'Правило трейдера';
 
 export function hashSeed(value) {
     let hash = 2166136261;
@@ -70,12 +103,21 @@ export function localDateKey(date = new Date()) {
     return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
 }
 
-export function pickDashQuote({ userId = 'guest', date = new Date(), quotes = DASH_QUOTES } = {}) {
-    if (!quotes.length) return null;
+export function pickDashQuote({
+    userId = 'guest',
+    date = new Date(),
+    quotes = DASH_QUOTES,
+    rules = TRADER_RULES,
+} = {}) {
     const parts = calendarParts(date);
     const day = Math.floor(Date.UTC(parts.year, parts.month - 1, parts.day) / 86400000);
-    const index = (hashSeed(userId || 'guest') + day) % quotes.length;
-    return quotes[index];
+    const useRule = day % 2 === 1;
+    const list = useRule ? rules : quotes;
+    if (!list.length) return null;
+    const index = (hashSeed(userId || 'guest') + Math.floor(day / 2)) % list.length;
+    const quote = list[index];
+    if (useRule) return { ...quote, kind: 'rule', author: TRADER_RULE_LABEL };
+    return { ...quote, kind: 'person' };
 }
 
 function calendarParts(date) {

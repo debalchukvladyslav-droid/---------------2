@@ -718,6 +718,7 @@ body[data-theme="light"] .sidebar-nav-item.active .ti-icon { background-color: v
     letter-spacing: 0;
     font-weight: 500;
 }
+.dash-quote.is-rule .dash-quote-by cite::before { content: none; }
 @keyframes dash-quote-in {
     from { opacity: 0; }
     to { opacity: 1; }
