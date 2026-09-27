@@ -57,7 +57,7 @@ export function pickReplaySession(sessions = [], random = Math.random) {
     return sessions[index] || null;
 }
 
-export function createReplay(candles, { warmup = 20, fromOpen = false } = {}) {
+export function createReplay(candles, { warmup = 20, fromOpen = false, fromStart = false } = {}) {
     const unique = [];
     const seen = new Set();
     (Array.isArray(candles) ? candles : []).forEach((candidate) => {
@@ -72,7 +72,7 @@ export function createReplay(candles, { warmup = 20, fromOpen = false } = {}) {
         if (openCursor == null) unique.length = 0;
         else unique.splice(0, openCursor - 1);
     }
-    const cursor = fromOpen
+    const cursor = fromOpen || fromStart
         ? Math.min(unique.length, 1)
         : Math.min(unique.length, Math.max(1, Math.floor(warmup) || 1));
     return {
@@ -253,6 +253,36 @@ export function summarizeAttempts(trades = []) {
         totalR,
         avgR: rows.length ? totalR / rows.length : 0,
     };
+}
+
+export function stopFromEntryAndCents(entryPrice, consolidateCents) {
+    const entry = Number(entryPrice);
+    const raw = String(consolidateCents ?? '').replace(/\s/g, '').replace(',', '.');
+    if (!(entry > 0) || !/[0-9]/.test(raw)) return null;
+    const cents = Number(raw.replace(/[^0-9.-]/g, ''));
+    if (!Number.isFinite(cents)) return null;
+    return Math.round((entry + cents / 100) * 10000) / 10000;
+}
+
+export function tradeClockToUnix(dateStr, value, offset = '-04:00') {
+    const text = String(value || '').trim();
+    if (!text || !/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || ''))) return null;
+    if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(text) || /^\d{4}-\d{2}-\d{2}T/.test(text)) {
+        const parsed = Date.parse(text);
+        if (Number.isFinite(parsed)) return Math.floor(parsed / 1000);
+    }
+    const match = text.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i);
+    if (!match) return null;
+    let hour = Number(match[1]);
+    const minute = Number(match[2]);
+    const second = Number(match[3] || 0);
+    const ampm = match[4]?.toUpperCase();
+    if (ampm === 'PM' && hour < 12) hour += 12;
+    if (ampm === 'AM' && hour === 12) hour = 0;
+    if (hour > 23 || minute > 59 || second > 59) return null;
+    const stamp = `${dateStr}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}${offset}`;
+    const parsed = Date.parse(stamp);
+    return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : null;
 }
 
 export function formatReplayPrice(value) {

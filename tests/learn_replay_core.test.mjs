@@ -12,7 +12,9 @@ import {
     pickReplaySession,
     setEntryPrice,
     setStopPrice,
+    stopFromEntryAndCents,
     summarizeAttempts,
+    tradeClockToUnix,
 } from '../js/learn_replay_core.js';
 
 function bar(time, open, high, low, close) {
@@ -121,6 +123,20 @@ test('jump to the open resolves orders on skipped candles and pauses again', () 
     assert.equal(jumped.trades[0].result, 'stop');
 });
 
+test('the replay can start on the first journal candle and keep the last one', () => {
+    const start = 1_700_000_000;
+    const end = start + 86_400;
+    const replay = createReplay([
+        bar(start, 4, 4.2, 3.9, 4.1),
+        bar(start + 60, 4.1, 8, 4, 7.5),
+        bar(end, 6, 6.2, 5.8, 6),
+    ], { fromStart: true });
+    assert.equal(replay.cursor, 1);
+    assert.equal(replay.bars[0].time, start);
+    assert.equal(replay.bars.at(-1).time, end);
+    assert.equal(replay.bars.length, 3);
+});
+
 test('the replay starts on the opening minute, not five minutes later', () => {
     const open = Math.floor(Date.UTC(2026, 0, 5, 14, 30) / 1000);
     const replay = createReplay([
@@ -146,6 +162,18 @@ test('a ticker allows a second entry only after a stop', () => {
     const twice = { ...open, trades: [{ result: 'stop', r: -1 }, { result: 'stop', r: -1 }] };
     assert.equal(entriesAllowed(twice), false);
     assert.equal(beginEntry(taken), taken);
+});
+
+test('stop is the entry plus consolidation cents', () => {
+    assert.equal(stopFromEntryAndCents(4.25, 15), 4.4);
+    assert.equal(stopFromEntryAndCents(10, '7,5'), 10.075);
+    assert.equal(stopFromEntryAndCents(10, ''), null);
+});
+
+test('trade clocks are read as New York time on that date', () => {
+    const unix = tradeClockToUnix('2026-01-05', '09:31:00', '-05:00');
+    assert.equal(unix, Math.floor(Date.UTC(2026, 0, 5, 14, 31) / 1000));
+    assert.equal(tradeClockToUnix('2026-01-05', '9:31 AM', '-05:00'), unix);
 });
 
 test('an unfinished position is marked to the last close', () => {

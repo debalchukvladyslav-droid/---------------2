@@ -119,6 +119,8 @@
 .learn-replay-coach p { margin: 0; display: grid; gap: 4px; }
 .learn-replay-coach strong { font-size: 0.92rem; }
 .is-lesson-target { outline: 2px solid var(--accent); outline-offset: 3px; }
+.learn-replay-lead, .learn-replay-note { color: var(--text-muted); font-size: 0.84rem; line-height: 1.45; margin: 0 0 12px; }
+.learn-replay-wide { grid-column: 1 / -1; }
 .learn-replay-meta { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; margin-bottom: 10px; }
 .learn-replay-meta strong { font-family: var(--font-head); font-size: 1rem; }
 .learn-replay-clock, #learn-replay-status { color: var(--text-muted); font-size: 0.82rem; }
