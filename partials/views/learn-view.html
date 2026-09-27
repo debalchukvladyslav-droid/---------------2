@@ -1,4 +1,9 @@
 <div id="view-learn" class="view-content">
+    <div class="learn-mode-bar" role="tablist" aria-label="Режим навчання">
+        <button type="button" class="learn-mode-btn active" role="tab" aria-selected="true" data-action="learn-mode" data-learn-mode="videos">Відео</button>
+        <button type="button" class="learn-mode-btn" role="tab" aria-selected="false" data-action="learn-mode" data-learn-mode="replay">Полігон</button>
+    </div>
+    <div id="learn-videos-pane">
     <div class="panel">
         <div class="section-head">
             <h3 class="section-title-accent">Навчання</h3>
@@ -14,5 +19,35 @@
         <div id="learn-results" class="learn-results-grid">
             <div class="empty-grid-state">Натисніть “Оновити” щоб AI підібрав відео для вас</div>
         </div>
+    </div>
+    </div>
+    <div id="learn-replay-pane" class="panel learn-replay" hidden>
+        <div class="section-head">
+            <h3 class="section-title-accent">Полігон</h3>
+            <button type="button" class="btn-primary btn-auto" data-action="learn-replay-new">Нова сесія</button>
+        </div>
+        <p class="learn-replay-lead">Випадковий тікер береться з журналу: з вашого дня або з дня когось із куща. Свічки відкриваються по одній, як запис. Клік по графіку ставить ціну входу на поточній свічці, другий клік ставить стоп. Кнопка «Вхід» входить за ціною закриття цієї свічки. Тейк завжди стоїть на 1:3.7. Після останньої свічки видно ваші входи і входи людини, з чийого дня взято сесію.</p>
+        <div class="learn-replay-meta">
+            <strong id="learn-replay-title">Сесію ще не вибрано</strong>
+            <span id="learn-replay-clock"></span>
+            <span id="learn-replay-status">Натисніть «Нова сесія»</span>
+        </div>
+        <div id="learn-replay-chart" class="learn-replay-chart"></div>
+        <div class="learn-replay-transport">
+            <button type="button" class="btn-secondary" id="learn-replay-play" data-action="learn-replay-play" disabled>Старт</button>
+            <div class="learn-replay-speeds" role="group" aria-label="Швидкість">
+                <button type="button" data-action="learn-replay-speed" data-speed="1" aria-pressed="true">1×</button>
+                <button type="button" data-action="learn-replay-speed" data-speed="2" aria-pressed="false">2×</button>
+                <button type="button" data-action="learn-replay-speed" data-speed="5" aria-pressed="false">5×</button>
+            </div>
+            <button type="button" class="btn-secondary" id="learn-replay-open" data-action="learn-replay-open" disabled>До відкриття</button>
+        </div>
+        <div class="learn-replay-orders">
+            <button type="button" class="btn-primary" id="learn-replay-entry" data-action="learn-replay-entry" disabled>Вхід</button>
+            <button type="button" class="btn-secondary" id="learn-replay-stop" data-action="learn-replay-stop" disabled>Стоп</button>
+            <span class="learn-replay-take" id="learn-replay-take">Тейк 1:3.7</span>
+            <button type="button" class="btn-secondary" id="learn-replay-cancel" data-action="learn-replay-cancel" disabled>Скасувати</button>
+        </div>
+        <div id="learn-replay-results" class="learn-replay-results" hidden></div>
     </div>
 </div>

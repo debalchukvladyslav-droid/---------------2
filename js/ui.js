@@ -800,6 +800,7 @@ async function runMainTabWork(tab) {
     }
     if (tab === 'playbook' && window.renderPlaybook) tasks.push(Promise.resolve(window.renderPlaybook()));
     if (tab === 'learn' && window.renderLearnCache) tasks.push(Promise.resolve(window.renderLearnCache()));
+    if (tab === 'learn') tasks.push(import('./learn_replay.js').then((module) => module.syncLearnReplayLayout()));
     if (tab === 'admin' && window.renderAdminPanel) tasks.push(Promise.resolve(window.renderAdminPanel()));
     if (tab === 'testing' && window.renderTestingPanel) tasks.push(Promise.resolve(window.renderTestingPanel()));
     if (tab === 'research') tasks.push(import('./research.js').then((module) => module.openResearchView()));
@@ -904,6 +905,9 @@ export async function switchMainTab(tab, options = {}) {
     if (previousTab === tab) {
         if (tab === 'dash') window.closeDayPanel?.();
         return;
+    }
+    if (previousTab === 'learn' && tab !== 'learn') {
+        void import('./learn_replay.js').then((module) => module.pauseLearnReplay());
     }
     await window.autoSaveCurrentDay?.();
     const switchToken = ++mainTabSwitchToken;
