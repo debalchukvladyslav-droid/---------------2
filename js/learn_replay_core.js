@@ -57,7 +57,7 @@ export function pickReplaySession(sessions = [], random = Math.random) {
     return sessions[index] || null;
 }
 
-export function createReplay(candles, { warmup = 20 } = {}) {
+export function createReplay(candles, { warmup = 20, fromOpen = false } = {}) {
     const unique = [];
     const seen = new Set();
     (Array.isArray(candles) ? candles : []).forEach((candidate) => {
@@ -67,7 +67,14 @@ export function createReplay(candles, { warmup = 20 } = {}) {
         unique.push(bar);
     });
     unique.sort((a, b) => a.time - b.time);
-    const cursor = Math.min(unique.length, Math.max(1, Math.floor(warmup) || 1));
+    if (fromOpen) {
+        const openCursor = cursorAtSessionOpen(unique);
+        if (openCursor == null) unique.length = 0;
+        else unique.splice(0, openCursor - 1);
+    }
+    const cursor = fromOpen
+        ? Math.min(unique.length, 1)
+        : Math.min(unique.length, Math.max(1, Math.floor(warmup) || 1));
     return {
         bars: unique,
         cursor,
@@ -118,9 +125,17 @@ export function setReplayStatus(replay, status) {
     return { ...replay, status };
 }
 
+export function entriesAllowed(replay) {
+    if (!replay || replay.status === 'done' || replay.active) return false;
+    if (replay.phase === 'entry' || replay.phase === 'stop' || replay.phase === 'position') return false;
+    if (replay.cursor >= (replay.bars?.length || 0)) return false;
+    const tries = replay.trades?.length || 0;
+    if (tries === 0) return true;
+    return tries === 1 && replay.trades[0].result === 'stop';
+}
+
 export function beginEntry(replay) {
-    if (!replay || replay.status === 'done' || replay.active) return replay;
-    if (replay.cursor >= replay.bars.length) return replay;
+    if (!entriesAllowed(replay)) return replay;
     return { ...replay, phase: 'entry', pending: null };
 }
 

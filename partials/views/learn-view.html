@@ -24,13 +24,16 @@
     <div id="learn-replay-pane" class="panel learn-replay" hidden>
         <div class="section-head">
             <h3 class="section-title-accent">Полігон</h3>
-            <button type="button" class="btn-primary btn-auto" data-action="learn-replay-new">Нова сесія</button>
+            <button type="button" class="btn-primary btn-auto" id="learn-replay-new" data-action="learn-replay-new">Почати</button>
         </div>
-        <p class="learn-replay-lead">Випадковий тікер береться з журналу: з вашого дня або з дня когось із куща. Свічки відкриваються по одній, як запис. Клік по графіку ставить ціну входу на поточній свічці, другий клік ставить стоп. Кнопка «Вхід» входить за ціною закриття цієї свічки. Тейк завжди стоїть на 1:3.7. Після останньої свічки видно ваші входи і входи людини, з чийого дня взято сесію.</p>
+        <div id="learn-replay-coach" class="learn-replay-coach" hidden>
+            <p id="learn-replay-coach-text"></p>
+        </div>
+        <p class="learn-replay-lead">Урок іде тікер за тікером, поки не натиснеш «Зупинити». Стрічка починається з 9:30, з першої хвилини сесії. На тікер один вхід; після стопа можна ввійти ще раз. У кінці вхід звіряється з реальними угодами з TRADES.</p>
         <div class="learn-replay-meta">
             <strong id="learn-replay-title">Сесію ще не вибрано</strong>
             <span id="learn-replay-clock"></span>
-            <span id="learn-replay-status">Натисніть «Нова сесія»</span>
+            <span id="learn-replay-status">Натисни «Почати»</span>
         </div>
         <div id="learn-replay-chart" class="learn-replay-chart"></div>
         <div class="learn-replay-transport">
@@ -40,7 +43,6 @@
                 <button type="button" data-action="learn-replay-speed" data-speed="2" aria-pressed="false">2×</button>
                 <button type="button" data-action="learn-replay-speed" data-speed="5" aria-pressed="false">5×</button>
             </div>
-            <button type="button" class="btn-secondary" id="learn-replay-open" data-action="learn-replay-open" disabled>До відкриття</button>
         </div>
         <div class="learn-replay-orders">
             <button type="button" class="btn-primary" id="learn-replay-entry" data-action="learn-replay-entry" disabled>Вхід</button>

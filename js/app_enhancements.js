@@ -6,7 +6,7 @@ import { rememberShsTrader } from './shs_sync.js';
 import { showToast } from './utils.js';
 import { INVALID_IMAGE_FORMAT_MESSAGE, isJpegOrPng } from './image_file_validation.js';
 import { copyClientErrorReport, downloadClientErrorReports, refreshClientErrorReports } from './admin.js';
-import { cancelLearnReplaySetup, enterLearnReplay, focusLearnReplayStop, jumpLearnReplayToOpen, setLearnReplaySpeed, showLearnMode, startLearnReplay, toggleLearnReplay } from './learn_replay.js';
+import { cancelLearnReplaySetup, enterLearnReplay, focusLearnReplayStop, onLearnRunButton, setLearnReplaySpeed, showLearnMode, toggleLearnReplay } from './learn_replay.js';
 
 const MAX_IMPORT_SIZE_MB = 35;
 let dayFormDirty = false;
@@ -175,10 +175,9 @@ function activateAction(action, trigger, event = null) {
         'reset-apply': () => window.applyNewPassword?.(),
         'learn-refresh': () => window.loadLearnContent?.(),
         'learn-mode': () => showLearnMode(trigger?.dataset?.learnMode),
-        'learn-replay-new': () => { void startLearnReplay(); },
+        'learn-replay-new': () => onLearnRunButton(),
         'learn-replay-play': () => toggleLearnReplay(),
         'learn-replay-speed': () => setLearnReplaySpeed(trigger),
-        'learn-replay-open': () => jumpLearnReplayToOpen(),
         'learn-replay-entry': () => enterLearnReplay(),
         'learn-replay-stop': () => focusLearnReplayStop(),
         'learn-replay-cancel': () => cancelLearnReplaySetup(),

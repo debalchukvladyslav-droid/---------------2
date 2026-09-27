@@ -2,10 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     advanceReplay,
+    beginEntry,
     collectReplaySessions,
     createReplay,
     cursorAtSessionOpen,
     enterAtMarket,
+    entriesAllowed,
     jumpToSessionOpen,
     pickReplaySession,
     setEntryPrice,
@@ -117,6 +119,33 @@ test('jump to the open resolves orders on skipped candles and pauses again', () 
     assert.equal(jumped.cursor, 3);
     assert.equal(jumped.status, 'paused');
     assert.equal(jumped.trades[0].result, 'stop');
+});
+
+test('the replay starts on the opening minute, not five minutes later', () => {
+    const open = Math.floor(Date.UTC(2026, 0, 5, 14, 30) / 1000);
+    const replay = createReplay([
+        bar(open - 300, 10, 10, 10, 10),
+        bar(open, 10, 10.2, 9.9, 10),
+        bar(open + 60, 10, 10, 10, 10),
+        bar(open + 300, 10, 11, 9, 10),
+    ], { fromOpen: true });
+    assert.equal(replay.bars[0].time, open);
+    assert.equal(replay.cursor, 1);
+    assert.equal(replay.bars.some((candle) => candle.time === open - 300), false);
+    assert.equal(replay.bars.some((candle) => candle.time === open + 300), true);
+});
+
+test('a ticker allows a second entry only after a stop', () => {
+    const bars = [bar(1, 10, 10, 10, 10), bar(2, 10, 10, 10, 10), bar(3, 10, 10, 10, 10)];
+    const open = createReplay(bars, { warmup: 1 });
+    assert.equal(entriesAllowed(open), true);
+    const stopped = { ...open, trades: [{ result: 'stop', r: -1 }] };
+    assert.equal(entriesAllowed(stopped), true);
+    const taken = { ...open, trades: [{ result: 'take', r: 3.7 }] };
+    assert.equal(entriesAllowed(taken), false);
+    const twice = { ...open, trades: [{ result: 'stop', r: -1 }, { result: 'stop', r: -1 }] };
+    assert.equal(entriesAllowed(twice), false);
+    assert.equal(beginEntry(taken), taken);
 });
 
 test('an unfinished position is marked to the last close', () => {
