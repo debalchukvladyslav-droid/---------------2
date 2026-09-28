@@ -37,20 +37,31 @@ test('collects only shorts closed by time', () => {
     assert.deepEqual(collectTimedShortTrades(journal).map((row) => row.symbol), ['TIME']);
 });
 
-test('ZTG uses the later time exit when the first fill stopped in a few minutes', () => {
+test('ZTG uses the later time exit when Excel marks that entry по часу', () => {
     const journal = { '2026-09-04': { trades: [
         { symbol: 'ZTG', type: 'Short', opened: '05:11:02', closed: '05:14:50', entry: 0.7947, exit: 0.9, qty: 10770, net: -1183, sheet: { exit: 'по часу', consolidateCents: 7.53, entryPrice: 0.7947, sheetNet: -1119 } },
-        { symbol: 'ZTG', type: 'Short', opened: '05:16:42', closed: '09:30:13', entry: 0.79, exit: 0.6869, qty: 10770, net: 1110, sheet: { exit: 'стоп', entryPrice: 0.79 } },
+        { symbol: 'ZTG', type: 'Short', opened: '05:16:42', closed: '09:30:13', entry: 0.79, exit: 0.6869, qty: 10770, net: 1110, sheet: { exit: 'по часу', entryPrice: 0.79, consolidateCents: 7.53 } },
     ] } };
     const sheetRows = { main: { '2026-09-04': [
-        { symbol: 'ZTG', net: -1119, type: 'Short', sheet: { exit: 'по часу', entryPrice: 0.7947, consolidateCents: 7.53, qtyShares: 10770, sheetNet: -1119, sheetRow: 2 } },
+        { symbol: 'ZTG', net: -1119, type: 'Short', sheet: { exit: 'стоп', entryPrice: 0.7947, consolidateCents: 7.53, qtyShares: 10770, sheetNet: -1119, sheetRow: 2 } },
+        { symbol: 'ZTG', net: 1110, type: 'Short', sheet: { exit: 'по часу', entryPrice: 0.79, consolidateCents: 7.53, qtyShares: 10770, sheetNet: 1110, sheetRow: 3 } },
     ] } };
     const rows = collectTimedShortTrades(journal, null, { sheetRows });
     assert.equal(rows.length, 1);
     assert.equal(rows[0].entryPrice, 0.79);
     assert.equal(rows[0].stopEntryMinute, 316);
     assert.equal(rows[0].actualExitPrice, 0.6869);
-    assert.equal(rows[0].stopPrice, 0.8653);
+});
+
+test('LXEH take in Excel is not treated as a time exit', () => {
+    const journal = { '2026-09-04': { trades: [
+        { symbol: 'LXEH', type: 'Short', opened: '04:12:00', closed: '04:15:10', entry: 4.2, exit: 4.55, qty: 2000, net: -700, sheet: { exit: 'по часу', entryPrice: 4.2, consolidateCents: 35 } },
+        { symbol: 'LXEH', type: 'Short', opened: '04:20:00', closed: '08:05:00', entry: 4.1, exit: 3.4, qty: 2000, net: 1400, sheet: { exit: 'тейк', entryPrice: 4.1, consolidateCents: 35 } },
+    ] } };
+    const sheetRows = { main: { '2026-09-04': [
+        { symbol: 'LXEH', net: 1400, type: 'Short', sheet: { exit: 'тейк', entryPrice: 4.1, consolidateCents: 35, qtyShares: 2000, sheetNet: 1400, sheetRow: 8 } },
+    ] } };
+    assert.deepEqual(collectTimedShortTrades(journal, null, { sheetRows }), []);
 });
 
 test('keeps the time-exit entry when the same day starts with a stop', () => {

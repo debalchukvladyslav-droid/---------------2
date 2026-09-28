@@ -185,40 +185,62 @@ function indexedShorts(trades = [], symbol = '') {
     });
 }
 
-function closestByPnl(list = [], profit = null) {
-    if (!list.length) return null;
-    if (profit == null) return list[0];
-    return [...list].sort((left, right) => {
-        const leftNet = tradeResultValue(left.trade);
-        const rightNet = tradeResultValue(right.trade);
-        const leftDistance = leftNet == null ? Number.POSITIVE_INFINITY : Math.abs(leftNet - profit);
-        const rightDistance = rightNet == null ? Number.POSITIVE_INFINITY : Math.abs(rightNet - profit);
-        return leftDistance - rightDistance || left.tradeIndex - right.tradeIndex;
-    })[0];
+function isConfirmedTimeExit(trade = {}) {
+    if (!isTimeExitTrade(trade)) return false;
+    if (isExcludedStopTakeExit(trade)) return false;
+    return true;
 }
 
-function chooseTimeExitFills(trades = [], { profit = null, requireLabel = true } = {}) {
-    const labeled = trades.filter(({ trade }) => isTimeExitTrade(trade));
-    const live = trades.filter(({ trade }) => !isQuickStopFill(trade));
-    const labeledLive = labeled.filter(({ trade }) => !isQuickStopFill(trade));
-    if (labeledLive.length) return labeledLive;
-    if ((labeled.length || !requireLabel) && live.length) return live.length === 1 ? live : [closestByPnl(live, profit)].filter(Boolean);
-    if (labeled.length) return labeled;
-    return [];
+function chooseTimeExitFills(trades = []) {
+    const labeled = trades.filter(({ trade }) => isConfirmedTimeExit(trade));
+    const live = labeled.filter(({ trade }) => !isQuickStopFill(trade));
+    if (live.length) return live;
+    return labeled;
 }
 
-function asTimeExitTrade(trade = {}, centsSource = null) {
-    const ownCents = consolidationCents(trade?.sheet?.consolidateCents);
-    const cents = ownCents != null ? trade.sheet.consolidateCents : centsSource?.sheet?.consolidateCents;
-    return {
-        ...trade,
-        sheet: {
-            ...(centsSource?.sheet || {}),
-            ...(trade?.sheet || {}),
-            ...(cents != null && cents !== '' ? { consolidateCents: cents } : {}),
-            exit: tradeExitReason(trade) && isTimeExitTrade(trade) ? tradeExitReason(trade) : 'по часу',
-        },
-    };
+function listSheetExitRows(sheetRows = {}, allowedDates = null) {
+    const store = sheetRows && typeof sheetRows === 'object' ? sheetRows : {};
+    const rows = [];
+    Object.values(store).forEach((byDay) => {
+        if (!byDay || typeof byDay !== 'object' || Array.isArray(byDay)) return;
+        Object.entries(byDay).forEach(([dateStr, dayRows]) => {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr) || (allowedDates instanceof Set && !allowedDates.has(dateStr))) return;
+            (Array.isArray(dayRows) ? dayRows : []).forEach((row, index) => {
+                const sheet = row?.sheet && typeof row.sheet === 'object' ? row.sheet : {};
+                const symbol = String(row?.symbol || '').toUpperCase();
+                if (!/^[A-Z]{1,10}$/.test(symbol)) return;
+                rows.push({ date: dateStr, symbol, entryPrice: Number(sheet.entryPrice ?? row?.entry), sheet, row, index });
+            });
+        });
+    });
+    return rows;
+}
+
+function sheetRowMatchRank(sheetRow, trade) {
+    if (!sheetRowMatchesTrade(sheetRow, trade)) return 0;
+    const entry = tradeEntryPrice(trade);
+    if (entry && sheetRow.entryPrice > 0 && samePrice(entry, sheetRow.entryPrice)) return 2;
+    return 1;
+}
+
+function sheetRowMatchesTrade(sheetRow, trade) {
+    const entry = tradeEntryPrice(trade);
+    if (entry && sheetRow.entryPrice > 0 && samePrice(entry, sheetRow.entryPrice)) return true;
+    const profit = sheetProfit(sheetRow.row);
+    const net = tradeResultValue(trade);
+    return profit != null && net != null && Math.abs(net - profit) <= Math.max(5, Math.abs(profit) * 0.08);
+}
+
+function excelConfirmsTimeExit(trade, excelRows = []) {
+    if (!excelRows.length) return isConfirmedTimeExit(trade);
+    const timeRows = excelRows.filter((row) => isConfirmedTimeExit({ sheet: row.sheet }));
+    const closedRows = excelRows.filter((row) => isExcludedStopTakeExit({ sheet: row.sheet }) && !isConfirmedTimeExit({ sheet: row.sheet }));
+    const bestTime = timeRows.reduce((best, row) => Math.max(best, sheetRowMatchRank(row, trade)), 0);
+    const bestClosed = closedRows.reduce((best, row) => Math.max(best, sheetRowMatchRank(row, trade)), 0);
+    if (bestClosed > bestTime) return false;
+    if (bestTime > 0) return true;
+    if (!timeRows.length) return false;
+    return false;
 }
 
 function listSheetTimeExits(sheetRows = {}, allowedDates = null) {
@@ -232,7 +254,7 @@ function listSheetTimeExits(sheetRows = {}, allowedDates = null) {
             (Array.isArray(dayRows) ? dayRows : []).forEach((row, index) => {
                 const sheet = row?.sheet && typeof row.sheet === 'object' ? row.sheet : {};
                 const trade = { ...row, sheet };
-                if (!isTimeExitTrade(trade)) return;
+                if (!isConfirmedTimeExit(trade)) return;
                 const symbol = String(row?.symbol || '').toUpperCase();
                 const entryPrice = Number(sheet.entryPrice ?? row?.entry);
                 if (!/^[A-Z]{1,10}$/.test(symbol) || !(entryPrice > 0)) return;
@@ -287,6 +309,7 @@ function timedRowFromTrade(dateStr, tradeIndex, trade, { marketOpenStopsOnly }) 
 export function collectTimedShortTrades(journal = {}, allowedDates = null, { marketOpenStopsOnly = false, sheetRows = null } = {}) {
     const rows = [];
     const journalByDay = new Map();
+    const excelRows = sheetRows ? listSheetExitRows(sheetRows, allowedDates) : [];
     for (const [dateStr, day] of Object.entries(journal || {})) {
         if (allowedDates instanceof Set && !allowedDates.has(dateStr)) continue;
         const trades = day?.trades || [];
@@ -306,12 +329,11 @@ export function collectTimedShortTrades(journal = {}, allowedDates = null, { mar
             bySymbol.set(symbol, list);
         });
         bySymbol.forEach((list) => {
-            const centsSource = list.find(({ trade }) => isTimeExitTrade(trade) && consolidationCents(trade?.sheet?.consolidateCents) != null)?.trade
-                || list.find(({ trade }) => consolidationCents(trade?.sheet?.consolidateCents) != null)?.trade
-                || null;
-            chooseTimeExitFills(list, { requireLabel: true }).forEach((fill) => {
-                const trade = isTimeExitTrade(fill.trade) && !isShortStoppedOut(fill.trade) ? fill.trade : asTimeExitTrade(fill.trade, centsSource);
-                const row = timedRowFromTrade(dateStr, fill.tradeIndex, trade, { marketOpenStopsOnly: false });
+            const symbol = String(list[0]?.trade?.symbol || '').toUpperCase();
+            const excel = excelRows.filter((row) => row.date === dateStr && row.symbol === symbol);
+            chooseTimeExitFills(list).forEach((fill) => {
+                if (sheetRows && !excelConfirmsTimeExit(fill.trade, excel)) return;
+                const row = timedRowFromTrade(dateStr, fill.tradeIndex, fill.trade, { marketOpenStopsOnly: false });
                 if (row) rows.push(row);
             });
         });
@@ -327,25 +349,30 @@ export function collectTimedShortTrades(journal = {}, allowedDates = null, { mar
     sheetTimes.forEach((sheetTime) => {
         const trades = journalByDay.get(sheetTime.date) || [];
         const profit = sheetProfit(sheetTime.row);
+        const excel = excelRows.filter((row) => row.date === sheetTime.date && row.symbol === sheetTime.symbol);
         const available = indexedShorts(trades, sheetTime.symbol).filter(({ tradeIndex }) => !usedTrades.has(`${sheetTime.date}:${tradeIndex}`));
-        const liveFill = chooseTimeExitFills(available, { profit, requireLabel: false }).find(({ trade }) => !isQuickStopFill(trade)) || null;
-        if (liveFill) usedTrades.add(`${sheetTime.date}:${liveFill.tradeIndex}`);
-        const borrow = liveFill;
+        const borrow = available
+            .filter(({ trade }) => excelConfirmsTimeExit(trade, excel) && sheetRowMatchRank(sheetTime, trade) > 0 && !isQuickStopFill(trade))
+            .sort((left, right) => sheetRowMatchRank(sheetTime, right.trade) - sheetRowMatchRank(sheetTime, left.trade))[0] || null;
+        if (borrow) usedTrades.add(`${sheetTime.date}:${borrow.tradeIndex}`);
         const entryPrice = tradeEntryPrice(borrow?.trade) || sheetTime.entryPrice;
         const qty = Math.abs(Number(borrow?.trade?.qty || sheetTime.sheet.qtyShares || 0));
         const actualExitPrice = tradeExitPrice(borrow?.trade)
             || shortExitFromProfit(entryPrice, qty, borrow ? tradeResultValue(borrow.trade) : profit);
         const opened = borrow?.trade?.opened || borrow?.trade?.entryTime || '';
-        const centsSource = borrow?.trade?.sheet?.consolidateCents ? borrow.trade : { sheet: sheetTime.sheet };
-        const synthetic = asTimeExitTrade({
-            ...borrow?.trade,
+        const synthetic = {
             symbol: sheetTime.symbol,
             type: borrow?.trade?.type || sheetTime.row?.type || 'Short',
             opened,
             entry: entryPrice,
             exit: actualExitPrice,
             qty,
-        }, centsSource);
+            sheet: {
+                ...sheetTime.sheet,
+                consolidateCents: sheetTime.sheet.consolidateCents ?? borrow?.trade?.sheet?.consolidateCents,
+                exit: 'по часу',
+            },
+        };
         const row = timedRowFromTrade(sheetTime.date, borrow?.tradeIndex ?? sheetTime.index, synthetic, { marketOpenStopsOnly: false });
         if (!row) return;
         kept.push(row);
