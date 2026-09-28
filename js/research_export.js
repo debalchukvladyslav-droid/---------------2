@@ -1,9 +1,9 @@
 import { state } from './state.js';
-import { supabase } from './supabase.js';
+import { supabase, SUPABASE_URL } from './supabase.js';
 import { showToast } from './utils.js';
 import { loadJournalRange } from './storage.js';
 import { clampResearchPeriod, shiftIsoMonths } from './market_criteria_analysis.js';
-import { loadJournalPolygonDay } from './journal_polygon.js';
+import { readPolygonDay } from './polygon_intraday_cache.js';
 import { ensureJsZip, ensureLightweightCharts, ensurePdfTools } from './vendor_loader.js';
 import { analysisPrompt, buildExportDocument, collectExportTrades, exportFileBase } from './research_export_core.js';
 
@@ -141,15 +141,44 @@ function snapToCandle(candles, ts) {
     return bestDiff <= 600 ? best.time : null;
 }
 
+const NOON_NY = 12 * 60;
+
+async function fetchPolygonRange(symbol, date, token, from, to) {
+    const offset = nyOffset(date);
+    const response = await fetch(`${String(SUPABASE_URL).replace(/\/$/, '')}/functions/v1/polygon-aggs`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            symbol,
+            fromMs: new Date(`${date}T${from}${offset}`).getTime(),
+            toMs: new Date(`${date}T${to}${offset}`).getTime(),
+        }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.message || `Polygon: HTTP ${response.status}`);
+    return Array.isArray(payload?.results) ? payload.results : [];
+}
+
+async function barsThroughNoon(symbol, date, token) {
+    const cached = await readPolygonDay(symbol, date);
+    if (cached?.length) return cached;
+    return fetchPolygonRange(symbol, date, token, '04:00:00', '12:01:00');
+}
+
+async function postmarketBars(symbol, date, token) {
+    const cached = await readPolygonDay(symbol, date);
+    if (cached?.length) return cached;
+    return fetchPolygonRange(symbol, date, token, '16:00:00', '20:00:00');
+}
+
 async function loadSessionCandles(symbol, date, token) {
-    const current = await loadJournalPolygonDay(symbol, date, token, { from: '04:00:00', to: '23:59:00' });
-    const currentCandles = toCandles(current.bars);
+    const currentCandles = toCandles(await barsThroughNoon(symbol, date, token)).filter((candle) => nyMinute(candle.time) <= NOON_NY);
     if (!currentCandles.length) throw new Error('Polygon не повернув свічки');
     let previous = [];
     const prevDate = prevTradingDate(date);
     try {
-        const loaded = await loadJournalPolygonDay(symbol, prevDate, token, { from: '04:00:00', to: '23:59:00' });
-        previous = toCandles(loaded.bars).filter((candle) => nyMinute(candle.time) >= 16 * 60);
+        const loaded = await postmarketBars(symbol, prevDate, token);
+        previous = toCandles(loaded).filter((candle) => nyMinute(candle.time) >= 16 * 60);
     } catch (error) {
         console.warn('[Research export] previous session skipped', symbol, prevDate, error);
     }
