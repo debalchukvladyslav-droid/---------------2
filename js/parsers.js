@@ -536,6 +536,7 @@ export function importFondexxReport(event) {
                 daysUpdated++;
             }
             saveJournalData().then(() => {
+                import('./trade_criteria.js').then((module) => module.scheduleCriteriaForDates(Object.keys(dailyData))).catch(() => {});
                 if (fondexxTradeCount > 0) {
                     console.log(
                         `[Імпорт Fondexx звіт] Імпортовано у журнал: ${fondexxTradeCount} угод, оновлено календарних днів: ${daysUpdated}.`,
@@ -717,6 +718,7 @@ export function importFondexxTrades(event) {
                     window.refreshStatsView();
                 }
                 if (window.selectDate) window.selectDate(state.selectedDateStr);
+                import('./trade_criteria.js').then((module) => module.scheduleCriteriaForDates(Object.keys(dailyTrades))).catch(() => {});
             }).catch(err => {
                 showToast('Import save error: ' + (err?.message || err));
             }).finally(() => {

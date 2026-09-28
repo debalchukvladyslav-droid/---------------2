@@ -111,7 +111,10 @@ export async function syncShsIntoJournal() {
     const dayMap = buildShsDayMap(orders, locates, nick);
     const result = applyShsDays(state.appData.journal, dayMap, getDefaultDayEntry);
     result.updated.forEach((date) => markJournalDayDirty(date));
-    if (result.updated.length) await saveJournalData();
+    if (result.updated.length) {
+        await saveJournalData();
+        import('./trade_criteria.js').then((module) => module.scheduleCriteriaForDates(result.updated)).catch(() => {});
+    }
     console.info(`[Бот] ${nick}: днів ${result.updated.length}, пропущено через PPRO ${result.skippedPpro.length}${truncated ? ', стрічка обрізала надто довгий день' : ''}`);
     return { ...result, truncated };
 }

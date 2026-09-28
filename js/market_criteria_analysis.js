@@ -131,6 +131,10 @@ function presentNumber(value) {
 
 export function criteriaMetricsReady(metrics, entryMinutes = []) {
     if (!metrics || typeof metrics !== 'object') return false;
+    if (metrics.provider === 'massive' || metrics.source === 'massive') {
+        return ['atr', 'avg_vol', 'vol', 'vol_play'].every((key) => presentNumber(metrics[key]))
+            || Boolean(metrics.source_errors?.massive);
+    }
     const minutes = Array.isArray(entryMinutes) ? entryMinutes : [...entryMinutes || []];
     const marketReady = ['atr', 'avg_vol', 'vol', 'vol_play'].every((key) => presentNumber(metrics[key]))
         || Boolean(metrics.source_errors?.yahoo);

@@ -73,6 +73,7 @@ async function saveDraft() {
     state.appData.journal[date] = day; markJournalDayDirty(date);
     try {
         busy(true, 'Зберігаю угоду, multimodal metadata й Vector Memory…'); await saveJournalData();
+        import('./trade_criteria.js').then((module) => module.ensureTradeCriteria(date, trade)).catch(() => {});
         const { data: auth } = await supabase.auth.getUser(); const { data: journalDay, error: dayError } = await supabase.from('journal_days').select('id').eq('user_id', auth.user.id).eq('trade_date', date).single(); if (dayError) throw dayError;
         const { data: multimodal, error: multimodalError } = await supabase.from('trade_multimodal_inputs').insert({ user_id: auth.user.id, journal_day_id: journalDay.id, trade_key: `${date}:${ticker}:${day.trades.length - 1}`, audio_transcript: transcript, chart_image_url: chartPath, vision_analysis: vision ? JSON.stringify(vision) : '', ai_confidence_score: vision ? Math.round((Number(vision.confidence) || 0) * 100) : null }).select('id').single(); if (multimodalError) throw multimodalError;
         trade.analysisResult.multimodalInputId = multimodal.id; markJournalDayDirty(date); await saveJournalData();

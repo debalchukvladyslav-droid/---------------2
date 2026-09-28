@@ -2,9 +2,8 @@ import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { showToast } from './utils.js';
 import { loadAllMonths, loadJournalRange } from './storage.js';
-import { calculatePreMarketVolume } from './polygon_intraday_cache.js';
 import { clampResearchPeriod, criteriaCoverage, groupCriteriaPairs, journalDatesInRange, shiftIsoMonths, sixMonthWindows } from './market_criteria_analysis.js';
-import { loadJournalPolygonDay } from './journal_polygon.js';
+import { ensureTradeCriteria } from './trade_criteria.js';
 
 const RESEARCH_TRADE_TYPES = ['Візуально', 'Синя', 'Зелена', 'Фіолетова'];
 const RESEARCH_TYPE_TONES = { Візуально: 'visual', Синя: 'blue', Зелена: 'green', Фіолетова: 'purple' };
@@ -208,36 +207,6 @@ export async function showResearch() {
     }
 }
 
-function rememberCriteria(date, ticker, metrics) {
-    const day = state.appData.journal?.[date];
-    if (!day || !metrics) return;
-    day.tradePolygons = { ...(day.tradePolygons || {}), [ticker]: metrics };
-    (day.trades || []).forEach((trade) => {
-        if (String(trade?.symbol || trade?.ticker || '').trim().toUpperCase() === ticker) trade.marketCriteria = metrics;
-    });
-}
-
-async function loadCriteriaDayBars(pair, token) {
-    if (!pair.entryMinutes.length) return [];
-    const loaded = await loadJournalPolygonDay(pair.ticker, pair.date, token, { to: '12:01:00' });
-    return loaded.bars;
-}
-
-async function volPreByDateForPairs(pairs, token) {
-    const volPreByDate = {};
-    await Promise.all(pairs.map(async (pair) => {
-        if (!pair.entryMinutes.length) return;
-        try {
-            const bars = await loadCriteriaDayBars(pair, token);
-            const volumes = Object.fromEntries(pair.entryMinutes.map((minute) => [String(minute), calculatePreMarketVolume(bars, minute)]).filter(([, value]) => value !== null));
-            if (Object.keys(volumes).length) volPreByDate[pair.date] = volumes;
-        } catch (error) {
-            console.warn('[Research criteria bars]', pair.ticker, pair.date, error);
-        }
-    }));
-    return volPreByDate;
-}
-
 async function mapPool(items, limit, worker) {
     const queue = [...items];
     await Promise.all(Array.from({ length: Math.min(limit, queue.length) }, async () => {
@@ -249,7 +218,7 @@ function coverageText(label, coverage) {
     if (!coverage.trades) return `У періоді ${label} немає угод із тікером.`;
     const sameDay = coverage.trades === coverage.pairs
         ? ''
-        : ` ${coverage.trades} угод згортаються в ${coverage.pairs} днів тікера: кілька угод одного паперу за день мають одні критерії.`;
+        : ` ${coverage.trades} угод на ${coverage.pairs} днів тікера. Snapshot рахується окремо для часу входу кожної угоди.`;
     return `Період ${label}, ${selectedTypeLabel()}: критерії є для ${coverage.ready} із ${coverage.pairs} днів тікера.${sameDay}`;
 }
 
@@ -264,12 +233,6 @@ async function tradeDateBounds() {
         from: String(oldest.data?.[0]?.trade_date || '').slice(0, 10),
         to: String(newest.data?.[0]?.trade_date || '').slice(0, 10),
     };
-}
-
-function chunk(items, size) {
-    const chunks = [];
-    for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size));
-    return chunks;
 }
 
 export async function loadResearchCriteria() {
@@ -316,36 +279,27 @@ export async function loadResearchCriteria() {
             await renderPeriod(period.from, period.to);
             return;
         }
-        const { data: { session } = {} } = await supabase.auth.getSession();
-        if (!session?.access_token) throw new Error('Потрібно увійти в акаунт');
         let done = 0;
         let failed = 0;
         let finished = 0;
-        await mapPool(groups, 2, async (group) => {
+        await mapPool(groups, 1, async (group) => {
             if (status) status.textContent = `${group.ticker}: ${group.pairs.length} дат · тікер ${finished + 1} із ${groups.length} · у журналі ${journalTrades} угод`;
-            const savedDates = new Set();
-            try {
-                for (const slice of chunk(group.pairs, 80)) {
-                    const volPreByDate = await volPreByDateForPairs(slice, session.access_token);
-                    const response = await fetch('/api/trade-polygons', {
-                        method: 'POST',
-                        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ticker: group.ticker, dates: slice.map((pair) => pair.date), volPreByDate }),
-                    });
-                    const payload = await response.json().catch(() => ({}));
-                    const results = Array.isArray(payload.results) ? payload.results : [];
-                    if (!response.ok && !results.some((item) => item.ok)) throw new Error(payload.error || `HTTP ${response.status}`);
-                    results.forEach((item) => {
-                        if (!item?.ok || !item.metrics) return;
-                        rememberCriteria(item.date, group.ticker, item.metrics);
-                        savedDates.add(item.date);
-                    });
+            let saved = 0;
+            for (const pair of group.pairs) {
+                const trades = (state.appData.journal?.[pair.date]?.trades || []).filter((trade) => String(trade?.symbol || trade?.ticker || '').trim().toUpperCase() === group.ticker);
+                let pairSaved = false;
+                for (const trade of trades) {
+                    try {
+                        const snapshot = await ensureTradeCriteria(pair.date, trade);
+                        if (snapshot) pairSaved = true;
+                    } catch (error) {
+                        console.warn('[Research criteria]', group.ticker, pair.date, error?.message || error);
+                    }
                 }
-            } catch (error) {
-                console.warn('[Research criteria]', group.ticker, error);
+                if (pairSaved) saved += 1;
             }
-            done += savedDates.size;
-            failed += group.pairs.length - savedDates.size;
+            done += saved;
+            failed += group.pairs.length - saved;
             finished += 1;
             if (progress) progress.value = done + failed;
         });

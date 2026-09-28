@@ -90,7 +90,8 @@ test('website fetch is manual and RPC writes criteria into journal trade', async
     assert.match(fixMigration, /GRANT EXECUTE.*service_role/i);
     assert.match(storage, /tradePolygons/);
     assert.match(view, /Критерії паперу/);
-    assert.match(view, /fetch\('\/api\/trade-polygons'/);
+    assert.match(view, /ensureTradeCriteria/);
+    assert.match(view, /ATRPlay/);
     assert.match(view, /value === null \|\| value === undefined \|\| value === ''/);
     assert.match(view, /shs_float_display \|\| polygonCriteria\.shs_float_raw/);
     assert.match(view, /hasMetric\(polygonCriteria\.atr\)/);
@@ -112,7 +113,7 @@ test('research screen loads criteria for the selected period and testing no long
     assert.match(research, /sixMonthWindows/);
     assert.match(research, /criteriaCoverage/);
     assert.match(research, /coverage\.pending/);
-    assert.match(research, /fetch\('\/api\/trade-polygons'/);
+    assert.match(research, /ensureTradeCriteria/);
     assert.match(research, /clampResearchPeriod/);
     assert.doesNotMatch(admin, /data-testing-criteria-host|data-load-all-criteria|stats-market-criteria-panel|stats-best-exit-content/);
 });

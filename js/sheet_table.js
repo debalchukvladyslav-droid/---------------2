@@ -1445,6 +1445,7 @@ async function executeSyncWithCfg(cfg, options = {}) {
         }
         await deleteJournalDatesFromSupabase(mergeResult.deletedDates);
         await saveJournalData({ skipEmbedding: true });
+        import('./trade_criteria.js').then((module) => module.scheduleCriteriaForDates(Object.keys(outByDay || {}))).catch(() => {});
         await saveSettings();
         syncSheetModeUi();
         renderSheetRowsPanel();

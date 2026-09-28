@@ -3,13 +3,15 @@ import { state } from './state.js';
 import { supabase, SUPABASE_URL } from './supabase.js';
 import { buildTradeContext, analyzeTradeStory, renderStoryOverlay } from './trade_story.js';
 import { sleep } from './ai.js';
-import { saveJournalData, markJournalDayDirty, loadTradeDays, loadDayDetails } from './storage.js';
+import { saveJournalData, markJournalDayDirty, loadTradeDays } from './storage.js';
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 import { findScreenshotsForTicker, openScreenshotForTrade } from './gallery.js';
 import { ensureLightweightCharts } from './vendor_loader.js';
 import { findTradeIndexByIdentity, isPureGoogleSheetTrade, visibleTradeRowsForDate } from './trade_filters.js';
 import { isMarketOpenStopTrade } from './best_exit_core.js';
 import { getOrLoadPolygonDay } from './polygon_intraday_cache.js';
+import { criteriaSnapshotOf, ensureTradeCriteria, loadStoredCriteria } from './trade_criteria.js';
+import { formatNy } from '../lib/massive_criteria.js';
 
 function sanitizeHTML(str) {
     const div = document.createElement('div');
@@ -430,6 +432,15 @@ function _selectTrade(dateStr, tradeIndex) {
 
     renderTradeInfoBar([trade]);
     buildLWChart(trade.symbol, dateStr, [trade]);
+    if (!criteriaSnapshotOf(trade)) {
+        void loadStoredCriteria(dateStr, trade).then((stored) => {
+            if (stored && _activeTrade?.dateStr === dateStr && _activeTrade?.tradeIndex === tradeIndex) renderTradeInfoBar([trade]);
+            if (stored) return null;
+            return ensureTradeCriteria(dateStr, trade);
+        }).then((created) => {
+            if (created && _activeTrade?.dateStr === dateStr && _activeTrade?.tradeIndex === tradeIndex) renderTradeInfoBar([trade]);
+        }).catch(() => {});
+    }
 }
 
 export function disposeTradesView(options = {}) {
@@ -542,12 +553,28 @@ function renderTradeInfoBar(trades) {
     if (stopPrice != null && stopPrice !== '') items.push({ label: 'Стоп', value: String(stopPrice), color: 'var(--gold)' });
     if (sheet.exit) items.push({ label: 'Вихід', value: String(sheet.exit), color: 'var(--text-main)' });
     if (sheetException) items.push({ label: 'Виключення', value: sheetException, color: 'var(--loss)' });
-    if (polygonCriteria) {
+    const criteriaSnapshot = criteriaSnapshotOf(trade);
+    const hasMetric = (value) => !(value === null || value === undefined || value === '') && Number.isFinite(Number(value));
+    if (criteriaSnapshot) {
+        const shown = (label, value, color) => value ? items.push({ label, value, color }) : items.push({ label, value: '—', color: 'var(--text-muted)' });
+        shown('ATR', criteriaSnapshot.display.atr14, 'var(--accent)');
+        shown('AvgVol', criteriaSnapshot.display.avgVol14, 'var(--text-main)');
+        shown('Vol', criteriaSnapshot.display.dayVolume, 'var(--text-main)');
+        shown('VolPlay', criteriaSnapshot.display.volPlay14, 'var(--gold)');
+        shown('ATRPlay', criteriaSnapshot.display.atrPlay14, 'var(--gold)');
+        shown('High', criteriaSnapshot.display.high, 'var(--text-main)');
+        shown('Low', criteriaSnapshot.display.low, 'var(--text-main)');
+        shown('Остання свічка', criteriaSnapshot.display.lastCandle, 'var(--text-muted)');
+        items.push({
+            label: 'Статус',
+            value: `${criteriaSnapshot.display.fetchStatus} · ${criteriaSnapshot.display.completeness}`,
+            color: criteriaSnapshot.completeness === 'complete' && criteriaSnapshot.fetchStatus === 'ok' ? 'var(--profit)' : 'var(--gold)',
+        });
+    } else if (polygonCriteria) {
         const millions = (value, digits) => `${(Number(value) / 1e6).toFixed(digits)}M`;
         const openedMatch = /\b(\d{1,2}):(\d{2})(?::\d{2})?\b/.exec(String(trade?.opened || trade?.entryTime || trade?.time || ''));
         const openedMinute = openedMatch ? Number(openedMatch[1]) * 60 + Number(openedMatch[2]) : null;
         const volPre = openedMinute == null ? null : polygonCriteria.vol_pre_by_minute?.[String(openedMinute)];
-        const hasMetric = (value) => !(value === null || value === undefined || value === '') && Number.isFinite(Number(value));
         items.push(
             ...(hasMetric(polygonCriteria.atr) ? [{ label: 'ATR 14 · до входу', value: Number(polygonCriteria.atr).toFixed(2), color: 'var(--accent)' }] : []),
             ...(hasMetric(polygonCriteria.avg_vol) ? [{ label: 'Avg Vol 14 · до входу', value: millions(polygonCriteria.avg_vol, 2), color: 'var(--text-main)' }] : []),
@@ -558,10 +585,11 @@ function renderTradeInfoBar(trades) {
             ...(polygonCriteria.as_of_date ? [{ label: 'Дані станом на', value: polygonCriteria.as_of_date, color: 'var(--text-muted)' }] : []),
         );
     }
-    if (trade?.symbol && _activeTrade?.dateStr) {
+    const criteriaFrozen = criteriaSnapshot?.completeness === 'complete' && criteriaSnapshot?.fetchStatus === 'ok';
+    if (trade?.symbol && _activeTrade?.dateStr && !criteriaFrozen) {
         items.push({
             label: 'Критерії паперу',
-            value: polygonCriteria ? 'Оновити' : 'Завантажити',
+            value: criteriaSnapshot ? 'Повторити' : 'Завантажити',
             color: 'var(--accent)',
             action: 'load-market-criteria',
         });
@@ -590,7 +618,7 @@ function renderTradeInfoBar(trades) {
         if (action === 'load-market-criteria') {
             card.setAttribute('role', 'button');
             card.tabIndex = 0;
-            card.title = 'Отримати ATR, об’єми та Float для цього тікера і дня';
+            card.title = 'Порахувати ATR, обсяги, High і Low на момент входу';
             card.style.cursor = 'pointer';
             card.style.borderColor = 'color-mix(in srgb, var(--accent) 45%, var(--border))';
             const activate = async () => {
@@ -599,28 +627,15 @@ function renderTradeInfoBar(trades) {
                 const original = val.textContent;
                 val.textContent = 'Завантаження…';
                 try {
-                    const { data: { session } = {} } = await supabase.auth.getSession();
-                    if (!session?.access_token) throw new Error('Потрібно увійти в акаунт');
-                    const response = await fetch('/api/trade-polygons', {
-                        method: 'POST',
-                        headers: {
-                            Authorization: `Bearer ${session.access_token}`,
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            ticker: trade.symbol,
-                            date: _activeTrade.dateStr,
-                            volPreByMinute: polygonCriteria?.vol_pre_by_minute || {},
-                        }),
-                    });
-                    const result = await response.json().catch(() => ({}));
-                    if (!response.ok || !result.ok) throw new Error(result.error || `HTTP ${response.status}`);
-
                     const dateStr = _activeTrade.dateStr;
                     const tradeIndex = _activeTrade.tradeIndex;
-                    const day = await loadDayDetails(dateStr, state.myUserId, { force: true });
-                    const refreshedTrade = day?.trades?.[tradeIndex];
-                    if (refreshedTrade) renderTradeInfoBar([refreshedTrade]);
+                    const current = state.appData.journal?.[dateStr]?.trades?.[tradeIndex] || trade;
+                    await ensureTradeCriteria(dateStr, current, {
+                        manual: true,
+                        highLowSessionStart: criteriaSnapshot?.highLowSessionStart,
+                        volumeSessionStart: criteriaSnapshot?.volumeSessionStart,
+                    });
+                    renderTradeInfoBar([current]);
                 } catch (error) {
                     console.error('[Trade criteria]', error);
                     val.textContent = 'Повторити';
@@ -640,6 +655,20 @@ function renderTradeInfoBar(trades) {
         }
         bar.appendChild(card);
     });
+
+    if (criteriaSnapshot) {
+        const details = document.createElement('div');
+        details.style.cssText = 'flex:1 1 280px;min-width:240px;padding:7px 12px;background:var(--bg-main);border:1px solid var(--border);border-radius:8px;color:var(--text-muted);font-size:0.75rem;line-height:1.4;';
+        const end = criteriaSnapshot.sourceMeta?.lastCandleEnd ? formatNy(Date.parse(criteriaSnapshot.sourceMeta.lastCandleEnd)) : '';
+        const notes = Array.isArray(criteriaSnapshot.sourceMeta?.notes) ? criteriaSnapshot.sourceMeta.notes.filter(Boolean) : [];
+        details.textContent = [
+            `Massive · adjusted=true · розрахунок v${criteriaSnapshot.calculationVersion}`,
+            `High/Low від ${criteriaSnapshot.highLowSessionStart} ET · обсяг від ${criteriaSnapshot.volumeSessionStart} ET`,
+            end ? `Остання свічка почалась ${criteriaSnapshot.display.lastCandle}, завершилась ${end}` : '',
+            criteriaSnapshot.statusDetail || notes[0] || '',
+        ].filter(Boolean).join(' · ');
+        bar.appendChild(details);
+    }
 
     if (sheetComment) {
         const note = document.createElement('div');
