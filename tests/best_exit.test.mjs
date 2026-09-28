@@ -37,6 +37,22 @@ test('collects only shorts closed by time', () => {
     assert.deepEqual(collectTimedShortTrades(journal).map((row) => row.symbol), ['TIME']);
 });
 
+test('ZTG uses the later time exit when the first fill stopped in a few minutes', () => {
+    const journal = { '2026-09-04': { trades: [
+        { symbol: 'ZTG', type: 'Short', opened: '05:11:02', closed: '05:14:50', entry: 0.7947, exit: 0.9, qty: 10770, net: -1183, sheet: { exit: 'по часу', consolidateCents: 7.53, entryPrice: 0.7947, sheetNet: -1119 } },
+        { symbol: 'ZTG', type: 'Short', opened: '05:16:42', closed: '09:30:13', entry: 0.79, exit: 0.6869, qty: 10770, net: 1110, sheet: { exit: 'стоп', entryPrice: 0.79 } },
+    ] } };
+    const sheetRows = { main: { '2026-09-04': [
+        { symbol: 'ZTG', net: -1119, type: 'Short', sheet: { exit: 'по часу', entryPrice: 0.7947, consolidateCents: 7.53, qtyShares: 10770, sheetNet: -1119, sheetRow: 2 } },
+    ] } };
+    const rows = collectTimedShortTrades(journal, null, { sheetRows });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].entryPrice, 0.79);
+    assert.equal(rows[0].stopEntryMinute, 316);
+    assert.equal(rows[0].actualExitPrice, 0.6869);
+    assert.equal(rows[0].stopPrice, 0.8653);
+});
+
 test('keeps the time-exit entry when the same day starts with a stop', () => {
     const journal = { '2026-06-02': { trades: [
         { symbol: 'ABC', type: 'Short', opened: '09:31', entry: 1.03, exit: 1.13, qty: 2000, net: -200, sheet: { exit: 'стоп', entryPrice: 1.03, consolidateCents: 10, stopPrice: 1.13 } },
