@@ -21,6 +21,26 @@ test('full Polygon day is loaded once and reused from the browser cache', async 
     assert.equal(restored.cached, true);
 });
 
+test('stop is checked only after the time-exit entry prints, not from the earlier spike', () => {
+    const bars = [
+        { t: Date.parse('2026-08-19T13:40:00Z'), o: 1.7, h: 1.8, l: 1.65, c: 1.72, v: 100 },
+        { t: Date.parse('2026-08-19T14:05:00Z'), o: 1.38, h: 1.42, l: 1.35, c: 1.4, v: 80 },
+        { t: Date.parse('2026-08-19T14:10:00Z'), o: 1.4, h: 1.48, l: 1.28, c: 1.3, v: 90 },
+        { t: Date.parse('2026-08-19T14:30:00Z'), o: 1.3, h: 1.32, l: 1.22, c: 1.25, v: 70 },
+    ];
+    const beforeEntry = analyzePolygonDay(bars, { symbol: 'ABC', date: '2026-08-19', entryMinute: 570, entryPrice: 1.4, stopPrice: 1.52 }, 600);
+    assert.equal(beforeEntry.notOpened, true);
+    assert.equal(beforeEntry.stopHit, false);
+    const atTime = analyzePolygonDay(bars, { symbol: 'ABC', date: '2026-08-19', entryMinute: 570, entryPrice: 1.4, stopPrice: 1.52 }, 630);
+    assert.equal(atTime.entryFillMinute, 605);
+    assert.equal(atTime.stopHit, false);
+    assert.equal(atTime.priceAtTime, 1.25);
+    const stopped = analyzePolygonDay(bars, { symbol: 'ABC', date: '2026-08-19', entryMinute: 605, entryPrice: 1.4, stopPrice: 1.48, entryTimeKnown: true, stopEntryMinute: 605 }, 630);
+    assert.equal(stopped.stopHit, true);
+    assert.equal(stopped.stopMinute, 610);
+    assert.equal(stopped.priceAtTime, 1.48);
+});
+
 test('best exit, selected time and stop are calculated from one cached full chart', () => {
     const bars = [
         { t: Date.parse('2026-08-19T13:30:00Z'), o: 10, h: 10.1, l: 9.8, c: 9.9, v: 100 },

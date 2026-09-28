@@ -89,6 +89,24 @@ function minuteNY(timestamp) {
     return Number(parts.find((part) => part.type === 'hour')?.value) * 60 + Number(parts.find((part) => part.type === 'minute')?.value);
 }
 
+function clockMinute(value) {
+    const minute = Number(value);
+    return Number.isInteger(minute) && minute >= 0 && minute < 24 * 60 ? minute : null;
+}
+
+function barTouchesPrice(bar, price) {
+    const low = Number(bar?.l);
+    const high = Number(bar?.h);
+    if (!(low > 0) || !(high > 0) || !(price > 0)) return false;
+    return low <= price + 0.005 && high >= price - 0.005;
+}
+
+function firstEntryFillMinute(byMinute, entryPrice, fromMinute) {
+    return [...byMinute.entries()]
+        .filter(([minute, bar]) => minute >= fromMinute && minute < 720 && barTouchesPrice(bar, entryPrice))
+        .sort((left, right) => left[0] - right[0])[0]?.[0] ?? null;
+}
+
 export function calculatePreMarketVolume(bars, entryMinute) {
     const end = Number(entryMinute);
     if (!Number.isInteger(end) || end < 240 || end > 720) return null;
@@ -113,11 +131,19 @@ export function analyzePolygonDay(bars, item, targetMinute = null) {
     if (!Number.isInteger(targetMinute)) return result;
     result.targetMinute = targetMinute;
     result.stopPrice = Number(item.stopPrice) || null;
-    result.stopEntryMinute = Number(item.stopEntryMinute);
-    if (targetMinute < result.stopEntryMinute) return { ...result, notOpened: true, stopHit: false };
+    const explicitHint = clockMinute(item.stopEntryMinute);
+    const hintedFill = item.entryTimeKnown === true ? explicitHint : null;
+    const entryPrice = Number(item.entryPrice);
+    const fillMinute = entryPrice > 0 ? firstEntryFillMinute(byMinute, entryPrice, hintedFill ?? 240) : null;
+    const stopFrom = fillMinute != null && (hintedFill == null || fillMinute <= hintedFill + 30)
+        ? fillMinute
+        : (explicitHint ?? fillMinute ?? 570);
+    result.entryFillMinute = fillMinute;
+    result.stopEntryMinute = stopFrom;
+    if (targetMinute < stopFrom) return { ...result, notOpened: true, stopHit: false };
     const stop = result.stopPrice > 0
         ? [...byMinute.entries()]
-            .filter(([minute, bar]) => minute >= result.stopEntryMinute && minute <= targetMinute && Number(bar?.h) >= result.stopPrice)
+            .filter(([minute, bar]) => minute >= stopFrom && minute <= targetMinute && Number(bar?.h) >= result.stopPrice)
             .sort((left, right) => left[0] - right[0])[0]
         : null;
     if (stop) return { ...result, stopHit: true, stopMinute: stop[0], stopTime: new Date(Number(stop[1].t)).toISOString(), priceMinute: targetMinute, priceAtTime: result.stopPrice, priceTime: new Date(Number(stop[1].t)).toISOString() };
@@ -125,7 +151,7 @@ export function analyzePolygonDay(bars, item, targetMinute = null) {
     // executions in that exact minute. In that case the price at the requested
     // time is the latest known close at or before it, never a future candle.
     const target = byMinute.get(targetMinute) || [...byMinute.entries()]
-        .filter(([minute, bar]) => minute >= result.stopEntryMinute && minute <= targetMinute && Number(bar?.c) > 0)
+        .filter(([minute, bar]) => minute >= stopFrom && minute <= targetMinute && Number(bar?.c) > 0)
         .reduce((latest, current) => !latest || current[0] > latest[0] ? current : latest, null)?.[1];
     if (!target || !(Number(target.c) > 0)) return result;
     const actualMinute = minuteNY(target.t);

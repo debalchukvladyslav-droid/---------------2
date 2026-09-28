@@ -1,5 +1,5 @@
 import { supabase } from './supabase.js';
-import { attachBestExitResult, bestExitWindowNY, calculateShortExitComparison, collectTimedShortTrades } from './best_exit_core.js';
+import { attachBestExitResult, bestExitWindowNY, calculateShortExitComparison, collectTimedShortTrades, shortConsolidationStopLoss } from './best_exit_core.js';
 import { analyzePolygonDay, readPolygonDay } from './polygon_intraday_cache.js';
 import { loadJournalPolygonDay } from './journal_polygon.js';
 
@@ -77,13 +77,23 @@ function rowFromTrade(trade) {
     if (!priced) {
         return { ...trade, missingChart: true, low: null, actualGross: fact, selectedGross: null, selectedGrossDiff: null, bestPnl: null, sessionEmpty: true };
     }
-    const selectedPrice = analyzed.notOpened ? NaN : (analyzed.stopHit ? Number(analyzed.stopPrice) : Number(analyzed.priceAtTime));
+    const stopLoss = analyzed.stopHit ? shortConsolidationStopLoss({
+        entryPrice: priced.entryPrice,
+        consolidateCents: priced.consolidateCents,
+        stopPrice: analyzed.stopPrice ?? priced.stopPrice,
+        qty: priced.qty,
+    }) : null;
+    const selectedPrice = analyzed.notOpened ? NaN : (stopLoss?.stopPrice || (analyzed.stopHit ? Number(analyzed.stopPrice) : Number(analyzed.priceAtTime)));
     const comparison = calculateShortExitComparison({
         entryPrice: priced.entryPrice,
         actualExitPrice: priced.actualExitPrice,
         selectedPrice,
         qty: priced.qty,
     });
+    const selectedGross = stopLoss?.loss ?? comparison?.selectedGross ?? null;
+    const selectedGrossDiff = stopLoss && Number.isFinite(comparison?.actualGross)
+        ? Number((stopLoss.loss - comparison.actualGross).toFixed(2))
+        : (comparison?.difference ?? null);
     return {
         ...priced,
         missingChart: false,
@@ -91,10 +101,21 @@ function rowFromTrade(trade) {
         notOpened: analyzed.notOpened === true,
         stopHit: analyzed.stopHit === true,
         stopMinute: analyzed.stopMinute ?? null,
+        stopLoss,
         actualGross: comparison?.actualGross ?? fact,
-        selectedGross: comparison?.selectedGross ?? null,
-        selectedGrossDiff: comparison?.difference ?? null,
+        selectedGross,
+        selectedGrossDiff,
     };
+}
+
+function stopResultText(row) {
+    const loss = row.stopLoss;
+    const clock = row.stopMinute == null ? '' : minuteToClock(row.stopMinute);
+    if (!loss) return `${money(row.selectedGross)}${clock ? ` · стоп ${clock}` : ''}`;
+    const cents = Number.isInteger(loss.cents) ? String(loss.cents) : String(loss.cents).replace('.', ',');
+    const shares = Number(loss.shares).toLocaleString('uk-UA');
+    const stop = Number(loss.stopPrice);
+    return `${money(loss.loss)} · ${cents} ц × ${shares} шер${stop > 0 ? ` · стоп ${stop.toFixed(2)}` : ''}${clock ? ` о ${clock}` : ''}`;
 }
 
 function sortedRows() {
@@ -149,7 +170,7 @@ function paint() {
                     <td>${row.date}</td>
                     <td><button type="button" class="best-exit-trade-link" data-best-exit-date="${escapeHtml(row.date)}" data-best-exit-index="${Number(row.tradeIndex)}" data-best-exit-identity="${escapeHtml(JSON.stringify(row.tradeIdentity || {}))}">${escapeHtml(row.symbol)}</button></td>
                     <td>${money(row.actualGross)}</td>
-                    <td>${row.missingChart ? '—' : (row.notOpened ? 'ще не відкрито' : (row.stopHit ? `стоп ${row.stopMinute == null ? '' : minuteToClock(row.stopMinute)}` : money(row.selectedGross)))}</td>
+                    <td>${row.missingChart ? '—' : (row.notOpened ? 'ще не відкрито' : (row.stopHit ? stopResultText(row) : money(row.selectedGross)))}</td>
                     <td class="${Number(row.selectedGrossDiff) > 0 ? 'positive' : (Number(row.selectedGrossDiff) < 0 ? 'negative' : '')}">${row.selectedGrossDiff == null ? '—' : money(row.selectedGrossDiff)}</td>
                     <td>${row.low > 0 ? `${row.low.toFixed(2)}${bestExitWindowNY(row.lowTime) ? ` · ${bestExitWindowNY(row.lowTime)}` : ''}` : (row.sessionEmpty ? 'немає low у сесії' : 'немає свічок')}</td>
                 </tr>`).join('') || '<tr><td colspan="6">У цьому періоді немає short, закритих по часу.</td></tr>'}</tbody>

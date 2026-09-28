@@ -104,11 +104,37 @@ function shortExitFromProfit(entryPrice, qty, profit) {
     return exitPrice > 0 ? exitPrice : null;
 }
 
+function consolidationCents(value) {
+    const raw = String(value ?? '').replace(/\s/g, '').replace(',', '.');
+    if (!/[0-9]/.test(raw)) return null;
+    const cents = Number(raw.replace(/[^0-9.-]/g, ''));
+    return Number.isFinite(cents) ? cents : null;
+}
+
 function stopPriceFor(entryPrice, sheet = {}) {
-    if (Number(sheet.stopPrice) > 0) return Number(sheet.stopPrice);
-    const cents = Number(sheet.consolidateCents);
-    if (Number.isFinite(cents) && cents >= 0 && entryPrice > 0) return Math.round((entryPrice + cents / 100) * 10000) / 10000;
+    const cents = consolidationCents(sheet?.consolidateCents);
+    if (cents != null && cents > 0 && entryPrice > 0) return Math.round((entryPrice + cents / 100) * 10000) / 10000;
+    if (Number(sheet?.stopPrice) > 0) return Number(sheet.stopPrice);
     return null;
+}
+
+export function shortConsolidationStopLoss({ entryPrice, consolidateCents: centsValue, stopPrice, qty } = {}) {
+    const shares = Math.abs(Number(qty));
+    const cents = consolidationCents(centsValue);
+    const entry = Number(entryPrice);
+    const stop = Number(stopPrice);
+    const riskPerShare = cents != null && cents > 0
+        ? cents / 100
+        : (entry > 0 && stop > entry ? stop - entry : null);
+    if (!(shares > 0) || !(riskPerShare > 0)) return null;
+    const resolvedCents = cents != null && cents > 0 ? cents : Math.round(riskPerShare * 10000) / 100;
+    const resolvedStop = stop > entry ? stop : (entry > 0 ? Math.round((entry + riskPerShare) * 10000) / 10000 : null);
+    return {
+        cents: resolvedCents,
+        shares,
+        stopPrice: resolvedStop,
+        loss: Number((-(riskPerShare * shares)).toFixed(2)),
+    };
 }
 
 function samePrice(left, right) {
@@ -150,7 +176,8 @@ function timedRowFromTrade(dateStr, tradeIndex, trade, { marketOpenStopsOnly }) 
         trade?.closed || trade?.exited || trade?.exitTime || trade?.closeTime || trade?.sheet?.exitTime || ''
     );
     const entryMinute = Math.max(570, openedMinute ?? 570);
-    const stopEntryMinute = Math.max(540, openedMinute ?? 570);
+    const entryTimeKnown = openedMinute != null;
+    const stopEntryMinute = entryTimeKnown ? Math.min(719, Math.max(240, openedMinute)) : null;
     if (entryMinute >= 720) return null;
     const entryPrice = Number(trade?.entry || trade?.sheet?.entryPrice);
     const actualExitPrice = Number(trade?.exit || trade?.closePrice || trade?.sheet?.exitPrice);
@@ -164,12 +191,14 @@ function timedRowFromTrade(dateStr, tradeIndex, trade, { marketOpenStopsOnly }) 
         symbol: String(trade.symbol).toUpperCase(),
         entryMinute,
         stopEntryMinute,
+        entryTimeKnown,
         exitMinute,
         entryPrice,
         actualExitPrice,
         exitReason,
         isMarketOpenStop,
         qty: qty > 0 ? qty : null,
+        consolidateCents: consolidationCents(trade?.sheet?.consolidateCents),
         stopPrice: stopPriceFor(entryPrice, trade?.sheet),
         tradeIdentity: { symbol: trade.symbol, opened: trade.opened || trade.entryTime || trade.time || '', entry: entryPrice, exit: actualExitPrice, qty: qty > 0 ? qty : null },
     };
@@ -199,16 +228,19 @@ export function collectTimedShortTrades(journal = {}, allowedDates = null, { mar
         const trades = journalByDay.get(sheetTime.date) || [];
         const profit = sheetProfit(sheetTime.row);
         let borrow = null;
+        const borrowRank = (candidate) => (candidate.timeExit ? 4 : 0) + (candidate.entryMatch ? 2 : 0) + (candidate.pnlMatch ? 1 : 0);
         trades.forEach((trade, tradeIndex) => {
             const key = `${sheetTime.date}:${tradeIndex}`;
             if (usedTrades.has(key) || !isShortTrade(trade)) return;
+            if (isExcludedStopTakeExit(trade) && !isTimeExitTrade(trade)) return;
             if (String(trade?.symbol || '').toUpperCase() !== sheetTime.symbol) return;
             const entry = Number(trade?.entry || trade?.sheet?.entryPrice);
             const net = tradeResultValue(trade);
             const entryMatch = samePrice(entry, sheetTime.entryPrice);
             const pnlMatch = profit != null && net != null && Math.abs(net - profit) <= Math.max(5, Math.abs(profit) * 0.08);
             if (!entryMatch && !pnlMatch) return;
-            if (!borrow || (pnlMatch && !borrow.pnlMatch) || (entryMatch && pnlMatch)) borrow = { trade, tradeIndex, pnlMatch, entryMatch };
+            const candidate = { trade, tradeIndex, pnlMatch, entryMatch, timeExit: isTimeExitTrade(trade) };
+            if (!borrow || borrowRank(candidate) > borrowRank(borrow)) borrow = candidate;
         });
         if (borrow) usedTrades.add(`${sheetTime.date}:${borrow.tradeIndex}`);
         const qty = Math.abs(Number(sheetTime.sheet.qtyShares || borrow?.trade?.qty || 0));

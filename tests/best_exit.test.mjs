@@ -7,6 +7,7 @@ import {
     buildLowTimeFrequencySeries,
     calculateShortExitComparison,
     collectTimedShortTrades,
+    shortConsolidationStopLoss,
     isExcludedStopTakeExit,
     isMarketOpenStopTrade,
     isTimeExitTrade,
@@ -34,6 +35,35 @@ test('collects only shorts closed by time', () => {
         { symbol: 'EEE', type: 'Short', opened: '09:35', entry: 10 },
     ] } };
     assert.deepEqual(collectTimedShortTrades(journal).map((row) => row.symbol), ['TIME']);
+});
+
+test('keeps the time-exit entry when the same day starts with a stop', () => {
+    const journal = { '2026-06-02': { trades: [
+        { symbol: 'ABC', type: 'Short', opened: '09:31', entry: 1.03, exit: 1.13, qty: 2000, net: -200, sheet: { exit: 'стоп', entryPrice: 1.03, consolidateCents: 10, stopPrice: 1.13 } },
+        { symbol: 'ABC', type: 'Short', opened: '10:05', entry: 1.4, exit: 1.1, qty: 500, net: 150, sheet: { exit: 'по часу', entryPrice: 1.4, consolidateCents: '12', stopPrice: 1.13 } },
+    ] } };
+    const rows = collectTimedShortTrades(journal);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].entryPrice, 1.4);
+    assert.equal(rows[0].stopPrice, 1.52);
+    assert.equal(rows[0].stopEntryMinute, 605);
+    assert.equal(rows[0].entryTimeKnown, true);
+});
+
+test('stop for a time exit is entry plus consolidation cents, not the earlier stop price', () => {
+    const journal = { '2026-06-02': { trades: [
+        { symbol: 'ABC', type: 'Short', opened: '09:31', entry: 1.03, exit: 1.13, qty: 2000, net: -200, sheet: { exit: 'стоп' } },
+    ] } };
+    const sheetRows = { main: { '2026-06-02': [
+        { symbol: 'ABC', net: -200, type: 'Short', sheet: { exit: 'стоп', entryPrice: 1.03, consolidateCents: 10, stopPrice: 1.13, qtyShares: 2000, sheetNet: -200, sheetRow: 4 } },
+        { symbol: 'ABC', net: 150, type: 'Short', sheet: { exit: 'по часу', entryPrice: 1.4, consolidateCents: 12, stopPrice: 1.13, qtyShares: 500, sheetNet: 150, sheetRow: 5 } },
+    ] } };
+    const rows = collectTimedShortTrades(journal, null, { sheetRows });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].entryPrice, 1.4);
+    assert.equal(rows[0].stopPrice, 1.52);
+    assert.equal(rows[0].entryTimeKnown, false);
+    assert.equal(rows[0].stopEntryMinute, null);
 });
 
 test('uses the later time-exit entry instead of the first stop of the same ticker', () => {
@@ -117,6 +147,16 @@ test('calculates best short exit and aggregate opportunity', () => {
     assert.equal(summary.bestPnl, 200);
     assert.equal(summary.extraPnl, 100);
     assert.equal(summary.avgCapturePct, 50);
+});
+
+test('stop after entry is a minus of consolidation cents times shares at the stop price', () => {
+    assert.deepEqual(shortConsolidationStopLoss({ entryPrice: 1.03, consolidateCents: 10, stopPrice: 1.13, qty: 1000 }), {
+        cents: 10,
+        shares: 1000,
+        stopPrice: 1.13,
+        loss: -100,
+    });
+    assert.equal(shortConsolidationStopLoss({ entryPrice: 1.4, consolidateCents: '12', qty: 500 }).loss, -60);
 });
 
 test('calculates hypothetical short Gross from entry, selected price and shares', () => {
