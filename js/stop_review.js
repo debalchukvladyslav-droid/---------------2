@@ -2,7 +2,7 @@ import { supabase } from './supabase.js';
 import { state } from './state.js';
 import { getSupabaseStorageUrl } from './supabase_storage.js';
 import { showToast } from './utils.js';
-import { markJournalDayDirty, saveSettings, saveToLocal } from './storage.js';
+import { loadDayDetails, loadMonth, markJournalDayDirty, saveSettings, saveToLocal } from './storage.js';
 import { buildStopReviewCandidates, googleDriveFileId, isStopExitReason, normalizeStopExitReason } from './stop_review_core.js';
 
 const STATUS_LABELS = {
@@ -182,18 +182,67 @@ async function syncMistakeTitleToJournal(oldTitle, newTitle) {
     window.renderErrorsList?.();
 }
 
+function monthKeysBetween(from, to) {
+    const keys = [];
+    const cursor = new Date(`${String(from || '').slice(0, 7)}-01T12:00:00`);
+    const end = new Date(`${String(to || '').slice(0, 7)}-01T12:00:00`);
+    if (Number.isNaN(cursor.getTime()) || Number.isNaN(end.getTime())) return keys;
+    while (cursor <= end && keys.length < 24) {
+        keys.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`);
+        cursor.setMonth(cursor.getMonth() + 1, 1);
+    }
+    return keys;
+}
+
+async function ensureJournalMonths(from, to) {
+    const nick = state.CURRENT_VIEWED_USER || state.USER_DOC_NAME;
+    if (!nick) return;
+    for (const monthKey of monthKeysBetween(from, to)) {
+        await loadMonth(nick, monthKey);
+    }
+}
+
+function liveStopCandidate(review) {
+    const date = review?.trade_date;
+    if (!date) return null;
+    const day = state.appData?.journal?.[date] || {};
+    const sheetStore = state.appData?.sheetRows && typeof state.appData.sheetRows === 'object' ? state.appData.sheetRows : {};
+    const narrowed = {};
+    Object.entries(sheetStore).forEach(([id, byDay]) => {
+        if (byDay?.[date]) narrowed[id] = { [date]: byDay[date] };
+    });
+    return buildStopReviewCandidates({
+        ...state.appData,
+        sheetRows: Object.keys(narrowed).length ? narrowed : sheetStore,
+        journal: { [date]: day },
+        tickers: { ...(state.appData?.tickers || {}), ...(day.tickers || {}) },
+    }, date, date).find(item => normalizeSymbol(item.symbol) === normalizeSymbol(review.symbol)) || null;
+}
+
+function screenshotPathsForReview(review) {
+    const stored = Array.isArray(review?.screenshot_paths) ? review.screenshot_paths.filter(Boolean) : [];
+    const live = liveStopCandidate(review)?.screenshot_paths || [];
+    return [...new Set([...live.filter(Boolean), ...stored])];
+}
+
 async function syncCandidates(candidates) {
     if (!isOwner()) return;
     const userId = currentUserId();
+    const previous = new Map(runtime.reviews.map(row => [reviewKey(row), row]));
     const activeKeys = new Set(candidates.map(reviewKey));
-    const payload = candidates.map(item => ({
-        user_id: userId,
-        trade_date: item.trade_date,
-        symbol: item.symbol,
-        trade_refs: item.trade_refs,
-        screenshot_paths: item.screenshot_paths,
-        active: true,
-    }));
+    const payload = candidates.map(item => {
+        const saved = previous.get(reviewKey(item));
+        const freshPaths = Array.isArray(item.screenshot_paths) ? item.screenshot_paths.filter(Boolean) : [];
+        const savedPaths = Array.isArray(saved?.screenshot_paths) ? saved.screenshot_paths.filter(Boolean) : [];
+        return {
+            user_id: userId,
+            trade_date: item.trade_date,
+            symbol: item.symbol,
+            trade_refs: item.trade_refs,
+            screenshot_paths: freshPaths.length ? freshPaths : savedPaths,
+            active: true,
+        };
+    });
     if (payload.length) {
         const { error } = await supabase.from('stop_reviews').upsert(payload, {
             onConflict: 'user_id,trade_date,symbol',
@@ -222,6 +271,8 @@ function hydrateCandidates() {
 }
 
 async function refreshData({ sync = true } = {}) {
+    const range = selectedRange();
+    await ensureJournalMonths(range.from, range.to);
     hydrateCandidates();
     await loadRemoteData();
     await syncSharedMistakeCatalog();
@@ -316,7 +367,11 @@ async function renderCurrentCard() {
         </div>`;
         return;
     }
-    const paths = Array.isArray(review.screenshot_paths) ? review.screenshot_paths : [];
+    let paths = screenshotPathsForReview(review);
+    if (!paths.length) {
+        await loadDayDetails(review.trade_date);
+        paths = screenshotPathsForReview(review);
+    }
     const refs = Array.isArray(review.trade_refs) ? review.trade_refs : [];
     let urls = (await Promise.all(paths.map(urlFor))).filter(Boolean);
     if (!urls.length) {
@@ -568,7 +623,7 @@ async function hydrateMistakeThumbnails(detail, reviews) {
     await Promise.all(reviews.map(async review => {
         const target = detail.querySelector(`[data-mistake-thumb="${review.id}"]`);
         if (!target) return;
-        const paths = Array.isArray(review.screenshot_paths) ? review.screenshot_paths : [];
+        const paths = screenshotPathsForReview(review);
         let src = paths.length ? await urlFor(paths[0]) : '';
         if (!src) {
             const refs = Array.isArray(review.trade_refs) ? review.trade_refs : [];
