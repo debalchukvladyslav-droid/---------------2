@@ -11,6 +11,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/trade-criteria",
+      "destination": "/api/trade-polygons?resource=entry-criteria"
+    },
+    {
       "source": "/api/aggressiveness",
       "destination": "/api/fear-greed?gauge=aggressiveness"
     },

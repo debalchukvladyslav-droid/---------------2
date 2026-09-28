@@ -1,4 +1,5 @@
 import { supabaseRest, verifySupabaseUser } from '../lib/google_sheet_sync.js';
+import tradeCriteriaHandler from '../lib/trade_criteria_http.js';
 
 const TICKER_RE = /^[A-Z0-9.\-^=]{1,20}$/;
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36';
@@ -192,6 +193,7 @@ async function archiveCriteria(ticker, tradeDate, metrics) {
 }
 
 export default async function handler(req, res) {
+    if (String(req.query?.resource || '') === 'entry-criteria') return tradeCriteriaHandler(req, res);
     if (req.method !== 'POST') {
         res.setHeader('Allow', 'POST');
         return sendJson(res, 405, { ok: false, error: 'Method not allowed' });

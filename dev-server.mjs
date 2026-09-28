@@ -17,7 +17,7 @@ import aggressivenessHandler from './lib/aggressiveness_http.js';
 import serviceBotsHandler from './api/admin/service-bots.js';
 import sheetsServiceHandler from './api/sheets-service.js';
 import serviceBotEndpointHandler from './api/service-bots/[endpoint].js';
-import tradeCriteriaHandler from './api/trade-criteria.js';
+import tradeCriteriaHandler from './lib/trade_criteria_http.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
