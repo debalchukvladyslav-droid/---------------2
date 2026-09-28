@@ -380,8 +380,10 @@ async function applySynchronizedChanges(userId, changes) {
             }
         } else if (change.domain === 'setting' && change.record?.value && !_settingsSavePromise && !_settingsSaveRequested) {
             applySettingsPayload(change.record.value);
+            window.refreshSessionCriteria?.();
         } else if (change.domain === 'settings' && change.record?.value && !_settingsSavePromise && !_settingsSaveRequested) {
             applySettingsPayload(change.record.value);
+            window.refreshSessionCriteria?.();
         }
     }
     if (journalChanged) {
@@ -404,7 +406,10 @@ setDataSyncHandlers({
             if (state.appData.journal[date]) nextJournal[date] = state.appData.journal[date];
         }
         state.appData.journal = nextJournal;
-        if (!_settingsSavePromise && !_settingsSaveRequested) applySettingsPayload(settings);
+        if (!_settingsSavePromise && !_settingsSaveRequested) {
+            applySettingsPayload(settings);
+            window.refreshSessionCriteria?.();
+        }
         state._availableMonthKeys = getMonthsInJournal(nextJournal);
         state._monthListLoaded = true;
         clearStatsCache(state.USER_DOC_NAME);

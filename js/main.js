@@ -10,7 +10,7 @@ import { getDefaultDayEntry, resolveMonthlyDayloss } from './data_utils.js';
 import { hasImportedNetPnl } from './trade_filters.js';
 import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm, canAccessMentorReviewQueue, mentorAcceptReviewRequest, ensureAuthUserProfile, rejectBlockedProfile, rejectPendingProfile, submitRegistrationRequest, isPasswordRecoveryUrl, showPasswordRecoveryForm } from './auth.js';
 import { loadTeams, openTeamManager, createNewTeam, moveTrader, deleteTeam, renameTeam, deleteTraderProfile, renderTeamSidebar, switchUser } from './teams.js';
-import { saveToLocal, saveJournalData, saveSettings, markJournalDayDirty, markAllJournalDirty, initializeApp, resetRuntimeDataForAccountSwitch, exportData, importData, loadMonth, loadTradeDays, resolveViewedUserId, setCurrentViewedUserId,
+import { saveToLocal, saveJournalData, saveSettings, loadSettings, markJournalDayDirty, markAllJournalDirty, initializeApp, resetRuntimeDataForAccountSwitch, exportData, importData, loadMonth, loadTradeDays, resolveViewedUserId, setCurrentViewedUserId,
          loadBackgroundGallery, flushPendingDataSync } from './storage.js';
 import { applyTheme, resetCustomTheme, saveThemeSettings, switchTab, toggleMobileSidebar, switchMainTab, scrollMainTabs, toggleMoreTabs, toggleMobileMoreMenu, closeMobileMoreMenu, bindMainTabRoutes, syncMainTabFromRoute, refreshCurrentMainTitle } from './ui.js';
 import { shiftDate, selectDateFromInput, saveEntry, autoSaveCurrentDay, renderView, selectDate, updateAutoFlags, initSelectors, renderSidebarTradesList } from './calendar.js';
@@ -463,29 +463,128 @@ function appendSessionCriteriaGroup(parent, title, rows, tone) {
     parent.appendChild(group);
 }
 
-function renderSessionCriteriaHints(containerId, anchorDateStr) {
-    const container = document.getElementById(containerId);
-    if (!container) return;
+function sheetStoreDayCount(store) {
+    if (!store || typeof store !== 'object') return 0;
+    let count = 0;
+    Object.values(store).forEach((byDay) => {
+        if (byDay && typeof byDay === 'object') count += Object.keys(byDay).length;
+    });
+    return count;
+}
+
+function adoptSheetStore(key) {
+    const current = state.appData?.[key];
+    if (sheetStoreDayCount(current) > 0) return current;
+    const nested = state.appData?.settings?.[key];
+    if (sheetStoreDayCount(nested) > 0) {
+        state.appData[key] = nested;
+        return nested;
+    }
+    return current && typeof current === 'object' ? current : {};
+}
+
+function sessionCriteriaRows(anchorDateStr) {
     const anchor = anchorDateStr || getTodayEST();
-    const rows = buildExceptionKfRows([], null, {
-        sheetRows: combineStatsSheetRows(state.appData?.sheetRows || {}, state.appData?.cumulativeSheetRows || {}),
+    return buildExceptionKfRows([], null, {
+        sheetRows: combineStatsSheetRows(adoptSheetStore('sheetRows'), adoptSheetStore('cumulativeSheetRows')),
         dateMatches: sessionCriteriaDateMatches(anchor, 2),
     });
-    const hints = pickSessionCriteriaHints(rows, 2);
+}
+
+function paintSessionCriteria(container, anchorDateStr) {
+    if (!container) return 0;
+    const hints = pickSessionCriteriaHints(sessionCriteriaRows(anchorDateStr), 2);
     container.replaceChildren();
     if (!hints.strong.length && !hints.avoid.length) {
         const empty = document.createElement('div');
         empty.className = 'session-criteria-empty';
         empty.textContent = 'У таблицях ще немає критеріїв із КФ за цей період.';
         container.appendChild(empty);
-        return;
+        return 0;
     }
     appendSessionCriteriaGroup(container, 'Тримати', hints.strong, 'profit');
     appendSessionCriteriaGroup(container, 'Уникати', hints.avoid, 'loss');
+    return hints.strong.length + hints.avoid.length;
 }
 
+function parseStoredSheetValue(value) {
+    if (typeof value === 'string') {
+        try { return JSON.parse(value); } catch { return null; }
+    }
+    return value && typeof value === 'object' ? value : null;
+}
+
+let sessionSheetRowsPromise = null;
+
+function ensureSessionSheetRows() {
+    if (!sessionSheetRowsPromise) {
+        sessionSheetRowsPromise = loadSessionSheetRows().finally(() => {
+            sessionSheetRowsPromise = null;
+        });
+    }
+    return sessionSheetRowsPromise;
+}
+
+async function loadSessionSheetRows() {
+    adoptSheetStore('sheetRows');
+    adoptSheetStore('cumulativeSheetRows');
+    if (sessionCriteriaRows(getTodayEST()).length) return;
+    try {
+        await loadSettings();
+    } catch (error) {
+        console.warn('[session criteria] settings reload failed:', error?.message || error);
+    }
+    adoptSheetStore('sheetRows');
+    adoptSheetStore('cumulativeSheetRows');
+    if (sessionCriteriaRows(getTodayEST()).length) return;
+    const userId = state.myUserId;
+    if (!userId) return;
+    const { data, error } = await supabase
+        .from('user_settings')
+        .select('key, value')
+        .eq('user_id', userId)
+        .in('key', ['sheetRows', 'cumulativeSheetRows']);
+    if (error || !Array.isArray(data)) return;
+    data.forEach((row) => {
+        const value = parseStoredSheetValue(row.value);
+        if (sheetStoreDayCount(value) <= sheetStoreDayCount(state.appData?.[row.key])) return;
+        state.appData[row.key] = value;
+    });
+}
+
+function showSessionCriteriaLoading(container) {
+    if (!container) return;
+    container.replaceChildren();
+    const loading = document.createElement('div');
+    loading.className = 'session-criteria-empty';
+    loading.textContent = 'Завантаження критеріїв…';
+    container.appendChild(loading);
+}
+
+async function renderSessionCriteriaHints(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const anchor = getTodayEST();
+    const generation = String(Number(container.dataset.criteriaGeneration || 0) + 1);
+    container.dataset.criteriaGeneration = generation;
+    if (paintSessionCriteria(container, anchor) > 0) return;
+    showSessionCriteriaLoading(container);
+    await ensureSessionSheetRows();
+    if (container.dataset.criteriaGeneration !== generation) return;
+    paintSessionCriteria(container, anchor);
+}
+
+window.refreshSessionCriteria = function() {
+    const anchor = getTodayEST();
+    ['session-criteria-hints', 'sm-criteria-hints'].forEach((id) => {
+        const container = document.getElementById(id);
+        if (!container || container.textContent.startsWith('Завантаження')) return;
+        paintSessionCriteria(container, anchor);
+    });
+};
+
 window.renderSessionPlaybook = function() {
-    renderSessionCriteriaHints('session-criteria-hints', state.selectedDateStr);
+    void renderSessionCriteriaHints('session-criteria-hints');
 };
 
 window.saveSessionData = function() {
@@ -539,7 +638,7 @@ function isSessionTime() {
 }
 
 function renderSessionModalPlaybook() {
-    renderSessionCriteriaHints('sm-criteria-hints', getTodayEST());
+    void renderSessionCriteriaHints('sm-criteria-hints');
 }
 
 function fillSessionModalFromSaved() {
