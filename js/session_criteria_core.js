@@ -22,22 +22,13 @@ export function sessionCriteriaDateMatches(anchorDateStr, months = 2) {
     };
 }
 
-function isNamedCriterion(row) {
-    const name = String(row?.criterion || '').trim();
-    return Boolean(name) && name !== '-' && !name.includes(';');
-}
-
 export function pickSessionCriteriaHints(rows = [], count = 2) {
     const limit = Math.max(0, Number(count) || 0);
-    const named = rows.filter(isNamedCriterion);
-    const byName = (a, b) => String(a.criterion).localeCompare(String(b.criterion), 'uk');
-    const strong = named
-        .filter((row) => Number(row.kf) > 0)
-        .sort((a, b) => (Number(b.kf) || 0) - (Number(a.kf) || 0) || (Number(b.trades) || 0) - (Number(a.trades) || 0) || byName(a, b))
-        .slice(0, limit);
-    const avoid = named
-        .filter((row) => Number(row.kf) < 0)
-        .sort((a, b) => (Number(a.kf) || 0) - (Number(b.kf) || 0) || (Number(b.trades) || 0) - (Number(a.trades) || 0) || byName(a, b))
-        .slice(0, limit);
+    const sorted = [...rows]
+        .filter((row) => String(row?.criterion ?? '').trim())
+        .sort((a, b) => (Number(b.kf) || 0) - (Number(a.kf) || 0));
+    if (!limit || !sorted.length) return { strong: [], avoid: [] };
+    const strong = sorted.slice(0, limit);
+    const avoid = sorted.slice(Math.max(sorted.length - limit, strong.length));
     return { strong, avoid };
 }

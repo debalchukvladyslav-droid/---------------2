@@ -20,7 +20,7 @@ test('month shift clamps to the last day of a shorter month', () => {
     assert.equal(matches('2026-02-27'), false);
 });
 
-test('session hints keep the two strongest and two most negative named criteria', () => {
+test('session hints are the first two and last two bars of the analytics chart', () => {
     const rows = [
         { criterion: 'ORB', kf: 4.2, trades: 3 },
         { criterion: 'Sweep', kf: 6.1, trades: 2 },
@@ -29,12 +29,14 @@ test('session hints keep the two strongest and two most negative named criteria'
         { criterion: 'News', kf: -2.2, trades: 6 },
         { criterion: 'Chase', kf: -0.4, trades: 8 },
         { criterion: 'ORB; Sweep', kf: 12, trades: 2 },
-        { criterion: '-', kf: -20, trades: 1 },
+        { criterion: '-', kf: 32, trades: 1 },
         { criterion: 'Flat', kf: 0, trades: 5 },
+        { criterion: '700K+; Shs float<1M', kf: -18, trades: 4 },
+        { criterion: 'Shs float<1M', kf: -22, trades: 6 },
     ];
     const hints = pickSessionCriteriaHints(rows, 2);
-    assert.deepEqual(hints.strong.map((row) => row.criterion), ['Sweep', 'ORB']);
-    assert.deepEqual(hints.avoid.map((row) => row.criterion), ['Late', 'News']);
+    assert.deepEqual(hints.strong.map((row) => row.criterion), ['-', 'ORB; Sweep']);
+    assert.deepEqual(hints.avoid.map((row) => row.criterion), ['700K+; Shs float<1M', 'Shs float<1M']);
 });
 
 test('hints use the same criterion КФ as analytics, limited to two months', () => {
@@ -61,6 +63,6 @@ test('hints use the same criterion КФ as analytics, limited to two months', ()
     assert.equal(byName.Sweep.kf, 4.5);
     assert.equal(byName.Late.kf, -1);
     const hints = pickSessionCriteriaHints(rows, 2);
-    assert.deepEqual(hints.strong.map((row) => row.criterion), ['Sweep', 'ORB']);
-    assert.deepEqual(hints.avoid.map((row) => row.criterion), ['News', 'Late']);
+    assert.deepEqual(hints.strong.map((row) => row.criterion), ['Sweep', 'Late; ORB']);
+    assert.deepEqual(hints.avoid.map((row) => row.criterion), ['Late', 'News']);
 });
