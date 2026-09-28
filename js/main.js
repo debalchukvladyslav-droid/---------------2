@@ -15,6 +15,8 @@ import { saveToLocal, saveJournalData, saveSettings, markJournalDayDirty, markAl
 import { applyTheme, resetCustomTheme, saveThemeSettings, switchTab, toggleMobileSidebar, switchMainTab, scrollMainTabs, toggleMoreTabs, toggleMobileMoreMenu, closeMobileMoreMenu, bindMainTabRoutes, syncMainTabFromRoute, refreshCurrentMainTitle } from './ui.js';
 import { shiftDate, selectDateFromInput, saveEntry, autoSaveCurrentDay, renderView, selectDate, updateAutoFlags, initSelectors, renderSidebarTradesList } from './calendar.js';
 import { toggleStatsDropdown, toggleTree, toggleStatsFilter, refreshStatsView, closeStatsDropdown, renderStatsSourceSelector, selectStatsSource, renderTradeTypeSelector, selectTradeTypeFilter, toggleStatsEquityMode, toggleStatsCompareMode, closeStatsCompareMode, openStatsComparisonWithTrader } from './stats.js';
+import { buildExceptionKfRows, combineStatsSheetRows } from './stats_sheet_metrics.js';
+import { pickSessionCriteriaHints, sessionCriteriaDateMatches } from './session_criteria_core.js';
 import { openAnalyticsExport, closeAnalyticsExport, analyticsExportNext, analyticsExportPrev, addAnalyticsReportPeriod, resetAnalyticsExport, saveAnalyticsExportPreset, loadAnalyticsExportPreset, generateCurrentAnalyticsPdf } from './analytics_export.js';
 import { renderErrorsList, addNewErrorType, deleteErrorType, renderChecklistDisplay, renderSettingsChecklist, addNewChecklistItem, deleteChecklistItem, saveChecklist, renderSidebarSliders, renderSettingsSliders, addNewSliderItem, deleteSliderItem, saveSlidersSettings, renderSettingsTradeTypes, addNewTradeType, deleteTradeType, saveTradeTypes, renderMyTradeTypes, addMyTradeType, deleteMyTradeType, saveMyTradeTypes, renderSettingsSituations, addPlaybookSituation, deletePlaybookSituation, savePlaybookSituations } from './settings.js';
 import { openZoom, openZoomGallery, closeZoom, openOriginal, zoomStep, loadMoreUnassigned, assignImage, removeAssignedImage, deleteFileFromPC, loadImages, renderAssignedScreens, disposeScreensView, openScreenshotForTrade, getStorageUrl } from './gallery.js';
@@ -417,26 +419,73 @@ window.renderLearnCache = renderLearnCache;
 window.renderAdminPanel = renderAdminPanel;
 window.renderTestingPanel = renderTestingPanel;
 
-window.renderSessionPlaybook = function() {
-    const container = document.getElementById('session-playbook-checks');
-    if (!container) return;
-    const playbook = state.appData.playbook || [];
-    if (!playbook.length) { container.innerHTML = '<span style="color:var(--text-muted); font-size:0.85rem;">Плейбук порожній</span>'; return; }
-    const saved = state.appData.journal[state.selectedDateStr]?.sessionSetups || [];
-    container.innerHTML = '';
-    playbook.forEach((s) => {
-        const label = document.createElement('label');
-        label.style.cssText = 'display:flex; align-items:center; gap:8px; cursor:pointer; padding:6px 8px; border-radius:6px; background:var(--bg-main); border:1px solid var(--border);';
-        const cb = document.createElement('input');
-        cb.type = 'checkbox'; cb.value = s.name;
-        cb.checked = saved.includes(s.name);
-        cb.addEventListener('change', () => window.saveSessionData());
-        const span = document.createElement('span');
-        span.style.fontSize = '0.9rem';
-        span.textContent = s.name;
-        label.appendChild(cb); label.appendChild(span);
-        container.appendChild(label);
+function formatSessionKf(value) {
+    const num = Number(value) || 0;
+    return `${num > 0 ? '+' : ''}${num.toFixed(2)} КФ`;
+}
+
+function sessionTradeCountLabel(count) {
+    const n = Math.abs(Number(count) || 0);
+    const mod10 = n % 10;
+    const mod100 = n % 100;
+    if (mod10 === 1 && mod100 !== 11) return `${n} угода`;
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${n} угоди`;
+    return `${n} угод`;
+}
+
+function appendSessionCriteriaGroup(parent, title, rows, tone) {
+    const group = document.createElement('div');
+    group.className = `session-criteria-group is-${tone}`;
+    const kicker = document.createElement('div');
+    kicker.className = 'session-criteria-kicker';
+    kicker.textContent = title;
+    group.appendChild(kicker);
+    if (!rows.length) {
+        const empty = document.createElement('div');
+        empty.className = 'session-criteria-empty';
+        empty.textContent = tone === 'profit' ? 'Немає плюсових критеріїв' : 'Немає мінусових критеріїв';
+        group.appendChild(empty);
+        parent.appendChild(group);
+        return;
+    }
+    rows.forEach((row) => {
+        const line = document.createElement('div');
+        line.className = 'session-criteria-row';
+        const name = document.createElement('span');
+        name.className = 'session-criteria-name';
+        name.textContent = row.criterion;
+        const meta = document.createElement('span');
+        meta.className = `session-criteria-kf is-${tone}`;
+        meta.textContent = `${formatSessionKf(row.kf)} · ${sessionTradeCountLabel(row.trades)}`;
+        line.append(name, meta);
+        group.appendChild(line);
     });
+    parent.appendChild(group);
+}
+
+function renderSessionCriteriaHints(containerId, anchorDateStr) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const anchor = anchorDateStr || getTodayEST();
+    const rows = buildExceptionKfRows([], null, {
+        sheetRows: combineStatsSheetRows(state.appData?.sheetRows || {}, state.appData?.cumulativeSheetRows || {}),
+        dateMatches: sessionCriteriaDateMatches(anchor, 2),
+    });
+    const hints = pickSessionCriteriaHints(rows, 2);
+    container.replaceChildren();
+    if (!hints.strong.length && !hints.avoid.length) {
+        const empty = document.createElement('div');
+        empty.className = 'session-criteria-empty';
+        empty.textContent = 'У таблицях ще немає критеріїв із КФ за цей період.';
+        container.appendChild(empty);
+        return;
+    }
+    appendSessionCriteriaGroup(container, 'Тримати', hints.strong, 'profit');
+    appendSessionCriteriaGroup(container, 'Уникати', hints.avoid, 'loss');
+}
+
+window.renderSessionPlaybook = function() {
+    renderSessionCriteriaHints('session-criteria-hints', state.selectedDateStr);
 };
 
 window.saveSessionData = function() {
@@ -444,11 +493,9 @@ window.saveSessionData = function() {
     const goal = document.getElementById('session-goal')?.value || '';
     const plan = document.getElementById('session-plan')?.value || '';
     const readiness = document.getElementById('session-readiness')?.value || 5;
-    const setups = [...document.querySelectorAll('#session-playbook-checks input:checked')].map(cb => cb.value);
     state.appData.journal[state.selectedDateStr].sessionGoal = goal;
     state.appData.journal[state.selectedDateStr].sessionPlan = plan;
     state.appData.journal[state.selectedDateStr].sessionReadiness = parseInt(readiness);
-    state.appData.journal[state.selectedDateStr].sessionSetups = setups;
     state.appData.journal[state.selectedDateStr].sessionStartRecorded = true;
     state.appData.journal[state.selectedDateStr].__detailsLoaded = true;
     markJournalDayDirty(state.selectedDateStr);
@@ -492,25 +539,7 @@ function isSessionTime() {
 }
 
 function renderSessionModalPlaybook() {
-    const container = document.getElementById('sm-playbook-checks');
-    if (!container) return;
-    const playbook = state.appData.playbook || [];
-    if (!playbook.length) { container.innerHTML = '<span style="color:var(--text-muted); font-size:0.85rem;">Плейбук порожній</span>'; return; }
-    const today = getTodayEST();
-    const saved = state.appData.journal?.[today]?.sessionSetups || [];
-    container.innerHTML = '';
-    playbook.forEach(s => {
-        const label = document.createElement('label');
-        label.style.cssText = 'display:flex; align-items:center; gap:8px; cursor:pointer; padding:6px 8px; border-radius:6px; background:var(--bg-main); border:1px solid var(--border);';
-        const cb = document.createElement('input');
-        cb.type = 'checkbox'; cb.value = s.name;
-        cb.checked = saved.includes(s.name);
-        const span = document.createElement('span');
-        span.style.fontSize = '0.9rem';
-        span.textContent = s.name;
-        label.appendChild(cb); label.appendChild(span);
-        container.appendChild(label);
-    });
+    renderSessionCriteriaHints('sm-criteria-hints', getTodayEST());
 }
 
 function fillSessionModalFromSaved() {
@@ -538,7 +567,6 @@ window.saveSessionModal = async function() {
     state.appData.journal[today].sessionGoal = document.getElementById('sm-goal')?.value || '';
     state.appData.journal[today].sessionPlan = document.getElementById('sm-plan')?.value || '';
     state.appData.journal[today].sessionReadiness = parseInt(document.getElementById('sm-readiness')?.value) || 5;
-    state.appData.journal[today].sessionSetups = [...document.querySelectorAll('#sm-playbook-checks input:checked')].map(cb => cb.value);
     state.appData.journal[today].sessionDone = true;
     state.appData.journal[today].sessionStartRecorded = true;
     state.appData.journal[today].__detailsLoaded = true;
@@ -572,13 +600,12 @@ window.checkSessionModalReadiness = async function() {
     const goal = document.getElementById('sm-goal')?.value || '';
     const plan = document.getElementById('sm-plan')?.value || '';
     const readiness = document.getElementById('sm-readiness')?.value || 5;
-    const setups = [...document.querySelectorAll('#sm-playbook-checks input:checked')].map(cb => cb.value);
     const resultEl = document.getElementById('sm-ai-result');
     resultEl.style.display = 'block';
     resultEl.textContent = '⏳ AI аналізує...';
     try {
         const { callGemini, getGeminiKeys } = await import('./ai.js');
-        const prompt = buildSessionReadinessPrompt({ goal, plan, readiness, setups });
+        const prompt = buildSessionReadinessPrompt({ goal, plan, readiness });
         const res = await callGemini(getGeminiKeys()[0], {
             systemInstruction: { parts: [{ text: 'Ти передторговий ментальний чекер. Оцінюй лише поточну психологічну та процесну готовність. Фінансові результати не є доказом готовності або неготовності.' }] },
             contents: [{ parts: [{ text: prompt }] }]
@@ -616,7 +643,7 @@ async function isSessionReviewTime() {
     return isEndOfSessionReviewTime(await getTrustedServerNow());
 }
 
-function buildSessionReadinessPrompt({ goal = '', plan = '', readiness = 5, setups = [], stateSignals = [] } = {}) {
+function buildSessionReadinessPrompt({ goal = '', plan = '', readiness = 5, stateSignals = [] } = {}) {
     const previousReadiness = Object.entries(state.appData.journal || {})
         .filter(([date, day]) => /^\d{4}-\d{2}-\d{2}$/.test(date) && day?.sessionReadiness)
         .sort(([a], [b]) => b.localeCompare(a))
@@ -630,7 +657,6 @@ function buildSessionReadinessPrompt({ goal = '', plan = '', readiness = 5, setu
 - Самооцінка готовності: ${readiness}/10
 - Ціль сесії: ${goal || 'не сформульована'}
 - План сесії: ${plan || 'не сформульований'}
-- Дозволені сетапи: ${setups.join(', ') || 'не обрані'}
 - Самооцінки стану: ${stateSignals.join(', ') || 'не заповнені'}
 - Попередні самооцінки готовності: ${previousReadiness || 'немає даних'}
 
@@ -885,7 +911,6 @@ window.checkSessionReadiness = async function() {
     const goal = document.getElementById('session-goal')?.value || '';
     const plan = document.getElementById('session-plan')?.value || '';
     const readiness = document.getElementById('session-readiness')?.value || 5;
-    const setups = [...document.querySelectorAll('#session-playbook-checks input:checked')].map(cb => cb.value);
     const sliders = [];
     document.querySelectorAll('.slider-input').forEach(el => {
         const f = state.appData.settings.sliders?.find(p => p.id === el.getAttribute('data-id'));
@@ -901,7 +926,6 @@ window.checkSessionReadiness = async function() {
             goal,
             plan,
             readiness,
-            setups,
             stateSignals: sliders,
         });
         const res = await callGemini(getGeminiKeys()[0], {
