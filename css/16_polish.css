@@ -4503,18 +4503,58 @@ body[data-theme="light"] .auth-card {
     background: color-mix(in srgb, var(--bg-main) 38%, transparent);
 }
 
+#form-sidebar .errors-list-container {
+    display: flex;
+    flex-direction: column;
+    max-height: min(460px, 58vh);
+    margin-top: 4px;
+    padding: 6px;
+    overflow: auto;
+    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--bg-main) 62%, transparent);
+}
+
+#form-sidebar .errors-list-empty {
+    margin: 8px 6px;
+    color: var(--text-muted);
+    font-size: 0.84rem;
+    line-height: 1.4;
+}
+
 #form-sidebar .error-item {
     min-height: 38px;
     margin-bottom: 0;
-    padding: 9px 11px !important;
+    padding: 9px 8px 9px 11px !important;
     border-radius: 8px;
     border-color: color-mix(in srgb, var(--border) 82%, transparent) !important;
-    background: color-mix(in srgb, var(--bg-panel) 72%, transparent) !important;
+    background: color-mix(in srgb, var(--bg-panel) 94%, var(--bg-main)) !important;
 }
 
 #form-sidebar .error-item:hover {
     border-color: color-mix(in srgb, var(--accent) 34%, var(--border)) !important;
-    background: color-mix(in srgb, var(--accent) 6%, var(--bg-panel)) !important;
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel)) !important;
+}
+
+#form-sidebar .error-item:has(input:checked) {
+    border-color: color-mix(in srgb, var(--accent) 62%, var(--border)) !important;
+    background: color-mix(in srgb, var(--accent) 16%, var(--bg-panel)) !important;
+    box-shadow: inset 3px 0 0 var(--accent);
+}
+
+#form-sidebar .error-actions {
+    display: flex;
+    gap: 2px;
+    opacity: 0;
+}
+
+#form-sidebar .error-item:hover .error-actions,
+#form-sidebar .error-item:focus-within .error-actions {
+    opacity: 1;
+}
+
+@media (hover: none) {
+    #form-sidebar .error-actions { opacity: 1; }
 }
 
 #form-sidebar .error-label {

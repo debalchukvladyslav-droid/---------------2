@@ -193,8 +193,16 @@ function persistFieldChanges(message) {
 export function renderErrorsList() {
     const container = document.getElementById('errors-list-container');
     if (!container) return;
-    clearNode(container);
-    (state.appData?.errorTypes ?? []).forEach((err, index) => {
+    const selected = new Set(state.appData?.journal?.[state.selectedDateStr]?.errors || []);
+    const types = state.appData?.errorTypes ?? [];
+    const fragment = document.createDocumentFragment();
+    if (!types.length) {
+        const empty = document.createElement('p');
+        empty.className = 'errors-list-empty';
+        empty.textContent = 'Список порожній. Додайте першу помилку вище.';
+        fragment.appendChild(empty);
+    }
+    types.forEach((err, index) => {
         const item = document.createElement('div');
         item.className = 'error-item';
 
@@ -206,6 +214,7 @@ export function renderErrorsList() {
         checkbox.className = 'error-checkbox';
         checkbox.id = `err-${index}`;
         checkbox.value = err;
+        checkbox.checked = selected.has(err);
 
         const span = document.createElement('span');
         span.textContent = err;
@@ -226,16 +235,17 @@ export function renderErrorsList() {
         const delBtn = document.createElement('button');
         delBtn.type = 'button';
         delBtn.className = 'icon-btn delete';
-        delBtn.textContent = '❌';
+        delBtn.textContent = '×';
+        delBtn.title = 'Видалити';
         delBtn.onclick = () => deleteErrorType(index);
 
         actions.appendChild(editBtn);
         actions.appendChild(delBtn);
         item.appendChild(label);
         item.appendChild(actions);
-        container.appendChild(item);
+        fragment.appendChild(item);
     });
-    if (window.selectDate) window.selectDate(state.selectedDateStr, true);
+    container.replaceChildren(fragment);
 }
 
 export async function addNewErrorType() {

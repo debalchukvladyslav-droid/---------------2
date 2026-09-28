@@ -475,26 +475,63 @@ function renderSummary() {
     el.textContent = `Нерозібрані ${counts.pending} · Нормальні ${counts.normal} · Погані ${counts.bad}`;
 }
 
-function renderMistakeCatalog() {
+function pendingCatalog() {
+    const titles = Array.isArray(state.appData?.errorTypes) ? state.appData.errorTypes : [];
+    return titles.map((title, index) => ({
+        id: `pending:${index}`,
+        title: String(title),
+        description: '',
+        archived: false,
+        pending: true,
+    }));
+}
+
+function catalogMistakes() {
+    const linkedMistakeIds = new Set(runtime.links.map(link => link.mistake_id));
+    const remote = runtime.mistakes.length ? canonicalMistakes({ includeChosen: linkedMistakeIds }) : [];
+    return remote.length ? remote : pendingCatalog();
+}
+
+function setCatalogBusy(isBusy) {
+    const status = document.getElementById('stop-mistakes-status');
+    if (!status) return;
+    status.hidden = !isBusy;
+}
+
+function renderMistakeCatalog({ refreshDetail = true } = {}) {
     const list = document.getElementById('stop-mistakes-list');
     const detail = document.getElementById('stop-mistake-detail');
     if (!list || !detail) return;
-    const linkedMistakeIds = new Set(runtime.links.map(link => link.mistake_id));
-    const sorted = canonicalMistakes({ includeChosen: linkedMistakeIds });
-    if (!runtime.selectedMistakeId || !runtime.mistakes.some(item => item.id === runtime.selectedMistakeId)) {
-        runtime.selectedMistakeId = sorted.find(item => !item.archived)?.id || sorted[0]?.id || '';
+    const catalog = catalogMistakes();
+    const query = document.getElementById('stop-mistakes-query')?.value.trim().toLocaleLowerCase('uk-UA') || '';
+    const sorted = catalog.filter(item => !query || String(item.title).toLocaleLowerCase('uk-UA').includes(query));
+    const count = document.getElementById('stop-mistakes-count');
+    if (count) count.textContent = String(query ? sorted.length : catalog.length);
+    if (!runtime.selectedMistakeId || !catalog.some(item => item.id === runtime.selectedMistakeId)) {
+        runtime.selectedMistakeId = sorted.find(item => !item.archived)?.id || catalog.find(item => !item.archived)?.id || '';
     }
-    list.innerHTML = sorted.length ? sorted.map((item, index) => `
-        <div role="button" tabindex="0" class="stop-mistake-list-item ${item.id === runtime.selectedMistakeId ? 'active' : ''} ${item.archived ? 'archived' : ''}" data-mistake-select="${item.id}">
-            <span>${escapeHtml(item.title)}</span><small>${runtime.links.filter(link => link.mistake_id === item.id).length}</small>
-            ${isOwner() && !item.archived ? `<span class="stop-mistake-order">
+    const scrollTop = list.scrollTop;
+    list.innerHTML = sorted.length ? sorted.map((item) => `
+        <div role="button" tabindex="0" class="stop-mistake-list-item ${item.id === runtime.selectedMistakeId ? 'active' : ''} ${item.archived ? 'archived' : ''} ${item.pending ? 'is-pending' : ''}" data-mistake-select="${item.id}">
+            <span class="stop-mistake-title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</span><small>${item.pending ? '·' : runtime.links.filter(link => link.mistake_id === item.id).length}</small>
+            ${isOwner() && !item.archived && !item.pending ? `<span class="stop-mistake-order">
                 <button type="button" data-mistake-move="-1" data-mistake-id="${item.id}" aria-label="Перемістити вище">↑</button>
                 <button type="button" data-mistake-move="1" data-mistake-id="${item.id}" aria-label="Перемістити нижче">↓</button>
-            </span>` : ''}
-        </div>`).join('') : '<div class="stop-mistake-empty">Каталог порожній. Створіть першу помилку.</div>';
-    const selected = runtime.mistakes.find(item => item.id === runtime.selectedMistakeId);
+            </span>` : '<span class="stop-mistake-order"></span>'}
+        </div>`).join('') : `<div class="stop-mistake-empty">${query ? 'Нічого не знайдено.' : 'Каталог порожній. Створіть першу помилку.'}</div>`;
+    list.scrollTop = scrollTop;
+    const selected = catalog.find(item => item.id === runtime.selectedMistakeId);
+    const keepDetail = detail.dataset.mistakeId === runtime.selectedMistakeId
+        && (!refreshDetail || detail.contains(document.activeElement));
+    if (keepDetail) {
+        bindMistakeList(list);
+        return;
+    }
+    detail.dataset.mistakeId = runtime.selectedMistakeId || '';
     if (!selected) {
         detail.innerHTML = '<div class="stop-mistake-empty">Оберіть або додайте помилку.</div>';
+    } else if (selected.pending) {
+        detail.innerHTML = `<div class="stop-mistake-pending"><h3>${escapeHtml(selected.title)}</h3><p>Опис і пов’язані стопи з’являться за мить.</p></div>`;
     } else {
         const linkedIds = runtime.links.filter(link => link.mistake_id === selected.id).map(link => link.review_id);
         const linked = runtime.reviews.filter(review => linkedIds.includes(review.id));
@@ -512,6 +549,10 @@ function renderMistakeCatalog() {
         detail.querySelectorAll('[data-open-review]').forEach(button => button.addEventListener('click', () => openLinkedReview(button.dataset.openReview)));
         void hydrateMistakeThumbnails(detail, linked);
     }
+    bindMistakeList(list);
+}
+
+function bindMistakeList(list) {
     list.querySelectorAll('[data-mistake-select]').forEach(button => button.addEventListener('click', event => {
         if (event.target.closest('[data-mistake-move]')) return;
         runtime.selectedMistakeId = button.dataset.mistakeSelect;
@@ -521,9 +562,6 @@ function renderMistakeCatalog() {
         event.stopPropagation();
         void moveMistake(button.dataset.mistakeId, Number(button.dataset.mistakeMove));
     }));
-    requestAnimationFrame(() => {
-        list.querySelector(`[data-mistake-select="${CSS.escape(runtime.selectedMistakeId)}"]`)?.scrollIntoView({ block: 'nearest' });
-    });
 }
 
 async function hydrateMistakeThumbnails(detail, reviews) {
@@ -700,6 +738,7 @@ function bindUI() {
     if (!root) return;
     runtime.ready = true;
     root.querySelector('[data-mistake-add]')?.addEventListener('click', () => void addMistake());
+    document.getElementById('stop-mistakes-query')?.addEventListener('input', () => renderMistakeCatalog({ refreshDetail: false }));
     const defaults = monthBounds();
     document.getElementById('stop-review-from').value = defaults.from;
     document.getElementById('stop-review-to').value = defaults.to;
@@ -748,9 +787,29 @@ export function initStopReview() {
     bindUI();
 }
 
+let catalogRequest = 0;
+
+async function refreshCatalogOnly() {
+    const requestId = ++catalogRequest;
+    setCatalogBusy(true);
+    try {
+        await loadRemoteData();
+        if (requestId !== catalogRequest) return;
+        await syncSharedMistakeCatalog();
+        if (requestId !== catalogRequest) return;
+        renderMistakeCatalog();
+    } catch (error) {
+        console.error('[Stop review]', error);
+        showToast(`Не вдалося оновити список помилок: ${error.message}`);
+    } finally {
+        if (requestId === catalogRequest) setCatalogBusy(false);
+    }
+}
+
 export function refreshStopReview() {
     bindUI();
-    return renderAll();
+    renderMistakeCatalog();
+    return refreshCatalogOnly();
 }
 
 document.addEventListener('app:shell-ready', initStopReview);

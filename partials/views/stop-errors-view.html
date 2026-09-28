@@ -52,7 +52,16 @@
                     </div>
                 </div>
                 <div class="stop-mistakes-layout">
-                    <aside id="stop-mistakes-list" class="stop-mistakes-list"></aside>
+                    <div class="stop-mistakes-rail">
+                        <div class="stop-mistakes-list-tools">
+                            <label class="stop-mistakes-search">
+                                <input type="search" id="stop-mistakes-query" placeholder="Знайти помилку" autocomplete="off" aria-label="Пошук помилки">
+                            </label>
+                            <span id="stop-mistakes-count" class="stop-mistakes-count"></span>
+                        </div>
+                        <p id="stop-mistakes-status" class="stop-mistakes-status" hidden>Оновлюємо список…</p>
+                        <aside id="stop-mistakes-list" class="stop-mistakes-list"></aside>
+                    </div>
                     <div id="stop-mistake-detail" class="stop-mistake-detail"></div>
                 </div>
             </section>

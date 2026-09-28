@@ -786,8 +786,14 @@ async function runMainTabWork(tab) {
         if (window.refreshReviewRequestButtons) tasks.push(Promise.resolve(window.refreshReviewRequestButtons()));
     }
     if (tab === 'stop-errors') {
+        // The catalog is local and must stay visible. Remote sync must not
+        // hold the gray full-view loader over the mistake list.
         if (window.initStopReview) window.initStopReview();
-        if (window.refreshStopReview) tasks.push(Promise.resolve(window.refreshStopReview()));
+        if (window.refreshStopReview) {
+            void Promise.resolve(window.refreshStopReview()).catch((error) => {
+                console.warn('[Stop review]', error?.message || error);
+            });
+        }
     }
     if (tab === 'calendar' && window.refreshReviewRequestButtons) tasks.push(Promise.resolve(window.refreshReviewRequestButtons()));
     if (tab === 'settings' && window.renderDaylossSettings) tasks.push(Promise.resolve(window.renderDaylossSettings()));
@@ -928,7 +934,8 @@ export async function switchMainTab(tab, options = {}) {
     
     let view = document.getElementById('view-' + tab);
     activateMainView(view, tab, previousTab);
-    setViewLoading(view, tab, true);
+    const skipViewLoader = tab === 'stop-errors';
+    if (!skipViewLoader) setViewLoading(view, tab, true);
 
     // Оновлюємо bottom nav
     document.querySelectorAll('.mobile-nav-btn').forEach(b => {
@@ -955,10 +962,12 @@ export async function switchMainTab(tab, options = {}) {
     const startedAt = performance.now();
     await nextPaint();
     await runMainTabWork(tab);
-    const elapsed = performance.now() - startedAt;
-    if (elapsed < 260) await delay(260 - elapsed);
-    if (switchToken === mainTabSwitchToken && view?.classList.contains('active')) {
-        setViewLoading(view, tab, false);
+    if (!skipViewLoader) {
+        const elapsed = performance.now() - startedAt;
+        if (elapsed < 260) await delay(260 - elapsed);
+        if (switchToken === mainTabSwitchToken && view?.classList.contains('active')) {
+            setViewLoading(view, tab, false);
+        }
     }
 }
 
