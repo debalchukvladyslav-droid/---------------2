@@ -11,7 +11,7 @@ test('end-of-day cron is authenticated, runs Grandmaster and preserves the AI wo
     const cron = await readFile(new URL('../api/cron/sync-google-sheets.js', import.meta.url), 'utf8');
     const vercel = JSON.parse(await readFile(new URL('../vercel.json', import.meta.url), 'utf8'));
     assert.match(cron, /runGrandmasterDailyReviews/); assert.match(cron, /processNextLearningJob/); assert.match(cron, /Bearer \$\{cronSecret\}/);
-    assert.deepEqual(vercel.crons.find((item) => item.path === '/api/cron/end-of-day'), { path: '/api/cron/end-of-day', schedule: '0 15 * * *' });
+    assert.deepEqual(vercel.crons.find((item) => item.path === '/api/cron/end-of-day'), { path: '/api/cron/end-of-day', schedule: '15 21 * * *' });
     assert.ok(vercel.crons.length <= 2); assert.ok(vercel.rewrites.some((item) => item.source === '/api/cron/end-of-day' && /task=end-of-day/.test(item.destination)));
 });
 

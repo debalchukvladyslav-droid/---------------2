@@ -7,14 +7,19 @@ export interface DailyBar {
 }
 
 export interface AggressivenessComponents {
-    microSmall: number;
-    speculative: number;
-    broad: number;
-    stress: number;
+    smallMicro: number | null;
+    breadth: number | null;
+    speculative: number | null;
+    broadMarket: number | null;
+    macro: number | null;
+    analog: number | null;
+    ruleScore: number | null;
+    microSmall?: number | null;
+    broad?: number | null;
+    stress?: number | null;
     narrowPenalty: number;
     meltUpPenalty: number;
     liveAdjustment: number;
-    detail?: Record<string, { value: number | null; method: string; sample: number }>;
 }
 
 export interface AggressivenessResult {
@@ -22,15 +27,19 @@ export interface AggressivenessResult {
     sessionDate: string;
     infoThrough: string;
     scoreVersion: number;
-    baseScore?: number;
-    liveScore?: number;
+    ruleScore?: number | null;
+    analogScore?: number | null;
+    baseScore?: number | null;
+    liveScore?: number | null;
     liveAdjustment?: number | null;
-    displayScore?: number;
+    displayScore?: number | null;
     label?: string;
     tone?: string;
     confidence?: number | null;
     components?: AggressivenessComponents;
     missing: string[];
+    coverageGaps?: string[];
+    breadthUnavailable?: boolean;
     message?: string;
 }
 
@@ -40,6 +49,7 @@ export interface BacktestBucket {
     trades: number;
     totalR: number;
     rPerTrade: number | null;
+    medianRPerTrade: number | null;
     winRate: number | null;
     avgWinner: number | null;
     avgLoser: number | null;

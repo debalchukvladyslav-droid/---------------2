@@ -2,7 +2,10 @@ import { runGoogleSheetSync, supabaseRest } from '../../lib/google_sheet_sync.js
 import { processNextLearningJob, runLearningBatch } from '../../lib/ai_learning.js';
 import { runGrandmasterDailyReviews } from '../../lib/grandmaster_review.js';
 import { processSourceJobs } from '../../lib/source_worker.js';
-import { buildLiveNextSession } from '../../lib/next_session_service.js';
+import { buildGauge } from '../../lib/aggressiveness_service.js';
+import { createAggressivenessStore } from '../../lib/aggressiveness_http.js';
+import { createBreadthProvider } from '../../lib/market_data_provider.js';
+import { buildLiveNextSession, loadMechanicalSignals } from '../../lib/next_session_service.js';
 
 export const config = { maxDuration: 300 };
 
@@ -12,6 +15,30 @@ function sendJson(res, status, body) {
 }
 
 const NEXT_SESSION_ENABLED = false;
+
+async function storeAggressiveness() {
+    try {
+        const payload = await buildGauge({
+            now: new Date(),
+            env: process.env,
+            store: createAggressivenessStore(),
+            breadthProvider: createBreadthProvider(process.env),
+            loadSignals: () => loadMechanicalSignals(),
+        });
+        return {
+            ok: payload.status === 'ok',
+            sessionDate: payload.sessionDate || null,
+            infoThrough: payload.infoThrough || null,
+            score: payload.displayScore ?? null,
+            confidence: payload.confidence ?? null,
+            breadthUnavailable: Boolean(payload.breadthUnavailable),
+            incomplete: Boolean(payload.incomplete),
+        };
+    } catch (error) {
+        console.error('[Aggressiveness]', error);
+        return { ok: false, error: error?.message || String(error) };
+    }
+}
 
 async function storeNextSession() {
     if (!NEXT_SESSION_ENABLED) return { ok: false, disabled: true };
@@ -73,7 +100,8 @@ export default async function handler(req, res) {
             const grandmaster = await runGrandmasterDailyReviews({ tradeDate: /^\d{4}-\d{2}-\d{2}$/.test(String(req.query?.date || '')) ? String(req.query.date) : undefined });
             const queued = await processNextLearningJob().catch(() => ({ job: null, run: null, status: 'idle' }));
             const nextSession = await storeNextSession();
-            return sendJson(res, 200, { ok: grandmaster.failed === 0, task: 'end-of-day', grandmaster, aiLearning: queued, nextSession });
+            const aggressiveness = await storeAggressiveness();
+            return sendJson(res, 200, { ok: grandmaster.failed === 0, task: 'end-of-day', grandmaster, aiLearning: queued, nextSession, aggressiveness });
         }
         if (String(req.query?.task || '') === 'ai-learning') {
             const queued = await processNextLearningJob();

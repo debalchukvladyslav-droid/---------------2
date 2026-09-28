@@ -1,7 +1,7 @@
 import { fetchWithSession } from './authenticated_fetch.js';
-import { formatEtClock, needlePoint, nextLivePollDelay } from '../lib/aggressiveness_core.js';
+import { formatSessionDate, needlePoint, nextScoreRefreshDelay } from '../lib/aggressiveness_core.js';
 
-const CACHE_KEY = 'pj:market-aggressiveness:last-valid:v1';
+const CACHE_KEY = 'pj:market-aggressiveness:last-valid:v2';
 const FACE_KEY = 'pj:market-gauge-face:v1';
 const TONES = ['minimal', 'cautious', 'neutral', 'aggressive', 'maximal'];
 let pendingRequest = null;
@@ -194,7 +194,16 @@ function progressionChart(points) {
             class: index === points.length - 1 ? 'aggressiveness-chart-dot is-last' : 'aggressiveness-chart-dot',
         });
         const title = document.createElementNS(SVG_NS, 'title');
-        title.textContent = `${shortDate(point.date)} · ${point.score}${point.label ? ` · ${point.label}` : ''}`;
+        const mechanical = Number(point.mechanicalRPerTrade);
+        const parts = [
+            formatSessionDate(point.date) || point.date,
+            `оцінка ${point.score}`,
+            point.infoThrough ? `close ${formatSessionDate(point.infoThrough)}` : '',
+            point.ruleScore != null ? `Rule ${Math.round(point.ruleScore)}` : '',
+            point.analogScore != null ? `Analog ${Math.round(point.analogScore)}` : '',
+            Number.isFinite(mechanical) ? `mechanical R/trade ${mechanical.toFixed(2)} (результат дня, не вхід оцінки)` : '',
+        ].filter(Boolean);
+        title.textContent = parts.join(' · ');
         dot.append(title);
         svg.append(dot);
         const edge = index === 0 || index === points.length - 1;
@@ -208,7 +217,7 @@ function progressionChart(points) {
             value.textContent = String(point.score);
             svg.append(value);
         }
-        if (points.length <= 8 || edge || index % 2 === 0) {
+        if (points.length <= 10 || edge || index % Math.ceil(points.length / 6) === 0) {
             const date = svgEl('text', { x: cx, y: height - 8, class: 'aggressiveness-chart-date' });
             date.setAttribute('text-anchor', index === 0 ? 'start' : (index === points.length - 1 ? 'end' : 'middle'));
             date.textContent = shortDate(point.date);
@@ -221,7 +230,7 @@ function progressionChart(points) {
 function renderProgression(payload) {
     const history = Array.isArray(payload?.history) ? payload.history.filter((point) => point?.date) : [];
     if (history.length < 2) return null;
-    const days = historyDays === 7 ? 7 : 14;
+    const days = [7, 14, 30].includes(historyDays) ? historyDays : 14;
     const points = history.slice(-days);
     const block = document.createElement('section');
     block.className = 'aggressiveness-chart-block';
@@ -231,7 +240,7 @@ function renderProgression(payload) {
     title.textContent = 'Як змінювалась оцінка';
     const switches = document.createElement('div');
     switches.className = 'aggressiveness-range';
-    [7, 14].forEach((count) => {
+    [7, 14, 30].forEach((count) => {
         const button = document.createElement('button');
         button.type = 'button';
         button.dataset.action = 'aggressiveness-range';
@@ -253,12 +262,11 @@ function renderDetails(payload) {
     const host = document.getElementById('aggressiveness-info-body');
     if (!host) return;
     const components = payload?.components || {};
-    const detail = components.detail || {};
     host.replaceChildren();
 
     const lead = document.createElement('p');
     lead.className = 'aggressiveness-info-lead';
-    lead.textContent = 'Оцінка на сьогодні: наскільки ринок зручний для механічних шортів. Число зверху — підсумок. Нижче видно, з чого він склався: база до вчорашнього закриття, мінус штрафи, плюс сьогоднішній рух.';
+    lead.textContent = 'Оцінка на сьогодні на основі стану ринку на вчорашнє закриття. Показує, наскільки схожі ринкові умови історично були сприятливі для механічних short-сетапів наступної сесії. Протягом дня оцінка не змінюється.';
     host.append(lead);
 
     if (payload?.incomplete) {
@@ -280,10 +288,16 @@ function renderDetails(payload) {
     const confidence = document.createElement('em');
     const confidenceValue = Number(payload?.confidence);
     confidence.textContent = Number.isFinite(confidenceValue)
-        ? `Дані на ${Math.round(confidenceValue)}%. Це не змінює оцінку, лише показує, чи вистачає історії.`
+        ? `Дані на ${Math.round(confidenceValue)}%. Це не змінює оцінку.`
         : 'Повноту даних ще не пораховано.';
     hero.append(score, status, confidence);
     host.append(hero);
+    const when = document.createElement('p');
+    when.className = 'aggressiveness-info-note';
+    const closeDate = formatSessionDate(payload?.infoThrough);
+    const sessionDate = formatSessionDate(payload?.sessionDate);
+    when.textContent = `Розраховано після close: ${closeDate || '—'}. Для сесії: ${sessionDate || '—'}.`;
+    host.append(when);
 
     const scale = document.createElement('p');
     scale.className = 'aggressiveness-info-lead';
@@ -292,49 +306,56 @@ function renderDetails(payload) {
     const chart = renderProgression(payload);
     if (chart) host.append(chart);
 
+    const blockText = (value) => (value == null || !Number.isFinite(Number(value)) ? 'немає даних' : finiteText(value));
     const list = document.createElement('div');
     list.className = 'aggressiveness-ledger';
-    list.append(ledgerRow('База', finiteText(payload?.baseScore), {
-        hint: 'Усе, що відомо до вчорашнього закриття. З цього числа починається підсумок.',
-    }));
-    list.append(ledgerRow('Дрібні акції', finiteText(components.microSmall), {
+    list.append(ledgerRow('Small / Micro', blockText(components.smallMicro ?? components.microSmall), {
         child: true,
-        rowKey: 'microSmall',
-        detail,
-        hint: 'IWM і IWC проти SPY. Натисни рядок: побачиш, де дрібні були за останні 5 і 10 днів. 0 — у хвості, 100 — серед найсильніших.',
+        hint: 'IWM і IWC проти SPY. Напрям балів узятий з історичного mechanical R наступного дня, не з правила «сильніше = краще».',
     }));
-    list.append(ledgerRow('Спекулятивні', finiteText(components.speculative), {
+    list.append(ledgerRow('Breadth', blockText(components.breadth), {
         child: true,
-        rowKey: 'speculative',
-        detail,
-        hint: 'XBI і ARKK проти SPY. Те саме порівняння, але для історій, де живуть pump and dump.',
+        hint: payload?.breadthUnavailable
+            ? 'Біржовий breadth (advancers, volume, new highs/lows) у поточного провайдера немає. Число не вигадане.'
+            : 'Стан ширини ринку на попередньому закритті.',
     }));
-    list.append(ledgerRow('Широкий ринок', finiteText(components.broad), {
+    list.append(ledgerRow('Speculative', blockText(components.speculative), {
         child: true,
-        hint: 'Сам SPY. Дивиться, чи індекс іде рівно, без різкого падіння або перегріву.',
+        hint: 'XBI і ARKK проти SPY. Напрям визначає історія.',
     }));
-    list.append(ledgerRow('Стрес', finiteText(components.stress), {
+    list.append(ledgerRow('Broad Market', blockText(components.broadMarket ?? components.broad), {
         child: true,
-        hint: 'VIX, ставки і нафта. 100 означає лише одне: штрафу за стрес немає. Це не знак, що ринок хороший.',
+        hint: 'SPY, волатильність, QQQ і SMH. Залежність може бути нелінійною.',
     }));
-    list.append(ledgerRow('Вузьке лідерство', ledgerValue(components.narrowPenalty, { negate: true }), {
-        hint: 'Штраф, якщо Nasdaq або чіпи тягнуть ринок, а дрібні стоять. Самі по собі QQQ і SMH балів не додають.',
+    list.append(ledgerRow('Macro / Vol', blockText(components.macro ?? components.stress), {
+        child: true,
+        hint: 'VIX, US10Y і нафта. Зростання VIX саме по собі не є штрафом.',
     }));
-    list.append(ledgerRow('Перегрів', ledgerValue(components.meltUpPenalty, { negate: true }), {
-        hint: 'Ще один штраф, якщо індекс уже сильно виріс, волатильність тиха, а дрібні це не підтверджують.',
-    }));
-    list.append(ledgerRow('Сьогодні', formatSigned(components.liveAdjustment ?? payload?.liveAdjustment, 1), {
-        hint: 'Рух SPY, QQQ і IWM сьогодні. З 4:00 до 9:30 — від учорашнього закриття, після 9:30 — від відкриття. О 11:40 цифра заморожується.',
+    list.append(ledgerRow('Historical Analog', blockText(components.analog ?? payload?.analogScore), {
+        child: true,
+        hint: 'Найближчі попередні ринкові стани і їхній mechanical R наступної сесії.',
     }));
     list.append(ledgerRow('Разом', finiteText(payload?.displayScore), {
         total: true,
-        hint: 'База мінус два штрафи плюс сьогоднішнє коригування. Саме це число стоїть на шкалі.',
+        hint: payload?.analogScore == null
+            ? 'Analog ще не має вибірки, тому разом дорівнює Rule score. Протягом сесії число не змінюється.'
+            : '65% Rule score і 35% Historical Analog. Протягом сесії число не змінюється.',
     }));
     host.append(list);
+    if (payload?.drivers?.length) {
+        const drivers = document.createElement('p');
+        drivers.className = 'aggressiveness-info-note';
+        drivers.textContent = `Найбільше зрушують оцінку: ${payload.drivers.map((item) => {
+            const expectancy = Number(item.expectancy);
+            const r = Number.isFinite(expectancy) ? `${expectancy >= 0 ? '+' : ''}${expectancy.toFixed(2)}R` : '—';
+            return `${item.label} Q${item.quintile} (${r}, бал ${Math.round(item.score)})`;
+        }).join('; ')}.`;
+        host.append(drivers);
+    }
 
     const updated = document.createElement('p');
     updated.className = 'aggressiveness-info-note';
-    updated.textContent = `Оновлено ${formatEtClock(payload?.updatedAt) || '—'}`;
+    updated.textContent = `Дані: ${Number.isFinite(confidenceValue) ? `${Math.round(confidenceValue)}%` : '—'}. Оцінка зафіксована до сесії ${sessionDate || '—'}.`;
     host.append(updated);
 
     if (payload?.missing?.length) {
@@ -343,10 +364,16 @@ function renderDetails(payload) {
         missing.textContent = `Немає даних: ${payload.missing.join(', ')}`;
         host.append(missing);
     }
+    if (payload?.breadthUnavailable) {
+        const breadth = document.createElement('p');
+        breadth.className = 'aggressiveness-info-note';
+        breadth.textContent = 'Breadth відсутній: NYSE/NASDAQ advancers, decliners, up/down volume, new highs, new lows. Потрібен окремий diary provider. Ці поля не замінені проксі.';
+        host.append(breadth);
+    }
 }
 
 export function setAggressivenessRange(days) {
-    const next = Number(days) === 7 ? 7 : 14;
+    const next = [7, 14, 30].includes(Number(days)) ? Number(days) : 14;
     if (next === historyDays) return;
     historyDays = next;
     if (shownPayload) renderDetails(shownPayload);
@@ -373,9 +400,9 @@ function renderPayload(payload, { incomplete = false } = {}) {
     setText('market-aggressiveness-score', hasScore ? String(Math.round(score)) : '—');
     setText('market-aggressiveness-label', incomplete ? 'Data incomplete' : (payload?.label || ''));
     const confidence = Number(payload?.confidence);
-    setText('market-aggressiveness-confidence', Number.isFinite(confidence) ? `Впевненість ${Math.round(confidence)}%` : '');
-    setText('market-aggressiveness-delta', formatDelta(payload?.delta));
-    setText('market-aggressiveness-updated', formatEtClock(payload?.updatedAt));
+    setText('market-aggressiveness-confidence', Number.isFinite(confidence) ? `Дані ${Math.round(confidence)}%` : '');
+    setText('market-aggressiveness-delta', payload?.sessionDate ? `Сесія ${formatSessionDate(payload.sessionDate)}` : '');
+    setText('market-aggressiveness-updated', payload?.infoThrough ? `Close ${formatSessionDate(payload.infoThrough)}` : '');
     setNeedle(hasScore ? score : 0);
     applyTone(payload?.tone, incomplete || !hasScore);
     renderDetails(payload);
@@ -514,7 +541,7 @@ function scheduleRefill(payload) {
 
 function armPoll() {
     clearTimeout(pollTimer);
-    const delay = nextLivePollDelay(new Date());
+    const delay = nextScoreRefreshDelay(new Date());
     if (delay == null) return;
     const jitter = Math.floor(Math.random() * 15000);
     pollTimer = setTimeout(() => {

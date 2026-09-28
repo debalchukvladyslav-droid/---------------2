@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/end-of-day",
-      "schedule": "0 15 * * *"
+      "schedule": "15 21 * * *"
     }
   ],
   "rewrites": [
