@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { publicSupabaseConfig, schemaUnavailable, verifyRecoverySchema } from '../scripts/verify-deployment-schema.mjs';
+import { publicSupabaseConfig, schemaGateFailure, schemaUnavailable, verifyRecoverySchema } from '../scripts/verify-deployment-schema.mjs';
 
 test('deployment schema gate can use the public browser config when build env is absent', () => {
     assert.deepEqual(publicSupabaseConfig("supabaseUrl: 'https://project.supabase.co', supabaseAnonKey: 'publishable'"), {
@@ -26,6 +26,11 @@ test('production deployment stops when a required recovery object is missing', a
             : new Response(JSON.stringify({ code: 'PGRST205' }), { status: 404 });
     };
     await assert.rejects(verifyRecoverySchema({ url: 'https://project.supabase.co', key: 'anon', fetchImpl }), /source_sync_jobs is missing/);
+});
+
+test('a network timeout does not fail the install gate', () => {
+    assert.equal(schemaGateFailure(new Error('The operation was aborted due to timeout')), false);
+    assert.equal(schemaGateFailure(new Error('source_sync_jobs is missing in Supabase. Apply the recovery migrations before deploying this client.')), true);
 });
 
 test('authorization errors prove that required objects exist', async () => {

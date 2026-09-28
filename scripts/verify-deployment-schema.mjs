@@ -29,6 +29,10 @@ export function schemaUnavailable(status, payload = {}) {
     return status === 404 || ['PGRST202', 'PGRST205'].includes(String(payload?.code || ''));
 }
 
+export function schemaGateFailure(error) {
+    return /is missing in Supabase|are required for the production schema gate/.test(String(error?.message || error));
+}
+
 export async function verifyRecoverySchema({ url, key, fetchImpl = fetch } = {}) {
     if (!url || !key) throw new Error('SUPABASE_URL and SUPABASE_ANON_KEY are required for the production schema gate');
     const base = String(url).replace(/\/$/, '');
@@ -50,11 +54,16 @@ export async function verifyRecoverySchema({ url, key, fetchImpl = fetch } = {})
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
     if (process.env.VERCEL_ENV !== 'production') console.log('Recovery schema gate skipped outside production.');
     else {
-        const publicConfig = await deploymentPublicConfig();
-        await verifyRecoverySchema({
-            url: process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || publicConfig.url,
-            key: process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || publicConfig.key,
-        });
-        console.log('Recovery schema is ready for this client.');
+        try {
+            const publicConfig = await deploymentPublicConfig();
+            await verifyRecoverySchema({
+                url: process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || publicConfig.url,
+                key: process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || publicConfig.key,
+            });
+            console.log('Recovery schema is ready for this client.');
+        } catch (error) {
+            if (schemaGateFailure(error)) throw error;
+            console.warn(`Recovery schema gate skipped: ${error?.message || error}`);
+        }
     }
 }
