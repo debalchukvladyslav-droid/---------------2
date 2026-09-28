@@ -115,6 +115,36 @@ test('links a sheet ticker hyperlink to a synced Drive screenshot without OCR', 
     assert.equal(googleDriveFileId(`https://drive.google.com/open?id=${driveId}`), driveId);
 });
 
+test('reads older stops from cumulative stats and database screenshots', () => {
+    const driveId = 'older-drive-file';
+    const rows = buildStopReviewCandidates({
+        sheetRows: { sheetA: { '2026-09-02': [{ symbol: 'NVDA', sheet: { exit: 'стоп', sheetRow: 4 } }] } },
+        cumulativeSheetRows: {
+            archive: {
+                '2026-03-11': [{
+                    symbol: 'TSLA',
+                    net: -18,
+                    sheet: {
+                        exit: 'стоп',
+                        sheetRow: 40,
+                        screenshotUrl: `https://drive.google.com/file/d/${driveId}/view`,
+                    },
+                }],
+            },
+        },
+        screenshotRegistry: [{
+            storage_path: 'screenshots/2026/03/tsla-stop.png',
+            source_file_id: driveId,
+            ticker: 'TSLA',
+            source_created_at: '2026-03-11T14:10:00.000Z',
+        }],
+    }, '2026-03-01', '2026-03-31');
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].symbol, 'TSLA');
+    assert.equal(rows[0].trade_date, '2026-03-11');
+    assert.deepEqual(rows[0].screenshot_paths, ['screenshots/2026/03/tsla-stop.png']);
+});
+
 test('extracts Drive ids from supported sheet link formats', () => {
     assert.equal(googleDriveFileId('https://drive.google.com/uc?id=18UpVEcD0zAZWe0mv_MCln-n_Ictin_v6'), '18UpVEcD0zAZWe0mv_MCln-n_Ictin_v6');
     assert.equal(googleDriveFileId('https://drive.google.com/file/d/1X3sjg_bqpcmpEGouj-ocEzc0alfQJikc/view?usp=drivesdk'), '1X3sjg_bqpcmpEGouj-ocEzc0alfQJikc');

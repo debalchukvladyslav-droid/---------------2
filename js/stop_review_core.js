@@ -29,6 +29,49 @@ function linkedScreenshotPaths(url, paths, screenMeta = {}) {
     return paths.filter(path => String(screenMeta?.[path]?.driveId || '') === driveId);
 }
 
+function registryDate(row) {
+    return String(row?.source_created_at || row?.captured_at || '').slice(0, 10);
+}
+
+function screenshotLookup(appData = {}) {
+    const byDriveId = new Map();
+    const byTickerDate = new Map();
+    const remember = (driveId, path, symbol = '', date = '') => {
+        const fileId = String(driveId || '');
+        const storagePath = String(path || '');
+        if (fileId && storagePath && !byDriveId.has(fileId)) byDriveId.set(fileId, storagePath);
+        const ticker = symbolOf(symbol);
+        if (ticker && date && storagePath) {
+            const key = `${ticker}|${date}`;
+            const paths = byTickerDate.get(key) || [];
+            if (!paths.includes(storagePath)) paths.push(storagePath);
+            byTickerDate.set(key, paths);
+        }
+    };
+    Object.entries(appData.screenMeta || {}).forEach(([path, meta]) => {
+        remember(meta?.driveId, path, meta?.ticker, String(meta?.driveCreatedTime || meta?.capturedAt || '').slice(0, 10));
+    });
+    (Array.isArray(appData.screenshotRegistry) ? appData.screenshotRegistry : []).forEach(row => {
+        remember(row?.source_file_id, row?.storage_path, row?.ticker, registryDate(row));
+    });
+    return { byDriveId, byTickerDate };
+}
+
+function currentSheetSource(sheetStore = {}) {
+    const sourceIds = Object.keys(sheetStore).filter(id => {
+        const byDay = sheetStore[id];
+        return byDay && typeof byDay === 'object'
+            && Object.values(byDay).some(rows => Array.isArray(rows) && rows.length);
+    });
+    const spreadsheetId = sourceIds[sourceIds.length - 1] || '';
+    return spreadsheetId ? { id: spreadsheetId, byDay: sheetStore[spreadsheetId] } : null;
+}
+
+function cumulativeSheetSources(sheetStore = {}) {
+    return Object.entries(sheetStore).filter(([, byDay]) => byDay && typeof byDay === 'object')
+        .map(([id, byDay]) => ({ id, byDay }));
+}
+
 function screenshotMatchesSymbol(path, symbol, appData = {}) {
     if (symbolOf(appData?.tickers?.[path]) === symbol) return true;
     const tags = Array.isArray(appData?.screenTags?.[path]) ? appData.screenTags[path] : [];
@@ -40,54 +83,68 @@ function screenshotMatchesSymbol(path, symbol, appData = {}) {
 export function buildStopReviewCandidates(appData = {}, from = '', to = '') {
     const groups = new Map();
     const journal = appData?.journal || {};
-    const sheetStore = appData?.sheetRows && typeof appData.sheetRows === 'object' ? appData.sheetRows : {};
-    const sourceIds = Object.keys(sheetStore).filter(id => {
-        const byDay = sheetStore[id];
-        return byDay && typeof byDay === 'object'
-            && Object.values(byDay).some(rows => Array.isArray(rows) && rows.length);
-    });
-    const spreadsheetId = sourceIds[sourceIds.length - 1] || '';
-    const rowsByDay = spreadsheetId ? sheetStore[spreadsheetId] : {};
+    const lookup = screenshotLookup(appData);
+    const sources = [
+        currentSheetSource(appData?.sheetRows || {}),
+        ...cumulativeSheetSources(appData?.cumulativeSheetRows || {}),
+    ].filter(Boolean);
 
-    Object.keys(rowsByDay).sort().forEach(date => {
-        if ((from && date < from) || (to && date > to)) return;
-        const day = journal[date] || {};
-        const screens = day.screenshots || {};
-        const allPaths = ['good', 'normal', 'bad', 'error'].flatMap(key => Array.isArray(screens[key]) ? screens[key] : []);
-        const availablePaths = [...new Set([...allPaths, ...(Array.isArray(appData?.unassignedImages) ? appData.unassignedImages : [])])];
-        const sheetRows = Array.isArray(rowsByDay[date]) ? rowsByDay[date] : [];
-        sheetRows.forEach((trade, index) => {
-            if (!isStopExitReason(trade?.sheet?.exit)) return;
-            const symbol = symbolOf(trade?.symbol);
-            if (!symbol) return;
-            const key = `${date}|${symbol}`;
-            const directPaths = linkedScreenshotPaths(trade?.sheet?.screenshotUrl, availablePaths, appData?.screenMeta || {});
-            if (!groups.has(key)) {
-                groups.set(key, {
-                    key,
-                    trade_date: date,
-                    symbol,
-                    trade_refs: [],
-                    screenshot_paths: [...new Set([
-                        ...directPaths,
-                        ...allPaths.filter(path => screenshotMatchesSymbol(path, symbol, appData)),
-                    ])],
+    sources.forEach(({ id: spreadsheetId, byDay }) => {
+        Object.keys(byDay).sort().forEach(date => {
+            if ((from && date < from) || (to && date > to)) return;
+            const day = journal[date] || {};
+            const screens = day.screenshots || {};
+            const allPaths = ['good', 'normal', 'bad', 'error'].flatMap(key => Array.isArray(screens[key]) ? screens[key] : []);
+            const availablePaths = [...new Set([...allPaths, ...(Array.isArray(appData?.unassignedImages) ? appData.unassignedImages : [])])];
+            const sheetRows = Array.isArray(byDay[date]) ? byDay[date] : [];
+            sheetRows.forEach((trade, index) => {
+                if (!isStopExitReason(trade?.sheet?.exit)) return;
+                const symbol = symbolOf(trade?.symbol);
+                if (!symbol) return;
+                const key = `${date}|${symbol}`;
+                const sheet = trade?.sheet || {};
+                const screenshotUrl = String(sheet.screenshotUrl || '');
+                const driveId = googleDriveFileId(screenshotUrl);
+                const linkedPath = driveId ? lookup.byDriveId.get(driveId) : '';
+                const directPaths = [
+                    ...linkedScreenshotPaths(screenshotUrl, availablePaths, appData?.screenMeta || {}),
+                    ...(linkedPath ? [linkedPath] : []),
+                    ...(lookup.byTickerDate.get(`${symbol}|${date}`) || []),
+                ];
+                if (!groups.has(key)) {
+                    groups.set(key, {
+                        key,
+                        trade_date: date,
+                        symbol,
+                        trade_refs: [],
+                        refKeys: new Set(),
+                        screenshot_paths: [...new Set([
+                            ...directPaths,
+                            ...allPaths.filter(path => screenshotMatchesSymbol(path, symbol, appData)),
+                        ])],
+                    });
+                }
+                const group = groups.get(key);
+                directPaths.forEach(path => {
+                    if (path && !group.screenshot_paths.includes(path)) group.screenshot_paths.push(path);
                 });
-            }
-            directPaths.forEach(path => {
-                if (!groups.get(key).screenshot_paths.includes(path)) groups.get(key).screenshot_paths.push(path);
-            });
-            const sheet = trade?.sheet || {};
-            groups.get(key).trade_refs.push({
-                sheetRow: Number.isInteger(Number(sheet.sheetRow)) ? Number(sheet.sheetRow) : index,
-                spreadsheetId: String(sheet.spreadsheetId || spreadsheetId),
-                net: Number(trade?.net) || 0,
-                type: String(trade?.type || sheet.tradeType || ''),
-                stop: trade?.stop ?? sheet.stopPrice ?? null,
-                exitReason: String(sheet.exit || ''),
-                screenshotUrl: String(sheet.screenshotUrl || ''),
+                const sheetRow = Number.isInteger(Number(sheet.sheetRow)) ? Number(sheet.sheetRow) : index;
+                const refKey = `${spreadsheetId}|${sheetRow}|${Number(trade?.net) || 0}|${String(sheet.exit || '')}`;
+                if (group.refKeys.has(refKey)) return;
+                group.refKeys.add(refKey);
+                group.trade_refs.push({
+                    sheetRow,
+                    spreadsheetId: String(sheet.spreadsheetId || spreadsheetId),
+                    net: Number(trade?.net) || 0,
+                    type: String(trade?.type || sheet.tradeType || ''),
+                    stop: trade?.stop ?? sheet.stopPrice ?? null,
+                    exitReason: String(sheet.exit || ''),
+                    screenshotUrl,
+                });
             });
         });
     });
-    return [...groups.values()].sort((a, b) => a.trade_date.localeCompare(b.trade_date) || a.symbol.localeCompare(b.symbol));
+    return [...groups.values()]
+        .map(({ refKeys, ...group }) => group)
+        .sort((a, b) => a.trade_date.localeCompare(b.trade_date) || a.symbol.localeCompare(b.symbol));
 }

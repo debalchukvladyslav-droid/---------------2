@@ -4,6 +4,7 @@ import { getSupabaseStorageUrl } from './supabase_storage.js';
 import { showToast } from './utils.js';
 import { loadDayDetails, loadMonth, markJournalDayDirty, saveSettings, saveToLocal } from './storage.js';
 import { buildStopReviewCandidates, googleDriveFileId, isStopExitReason, normalizeStopExitReason } from './stop_review_core.js';
+import { loadScreenshotRegistry } from './screenshot_registry.js';
 
 const STATUS_LABELS = {
     normal: 'Нормальний стоп',
@@ -24,6 +25,7 @@ const runtime = {
     selectedMistakeId: '',
     lastPickedMistakeId: '',
     imageUrls: new Map(),
+    screenshotRegistry: [],
 };
 
 export function normalizeExitReason(value) {
@@ -202,21 +204,43 @@ async function ensureJournalMonths(from, to) {
     }
 }
 
+function narrowSheetStore(store, date) {
+    const narrowed = {};
+    Object.entries(store || {}).forEach(([id, byDay]) => {
+        if (byDay?.[date]) narrowed[id] = { [date]: byDay[date] };
+    });
+    return narrowed;
+}
+
+function appDataForStops(extra = {}) {
+    return { ...state.appData, screenshotRegistry: runtime.screenshotRegistry || [], ...extra };
+}
+
+async function ensureScreenshotRegistry() {
+    const userId = currentUserId();
+    if (!userId) {
+        runtime.screenshotRegistry = [];
+        return;
+    }
+    try {
+        runtime.screenshotRegistry = await loadScreenshotRegistry(userId);
+    } catch (error) {
+        console.warn('[Stop review screenshots]', error?.message || error);
+    }
+}
+
 function liveStopCandidate(review) {
     const date = review?.trade_date;
     if (!date) return null;
     const day = state.appData?.journal?.[date] || {};
-    const sheetStore = state.appData?.sheetRows && typeof state.appData.sheetRows === 'object' ? state.appData.sheetRows : {};
-    const narrowed = {};
-    Object.entries(sheetStore).forEach(([id, byDay]) => {
-        if (byDay?.[date]) narrowed[id] = { [date]: byDay[date] };
-    });
-    return buildStopReviewCandidates({
-        ...state.appData,
-        sheetRows: Object.keys(narrowed).length ? narrowed : sheetStore,
+    const sheetRows = narrowSheetStore(state.appData?.sheetRows, date);
+    const cumulativeSheetRows = narrowSheetStore(state.appData?.cumulativeSheetRows, date);
+    return buildStopReviewCandidates(appDataForStops({
+        sheetRows: Object.keys(sheetRows).length ? sheetRows : (state.appData?.sheetRows || {}),
+        cumulativeSheetRows: Object.keys(cumulativeSheetRows).length ? cumulativeSheetRows : (state.appData?.cumulativeSheetRows || {}),
         journal: { [date]: day },
         tickers: { ...(state.appData?.tickers || {}), ...(day.tickers || {}) },
-    }, date, date).find(item => normalizeSymbol(item.symbol) === normalizeSymbol(review.symbol)) || null;
+    }), date, date).find(item => normalizeSymbol(item.symbol) === normalizeSymbol(review.symbol)) || null;
 }
 
 function screenshotPathsForReview(review) {
@@ -267,17 +291,18 @@ function selectedRange() {
 
 function hydrateCandidates() {
     const range = selectedRange();
-    runtime.candidates = collectStopCandidates(state.appData, range.from, range.to);
+    runtime.candidates = collectStopCandidates(appDataForStops(), range.from, range.to);
 }
 
 async function refreshData({ sync = true } = {}) {
     const range = selectedRange();
     await ensureJournalMonths(range.from, range.to);
+    await ensureScreenshotRegistry();
     hydrateCandidates();
     await loadRemoteData();
     await syncSharedMistakeCatalog();
     if (sync) {
-        await syncCandidates(collectStopCandidates(state.appData));
+        await syncCandidates(collectStopCandidates(appDataForStops()));
         await loadRemoteData();
     }
 }
