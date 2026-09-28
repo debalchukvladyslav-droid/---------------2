@@ -7,7 +7,7 @@ import {
     presentSnapshot,
     zonedDateTimeToUtcMs,
 } from '../lib/massive_criteria.js';
-import { fetchMassiveAggregates, mapMassiveFailure, redactSecrets, resetMassiveClientState } from '../lib/massive_client.js';
+import { aggregatesHost, fetchMassiveAggregates, mapMassiveFailure, massiveApiKey, redactSecrets, resetMassiveClientState } from '../lib/massive_client.js';
 
 function midnightEt(date) {
     return zonedDateTimeToUtcMs(date, '00:00:00');
@@ -159,6 +159,13 @@ test('a finished snapshot is not replaced automatically', () => {
     assert.equal(decideSnapshotWrite(frozen, { manual: true }), 'reuse');
     assert.equal(decideSnapshotWrite(failed, { manual: false }), 'reuse');
     assert.equal(decideSnapshotWrite(failed, { manual: true }), 'replace');
+});
+
+test('Massive uses the same key as Polygon when MASSIVE_API_KEY is absent', () => {
+    assert.equal(massiveApiKey({ POLYGON_API_KEY: 'polygon-key' }), 'polygon-key');
+    assert.equal(aggregatesHost({ POLYGON_API_KEY: 'polygon-key' }), 'api.polygon.io');
+    assert.equal(massiveApiKey({ MASSIVE_API_KEY: 'massive-key', POLYGON_API_KEY: 'polygon-key' }), 'massive-key');
+    assert.equal(massiveApiKey({}), '');
 });
 
 test('Massive errors stay free of the API key and incomplete payloads are marked', async () => {
