@@ -73,5 +73,28 @@
             <p class="testing-analysis__status" data-research-exit-status>Оберіть період цієї панелі і натисніть «Показати збережене».</p>
             <div id="stats-best-exit-content"><div class="stats-empty-note">Розрахунок ще не запущено.</div></div>
         </article>
+
+        <article class="research-card research-export-panel">
+            <h3>Експорт угод</h3>
+            <p>Усі взяті угоди за період. На графіку видно вхід, вихід і стоп. PDF зручний для перегляду. Zip можна закинути в модель: там ті самі картинки і цифри по кожній угоді.</p>
+            <div class="research-presets" role="group" aria-label="Період експорту">
+                <button type="button" class="btn-admin-action" data-action="research-export-preset" data-months="1">1 місяць</button>
+                <button type="button" class="btn-admin-action" data-action="research-export-preset" data-months="3">3 місяці</button>
+                <button type="button" class="btn-admin-action" data-action="research-export-preset" data-months="6">6 місяців</button>
+            </div>
+            <div class="testing-period-picker">
+                <label><span>Від</span><input type="date" data-research-export-from></label>
+                <label><span>До</span><input type="date" data-research-export-to></label>
+                <button type="button" class="btn-primary" data-action="research-export-pdf">Завантажити PDF</button>
+                <button type="button" class="btn-admin-action" data-action="research-export-ai">Завантажити для моделі</button>
+            </div>
+            <div class="research-export-options">
+                <label><input type="checkbox" data-research-export-sheet checked> Рядок таблиці: ріст, ризик, коментарі, виключення</label>
+                <label><input type="checkbox" data-research-export-polygon checked> Критерії Polygon, якщо вони вже є</label>
+            </div>
+            <p class="research-note">Стоп для тейка і виходу по часу рахується як ціна входу плюс консолідація в центах: 1,03 + 10 = 1,13. Якщо після шорта покупка закрила стоп, лінія стоїть на ціні покупки. Цей експорт сам критерії не качає.</p>
+            <progress class="testing-job-progress" data-research-export-progress value="0" max="1" hidden></progress>
+            <p class="testing-analysis__status" data-research-export-status>Оберіть період і завантажте PDF або пакет для моделі.</p>
+        </article>
     </section>
 </div>

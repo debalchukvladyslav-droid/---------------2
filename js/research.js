@@ -76,6 +76,7 @@ export function openResearchView() {
     }
     markTradeType();
     fillExitPeriod();
+    void import('./research_export.js').then((module) => module.prepareResearchExport());
     if (root.dataset.periodBound === 'true') return;
     root.dataset.periodBound = 'true';
     root.addEventListener('change', (event) => {

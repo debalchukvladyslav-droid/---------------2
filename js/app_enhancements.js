@@ -220,6 +220,18 @@ function activateAction(action, trigger, event = null) {
             void import('./research.js').then((module) => module.selectResearchTradeType(trigger?.dataset?.tradeType || ''));
             return true;
         },
+        'research-export-preset': () => {
+            void import('./research_export.js').then((module) => module.applyResearchExportPreset(trigger?.dataset?.months));
+            return true;
+        },
+        'research-export-pdf': () => {
+            void import('./research_export.js').then((module) => module.exportResearchPdf());
+            return true;
+        },
+        'research-export-ai': () => {
+            void import('./research_export.js').then((module) => module.exportResearchAi());
+            return true;
+        },
         'right-sidebar-toggle': () => window.toggleRightSidebar?.(),
         'team-sidebar-open': () => window.openTeamSidebar?.(),
         'notifications-toggle': () => window.toggleNotificationPanel?.(),

@@ -79,6 +79,12 @@ export async function ensureGoogleIdentity() {
     return window.google;
 }
 
+export async function ensureJsZip() {
+    if (!window.JSZip) await loadScriptOnce('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
+    if (!window.JSZip) throw new Error('Не вдалося завантажити пакувальник zip');
+    return window.JSZip;
+}
+
 export async function ensureLightweightCharts() {
     if (!window.LightweightCharts?.createChart) await loadScriptOnce('/lw-charts.js');
     if (!window.LightweightCharts?.createChart) throw new Error('LW Charts не завантажився');
