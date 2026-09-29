@@ -755,6 +755,19 @@ test('main and cumulative rows remain separate when they use the same spreadshee
     ]);
 });
 
+test('stats use the current main sheet and drop PnL left by an older import', () => {
+    const combined = combineStatsSheetRows({
+        old: { '2026-07-01': [{ sheet: { entryPrice: 25, sheetNet: -650, sheetRow: 2 } }] },
+        current: { '2026-09-04': [{ sheet: { entryPrice: 2.03, sheetNet: 376, sheetRow: 8 } }] },
+    }, {
+        archive: { '2025-01-02': [{ sheet: { entryPrice: 4, sheetNet: 10, sheetRow: 3, profitRisk: '1R', exception: 'Архів' } }] },
+    });
+    const buckets = buildSheetEntryPriceBuckets(combined);
+    assert.equal(buckets.find((bucket) => bucket.key === '20+').trades, 0);
+    assert.equal(buckets.find((bucket) => bucket.key === '1-3').pnl, 376);
+    assert.equal(buckets.find((bucket) => bucket.key === '3-5').pnl, 10);
+});
+
 test('exception criteria use only criterion and KФ from the same isolated Sheet row', () => {
     const sheetRows = { active: { '2026-04-01': [
         { sheet: { sheetNet: -20, profitRisk: '-1R', exception: 'Late entry', exceptions: ['Late entry'] } },
@@ -938,6 +951,20 @@ test('shared Google Sheet merge stores all rows but only updates existing Trades
     assert.equal(sheetRowsStore['sheet-1']['2026-04-02'].length, 1);
     assert.equal(sheetRowsStore['sheet-1']['2026-04-02'][0].symbol, 'TSLA');
     assert.equal(sheetRowsStore['sheet-1']['2026-04-02'][0].type, 'do not take');
+});
+
+test('main sheet sync replaces rows stored from a previously connected spreadsheet', () => {
+    const sheetRowsStore = {
+        'old-sheet': {
+            '2026-07-01': [{ symbol: 'OLD', net: -650, sheet: { sheetNet: -650, entryPrice: 25, spreadsheetId: 'old-sheet' } }],
+        },
+    };
+    mergeGoogleSheetTradesIntoJournal({}, {
+        '2026-09-04': [{ symbol: 'CMND', net: 376, sheet: { source: 'google', spreadsheetId: 'new-sheet', sheetNet: 376, entryPrice: 2.03 } }],
+    }, 'new-sheet', { mode: 'main', sheetRowsStore });
+
+    assert.deepEqual(Object.keys(sheetRowsStore), ['new-sheet']);
+    assert.equal(sheetRowsStore['new-sheet']['2026-09-04'][0].symbol, 'CMND');
 });
 
 test('main Google Sheet writes grouped metrics and Gross without replacing net calendar PnL', () => {

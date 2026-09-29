@@ -84,6 +84,13 @@ function storeSheetRows(sheetRowsStore, spreadsheetId, outByDay) {
     return importedSheetRows;
 }
 
+function dropOtherMainSpreadsheets(sheetRowsStore, spreadsheetId) {
+    if (!sheetRowsStore || !spreadsheetId) return;
+    Object.keys(sheetRowsStore).forEach((id) => {
+        if (id !== spreadsheetId) delete sheetRowsStore[id];
+    });
+}
+
 function tradeHasMainSheetContext(trade, spreadsheetId = '') {
     const sheet = trade?.sheet;
     if (!sheet || sheet.source !== 'google') return false;
@@ -326,6 +333,7 @@ export function mergeGoogleSheetTradesIntoJournal(journal = {}, outByDay = {}, s
     );
 
     importedSheetRows = storeSheetRows(sheetRowsStore, spreadsheetId, outByDay);
+    if (!isCumulative && importedSheetRows > 0) dropOtherMainSpreadsheets(sheetRowsStore, spreadsheetId);
 
     if (!isCumulative) {
         Object.keys(journal).forEach((dateStr) => {

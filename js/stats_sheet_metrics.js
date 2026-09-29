@@ -39,6 +39,34 @@ function parseSheetNumber(value) {
     return Number.isFinite(number) ? number : null;
 }
 
+function sheetStoreCoverage(byDay) {
+    if (!byDay || typeof byDay !== 'object') return null;
+    const dates = Object.keys(byDay).filter((date) => Array.isArray(byDay[date]) && byDay[date].length);
+    if (!dates.length) return null;
+    return {
+        latest: dates.reduce((max, date) => (date > max ? date : max), ''),
+        rows: dates.reduce((count, date) => count + byDay[date].length, 0),
+    };
+}
+
+/** One main spreadsheet is current. An older connected file must not keep its PnL in the charts. */
+export function selectActiveMainSheetRows(mainRows = {}) {
+    const store = mainRows && typeof mainRows === 'object' ? mainRows : {};
+    let winner = '';
+    let winnerLatest = '';
+    let winnerRows = -1;
+    Object.keys(store).forEach((id) => {
+        const coverage = sheetStoreCoverage(store[id]);
+        if (!coverage) return;
+        if (coverage.latest > winnerLatest || (coverage.latest === winnerLatest && coverage.rows > winnerRows)) {
+            winner = id;
+            winnerLatest = coverage.latest;
+            winnerRows = coverage.rows;
+        }
+    });
+    return winner ? { [winner]: store[winner] } : {};
+}
+
 export function combineStatsSheetRows(mainRows = {}, cumulativeRows = {}) {
     const combined = {};
     const addStore = (store, kind) => {
@@ -48,7 +76,7 @@ export function combineStatsSheetRows(mainRows = {}, cumulativeRows = {}) {
             combined[`${kind}:${sourceId}`] = byDay;
         });
     };
-    addStore(mainRows, 'main');
+    addStore(selectActiveMainSheetRows(mainRows), 'main');
     addStore(cumulativeRows, 'cumulative');
     return combined;
 }
