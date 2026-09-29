@@ -119,7 +119,7 @@ const AUTO_MAP_ALIASES = {
 
 /** Перший рядок даних угод у Google Sheets (1-based). */
 const SHEET_DATA_FIRST_ROW = 6;
-const SHEET_PREVIEW_RENDER_MAX_ROWS = 60;
+const SHEET_PREVIEW_RENDER_MAX_ROWS = 2500;
 const SHEET_PREVIEW_RENDER_MAX_COLS = 52;
 const SHEET_MAPPING_SELECT_MAX_COLS = 80;
 
@@ -1378,6 +1378,7 @@ async function executeSyncWithCfg(cfg, options = {}) {
         // Read the complete main sheet so historical/missed rows are reconciled too.
         // Frequency is throttled by refreshSheetMatchesAfterTradesImport.
         const fullValues = await mod.fetchSpreadsheetValuesRange(spreadsheetId, 'A1:ZZ', cfg.sheetTitle || getSelectedSheetTitle(mode));
+        if (mode === getActiveSheetMode()) setSheetPreviewData(fullValues);
         const previousStartRow = startRow;
         const relocated = relocateSheetDataStartRow(fullValues, previousStartRow);
         if (relocated.moved) {
