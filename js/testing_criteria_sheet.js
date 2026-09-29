@@ -4,6 +4,7 @@ import { showToast } from './utils.js';
 import { hasExactEntryTime, nyParts, parseEntryInstant, presentSnapshot, snapshotIsFrozen, zonedDateTimeToUtcMs } from '../lib/massive_criteria.js';
 import {
     CRITERIA_COLUMNS,
+    assignEntryTrades,
     buildCellUpdates,
     carrySheetDates,
     cellCanAccept,
@@ -19,7 +20,7 @@ import {
 
 const SETTINGS_KEY = 'tj_sheet_criteria_export_settings_v1';
 const CACHE_KEY = 'tj_sheet_criteria_market_v3';
-const FETCH_FIELDS = new Set(['volPre', 'vol', 'atr', 'atrPlay', 'avgVol', 'volPlay', 'potential', 'vwap', 'dayPos', 'activePost', 'activeEarly', 'worked']);
+const FETCH_FIELDS = new Set(['volPre', 'vol', 'atr', 'atrPlay', 'avgVol', 'volPlay', 'potential', 'vwap', 'dayPos', 'activePost', 'activeEarly']);
 const get = (host, id) => host?.querySelector?.(`[data-criteria="${id}"]`);
 
 let busy = false;
@@ -44,6 +45,7 @@ function saveSettings(host) {
         limitEnabled: get(host, 'limit-enabled')?.checked === true,
         limit: get(host, 'limit')?.value || '5',
         auto: get(host, 'auto')?.checked === true,
+        telegramChat: get(host, 'telegram-chat')?.value || '',
     };
     try {
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
@@ -124,13 +126,9 @@ function entryPriceOf(raw, trade) {
     return Number.isFinite(fallback) && fallback > 0 ? fallback : null;
 }
 
-function matchTrade(date, ticker, excelRow) {
+function tradesOnDate(date) {
     const trades = state.appData?.journal?.[date]?.trades;
-    if (!Array.isArray(trades)) return null;
-    const same = trades.filter((trade) => String(trade?.symbol || trade?.ticker || '').trim().toUpperCase() === ticker);
-    return same.find((trade) => Number(trade?.sheet?.sheetRow) === excelRow)
-        || same.find((trade) => hasExactEntryTime(trade?.opened || trade?.entryTime || trade?.time))
-        || null;
+    return Array.isArray(trades) ? trades : [];
 }
 
 function localNumbers(trade) {
@@ -279,6 +277,8 @@ function currentSettings(host) {
     if (get(host, 'limit-enabled')) settings.limitEnabled = get(host, 'limit-enabled').checked === true;
     if (get(host, 'limit')?.value) settings.limit = get(host, 'limit').value;
     if (get(host, 'auto')) settings.auto = get(host, 'auto').checked === true;
+    const telegramChat = get(host, 'telegram-chat')?.value;
+    if (telegramChat) settings.telegramChat = telegramChat;
     const columns = { ...(settings.columns || {}) };
     CRITERIA_COLUMNS.forEach((field) => {
         const value = get(host, field.id)?.value;
@@ -286,6 +286,27 @@ function currentSettings(host) {
     });
     settings.columns = columns;
     return settings;
+}
+
+async function loadTelegramFloats(dates, chat) {
+    try {
+        const { supabase } = await import('./supabase.js');
+        const { data: { session } = {} } = await supabase.auth.getSession();
+        if (!session?.access_token) return { floats: {}, note: 'Потрібно увійти в акаунт.' };
+        const response = await fetch('/api/telegram-float', {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${session.access_token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ dates, chat: chat || '' }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) return { floats: {}, note: payload.error || 'Telegram недоступний.' };
+        return { floats: payload.floats || {}, note: payload.note || '' };
+    } catch (error) {
+        return { floats: {}, note: error?.message || 'Telegram недоступний.' };
+    }
 }
 
 export async function runCriteriaExport({ automatic = false, host = null } = {}) {
@@ -327,6 +348,7 @@ export async function runCriteriaExport({ automatic = false, host = null } = {})
         ));
         const cache = readCache();
         const candidates = [];
+        const pending = [];
         let skippedRecent = 0;
         let skippedWithoutTime = 0;
         values.forEach((row, index) => {
@@ -344,29 +366,48 @@ export async function runCriteriaExport({ automatic = false, host = null } = {})
                 skippedRecent += 1;
                 return;
             }
-            const trade = matchTrade(date, ticker, index + 1);
-            const opened = trade?.opened || trade?.entryTime || trade?.time || '';
-            if (!hasExactEntryTime(opened)) {
-                skippedWithoutTime += 1;
-                return;
-            }
-            const entry = parseEntryInstant({ tradeDate: date, opened });
-            if (!entry) {
-                skippedWithoutTime += 1;
-                return;
-            }
-            candidates.push({
-                eligible: true,
+            pending.push({
                 date,
                 ticker,
                 writableCount,
                 excelRow: index + 1,
                 row,
                 formulaRow,
-                trade,
-                opened,
-                entry,
-                entryPrice: entryPriceOf(cell(row, detected.entry), trade),
+            });
+        });
+        const byDate = new Map();
+        pending.forEach((item) => {
+            const rows = byDate.get(item.date) || [];
+            rows.push(item);
+            byDate.set(item.date, rows);
+        });
+        byDate.forEach((rows, date) => {
+            const assigned = assignEntryTrades(rows, tradesOnDate(date));
+            rows.forEach((item) => {
+                const trade = assigned.get(item.excelRow) || null;
+                const opened = trade?.opened || trade?.entryTime || trade?.time || '';
+                if (!hasExactEntryTime(opened)) {
+                    skippedWithoutTime += 1;
+                    return;
+                }
+                const entry = parseEntryInstant({ tradeDate: date, opened });
+                if (!entry) {
+                    skippedWithoutTime += 1;
+                    return;
+                }
+                candidates.push({
+                    eligible: true,
+                    date,
+                    ticker: item.ticker,
+                    writableCount: item.writableCount,
+                    excelRow: item.excelRow,
+                    row: item.row,
+                    formulaRow: item.formulaRow,
+                    trade,
+                    opened,
+                    entry,
+                    entryPrice: entryPriceOf(cell(item.row, detected.entry), trade),
+                });
             });
         });
         const eligible = candidates;
@@ -375,11 +416,12 @@ export async function runCriteriaExport({ automatic = false, host = null } = {})
             limit: settings.limit,
         });
         if (!selected.length) {
-            const text = `Немає порожніх рядків старіших за вчора. Пропущено сьогодні і вчора: ${skippedRecent}. Без часу входу: ${skippedWithoutTime}.`;
+            const text = `Немає порожніх рядків для запису. Пропущено вчора: ${skippedRecent}. Без часу входу: ${skippedWithoutTime}.`;
             setStatus(text);
             if (!automatic) showToast(text);
             return { ok: true, written: 0 };
         }
+        const telegram = await loadTelegramFloats(selected.map((item) => item.date), settings.telegramChat);
         const updates = [];
         let errors = 0;
         for (let index = 0; index < selected.length; index += 1) {
@@ -387,7 +429,13 @@ export async function runCriteriaExport({ automatic = false, host = null } = {})
             setStatus(`Рахуємо ${index + 1} із ${selected.length}: ${item.date} ${item.ticker}`);
             const cacheKey = `${item.ticker}|${item.entry.tradeDate}|${item.entry.entryAt}`;
             let market = mergeMarket(localNumbers(item.trade), cache[cacheKey]);
-            let composed = composeCriteriaValues({ ...market, entryMs: item.entry.entryMs, entryPrice: item.entryPrice });
+            const floatShares = telegram.floats[`${item.date}|${item.ticker}`] ?? null;
+            let composed = composeCriteriaValues({
+                ...market,
+                floatShares,
+                entryMs: item.entry.entryMs,
+                entryPrice: item.entryPrice,
+            });
             if (needsFetch(columns, item.row, item.formulaRow, composed) && !cache[cacheKey]) {
                 try {
                     const fetched = await fetchSheetMarket({
@@ -399,7 +447,12 @@ export async function runCriteriaExport({ automatic = false, host = null } = {})
                         cache[cacheKey] = fetched;
                         writeCache(cache);
                         market = mergeMarket(localNumbers(item.trade), fetched);
-                        composed = composeCriteriaValues({ ...market, entryMs: item.entry.entryMs, entryPrice: item.entryPrice });
+                        composed = composeCriteriaValues({
+                            ...market,
+                            floatShares,
+                            entryMs: item.entry.entryMs,
+                            entryPrice: item.entryPrice,
+                        });
                     }
                 } catch (error) {
                     errors += 1;
@@ -420,7 +473,8 @@ export async function runCriteriaExport({ automatic = false, host = null } = {})
             const result = await connector.updateSpreadsheetCells(spreadsheetId, sheetTitle, part);
             written += Number(result?.updatedCells) || part.length;
         }
-        const text = `Записано клітинок: ${written}. Рядків: ${selected.length}. Пропущено сьогодні і вчора: ${skippedRecent}. Без часу входу: ${skippedWithoutTime}. Помилок: ${errors}.`;
+        const floatNote = telegram.note ? ` ШФ: ${telegram.note}` : '';
+        const text = `Записано клітинок: ${written}. Рядків: ${selected.length}. Пропущено вчора: ${skippedRecent}. Без часу входу: ${skippedWithoutTime}. Помилок: ${errors}.${floatNote}`;
         setStatus(text);
         if (!automatic || written || errors) showToast(text);
         return { ok: true, written, rows: selected.length, errors };
@@ -450,7 +504,7 @@ export function initCriteriaSheetExport(host) {
         <div class="admin-service-bots-head">
             <div>
                 <h4 class="admin-section-title">Критерії в статистику</h4>
-                <p class="admin-section-subtitle">Порожні колонки існуючого рядка дата + тікер. Сьогодні й учора не записуються і Polygon для них не викликається.</p>
+                <p class="admin-section-subtitle">Порожні колонки існуючого рядка дата + тікер. Учора не записується. SHRFloat береться з відповіді @Shs_valera_bot у групі за цей день.</p>
             </div>
             <span class="admin-polygon-state is-active">Лише адмін</span>
         </div>
@@ -467,6 +521,7 @@ export function initCriteriaSheetExport(host) {
             <label><span>Скільки тікерів</span><input type="number" min="1" step="1" value="5" data-criteria="limit" disabled></label>
             <button type="button" class="btn-admin-action" data-criteria="write">Завантажити</button>
             <label><span>Автоматичне завантаження</span><input type="checkbox" data-criteria="auto"></label>
+            <label><span>Група Telegram</span><input class="sheet-service-input" type="text" data-criteria="telegram-chat" placeholder="@група або id"></label>
         </div>
         <p class="admin-section-subtitle">Без галочки кількості записуються всі порожні рядки. Автозапуск стартує після того, як синхронізація таблиці повністю завершилась.</p>`;
 
@@ -475,6 +530,7 @@ export function initCriteriaSheetExport(host) {
     get(host, 'limit-enabled').checked = saved.limitEnabled === true;
     get(host, 'limit').disabled = saved.limitEnabled !== true;
     get(host, 'auto').checked = saved.auto === true;
+    if (saved.telegramChat) get(host, 'telegram-chat').value = saved.telegramChat;
 
     const persist = () => saveSettings(host);
     host.querySelectorAll('[data-criteria]').forEach((element) => {

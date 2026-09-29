@@ -18,6 +18,7 @@ import serviceBotsHandler from './api/admin/service-bots.js';
 import sheetsServiceHandler from './api/sheets-service.js';
 import serviceBotEndpointHandler from './api/service-bots/[endpoint].js';
 import tradeCriteriaHandler from './lib/trade_criteria_http.js';
+import telegramFloatHandler from './lib/telegram_float_http.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
@@ -432,6 +433,13 @@ const server = http.createServer((req, res) => {
         handleVercelRoute(serviceBotEndpointHandler, req, res, u).catch((e) => {
             console.error('[SHS trades local]', e);
             if (!res.headersSent) sendJson(res, 500, { message: e.message || 'Server error' });
+        });
+        return;
+    }
+    if (u.pathname === '/api/telegram-float') {
+        handleVercelRoute(telegramFloatHandler, req, res, u).catch((e) => {
+            console.error('[telegram-float]', e?.message || e);
+            if (!res.headersSent) sendJson(res, 500, { ok: false, error: 'Не вдалося прочитати Telegram' });
         });
         return;
     }

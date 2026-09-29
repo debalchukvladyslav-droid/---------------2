@@ -7,7 +7,9 @@ import {
     carrySheetDates,
     composeCriteriaValues,
     dayPositionLabel,
+    assignEntryTrades,
     deriveSheetMarket,
+    premarketVolumeUntil,
     detectHeaderColumns,
     entryTimeBucket,
     isEligibleCriteriaDate,
@@ -21,10 +23,11 @@ import {
 
 const noon = zonedDateTimeToUtcMs('2026-09-29', '12:00:00');
 
-test('criteria export skips today and yesterday in New York', () => {
+test('criteria export includes today and skips yesterday in New York', () => {
     assert.equal(isEligibleCriteriaDate('2026-09-27', noon), true);
     assert.equal(isEligibleCriteriaDate('2026-09-28', noon), false);
-    assert.equal(isEligibleCriteriaDate('2026-09-29', noon), false);
+    assert.equal(isEligibleCriteriaDate('2026-09-29', noon), true);
+    assert.equal(isEligibleCriteriaDate('2026-09-30', noon), false);
     assert.equal(isEligibleCriteriaDate('BKYI', noon), false);
 });
 
@@ -62,7 +65,6 @@ test('header detection uses Потенціал and skips the coefficient column'
     assert.equal(columns.time, 'R');
     assert.equal(columns.dayPos, 'S');
     assert.equal(columns.entry, 'T');
-    assert.equal(columns.worked, 'U');
 });
 
 test('volumes become millions and the activity checkbox is exclusive', () => {
@@ -118,10 +120,10 @@ test('entry hour is 4 through 9 and market fields use the previous session', () 
         entryPrice: 4,
         ...market,
     });
-    assert.equal(values.volPre, 0.585);
+    assert.equal(values.volPre, 0.2);
+    assert.equal(market.premarketVolume, 200_000);
     assert.equal(values.vol, 0.585);
     assert.equal(values.atrPlay, 3.8);
-    assert.equal(values.worked, 'YES');
     assert.equal(values.avgVol, 0.27);
     assert.equal(values.shrFloat, 0.56);
     assert.equal(values.atr, 0.64);
@@ -216,6 +218,34 @@ test('SLND today uses the last completed session and the 14 sessions before it',
     const previousTrade = scoreCompletedSession(bars, '2026-09-28');
     assert.equal(previousTrade.date, '2026-09-25');
     assert.equal(previousTrade.volume, 114145.4124);
+});
+
+test('premarket volume stops at each entry and does not reuse one trade', () => {
+    const bars = [
+        { t: zonedDateTimeToUtcMs('2026-09-28', '04:10:00'), v: 100_000 },
+        { t: zonedDateTimeToUtcMs('2026-09-28', '07:40:00'), v: 250_000 },
+        { t: zonedDateTimeToUtcMs('2026-09-28', '08:20:00'), v: 400_000 },
+        { t: zonedDateTimeToUtcMs('2026-09-28', '09:30:00'), v: 900_000 },
+    ];
+    const first = zonedDateTimeToUtcMs('2026-09-28', '07:49:00');
+    const second = zonedDateTimeToUtcMs('2026-09-28', '08:31:00');
+    const afterOpen = zonedDateTimeToUtcMs('2026-09-28', '10:15:00');
+    assert.equal(premarketVolumeUntil(bars, '2026-09-28', first), 350_000);
+    assert.equal(premarketVolumeUntil(bars, '2026-09-28', second), 750_000);
+    assert.equal(premarketVolumeUntil(bars, '2026-09-28', afterOpen), 750_000);
+    const trades = [
+        { symbol: 'BKYI', opened: '2026-09-28 07:49:32', sheet: { sheetRow: 12 } },
+        { symbol: 'BKYI', opened: '2026-09-28 08:31:00' },
+        { symbol: 'SLND', opened: '2026-09-28 04:15:00' },
+    ];
+    const assigned = assignEntryTrades([
+        { excelRow: 12, ticker: 'BKYI' },
+        { excelRow: 18, ticker: 'BKYI' },
+        { excelRow: 19, ticker: 'SLND' },
+    ], trades);
+    assert.equal(assigned.get(12).opened, '2026-09-28 07:49:32');
+    assert.equal(assigned.get(18).opened, '2026-09-28 08:31:00');
+    assert.equal(assigned.get(19).opened, '2026-09-28 04:15:00');
 });
 
 test('quantity limit records only the first missing rows', () => {
