@@ -120,7 +120,7 @@ Deno.serve(async (req) => {
         return json({ message: 'Request body is too large' }, 413, req);
     }
 
-    let body: { mode?: string; symbol?: string; from?: string; to?: string; fromMs?: number; toMs?: number };
+    let body: { mode?: string; symbol?: string; from?: string; to?: string; fromMs?: number; toMs?: number; adjusted?: boolean };
     try {
         body = await req.json();
     } catch {
@@ -148,8 +148,11 @@ Deno.serve(async (req) => {
         return json({ message: 'Date range is too large' }, 400, req);
     }
 
+    const adjusted = body?.adjusted === true;
     const store = sharedPolygon();
-    const stored = await store.read(symbol, 'minute', fromMs, toMs).catch(() => ({ hit: false, results: [] as any[] }));
+    const stored = adjusted
+        ? { hit: false, results: [] as any[] }
+        : await store.read(symbol, 'minute', fromMs, toMs).catch(() => ({ hit: false, results: [] as any[] }));
     if (stored.hit) {
         return json({ status: 'OK', results: stored.results, resultsCount: stored.results.length, source: 'database' }, 200, req);
     }
@@ -168,7 +171,7 @@ Deno.serve(async (req) => {
     }
 
     const q = new URLSearchParams({
-        adjusted: 'false',
+        adjusted: adjusted ? 'true' : 'false',
         sort: 'asc',
         limit: '50000',
         apiKey: POLYGON_API_KEY,
@@ -201,14 +204,16 @@ Deno.serve(async (req) => {
             headers: { ...cors(req), 'Content-Type': 'application/json' },
         });
     }
-    await store.write({
-        symbol,
-        granularity: 'minute',
-        rangeStart: fromMs,
-        rangeEnd: toMs,
-        results: fetched.results,
-        complete: fetched.complete,
-    }).catch((error) => console.warn(`[Polygon bars] write failed ${symbol}: ${error?.message || error}`));
+    if (!adjusted) {
+        await store.write({
+            symbol,
+            granularity: 'minute',
+            rangeStart: fromMs,
+            rangeEnd: toMs,
+            results: fetched.results,
+            complete: fetched.complete,
+        }).catch((error) => console.warn(`[Polygon bars] write failed ${symbol}: ${error?.message || error}`));
+    }
     return json({
         ...fetched.payload,
         results: fetched.results,

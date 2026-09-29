@@ -576,10 +576,11 @@ function renderTradeInfoBar(trades) {
         const openedMinute = openedMatch ? Number(openedMatch[1]) * 60 + Number(openedMatch[2]) : null;
         const volPre = openedMinute == null ? null : polygonCriteria.vol_pre_by_minute?.[String(openedMinute)];
         items.push(
-            ...(hasMetric(polygonCriteria.atr) ? [{ label: 'ATR 14 · до входу', value: Number(polygonCriteria.atr).toFixed(2), color: 'var(--accent)' }] : []),
-            ...(hasMetric(polygonCriteria.avg_vol) ? [{ label: 'Avg Vol 14 · до входу', value: millions(polygonCriteria.avg_vol, 2), color: 'var(--text-main)' }] : []),
-            ...(hasMetric(polygonCriteria.vol) ? [{ label: 'Vol · попер. день', value: millions(polygonCriteria.vol, 2), color: 'var(--text-main)' }] : []),
-            ...(hasMetric(polygonCriteria.vol_play) ? [{ label: 'VolPlay · попер. день', value: `${Number(polygonCriteria.vol_play).toFixed(1)}x`, color: 'var(--gold)' }] : []),
+            ...(hasMetric(polygonCriteria.atr) ? [{ label: 'ATR', value: Number(polygonCriteria.atr).toFixed(2), color: 'var(--accent)' }] : []),
+            ...(hasMetric(polygonCriteria.avg_vol) ? [{ label: 'AvgVol', value: millions(polygonCriteria.avg_vol, 3), color: 'var(--text-main)' }] : []),
+            ...(hasMetric(polygonCriteria.vol) ? [{ label: 'Vol', value: millions(polygonCriteria.vol, 3), color: 'var(--text-main)' }] : []),
+            ...(hasMetric(polygonCriteria.vol_play) ? [{ label: 'VolPlay', value: Number(polygonCriteria.vol_play).toFixed(1), color: 'var(--gold)' }] : []),
+            ...(hasMetric(polygonCriteria.atr_play) ? [{ label: 'ATRPlay', value: Number(polygonCriteria.atr_play).toFixed(1), color: 'var(--gold)' }] : []),
             { label: 'Float', value: polygonCriteria.shs_float_display || polygonCriteria.shs_float_raw || (hasMetric(polygonCriteria.shs_float) ? millions(polygonCriteria.shs_float, 2) : '—'), color: 'var(--text-main)' },
             ...(Number.isFinite(Number(volPre)) ? [{ label: 'VolPre · на момент входу', value: millions(volPre, 3), color: 'var(--accent)' }] : []),
             ...(polygonCriteria.as_of_date ? [{ label: 'Дані станом на', value: polygonCriteria.as_of_date, color: 'var(--text-muted)' }] : []),

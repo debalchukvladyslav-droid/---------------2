@@ -11,6 +11,9 @@ import {
     detectHeaderColumns,
     entryTimeBucket,
     isEligibleCriteriaDate,
+    movePlayed,
+    tradingDate,
+    scoreCompletedSession,
     selectExportRows,
     toMillions,
     vwapSide,
@@ -36,11 +39,11 @@ test('sheet dates stay on the following ticker rows', () => {
 
 test('header detection uses Потенціал and skips the coefficient column', () => {
     const grid = [
-        ['Дата', 'коеф.', 'Ticker', '', 'VolPre(Вхід)', 'SHRFloat', 'ATR', 'AVGVol', 'Vol', 'VolPlay', 'Потенціал', 'Потенціал'],
-        ['', '', '', '', 'm', 'm', '', 'm', 'm', '', '', 'КФ'],
+        ['Дата', 'коеф.', 'Ticker', '', 'VolPre(Вхід)', 'SHRFloat', 'ATR', 'ATRPlay', 'AVGVol', 'Vol', 'VolPlay', 'Потенціал', 'Потенціал'],
+        ['', '', '', '', 'm', 'm', '', '', 'm', 'm', '', '', 'КФ'],
         [],
         [],
-        ['Дата', '', 'Ticker', '', '', '', '', '', '', '', '', '', '', '', 'Актив Пост', 'Актив Ранній', 'VWAP', 'TIME', 'Day Pos', 'Цiна входу'],
+        ['Дата', '', 'Ticker', '', '', '', '', '', '', '', '', '', '', '', 'Актив Пост', 'Актив Ранній', 'VWAP', 'TIME', 'Day Pos', 'Цiна входу', 'Сходила'],
     ];
     const columns = detectHeaderColumns(grid);
     assert.equal(columns.date, 'A');
@@ -48,16 +51,18 @@ test('header detection uses Потенціал and skips the coefficient column'
     assert.equal(columns.volPre, 'E');
     assert.equal(columns.shrFloat, 'F');
     assert.equal(columns.atr, 'G');
-    assert.equal(columns.avgVol, 'H');
-    assert.equal(columns.vol, 'I');
-    assert.equal(columns.volPlay, 'J');
-    assert.equal(columns.potential, 'K');
+    assert.equal(columns.atrPlay, 'H');
+    assert.equal(columns.avgVol, 'I');
+    assert.equal(columns.vol, 'J');
+    assert.equal(columns.volPlay, 'K');
+    assert.equal(columns.potential, 'L');
     assert.equal(columns.activePost, 'O');
     assert.equal(columns.activeEarly, 'P');
     assert.equal(columns.vwap, 'Q');
     assert.equal(columns.time, 'R');
     assert.equal(columns.dayPos, 'S');
     assert.equal(columns.entry, 'T');
+    assert.equal(columns.worked, 'U');
 });
 
 test('volumes become millions and the activity checkbox is exclusive', () => {
@@ -83,9 +88,9 @@ test('entry hour is 4 through 9 and market fields use the previous session', () 
         tradeDate: '2026-09-27',
         entryMs,
         dailyBars: [
-            { t: zonedDateTimeToUtcMs('2026-09-25', '00:00:00'), c: 4.2 },
-            { t: zonedDateTimeToUtcMs('2026-09-26', '00:00:00'), c: 3.5 },
-            { t: zonedDateTimeToUtcMs('2026-09-27', '00:00:00'), c: 9 },
+            { t: zonedDateTimeToUtcMs('2026-09-25', '00:00:00'), c: 4.2, v: 100_000 },
+            { t: zonedDateTimeToUtcMs('2026-09-26', '00:00:00'), c: 3.5, v: 1_200_000 },
+            { t: zonedDateTimeToUtcMs('2026-09-27', '00:00:00'), c: 1.25, h: 2, l: 1, v: 9_000_000 },
         ],
         minuteBars: [
             { t: zonedDateTimeToUtcMs('2026-09-26', '16:10:00'), v: 2_000_000, c: 3.4, h: 3.6, l: 3.3 },
@@ -95,6 +100,8 @@ test('entry hour is 4 through 9 and market fields use the previous session', () 
         ],
     });
     assert.equal(market.previousClose, 3.5);
+    assert.equal(market.previousVolume, 1_200_000);
+    assert.equal(market.sessionClose, 1.25);
     assert.equal(market.postVolume, 2_000_000);
     assert.equal(market.earlyVolume, 300_000);
     assert.equal(market.vwap, 5);
@@ -102,6 +109,7 @@ test('entry hour is 4 through 9 and market fields use the previous session', () 
     assert.equal(market.low, 3.8);
     const values = composeCriteriaValues({
         atr14: 0.64,
+        atrPlay14: 3.75,
         avgVol14: 270_000,
         dayVolume: 585_000,
         volPlay14: 2.17,
@@ -112,6 +120,8 @@ test('entry hour is 4 through 9 and market fields use the previous session', () 
     });
     assert.equal(values.volPre, 0.585);
     assert.equal(values.vol, 0.585);
+    assert.equal(values.atrPlay, 3.8);
+    assert.equal(values.worked, 'YES');
     assert.equal(values.avgVol, 0.27);
     assert.equal(values.shrFloat, 0.56);
     assert.equal(values.atr, 0.64);
@@ -161,6 +171,51 @@ test('writes skip filled cells and formulas and can check an empty box', () => {
         { range: 'A9', value: 'Над' },
         { range: 'C9', value: '06:00' },
     ]);
+});
+
+test('a UTC-midnight daily bar belongs to the next New York session', () => {
+    assert.equal(tradingDate(Date.parse('2026-09-26T00:00:00Z')), '2026-09-26');
+    assert.equal(movePlayed(2, 1, 1.25), 'YES');
+    assert.equal(movePlayed(2, 1, 1.9), 'NO');
+    assert.equal(movePlayed(2, 1, 1.75), 'NO');
+});
+
+test('SLND today uses the last completed session and the 14 sessions before it', () => {
+    const rows = [
+        ['2026-09-08', 0.64, 0.6212, 49944.4124],
+        ['2026-09-09', 0.65, 0.611, 190908.2484],
+        ['2026-09-10', 0.629, 0.5635, 221963.3994],
+        ['2026-09-11', 0.606, 0.5661, 81035.8324],
+        ['2026-09-14', 0.6186, 0.5815, 49722.34536],
+        ['2026-09-15', 0.5845, 0.5601, 77880.556355],
+        ['2026-09-16', 0.58, 0.5521, 82314.706355],
+        ['2026-09-17', 0.6, 0.5558, 75652.6504],
+        ['2026-09-18', 0.65, 0.5776, 241990.458192],
+        ['2026-09-21', 0.65, 0.59, 188638.579998],
+        ['2026-09-22', 0.6668, 0.615, 99530.1834],
+        ['2026-09-23', 0.639, 0.61, 55378.2364],
+        ['2026-09-24', 0.6489, 0.61, 78879.4124],
+        ['2026-09-25', 0.6799, 0.6264, 114145.4124],
+        ['2026-09-28', 0.6554, 0.61, 81309.91061, 0.61],
+    ];
+    const bars = rows.map(([date, high, low, volume, close]) => ({
+        t: zonedDateTimeToUtcMs(date, '16:00:00'),
+        h: high,
+        l: low,
+        c: close ?? high,
+        v: volume,
+    }));
+    const today = scoreCompletedSession(bars, '2026-09-29', { nowDate: '2026-09-29' });
+    assert.equal(today.date, '2026-09-28');
+    assert.equal(today.atr14, 0.04);
+    assert.equal(today.avgVol14, 114856);
+    assert.equal(today.volume, 81309.91061);
+    assert.equal(today.volPlay14, 0.7);
+    assert.equal(today.atrPlay14, 1.1);
+    assert.equal(today.close, 0.61);
+    const previousTrade = scoreCompletedSession(bars, '2026-09-28');
+    assert.equal(previousTrade.date, '2026-09-25');
+    assert.equal(previousTrade.volume, 114145.4124);
 });
 
 test('quantity limit records only the first missing rows', () => {

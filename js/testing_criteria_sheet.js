@@ -1,7 +1,7 @@
 import { parseSheetDateCellsToIsoSequence } from './parser_utils.js';
 import { state } from './state.js';
 import { showToast } from './utils.js';
-import { calculateEntryCriteria, hasExactEntryTime, parseEntryInstant, presentSnapshot, snapshotIsFrozen, zonedDateTimeToUtcMs } from '../lib/massive_criteria.js';
+import { hasExactEntryTime, nyParts, parseEntryInstant, presentSnapshot, snapshotIsFrozen, zonedDateTimeToUtcMs } from '../lib/massive_criteria.js';
 import {
     CRITERIA_COLUMNS,
     buildCellUpdates,
@@ -10,6 +10,7 @@ import {
     columnIndex,
     composeCriteriaValues,
     deriveSheetMarket,
+    scoreCompletedSession,
     detectHeaderColumns,
     isEligibleCriteriaDate,
     selectExportRows,
@@ -17,8 +18,8 @@ import {
 } from '../lib/sheet_criteria_export.js';
 
 const SETTINGS_KEY = 'tj_sheet_criteria_export_settings_v1';
-const CACHE_KEY = 'tj_sheet_criteria_market_v1';
-const FETCH_FIELDS = new Set(['volPre', 'vol', 'atr', 'avgVol', 'volPlay', 'potential', 'vwap', 'dayPos', 'activePost', 'activeEarly']);
+const CACHE_KEY = 'tj_sheet_criteria_market_v3';
+const FETCH_FIELDS = new Set(['volPre', 'vol', 'atr', 'atrPlay', 'avgVol', 'volPlay', 'potential', 'vwap', 'dayPos', 'activePost', 'activeEarly', 'worked']);
 const get = (host, id) => host?.querySelector?.(`[data-criteria="${id}"]`);
 
 let busy = false;
@@ -140,6 +141,7 @@ function localNumbers(trade) {
         avgVol14: view?.avgVol14,
         dayVolume: view?.dayVolume,
         volPlay14: view?.volPlay14,
+        atrPlay14: view?.atrPlay14,
         high: view?.high,
         low: view?.low,
         floatShares: trade?.marketCriteria?.shs_float,
@@ -154,10 +156,15 @@ function mergeMarket(local, fetched) {
         avgVol14: fetched.avgVol14 ?? local.avgVol14,
         dayVolume: fetched.dayVolume ?? local.dayVolume,
         volPlay14: fetched.volPlay14 ?? local.volPlay14,
+        atrPlay14: fetched.atrPlay14 ?? local.atrPlay14,
     };
     return {
         ...numbers,
         previousClose: fetched.previousClose,
+        previousVolume: fetched.previousVolume,
+        sessionHigh: fetched.sessionHigh,
+        sessionLow: fetched.sessionLow,
+        sessionClose: fetched.sessionClose,
         vwap: fetched.vwap,
         high: numbers.high ?? fetched.high,
         low: numbers.low ?? fetched.low,
@@ -203,21 +210,16 @@ async function fetchSheetMarket({ ticker, tradeDate, opened }) {
             mode: 'daily',
             symbol: ticker,
             from: shiftIsoDate(entry.tradeDate, -70),
-            to: shiftIsoDate(entry.tradeDate, -1),
+            to: entry.tradeDate,
         }),
         polygonBars(session.access_token, {
             symbol: ticker,
             fromMs: minuteFrom,
             toMs: entry.entryMs,
+            adjusted: true,
         }),
     ]);
-    const criteria = calculateEntryCriteria({
-        dailyBars,
-        minuteBars,
-        entryMs: entry.entryMs,
-        tradeDate: entry.tradeDate,
-        adjusted: true,
-    });
+    const scored = scoreCompletedSession(dailyBars, entry.tradeDate, { nowDate: nyParts(Date.now()).date });
     const market = deriveSheetMarket({
         dailyBars,
         minuteBars,
@@ -226,12 +228,13 @@ async function fetchSheetMarket({ ticker, tradeDate, opened }) {
     });
     return {
         ...market,
-        atr14: criteria.atr14,
-        avgVol14: criteria.avgVol14,
-        dayVolume: criteria.dayVolume,
-        volPlay14: criteria.volPlay14,
-        high: market.high ?? criteria.high,
-        low: market.low ?? criteria.low,
+        atr14: scored.atr14,
+        avgVol14: scored.avgVol14,
+        dayVolume: scored.volume,
+        volPlay14: scored.volPlay14,
+        atrPlay14: scored.atrPlay14,
+        high: market.high ?? scored.high,
+        low: market.low ?? scored.low,
     };
 }
 

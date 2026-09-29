@@ -79,26 +79,26 @@ export function calculateYahooMetrics(chart, targetDate) {
         });
     }
 
-    // Критерії входу не повинні бачити результат поточного дня. Беремо останню
-    // повністю завершену торгову сесію строго перед датою угоди.
+    // Останню завершену сесію беремо строго перед датою угоди. Поточний день у розрахунок не входить.
     let targetIndex = -1;
     rows.forEach((row, index) => { if (row.date < targetDate) targetIndex = index; });
     if (targetIndex < 0) throw new Error(`Немає завершеної сесії перед ${targetDate}`);
     if (targetIndex < 14) throw new Error('Недостатньо історії для ATR 14');
 
-    // Як у таблиці журналу: ATR — середній денний діапазон цих 14 сесій,
-    // середній обсяг — 14 сесій перед ними, VolPlay — обсяг цього дня поділений на середнє разом із ним.
-    const sessions = rows.slice(targetIndex - 13, targetIndex + 1);
+    // Остання завершена сесія перед датою угоди. ATR і середній обсяг — 14 сесій перед нею.
+    const current = rows[targetIndex];
     const priorSessions = rows.slice(targetIndex - 14, targetIndex);
-    const vol = rows[targetIndex].volume;
-    const playAverage = mean(sessions.map((row) => row.volume));
+    const atr = Number(mean(priorSessions.map((row) => row.high - row.low)).toFixed(2));
+    const avgVol = Math.round(mean(priorSessions.map((row) => row.volume)));
+    const range = current.high - current.low;
 
     return {
-        atr: Number(mean(sessions.map((row) => row.high - row.low)).toFixed(2)),
-        avg_vol: Math.round(mean(priorSessions.map((row) => row.volume))),
-        vol: Math.round(vol),
-        vol_play: Number((vol / playAverage).toFixed(1)),
-        as_of_date: rows[targetIndex].date,
+        atr,
+        avg_vol: avgVol,
+        vol: current.volume,
+        vol_play: avgVol > 0 ? Number((current.volume / avgVol).toFixed(1)) : null,
+        atr_play: atr > 0 ? Number((range / atr).toFixed(1)) : null,
+        as_of_date: current.date,
         basis: 'previous-session',
     };
 }

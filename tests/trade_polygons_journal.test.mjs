@@ -21,7 +21,7 @@ test('Yahoo criteria use only the completed session before the trade date', () =
         indicators: { quote: [{ high, low, close, volume }] },
     }] } }, '2026-08-18');
     assert.deepEqual(metrics, {
-        atr: 2, avg_vol: 1650, vol: 2400, vol_play: 1.4,
+        atr: 2, avg_vol: 1650, vol: 2400, vol_play: 1.5, atr_play: 1,
         as_of_date: '2026-08-17', basis: 'previous-session',
     });
     const afterSplit = calculateYahooMetrics({ chart: { result: [{
@@ -32,7 +32,8 @@ test('Yahoo criteria use only the completed session before the trade date', () =
     assert.equal(afterSplit.atr, 0.2);
     assert.equal(afterSplit.avg_vol, 16500);
     assert.equal(afterSplit.vol, 24000);
-    assert.equal(afterSplit.vol_play, 1.4);
+    assert.equal(afterSplit.vol_play, 1.5);
+    assert.equal(afterSplit.atr_play, 1);
     const jumped = high.map((value) => value);
     const jumpedLow = low.map((value) => value);
     const jumpedClose = close.map((value) => value);

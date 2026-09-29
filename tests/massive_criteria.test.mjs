@@ -5,6 +5,7 @@ import {
     decideSnapshotWrite,
     parseEntryInstant,
     presentSnapshot,
+    snapshotIsFrozen,
     zonedDateTimeToUtcMs,
 } from '../lib/massive_criteria.js';
 import { aggregatesHost, fetchMassiveAggregates, mapMassiveFailure, massiveApiKey, redactSecrets, resetMassiveClientState } from '../lib/massive_client.js';
@@ -41,85 +42,64 @@ function ctntFixture() {
     return { days, minutes };
 }
 
-test('CTNT 2026-09-28 11:22 ET matches the TOS targets on adjusted bars', () => {
+test('criteria use the completed session before the trade and ignore later minutes', () => {
     const entry = parseEntryInstant({ tradeDate: '2026-09-28', opened: '11:22' });
     assert.equal(entry.entryAt, '2026-09-28T15:22:00.000Z');
-    const { days, minutes } = ctntFixture();
+    const days = [];
+    for (let day = 10; day <= 27; day += 1) {
+        days.push({
+            t: midnightEt(`2026-09-${String(day).padStart(2, '0')}`),
+            h: 12,
+            l: 10,
+            c: 11,
+            v: day === 27 ? 2_000_000 : 1_000_000,
+        });
+    }
+    days.push({ t: midnightEt('2026-09-28'), h: 80, l: 1, c: 40, v: 9_000_000 });
     const criteria = calculateEntryCriteria({
         dailyBars: days,
-        minuteBars: minutes,
+        minuteBars: [minute('2026-09-28', '11:21:00', { h: 50, l: 1, v: 999_999 })],
         entryMs: entry.entryMs,
         tradeDate: entry.tradeDate,
     });
-    assert.equal(criteria.atr14, 18.78);
-    assert.equal(criteria.avgVol14, 1_760_174);
-    assert.equal(criteria.volPlay14, 0.1);
-    assert.equal(criteria.atrPlay14, 0.0);
-    assert.equal(criteria.high, 10.1);
+    assert.equal(criteria.atr14, 2);
+    assert.equal(criteria.avgVol14, 1_000_000);
+    assert.equal(criteria.dayVolume, 2_000_000);
+    assert.equal(criteria.volPlay14, 2);
+    assert.equal(criteria.atrPlay14, 1);
+    assert.equal(criteria.high, 12);
     assert.equal(criteria.low, 10);
-    assert.equal(criteria.lastCandleAt, '2026-09-28T15:21:00.000Z');
     assert.equal(criteria.completeness, 'complete');
-    assert.equal(criteria.dayVolume, 176_017);
+    assert.equal(criteria.sourceMeta.sessionDate, '2026-09-27');
     const view = presentSnapshot(criteria);
-    assert.equal(view.display.atr14, '18.78');
-    assert.equal(view.display.avgVol14, '1,760,174');
-    assert.equal(view.display.volPlay14, '0.1');
-    assert.equal(view.display.atrPlay14, '0.0');
-    assert.equal(view.display.lastCandle, '2026-09-28 11:21 ET');
+    assert.equal(view.display.atr14, '2.00');
+    assert.equal(view.display.volPlay14, '2.0');
+    assert.equal(view.display.atrPlay14, '1.0');
 });
 
-test('fourteen completed sessions are a hard boundary and missing bars stay null', () => {
+test('fourteen completed sessions before the scored day are a hard boundary', () => {
     const entry = parseEntryInstant({ tradeDate: '2026-09-28', opened: '11:22:00' });
     const days = [];
-    for (let day = 15; day <= 27; day += 1) {
-        days.push({ t: midnightEt(`2026-09-${day}`), h: 20, l: 10, v: 100 });
+    for (let day = 13; day <= 27; day += 1) {
+        days.push({ t: midnightEt(`2026-09-${day}`), h: 12, l: 10, v: 100 });
     }
-    const thirteen = calculateEntryCriteria({
-        dailyBars: days,
-        minuteBars: [minute('2026-09-28', '04:00:00', { v: 50, h: 11, l: 10 }), minute('2026-09-28', '09:30:00', { v: 5, h: 12, l: 11 })],
+    const thirteenPrior = calculateEntryCriteria({
+        dailyBars: days.slice(1),
         entryMs: entry.entryMs,
         tradeDate: entry.tradeDate,
     });
-    assert.equal(thirteen.avgVol14, null);
-    assert.equal(thirteen.volPlay14, null);
-    assert.equal(thirteen.atr14, 9.36);
-    days.push({ t: midnightEt('2026-09-14'), h: null, l: null, v: null });
-    const missing = calculateEntryCriteria({
+    assert.equal(thirteenPrior.avgVol14, null);
+    assert.equal(thirteenPrior.atr14, null);
+    assert.equal(thirteenPrior.dayVolume, 100);
+    const ready = calculateEntryCriteria({
         dailyBars: days,
-        minuteBars: [],
         entryMs: entry.entryMs,
         tradeDate: entry.tradeDate,
     });
-    assert.equal(missing.avgVol14, null);
-    assert.equal(missing.atr14, null);
-    assert.equal(missing.dayVolume, null);
-    assert.notEqual(missing.dayVolume, 0);
-});
-
-test('only minute bars completed before the entry are used', () => {
-    const entry = parseEntryInstant({ tradeDate: '2026-01-15', opened: '11:22' });
-    assert.equal(entry.entryAt, '2026-01-15T16:22:00.000Z');
-    const days = Array.from({ length: 14 }, (_, index) => ({
-        t: midnightEt(`2026-01-${String(index + 1).padStart(2, '0')}`),
-        h: 12,
-        l: 10,
-        v: 10,
-    }));
-    const criteria = calculateEntryCriteria({
-        dailyBars: days,
-        minuteBars: [
-            minute('2026-01-15', '11:21:00', { h: 11, l: 10.5, v: 4 }),
-            minute('2026-01-15', '11:22:00', { h: 30, l: 1, v: 500 }),
-        ],
-        entryMs: entry.entryMs,
-        tradeDate: entry.tradeDate,
-        volumeSessionStart: '11:00',
-        highLowSessionStart: '11:00',
-    });
-    assert.equal(criteria.high, 11);
-    assert.equal(criteria.low, 10.5);
-    assert.equal(criteria.dayVolume, 4);
-    assert.equal(criteria.lastCandleAt, '2026-01-15T16:21:00.000Z');
+    assert.equal(ready.atr14, 2);
+    assert.equal(ready.avgVol14, 100);
+    assert.equal(ready.dayVolume, 100);
+    assert.equal(ready.sourceMeta.sessionDate, '2026-09-27');
 });
 
 test('New York daylight-saving offsets are applied to the session clocks', () => {
@@ -129,31 +109,22 @@ test('New York daylight-saving offsets are applied to the session clocks', () =>
     assert.equal(zonedDateTimeToUtcMs('2026-11-01', '11:22:00'), Date.parse('2026-11-01T16:22:00.000Z'));
 });
 
-test('adjusted history is used as returned and a late first print is incomplete', () => {
+test('unadjusted history is rejected and an older snapshot is recalculated', () => {
     const entry = parseEntryInstant({ tradeDate: '2026-09-28', opened: '11:22' });
-    const { days, minutes } = ctntFixture();
     const unadjusted = calculateEntryCriteria({
-        dailyBars: days,
-        minuteBars: minutes,
+        dailyBars: [],
         entryMs: entry.entryMs,
         tradeDate: entry.tradeDate,
         adjusted: false,
     });
     assert.equal(unadjusted.avgVol14, null);
     assert.equal(unadjusted.fetchStatus, 'error');
-    const late = calculateEntryCriteria({
-        dailyBars: days,
-        minuteBars: minutes.filter((bar) => bar.t > zonedDateTimeToUtcMs('2026-09-28', '04:00:00')),
-        entryMs: entry.entryMs,
-        tradeDate: entry.tradeDate,
-    });
-    assert.equal(late.completeness, 'incomplete');
-    assert.match(late.sourceMeta.notes.join(' '), /премаркету неповний/);
-    assert.notEqual(late.dayVolume, 0);
+    assert.equal(snapshotIsFrozen({ completeness: 'complete', fetch_status: 'ok', calculation_version: 1 }), false);
+    assert.equal(snapshotIsFrozen({ completeness: 'complete', fetch_status: 'ok', calculation_version: 2 }), true);
 });
 
 test('a finished snapshot is not replaced automatically', () => {
-    const frozen = { completeness: 'complete', fetch_status: 'ok' };
+    const frozen = { completeness: 'complete', fetch_status: 'ok', calculation_version: 2 };
     const failed = { completeness: 'unavailable', fetch_status: 'forbidden' };
     assert.equal(decideSnapshotWrite(null, { manual: false }), 'insert');
     assert.equal(decideSnapshotWrite(frozen, { manual: true }), 'reuse');
