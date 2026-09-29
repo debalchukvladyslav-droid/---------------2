@@ -300,7 +300,7 @@ export async function runCriteriaExport({ automatic = false, host = null } = {})
     try {
         const connector = await import('./google_sheet_connector.js');
         const spreadsheetId = connector.extractSpreadsheetId(settings.source || '');
-        const sheetTitle = String(settings.tab || '').trim();
+        const sheetTitle = String(settings.tab || '');
         const columns = settings.columns || {};
         if (!spreadsheetId || !sheetTitle) {
             if (!automatic) setStatus('Вкажіть посилання на статистику і лист.');

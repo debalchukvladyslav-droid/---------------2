@@ -26,6 +26,31 @@ function buildRange(range, sheetTitle) {
     return `${quoteSheetTitle(sheetTitle)}!${range}`;
 }
 
+async function readJsonBody(req) {
+    const current = req.body;
+    if (current && typeof current === 'object' && !Buffer.isBuffer(current)) return current;
+    const text = typeof current === 'string'
+        ? current
+        : Buffer.isBuffer(current)
+            ? current.toString('utf8')
+            : '';
+    if (text) {
+        try { return JSON.parse(text); } catch { return {}; }
+    }
+    if (typeof req[Symbol.asyncIterator] !== 'function') return {};
+    const chunks = [];
+    for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    if (!chunks.length) return {};
+    try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return {}; }
+}
+
+function sheetCellValue(value) {
+    if (value === true) return 'TRUE';
+    if (value === false) return 'FALSE';
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    return value == null ? '' : String(value);
+}
+
 async function sheetsFetch(path, token, query = {}, options = {}) {
     const url = new URL(`https://sheets.googleapis.com/v4/spreadsheets/${path.replace(/^\/+/, '')}`);
     for (const [key, value] of Object.entries(query)) {
@@ -121,21 +146,29 @@ async function values(req, res, token) {
 
 async function updateValues(req, res, token) {
     const spreadsheetId = cleanSpreadsheetId(req.body?.spreadsheetId);
-    const sheetTitle = String(req.body?.sheetTitle || '').trim();
+    const sheetTitle = String(req.body?.sheetTitle ?? '');
     const updates = Array.isArray(req.body?.updates) ? req.body.updates : [];
     if (updates.length > 500) return sendJson(res, 413, { ok: false, error: 'Maximum 500 cells per request; no cells were changed' });
-    if (!spreadsheetId || !sheetTitle || !updates.length) return sendJson(res, 400, { ok: false, error: 'Missing update data' });
-    const data = updates.map((item) => ({
-        range: buildRange(String(item?.range || '').trim(), sheetTitle),
-        values: [[item?.value ?? '']],
-    })).filter((item) => item.range && /^[A-Z]{1,3}\d+$/i.test(item.range.split('!').at(-1).replace(/'/g, '')));
-    if (!data.length) return sendJson(res, 400, { ok: false, error: 'No valid cells to update' });
+    if (!spreadsheetId || !sheetTitle.trim() || !updates.length) return sendJson(res, 400, { ok: false, error: 'Missing update data' });
+    const seen = new Set();
+    const data = updates.flatMap((item) => {
+        const range = buildRange(String(item?.range || '').trim(), sheetTitle);
+        const cell = range.split('!').at(-1).replace(/'/g, '');
+        if (!range || !/^[A-Z]{1,3}\d+$/i.test(cell) || seen.has(range)) return [];
+        seen.add(range);
+        return [{ range, values: [[sheetCellValue(item?.value)]] }];
+    });
+    if (!data.length) return sendJson(res, 400, { ok: false, error: `No valid cells to update (${updates[0]?.range || 'empty'})` });
     const response = await sheetsFetch(`${encodeURIComponent(spreadsheetId)}/values:batchUpdate`, token, {}, {
         method: 'POST',
         body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data }),
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) return sendJson(res, response.status, { ok: false, error: payload.error?.message || response.statusText });
+    if (!response.ok) {
+        const message = payload.error?.message || response.statusText;
+        console.warn('[Sheets service] update failed', { spreadsheetId, sheetTitle, cells: data.length, status: response.status, message });
+        return sendJson(res, response.status, { ok: false, error: message });
+    }
     return sendJson(res, 200, { ok: true, updatedCells: Number(payload.totalUpdatedCells) || data.length });
 }
 
@@ -171,6 +204,7 @@ export default async function handler(req, res) {
         if (!user?.id) return sendJson(res, 401, { ok: false, error: 'Unauthorized' });
 
         const action = String(req.query.action || 'metadata');
+        if (req.method === 'PATCH') req.body = await readJsonBody(req);
         if (req.method === 'PATCH' && action !== 'update-values') return sendJson(res, 400, { ok: false, error: 'Unknown write action' });
         if (action === 'update-values') {
             const profiles = await supabaseRest(`profiles?id=eq.${encodeURIComponent(user.id)}&select=role&limit=1`);

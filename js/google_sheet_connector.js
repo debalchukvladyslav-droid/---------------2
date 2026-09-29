@@ -123,7 +123,11 @@ export async function updateSpreadsheetCells(spreadsheetId, sheetTitle, updates)
         body: JSON.stringify({ spreadsheetId, sheetTitle, updates }),
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok || data.ok === false) throw new Error(data.error || `Sheets service ${response.status}`);
+    if (!response.ok || data.ok === false) {
+        const message = data.error || `Sheets service ${response.status}`;
+        console.warn('[Sheets service] update failed', message);
+        throw new Error(message);
+    }
     return data;
 }
 
