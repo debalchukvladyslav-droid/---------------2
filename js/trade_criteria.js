@@ -6,6 +6,22 @@ import { hasExactEntryTime, presentSnapshot, snapshotIsFrozen } from '../lib/mas
 const attempted = new Set();
 const queue = [];
 let draining = false;
+const BLOCK_KEY = 'tj_criteria_not_synced_v1';
+
+function blockedKeys() {
+    try {
+        const stored = JSON.parse(sessionStorage.getItem(BLOCK_KEY) || '[]');
+        return new Set(Array.isArray(stored) ? stored : []);
+    } catch {
+        return new Set();
+    }
+}
+
+function blockKey(key) {
+    const keys = blockedKeys();
+    keys.add(key);
+    sessionStorage.setItem(BLOCK_KEY, JSON.stringify([...keys].slice(-500)));
+}
 
 function ownJournal() {
     return state.CURRENT_VIEWED_USER === state.USER_DOC_NAME;
@@ -63,7 +79,7 @@ export async function ensureTradeCriteria(dateStr, trade, { manual = false, high
     if (!ticker || !trade.id || !hasExactEntryTime(opened)) return null;
     const key = tradeKey(dateStr, trade);
     const current = criteriaSnapshotOf(trade);
-    if (!manual && (snapshotIsFrozen(current) || attempted.has(key))) return current;
+    if (!manual && (snapshotIsFrozen(current) || attempted.has(key) || blockedKeys().has(key))) return current;
     attempted.add(key);
     try {
         const response = await fetch('/api/trade-criteria', {
@@ -83,8 +99,9 @@ export async function ensureTradeCriteria(dateStr, trade, { manual = false, high
             }),
         });
         const payload = await response.json().catch(() => ({}));
-        if (response.status === 409) {
-            if (manual) attempted.delete(key);
+        if (response.status === 409 || payload?.reason === 'not-synced') {
+            if (!manual) blockKey(key);
+            else attempted.delete(key);
             return null;
         }
         if (!response.ok || !payload.snapshot) throw new Error(payload.error || `HTTP ${response.status}`);
@@ -115,11 +132,14 @@ function drain() {
 export function scheduleCriteriaForDates(dates = []) {
     if (!ownJournal()) return;
     const journal = state.appData?.journal || {};
+    const blocked = blockedKeys();
     dates.forEach((dateStr) => {
         const trades = journal[dateStr]?.trades;
         if (!Array.isArray(trades)) return;
         trades.forEach((trade) => {
             if (criteriaSnapshotOf(trade) && snapshotIsFrozen(criteriaSnapshotOf(trade))) return;
+            const key = tradeKey(dateStr, trade);
+            if (attempted.has(key) || blocked.has(key)) return;
             queue.push({ dateStr, trade });
         });
     });

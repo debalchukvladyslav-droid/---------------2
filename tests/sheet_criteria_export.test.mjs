@@ -66,16 +66,18 @@ test('volumes become millions and the activity checkbox is exclusive', () => {
     assert.equal(activityChoice(2_000_000, 2_000_000), 'post');
     assert.equal(activityChoice(1_500_000, 1_000_000), 'early');
     assert.equal(activityChoice(100, 999_999), null);
-    assert.equal(vwapSide(4, 5), 'під');
-    assert.equal(vwapSide(5, 5), 'над');
-    assert.equal(dayPositionLabel(1, 4, 1), 'low');
-    assert.equal(dayPositionLabel(2.5, 4, 1), 'balance');
-    assert.equal(dayPositionLabel(3.5, 4, 1), 'high');
+    assert.equal(vwapSide(4, 5), 'Під');
+    assert.equal(vwapSide(5, 5), 'Над');
+    assert.equal(dayPositionLabel(1, 4, 1), 'Low');
+    assert.equal(dayPositionLabel(2.5, 4, 1), 'Balance');
+    assert.equal(dayPositionLabel(3.5, 4, 1), 'High');
 });
 
 test('entry hour is 4 through 9 and market fields use the previous session', () => {
     const entryMs = zonedDateTimeToUtcMs('2026-09-27', '05:30:00');
-    assert.equal(entryTimeBucket(entryMs), '5');
+    assert.equal(entryTimeBucket(entryMs), '4 - 6');
+    assert.equal(entryTimeBucket(zonedDateTimeToUtcMs('2026-09-27', '06:15:00')), '06:00');
+    assert.equal(entryTimeBucket(zonedDateTimeToUtcMs('2026-09-27', '09:05:00')), '09:00');
     assert.equal(entryTimeBucket(zonedDateTimeToUtcMs('2026-09-27', '10:00:00')), null);
     const market = deriveSheetMarket({
         tradeDate: '2026-09-27',
@@ -115,9 +117,9 @@ test('entry hour is 4 through 9 and market fields use the previous session', () 
     assert.equal(values.atr, 0.64);
     assert.equal(values.volPlay, 2.2);
     assert.equal(values.potential, 3.5);
-    assert.equal(values.vwap, 'під');
-    assert.equal(values.time, '5');
-    assert.equal(values.dayPos, 'low');
+    assert.equal(values.vwap, 'Під');
+    assert.equal(values.time, '4 - 6');
+    assert.equal(values.dayPos, 'Low');
     assert.equal(values.activePost, true);
     assert.equal(values.activeEarly, null);
 });
@@ -148,6 +150,17 @@ test('writes skip filled cells and formulas and can check an empty box', () => {
         values: { activeEarly: true },
     });
     assert.deepEqual(unchecked, [{ range: 'A8', value: true }]);
+    const dropdown = buildCellUpdates({
+        excelRow: 9,
+        columns: { vwap: 'A', dayPos: 'B', time: 'C' },
+        row: ['над', 'Low', '4'],
+        formulaRow: [false, false, false],
+        values: { vwap: 'Над', dayPos: 'High', time: '06:00' },
+    });
+    assert.deepEqual(dropdown, [
+        { range: 'A9', value: 'Над' },
+        { range: 'C9', value: '06:00' },
+    ]);
 });
 
 test('quantity limit records only the first missing rows', () => {

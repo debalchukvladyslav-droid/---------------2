@@ -159,15 +159,34 @@ async function updateValues(req, res, token) {
         return [{ range, values: [[sheetCellValue(item?.value)]] }];
     });
     if (!data.length) return sendJson(res, 400, { ok: false, error: `No valid cells to update (${updates[0]?.range || 'empty'})` });
-    const response = await sheetsFetch(`${encodeURIComponent(spreadsheetId)}/values:batchUpdate`, token, {}, {
-        method: 'POST',
-        body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data }),
-    });
-    const payload = await response.json().catch(() => ({}));
+    const userToken = String(req.userGoogleToken || '').trim();
+    let response = null;
+    let payload = {};
+    if (userToken) {
+        response = await sheetsFetch(`${encodeURIComponent(spreadsheetId)}/values:batchUpdate`, userToken, {}, {
+            method: 'POST',
+            body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data }),
+        });
+        payload = await response.json().catch(() => ({}));
+        const raw = payload.error?.message || '';
+        if (!response.ok && (response.status === 401 || response.status === 403 || /protected cell or object/i.test(raw))) response = null;
+    }
+    if (!response) {
+        response = await sheetsFetch(`${encodeURIComponent(spreadsheetId)}/values:batchUpdate`, token, {}, {
+            method: 'POST',
+            body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data }),
+        });
+        payload = await response.json().catch(() => ({}));
+    }
     if (!response.ok) {
-        const message = payload.error?.message || response.statusText;
-        console.warn('[Sheets service] update failed', { spreadsheetId, sheetTitle, cells: data.length, status: response.status, message });
-        return sendJson(res, response.status, { ok: false, error: message });
+        const raw = payload.error?.message || response.statusText;
+        const protectedCell = /protected cell or object/i.test(raw);
+        const email = getGoogleServiceAccountEmail();
+        const message = protectedCell
+            ? `Клітинки захищені в Google Таблиці. Відкрийте Дані → Захищені аркуші й діапазони і додайте цю пошту як редактора: ${email || 'сервісний акаунт'}`
+            : raw;
+        console.warn('[Sheets service] update failed', { spreadsheetId, sheetTitle, cells: data.length, status: response.status, message: raw });
+        return sendJson(res, protectedCell ? 403 : response.status, { ok: false, error: message });
     }
     return sendJson(res, 200, { ok: true, updatedCells: Number(payload.totalUpdatedCells) || data.length });
 }
@@ -240,7 +259,10 @@ export default async function handler(req, res) {
             }
         }
         console.log('[Sheets service] authorization', { action, authMode });
-        if (action === 'update-values') return updateValues(req, res, token);
+        if (action === 'update-values') {
+            req.userGoogleToken = String(req.headers['x-google-access-token'] || '').trim();
+            return updateValues(req, res, token);
+        }
         if (action === 'metadata') return metadata(req, res, token);
         if (action === 'values') return values(req, res, token);
         return sendJson(res, 400, { ok: false, error: 'Unknown action' });

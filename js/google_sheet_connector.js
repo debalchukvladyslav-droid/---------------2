@@ -117,9 +117,14 @@ export async function fetchSheetServiceAccount() {
 export async function updateSpreadsheetCells(spreadsheetId, sheetTitle, updates) {
     const token = await getSupabaseAccessToken();
     if (!token) throw new Error('Supabase session expired');
+    const googleToken = accessToken || readStoredGoogleToken() || '';
     const response = await fetch('/api/sheets-service?action=update-values', {
         method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            ...(googleToken ? { 'X-Google-Access-Token': googleToken } : {}),
+        },
         body: JSON.stringify({ spreadsheetId, sheetTitle, updates }),
     });
     const data = await response.json().catch(() => ({}));

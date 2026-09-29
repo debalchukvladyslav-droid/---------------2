@@ -172,7 +172,7 @@ function needsFetch(columns, row, formulaRow, values) {
         if (values?.[field] != null && values[field] !== '') return false;
         const index = columnIndex(letter);
         const kind = field === 'activePost' || field === 'activeEarly' ? 'checkbox' : 'value';
-        return cellCanAccept(row?.[index], Boolean(formulaRow?.[index]), kind);
+        return cellCanAccept(row?.[index], Boolean(formulaRow?.[index]), kind, field);
     });
 }
 
@@ -334,7 +334,7 @@ export async function runCriteriaExport({ automatic = false, host = null } = {})
             const writableCount = Object.entries(columns).filter(([field, letter]) => {
                 if (!letter) return false;
                 const kind = field === 'activePost' || field === 'activeEarly' ? 'checkbox' : 'value';
-                return cellCanAccept(row?.[columnIndex(letter)], Boolean(formulaRow[columnIndex(letter)]), kind);
+                return cellCanAccept(row?.[columnIndex(letter)], Boolean(formulaRow[columnIndex(letter)]), kind, field);
             }).length;
             if (!writableCount) return;
             if (!isEligibleCriteriaDate(date)) {
