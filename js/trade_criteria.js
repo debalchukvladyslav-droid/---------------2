@@ -84,7 +84,7 @@ export async function ensureTradeCriteria(dateStr, trade, { manual = false, high
         });
         const payload = await response.json().catch(() => ({}));
         if (response.status === 409) {
-            attempted.delete(key);
+            if (manual) attempted.delete(key);
             return null;
         }
         if (!response.ok || !payload.snapshot) throw new Error(payload.error || `HTTP ${response.status}`);

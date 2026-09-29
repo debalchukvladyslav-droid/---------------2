@@ -1,7 +1,7 @@
 import { parseSheetDateCellsToIsoSequence } from './parser_utils.js';
 import { state } from './state.js';
 import { showToast } from './utils.js';
-import { hasExactEntryTime, parseEntryInstant, presentSnapshot, snapshotIsFrozen } from '../lib/massive_criteria.js';
+import { calculateEntryCriteria, hasExactEntryTime, parseEntryInstant, presentSnapshot, snapshotIsFrozen, zonedDateTimeToUtcMs } from '../lib/massive_criteria.js';
 import {
     CRITERIA_COLUMNS,
     buildCellUpdates,
@@ -9,9 +9,11 @@ import {
     cellCanAccept,
     columnIndex,
     composeCriteriaValues,
+    deriveSheetMarket,
     detectHeaderColumns,
     isEligibleCriteriaDate,
     selectExportRows,
+    shiftIsoDate,
 } from '../lib/sheet_criteria_export.js';
 
 const SETTINGS_KEY = 'tj_sheet_criteria_export_settings_v1';
@@ -174,24 +176,63 @@ function needsFetch(columns, row, formulaRow, values) {
     });
 }
 
+async function polygonBars(accessToken, body) {
+    const { SUPABASE_URL } = await import('./supabase.js');
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/polygon-aggs`, {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.message || `Polygon: HTTP ${response.status}`);
+    return Array.isArray(payload?.results) ? payload.results : [];
+}
+
 async function fetchSheetMarket({ ticker, tradeDate, opened }) {
+    const entry = parseEntryInstant({ tradeDate, opened });
+    if (!entry || !isEligibleCriteriaDate(entry.tradeDate)) return null;
     const { supabase } = await import('./supabase.js');
     const { data: { session } = {} } = await supabase.auth.getSession();
     if (!session?.access_token) throw new Error('Потрібно увійти в акаунт');
-    const response = await fetch('/api/trade-criteria', {
-        method: 'POST',
-        headers: {
-            Authorization: `Bearer ${session.access_token}`,
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ sheetExport: true, ticker, tradeDate, opened }),
+    const minuteFrom = zonedDateTimeToUtcMs(shiftIsoDate(entry.tradeDate, -5), '16:00:00');
+    const [dailyBars, minuteBars] = await Promise.all([
+        polygonBars(session.access_token, {
+            mode: 'daily',
+            symbol: ticker,
+            from: shiftIsoDate(entry.tradeDate, -70),
+            to: shiftIsoDate(entry.tradeDate, -1),
+        }),
+        polygonBars(session.access_token, {
+            symbol: ticker,
+            fromMs: minuteFrom,
+            toMs: entry.entryMs,
+        }),
+    ]);
+    const criteria = calculateEntryCriteria({
+        dailyBars,
+        minuteBars,
+        entryMs: entry.entryMs,
+        tradeDate: entry.tradeDate,
+        adjusted: true,
     });
-    const payload = await response.json().catch(() => ({}));
-    if (payload?.skipped) return null;
-    if (!response.ok || payload?.ok === false || !payload?.sheet) {
-        throw new Error(payload?.error || `Критерії ${ticker}: HTTP ${response.status}`);
-    }
-    return payload.sheet;
+    const market = deriveSheetMarket({
+        dailyBars,
+        minuteBars,
+        tradeDate: entry.tradeDate,
+        entryMs: entry.entryMs,
+    });
+    return {
+        ...market,
+        atr14: criteria.atr14,
+        avgVol14: criteria.avgVol14,
+        dayVolume: criteria.dayVolume,
+        volPlay14: criteria.volPlay14,
+        high: market.high ?? criteria.high,
+        low: market.low ?? criteria.low,
+    };
 }
 
 async function preferredSheetTitle(sheets) {
