@@ -15,6 +15,10 @@
       "destination": "/api/trade-polygons?resource=entry-criteria"
     },
     {
+      "source": "/api/telegram-float",
+      "destination": "/api/trade-polygons?resource=telegram-float"
+    },
+    {
       "source": "/api/aggressiveness",
       "destination": "/api/fear-greed?gauge=aggressiveness"
     },
