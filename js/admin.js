@@ -179,11 +179,15 @@ export function renderTestingPanel() {
         </div>
         <div class="admin-polygon-actions"><button type="button" class="btn-admin-action" data-test-auto-table>Автотаблиця</button></div>
         <p class="admin-polygon-result" data-test-auto-table-result>Шукає точне прізвище у трьох таблицях і запускає автомапінг.</p>
+        <section class="admin-polygon-panel" data-testing-criteria-sheet-host></section>
         <section class="admin-polygon-panel" data-testing-sheet-import-host></section>
         <section class="testing-loader-grid">
             <div class="admin-polygon-panel" data-testing-polygon-host></div>
         </section>`;
     void renderPolygonAdminPanel(panel.querySelector('[data-testing-polygon-host]'));
+    import('./testing_criteria_sheet.js').then(({ initCriteriaSheetExport }) => {
+        initCriteriaSheetExport(panel.querySelector('[data-testing-criteria-sheet-host]'));
+    }).catch((error) => console.warn('[Testing criteria sheet]', error));
     import('./testing_sheet_import.js').then(({ initIsolatedSheetTest }) => {
         initIsolatedSheetTest(panel.querySelector('[data-testing-sheet-import-host]'));
     }).catch((error) => console.warn('[Testing sheet import]', error));

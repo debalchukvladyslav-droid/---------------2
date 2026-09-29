@@ -14,6 +14,7 @@ export async function readSheetRangePages(range, { rowCount, read, pageSize = 50
     if (!Number.isSafeInteger(end) || end < 0) throw new Error('Invalid sheet row count');
     const values = [];
     values.hyperlinks = [];
+    values.formulas = [];
     for (let row = start; row <= end; row += pageSize) {
         const stop = Math.min(end, row + pageSize - 1);
         const page = await read(`${prefix}${left}${row}:${right}${stop}`);
@@ -21,8 +22,13 @@ export async function readSheetRangePages(range, { rowCount, read, pageSize = 50
         for (let offset = 0; offset <= stop - row; offset++) {
             values.push(page[offset] || []);
             values.hyperlinks.push(page.hyperlinks?.[offset] || []);
+            values.formulas.push(page.formulas?.[offset] || []);
         }
     }
-    while (values.length && !values.at(-1).length && !values.hyperlinks.at(-1).length) { values.pop(); values.hyperlinks.pop(); }
+    while (values.length && !values.at(-1).length && !values.hyperlinks.at(-1).length && !values.formulas.at(-1).some(Boolean)) {
+        values.pop();
+        values.hyperlinks.pop();
+        values.formulas.pop();
+    }
     return values;
 }

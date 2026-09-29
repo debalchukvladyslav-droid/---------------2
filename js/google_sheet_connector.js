@@ -706,6 +706,7 @@ async function fetchSpreadsheetValuesPage(spreadsheetId, range, sheetTitle) {
     });
     const values = response.values || [];
     values.hyperlinks = Array.isArray(response.hyperlinks) ? response.hyperlinks : [];
+    values.formulas = Array.isArray(response.formulas) ? response.formulas : [];
     return values;
 }
 

@@ -1486,6 +1486,12 @@ async function executeSyncWithCfg(cfg, options = {}) {
         }
         if (window.selectDate) window.selectDate(state.selectedDateStr);
 
+        if (!cumulative) {
+            import('./testing_criteria_sheet.js')
+                .then((module) => module.runAutomaticCriteriaExport())
+                .catch((error) => console.warn('[Criteria sheet]', error?.message || error));
+        }
+
         return { ok: true, stats, dateAnchors };
     } catch (e) {
         if (!quiet) {
