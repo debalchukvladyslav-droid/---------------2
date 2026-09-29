@@ -10,6 +10,7 @@ import { disposeTradesView } from './trades_view2.js';
 import { disposeScreensView } from './gallery.js';
 import { disposeTradesDatagrid } from './trades_datagrid.js';
 import { renderDashQuote } from './dash_quotes.js';
+import { onDayFormVisibilityChanged } from './day_stage.js';
 
 let isThemeUIInitialized = false;
 let selectedDashGreetingIndex = null;
@@ -524,6 +525,7 @@ export function toggleMobileSidebar(forceState) {
     if (menuBtn) {
         menuBtn.textContent = shouldOpen ? '✖ Закрити' : '☰ Меню';
     }
+    onDayFormVisibilityChanged();
 }
 
 const TAB_TITLES = {

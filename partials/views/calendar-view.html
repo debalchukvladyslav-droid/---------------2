@@ -39,4 +39,56 @@
                     <div id="mentor-rr-list"></div>
                 </div>
             </div>
+
+            <aside id="day-portrait" class="day-portrait" hidden aria-label="Підготовка до сесії">
+                <div class="day-portrait-scroll">
+                    <header class="day-prep-head">
+                        <div>
+                            <p class="day-portrait-kicker">Підготовка до сесії</p>
+                            <p class="day-prep-sub">Перед відкриттям ринку</p>
+                        </div>
+                        <strong id="day-prep-progress">0/0</strong>
+                    </header>
+                    <div id="day-portrait-checklist" class="day-prep-list"></div>
+                    <button type="button" class="day-prep-add" data-action="day-prep-add">+ Додати пункт</button>
+                    <label class="day-prep-notes">
+                        <span>Нотатки перед сесією</span>
+                        <textarea id="day-prep-notes" rows="4" placeholder="Що важливо памʼятати перед відкриттям…"></textarea>
+                    </label>
+                    <button type="button" class="day-prep-start" data-action="session-modal-open">Почати сесію</button>
+                </div>
+            </aside>
+
+            <div id="day-stage" class="day-stage" hidden>
+                <button type="button" class="day-stage-veil" data-action="day-stage-close" aria-label="Закрити день"></button>
+                <div class="day-stage-frame">
+                    <button type="button" class="day-stage-form" data-action="day-stage-form">Форма</button>
+                    <button type="button" class="day-stage-close" data-action="day-stage-close" aria-label="Закрити день">×</button>
+                    <header class="day-stage-top">
+                        <button type="button" class="day-stage-arrow" data-action="date-shift" data-offset="-1" title="Попередній день" aria-label="Попередній день">❮</button>
+                        <button type="button" class="day-stage-date" id="day-stage-date" data-action="date-picker">Сьогодні</button>
+                        <button type="button" class="day-stage-arrow" data-action="date-shift" data-offset="1" title="Наступний день" aria-label="Наступний день">❯</button>
+                    </header>
+                    <div class="day-stage-center">
+                        <div class="day-stage-hero">
+                            <article class="day-stage-ghost day-stage-ghost--prev" id="day-stage-ghost-prev" aria-hidden="true"></article>
+                            <article class="day-stage-ghost day-stage-ghost--next" id="day-stage-ghost-next" aria-hidden="true"></article>
+                            <article class="day-stage-card day-tilt" id="day-stage-card" data-tilt></article>
+                        </div>
+                        <div class="day-stage-scores" id="day-stage-scores"></div>
+                        <div class="day-stage-screens" id="day-stage-screens"></div>
+                    </div>
+                    <section class="day-stage-trades" id="day-stage-trades" aria-label="Угоди за день"></section>
+                    <div class="day-stage-thoughts">
+                        <label class="day-stage-thought day-tilt" data-tilt>
+                            <span>Думка дня</span>
+                            <textarea id="day-stage-notes" rows="3" placeholder="Що сьогодні спрацювало, де поспішив, що відчував?"></textarea>
+                        </label>
+                        <label class="day-stage-thought day-tilt" data-tilt>
+                            <span>Що покращити на завтра</span>
+                            <textarea id="day-stage-improvement" rows="3" placeholder="Одна конкретна дія для дисципліни наступного разу…"></textarea>
+                        </label>
+                    </div>
+                </div>
+            </div>
         </div>

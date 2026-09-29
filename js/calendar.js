@@ -11,6 +11,7 @@ import { getCalendarDayResult, getEffectiveDayPnl, isSheetOnlyPnl, visibleTradeR
 import { pickSheetRowsSource } from './datagrid_rows.js';
 import { getNyseDaySchedule } from './nyse_calendar.js';
 import { resolveMonthlyDayloss } from './data_utils.js';
+import { openDayStage, refreshDayStage, syncDayExtras } from './day_stage.js';
 
 let _selectDateRequestId = 0;
 let _dayEditorDirty = false;
@@ -623,6 +624,8 @@ function fillSelectedDateUI(dateStr) {
     }
 
     if (window.refreshReviewRequestButtons) window.refreshReviewRequestButtons();
+    syncDayExtras(state.selectedDateStr);
+    refreshDayStage();
     _dayEditorDirty = false;
 }
 
@@ -638,16 +641,18 @@ function focusActiveDayEditorField() {
 async function openDayEditor(dateStr) {
     const loadPromise = selectDate(dateStr);
     const sidebar = document.getElementById('form-sidebar');
+    const mobile = window.innerWidth <= 1024;
 
-    if (sidebar?.classList.contains('collapsed') && window.toggleRightSidebar) {
+    if (!mobile && sidebar?.classList.contains('collapsed') && window.toggleRightSidebar) {
         window.toggleRightSidebar();
-    } else if (window.innerWidth <= 1024 && !sidebar?.classList.contains('open') && window.toggleMobileSidebar) {
-        window.toggleMobileSidebar(true);
     }
 
-    requestAnimationFrame(focusActiveDayEditorField);
+    openDayStage();
+    if (!mobile) {
+        requestAnimationFrame(focusActiveDayEditorField);
+    }
     await loadPromise;
-    requestAnimationFrame(focusActiveDayEditorField);
+    if (!mobile) requestAnimationFrame(focusActiveDayEditorField);
 }
 
 export async function selectDate(dateStr) {
@@ -672,6 +677,42 @@ export async function selectDate(dateStr) {
         if (requestId === _selectDateRequestId && state.selectedDateStr === dateStr) {
             setDayDetailsLoading(false);
         }
+    }
+}
+
+function readDayScores(oldData) {
+    const read = (id, fallback) => {
+        const el = document.getElementById(id);
+        if (!el) return fallback ?? null;
+        if (el.value === '') return null;
+        const n = Number(el.value);
+        if (!Number.isFinite(n)) return null;
+        return Math.min(10, Math.max(1, Math.round(n)));
+    };
+    const saved = oldData?.dayScores && typeof oldData.dayScores === 'object' ? oldData.dayScores : {};
+    return {
+        discipline: read('day-score-discipline', saved.discipline),
+        plan: read('day-score-plan', saved.plan),
+        emotion: read('day-score-emotion', saved.emotion),
+        entries: read('day-score-entries', saved.entries),
+    };
+}
+
+function readDayGrade(oldData) {
+    const el = document.getElementById('day-grade');
+    const raw = String(el ? el.value : (oldData?.dayGrade || '')).trim().toUpperCase();
+    return 'ABCDEF'.includes(raw) ? raw : '';
+}
+
+function readDayTags(oldData) {
+    const el = document.getElementById('day-tags-json');
+    if (!el) return Array.isArray(oldData?.dayTags) ? oldData.dayTags : [];
+    try {
+        const parsed = JSON.parse(el.value || '[]');
+        if (!Array.isArray(parsed)) return [];
+        return parsed.map((tag) => String(tag).trim()).filter(Boolean).slice(0, 16);
+    } catch {
+        return Array.isArray(oldData?.dayTags) ? oldData.dayTags : [];
     }
 }
 
@@ -735,6 +776,9 @@ export function saveEntry(options = {}) {
         sheetTradeTypesSyncEnabled: oldData.sheetTradeTypesSyncEnabled === true,
         traderAbsent: document.getElementById('trade-day-absent')?.checked === true,
         demoTrading: document.getElementById('trade-day-demo')?.checked === true,
+        dayScores: readDayScores(oldData),
+        dayGrade: readDayGrade(oldData),
+        dayTags: readDayTags(oldData),
     };
 
     dayData.screenshots = oldData.screenshots || { good: [], normal: [], bad: [], error: [] };

@@ -262,6 +262,29 @@ function activateAction(action, trigger, event = null) {
             const offset = Number(trigger?.dataset?.offset ?? 0);
             if (Number.isFinite(offset)) window.shiftDate?.(offset);
         },
+        'day-stage-close': () => {
+            void import('./day_stage.js').then((module) => {
+                module.closeDayStage();
+                window.closeDayPanel?.();
+            });
+        },
+        'day-stage-form': () => window.toggleMobileSidebar?.(true),
+        'day-grade-open': () => {
+            const menu = document.getElementById('day-grade-menu');
+            if (menu) menu.hidden = !menu.hidden;
+        },
+        'day-grade-set': () => {
+            void import('./day_stage.js').then((module) => module.setDayGrade(trigger?.dataset?.grade || ''));
+        },
+        'day-tag-add': () => {
+            void import('./day_stage.js').then((module) => module.addDayTag());
+        },
+        'day-tag-remove': () => {
+            void import('./day_stage.js').then((module) => module.removeDayTag(trigger?.dataset?.tag || ''));
+        },
+        'day-prep-add': () => {
+            void import('./day_stage.js').then((module) => module.addPrepItem());
+        },
         'settings-checklist-add': () => window.addNewChecklistItem?.(),
         'settings-checklist-save': () => window.saveChecklist?.(),
         'settings-slider-add': () => window.addNewSliderItem?.(),

@@ -338,3 +338,1019 @@
 .folder-setup { display: flex; gap: 10px; align-items: flex-end; }
 
 /* === СКРІНШОТИ === */
+
+/* === Сцена відкритого дня === */
+.day-portrait[hidden],
+.day-stage[hidden] { display: none !important; }
+
+.day-portrait {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 256px;
+    z-index: var(--z-panel);
+    width: 280px;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    padding: 22px 16px 18px;
+    border-right: 1px solid color-mix(in srgb, var(--border) 74%, var(--accent) 26%);
+    background:
+        linear-gradient(180deg, color-mix(in srgb, var(--bg-panel) 96%, var(--accent) 4%), var(--bg-panel) 42%);
+    box-shadow: 18px 0 48px color-mix(in srgb, #000 28%, transparent);
+    color: var(--text-main);
+}
+
+.app-sidebar.collapsed ~ .main-content .day-portrait,
+.main-content.expanded .day-portrait { left: 64px; }
+
+.day-portrait-scroll {
+    overflow: auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.day-portrait-kicker {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.day-portrait-badges,
+.day-portrait-money {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.day-portrait-badge {
+    padding: 4px 8px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    color: var(--text-main);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.day-portrait-money div {
+    flex: 1 1 calc(50% - 8px);
+    min-width: 0;
+    padding: 10px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg-main) 55%, transparent);
+}
+
+.day-portrait-money span,
+.day-portrait-block h4 {
+    display: block;
+    margin: 0 0 4px;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.day-portrait-money strong {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.95rem;
+}
+
+.day-portrait-block { margin: 0; }
+
+.day-portrait-count,
+.day-portrait-goal,
+.day-stage-empty {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.84rem;
+    line-height: 1.45;
+}
+
+.day-portrait-goal { color: var(--text-main); }
+
+.day-portrait-list {
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.day-portrait-list li {
+    color: var(--text-main);
+    font-size: 0.84rem;
+    line-height: 1.35;
+}
+
+#day-portrait-checklist li::before {
+    content: "○ ";
+    color: var(--text-muted);
+}
+
+#day-portrait-checklist li.is-done::before {
+    content: "✓ ";
+    color: var(--profit);
+}
+
+#day-portrait-mentor {
+    margin: 0;
+    color: var(--text-main);
+    font-size: 0.84rem;
+    line-height: 1.45;
+    white-space: pre-wrap;
+}
+
+.day-portrait-screens {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.day-portrait-screen {
+    width: 72px;
+    height: 54px;
+    padding: 0;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-main);
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.day-portrait-screen img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.day-stage {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: calc(256px + 280px);
+    right: 430px;
+    z-index: var(--z-panel);
+    display: flex;
+    overflow: auto;
+    color: var(--text-main);
+}
+
+.app-sidebar.collapsed ~ .main-content .day-stage,
+.main-content.expanded .day-stage { left: calc(64px + 280px); }
+
+.day-stage-veil {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    background: color-mix(in srgb, var(--bg-main) 46%, transparent);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+.day-stage-frame {
+    position: relative;
+    z-index: 1;
+    pointer-events: none;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 22px 28px 20px;
+}
+
+.day-stage-frame > * { pointer-events: auto; }
+
+.day-stage-top {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.day-stage-arrow,
+.day-stage-close,
+.day-stage-form,
+.day-stage-date {
+    border: 1px solid color-mix(in srgb, var(--border) 70%, var(--accent) 30%);
+    background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+    color: var(--text-main);
+    font: inherit;
+    cursor: pointer;
+}
+
+.day-stage-arrow,
+.day-stage-close,
+.day-stage-form {
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.day-stage-form {
+    display: none;
+    width: auto;
+    padding: 0 12px;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.day-stage-close { margin-left: 4px; font-size: 1.2rem; line-height: 1; }
+
+.day-stage-date {
+    min-width: 0;
+    max-width: none;
+    height: 36px;
+    padding: 0 16px;
+    border-radius: 999px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+}
+
+.day-stage-center {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    align-items: stretch;
+    justify-content: center;
+    min-width: 0;
+}
+
+.day-tilt {
+    --tilt-x: 0deg;
+    --tilt-y: 0deg;
+    transform: perspective(900px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
+    transition: transform 0.18s ease;
+    will-change: transform;
+}
+
+.day-stage-card {
+    position: relative;
+    width: min(420px, 78%);
+    min-height: 280px;
+    padding: 22px 24px 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    border-radius: 28px;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    background:
+        radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, var(--bg-panel) 70%, transparent), var(--bg-panel) 62%);
+    box-shadow: 0 24px 60px color-mix(in srgb, #000 42%, transparent);
+}
+
+.day-stage-card.is-green {
+    border-color: color-mix(in srgb, var(--profit) 70%, transparent);
+    background:
+        radial-gradient(90% 70% at 50% 0%, color-mix(in srgb, var(--profit) 28%, transparent), transparent 58%),
+        linear-gradient(180deg, color-mix(in srgb, var(--profit) 10%, var(--bg-panel)), var(--bg-panel) 72%);
+    box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--profit) 35%, transparent),
+        0 0 42px color-mix(in srgb, var(--profit) 34%, transparent),
+        0 28px 70px color-mix(in srgb, #000 46%, transparent);
+}
+
+.day-stage-card.is-red {
+    border-color: color-mix(in srgb, var(--loss) 70%, transparent);
+    background:
+        radial-gradient(90% 70% at 50% 0%, color-mix(in srgb, var(--loss) 26%, transparent), transparent 58%),
+        linear-gradient(180deg, color-mix(in srgb, var(--loss) 10%, var(--bg-panel)), var(--bg-panel) 72%);
+    box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--loss) 32%, transparent),
+        0 0 42px color-mix(in srgb, var(--loss) 30%, transparent),
+        0 28px 70px color-mix(in srgb, #000 46%, transparent);
+}
+
+.day-stage-card.is-absent,
+.day-stage-card.is-demo {
+    background: linear-gradient(145deg, color-mix(in srgb, #7d838e 16%, var(--bg-panel)), color-mix(in srgb, #555b65 10%, var(--bg-panel)));
+    border-color: color-mix(in srgb, #a5abb5 44%, var(--border));
+    box-shadow: inset 3px 0 0 color-mix(in srgb, #a5abb5 66%, transparent), 0 18px 46px color-mix(in srgb, #000 28%, transparent);
+}
+
+.day-stage-card.is-closed {
+    background: linear-gradient(145deg, color-mix(in srgb, #9f3a4d 16%, var(--bg-panel)), color-mix(in srgb, #71303d 10%, var(--bg-panel)));
+    border-color: color-mix(in srgb, #d46a7d 48%, var(--border));
+}
+
+.day-stage-card.is-early {
+    background: linear-gradient(145deg, color-mix(in srgb, #b7791f 13%, var(--bg-panel)), color-mix(in srgb, #8f5e1b 8%, var(--bg-panel)));
+    border-color: color-mix(in srgb, #d6a04b 46%, var(--border));
+}
+
+.day-stage-card.is-record {
+    border-color: var(--gold);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--gold) 40%, transparent), 0 18px 46px color-mix(in srgb, #000 28%, transparent);
+}
+
+.day-stage-card.is-record-old { border-color: color-mix(in srgb, var(--gold) 50%, transparent); }
+
+.day-stage-card.is-dayloss {
+    border-color: var(--loss);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--loss) 30%, transparent), 0 18px 46px color-mix(in srgb, #000 28%, transparent);
+}
+
+.day-stage-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.day-stage-card-num {
+    font-size: clamp(4.4rem, 8vw, 6.4rem);
+    font-weight: 800;
+    line-height: 0.86;
+    letter-spacing: -0.06em;
+}
+
+.day-stage-card-badge {
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+    font-size: 0.68rem;
+    font-weight: 800;
+}
+
+.day-stage-card-pnl {
+    font-size: 1.85rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.03em;
+}
+
+.day-stage-thoughts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    width: min(920px, 100%);
+    margin: 0 auto;
+}
+
+.day-stage-thought {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    gap: 8px;
+    margin: 0;
+    padding: 14px;
+    border-radius: var(--radius-lg);
+    border: 1px solid color-mix(in srgb, var(--border) 70%, var(--accent) 30%);
+    background: color-mix(in srgb, var(--bg-panel) 84%, transparent);
+    box-shadow: 0 16px 40px color-mix(in srgb, #000 22%, transparent);
+}
+
+.day-stage-thought span {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.day-stage-thought textarea {
+    width: 100%;
+    min-height: 72px;
+    flex: 1;
+    resize: vertical;
+    box-sizing: border-box;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--bg-main) 72%, transparent);
+    color: var(--text-main);
+    font: inherit;
+    line-height: 1.45;
+    padding: 10px 12px;
+}
+
+.day-stage-types {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.day-stage-type {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+    color: var(--text-main);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    box-shadow: 0 10px 24px color-mix(in srgb, #000 16%, transparent);
+}
+
+.day-stage-type-name {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.day-stage .is-profit,
+.day-portrait .is-profit { color: var(--profit); }
+
+.day-stage .is-loss,
+.day-portrait .is-loss { color: var(--loss); }
+
+.day-stage-type small {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.day-stage-trades {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    width: min(920px, 100%);
+    margin: 0 auto;
+}
+
+.day-stage-trades-head {
+    width: 100%;
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 12px;
+}
+
+.day-stage-trades-head h3 {
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+.day-stage-trades-list {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+}
+
+.day-stage-trade {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    min-width: min(240px, 100%);
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+    color: var(--text-main);
+    font: inherit;
+    cursor: pointer;
+}
+
+.day-stage-trade-symbol { font-weight: 700; }
+
+.day-stage-trade-meta {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 1280px) {
+    .day-stage-scores { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .day-stage-thoughts { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 1200px) and (min-width: 1025px) {
+    .day-portrait { display: none !important; }
+    .day-stage { left: 256px; }
+    .app-sidebar.collapsed ~ .main-content .day-stage,
+    .main-content.expanded .day-stage { left: 64px; }
+}
+
+@media (max-width: 1024px) {
+    .day-portrait { display: none !important; }
+    .day-stage {
+        left: 0;
+        right: 0;
+        top: calc(58px + env(safe-area-inset-top));
+        bottom: calc(64px + env(safe-area-inset-bottom));
+    }
+    .day-stage-form { display: inline-flex; }
+    .day-stage-frame { padding: 16px 14px 18px; }
+    .day-stage-date { max-width: none; flex: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .day-tilt {
+        transform: none;
+        transition: none;
+    }
+}
+
+.day-stage-top {
+    width: fit-content;
+    margin: 0 auto;
+    padding: 6px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+    background: color-mix(in srgb, var(--bg-panel) 78%, transparent);
+    box-shadow: 0 10px 30px color-mix(in srgb, #000 28%, transparent);
+    backdrop-filter: blur(12px);
+}
+
+.day-stage-close,
+.day-stage-form {
+    position: absolute;
+    top: 18px;
+}
+
+.day-stage-close { right: 18px; }
+.day-stage-form { right: 60px; }
+
+.day-stage-hero {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: min(920px, 100%);
+    min-height: 320px;
+    margin: 0 auto;
+}
+
+.day-stage-ghost {
+    position: absolute;
+    top: 34px;
+    width: 200px;
+    height: 246px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 22px 18px;
+    border-radius: 26px;
+    pointer-events: none;
+    filter: blur(3px);
+    opacity: 0.78;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    background: color-mix(in srgb, var(--bg-panel) 82%, transparent);
+    color: var(--text-muted);
+}
+
+.day-stage-ghost strong {
+    font-size: 3.6rem;
+    font-weight: 800;
+    line-height: 0.85;
+    letter-spacing: -0.05em;
+}
+
+.day-stage-ghost span { font-weight: 800; font-size: 1.05rem; }
+.day-stage-ghost--prev { left: 7%; transform: rotate(-14deg) scale(0.9); }
+.day-stage-ghost--next { right: 7%; transform: rotate(14deg) scale(0.9); }
+
+.day-stage-ghost.is-green {
+    color: var(--profit);
+    border-color: color-mix(in srgb, var(--profit) 50%, transparent);
+    box-shadow: 0 0 32px color-mix(in srgb, var(--profit) 28%, transparent);
+}
+
+.day-stage-ghost.is-red {
+    color: var(--loss);
+    border-color: color-mix(in srgb, var(--loss) 50%, transparent);
+    box-shadow: 0 0 32px color-mix(in srgb, var(--loss) 28%, transparent);
+}
+
+.day-stage-card-month {
+    margin: 0;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: var(--text-muted);
+}
+
+.day-stage-card-hero {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.day-stage-spark { width: 120px; height: 46px; flex: 0 0 auto; }
+.day-stage-card-tone {
+    margin: 6px 0 0;
+    text-align: center;
+    font-weight: 800;
+}
+
+.day-stage-card.is-green .day-stage-card-tone { color: var(--profit); }
+.day-stage-card.is-green .day-stage-card-num {
+    text-shadow: 0 0 26px color-mix(in srgb, var(--profit) 42%, transparent);
+}
+.day-stage-card.is-red .day-stage-card-num {
+    text-shadow: 0 0 26px color-mix(in srgb, var(--loss) 36%, transparent);
+}
+
+.day-stage-veil {
+    background: color-mix(in srgb, var(--bg-main) 64%, transparent);
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+}
+.day-stage-card.is-red .day-stage-card-tone { color: var(--loss); }
+
+.day-stage-card-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+    gap: 8px;
+    margin-top: auto;
+    padding-top: 14px;
+    border-top: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+}
+
+.day-stage-card-stats strong { display: block; font-size: 1.2rem; letter-spacing: -0.03em; }
+.day-stage-card-stats span { color: var(--text-muted); font-size: 0.72rem; }
+
+.day-stage-grade {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.day-stage-grade strong { color: var(--gold); font-size: 1.45rem; }
+.day-stage-grade:disabled { cursor: default; }
+
+.day-stage-grade-wrap { position: relative; }
+
+.day-grade-menu[hidden] { display: none !important; }
+
+.day-grade-menu {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 8px);
+    display: flex;
+    gap: 4px;
+    padding: 6px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--bg-panel);
+    box-shadow: 0 14px 32px color-mix(in srgb, #000 36%, transparent);
+}
+
+.day-grade-menu button {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-main);
+    font: inherit;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.day-grade-menu button.is-current {
+    border-color: var(--gold);
+    color: var(--gold);
+}
+
+.day-stage-scores,
+.day-stage-screens {
+    width: min(920px, 100%);
+    margin: 0 auto;
+}
+
+.day-stage-scores {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.day-score {
+    min-height: 124px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    border-radius: 18px;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    background: color-mix(in srgb, var(--bg-panel) 90%, transparent);
+    box-shadow: 0 16px 34px color-mix(in srgb, #000 24%, transparent);
+    cursor: ns-resize;
+    user-select: none;
+    touch-action: none;
+}
+
+.day-score strong { font-size: 1.45rem; letter-spacing: -0.04em; }
+.day-score > span { font-weight: 700; }
+.day-score small { color: var(--text-muted); font-size: 0.68rem; }
+
+.day-score-icon {
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    margin-bottom: 8px;
+    border-radius: 999px;
+}
+
+.day-score-icon svg { width: 16px; height: 16px; }
+
+.day-score--green .day-score-icon {
+    color: var(--profit);
+    background: color-mix(in srgb, var(--profit) 18%, transparent);
+}
+.day-score--blue .day-score-icon {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.day-score--amber .day-score-icon {
+    color: var(--gold);
+    background: color-mix(in srgb, var(--gold) 18%, transparent);
+}
+.day-score--teal .day-score-icon {
+    color: color-mix(in srgb, var(--accent) 40%, var(--profit));
+    background: color-mix(in srgb, var(--profit) 14%, var(--accent) 10%);
+}
+
+.day-stage-section-title,
+.day-stage-trades-head h3 {
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+.day-stage-trades-head { justify-content: space-between; }
+
+.day-stage-screen-strip {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+}
+
+.day-stage-screen {
+    flex: 0 0 148px;
+    height: 96px;
+    padding: 0;
+    position: relative;
+    overflow: hidden;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--bg-main);
+    cursor: pointer;
+}
+
+.day-stage-screen img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.day-stage-screen span {
+    position: absolute;
+    left: 8px;
+    bottom: 8px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: color-mix(in srgb, #000 62%, transparent);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+.day-trade-table {
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+    border-radius: 18px;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+    box-shadow: 0 16px 36px color-mix(in srgb, #000 22%, transparent);
+}
+
+.day-trade-row {
+    display: grid;
+    grid-template-columns: 92px minmax(90px, 140px) 92px 64px minmax(120px, 1fr);
+    gap: 8px;
+    align-items: center;
+    width: 100%;
+    min-width: 520px;
+    padding: 11px 14px;
+    border: 0;
+    border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    background: transparent;
+    color: var(--text-main);
+    font: inherit;
+    text-align: left;
+}
+
+.day-trade-row--head {
+    border-top: 0;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+button.day-trade-row { cursor: pointer; }
+button.day-trade-row:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.day-trade-symbol { font-weight: 800; }
+.day-trade-comment {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-muted);
+}
+.is-profit-row { box-shadow: inset 3px 0 0 var(--profit); }
+.is-loss-row { box-shadow: inset 3px 0 0 var(--loss); }
+
+.day-stage-thought { min-height: 132px; }
+.day-stage-thought textarea { min-height: 84px; }
+
+.day-prep-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.day-prep-sub {
+    margin: 4px 0 0;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+
+#day-prep-progress {
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--profit) 16%, transparent);
+    color: var(--profit);
+    font-size: 0.85rem;
+}
+
+.day-prep-list { display: flex; flex-direction: column; gap: 8px; }
+
+.day-prep-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg-main) 55%, transparent);
+    cursor: pointer;
+}
+
+.day-prep-item.is-done .day-prep-name { color: var(--text-muted); text-decoration: line-through; }
+.day-prep-check { accent-color: var(--profit); width: 16px; height: 16px; }
+.day-prep-name { font-weight: 700; text-transform: none; }
+
+.day-prep-add,
+.day-prep-start,
+.day-tag,
+.day-tag-add {
+    border-radius: 999px;
+    font: inherit;
+    cursor: pointer;
+}
+
+.day-prep-add,
+.day-tag-add {
+    border: 1px dashed color-mix(in srgb, var(--border) 70%, var(--text-muted));
+    background: transparent;
+    color: var(--text-muted);
+}
+
+.day-prep-add { padding: 8px 12px; }
+
+.day-prep-notes {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+}
+
+.day-prep-notes span {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.day-prep-notes textarea {
+    width: 100%;
+    min-height: 92px;
+    box-sizing: border-box;
+    resize: vertical;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--bg-main) 70%, transparent);
+    color: var(--text-main);
+    font: inherit;
+    line-height: 1.45;
+    padding: 10px 12px;
+}
+
+.day-prep-start {
+    border: 0;
+    padding: 12px 14px;
+    background: var(--profit);
+    color: #04140c;
+    font-weight: 800;
+}
+
+.day-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 12px;
+}
+
+.day-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--text-main);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.day-tag button {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    cursor: pointer;
+}
+
+.day-tag-add { padding: 6px 10px; background: transparent; }
+
+.day-form-extras { display: none; }
+
+body.day-stage-open #form-sidebar .day-form-stage-field {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
+
+@media (max-width: 1200px) {
+    body.day-stage-open #form-sidebar .day-form-stage-field--desktop {
+        position: static !important;
+        width: auto !important;
+        height: auto !important;
+        padding: revert !important;
+        margin: revert !important;
+        overflow: visible !important;
+        clip: auto !important;
+        white-space: normal !important;
+        border: revert !important;
+    }
+}
+
+@media (max-width: 1280px) {
+    .day-stage-scores { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .day-stage-thoughts { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 1024px) {
+    .day-stage-ghost { display: none; }
+    .day-stage-hero { min-height: 0; }
+    .day-stage-card { width: 100%; min-height: 230px; }
+    .day-stage-scores { grid-template-columns: 1fr 1fr; }
+}

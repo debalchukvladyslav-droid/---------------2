@@ -14,6 +14,7 @@ import { saveToLocal, saveJournalData, saveSettings, loadSettings, markJournalDa
          loadBackgroundGallery, flushPendingDataSync } from './storage.js';
 import { applyTheme, resetCustomTheme, saveThemeSettings, switchTab, toggleMobileSidebar, switchMainTab, scrollMainTabs, toggleMoreTabs, toggleMobileMoreMenu, closeMobileMoreMenu, bindMainTabRoutes, syncMainTabFromRoute, refreshCurrentMainTitle } from './ui.js';
 import { shiftDate, selectDateFromInput, saveEntry, autoSaveCurrentDay, renderView, selectDate, updateAutoFlags, initSelectors, renderSidebarTradesList } from './calendar.js';
+import { onDayFormVisibilityChanged } from './day_stage.js';
 import { toggleStatsDropdown, toggleTree, toggleStatsFilter, refreshStatsView, closeStatsDropdown, renderStatsSourceSelector, selectStatsSource, renderTradeTypeSelector, selectTradeTypeFilter, toggleStatsEquityMode, toggleStatsCompareMode, closeStatsCompareMode, openStatsComparisonWithTrader } from './stats.js';
 import { buildExceptionKfRows, combineStatsSheetRows } from './stats_sheet_metrics.js';
 import { pickSessionCriteriaHints, sessionCriteriaDateMatches } from './session_criteria_core.js';
@@ -135,6 +136,7 @@ window.toggleRightSidebar = function() {
     }
 
     setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 320);
+    onDayFormVisibilityChanged();
 };
 
 window.closeDayPanel = function() {
@@ -145,6 +147,7 @@ window.closeDayPanel = function() {
         return;
     }
     if (!sidebar.classList.contains('collapsed')) window.toggleRightSidebar();
+    else onDayFormVisibilityChanged();
 };
 window.getDefaultDayEntry = getDefaultDayEntry;
 window.state = state;
