@@ -23,7 +23,9 @@
     "ai": "^7.0.66",
     "exceljs": "^4.4.0",
     "gridstack": "^13.1.2",
-    "sharp": "0.35.4"
+    "qrcode": "^1.5.4",
+    "sharp": "0.35.4",
+    "telegram": "^2.26.22"
   },
   "overrides": {
     "uuid": "11.1.1"

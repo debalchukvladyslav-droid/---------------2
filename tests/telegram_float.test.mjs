@@ -1,8 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { floatsForDate, parseShareCount } from '../lib/telegram_float.js';
+import { chatRecord, floatsForDate, parseShareCount } from '../lib/telegram_float.js';
 
 const kyivMorning = Date.parse('2026-09-28T05:31:00.000Z');
+
+test('group list keeps the title and does not ask to copy a tag', () => {
+    assert.deepEqual(chatRecord({
+        isGroup: true,
+        title: 'Торгівля',
+        entity: { className: 'Channel', id: 55, accessHash: '99', username: 'trade_room' },
+    }), { key: '@trade_room', title: 'Торгівля (@trade_room)' });
+    assert.equal(chatRecord({
+        isGroup: true,
+        title: 'Без тега',
+        entity: { className: 'Channel', id: 55, accessHash: '99' },
+    }).key, 'channel:55:99');
+    assert.equal(chatRecord({ isUser: true, title: 'Стас', entity: { className: 'User', id: 1 } }), null);
+});
 
 test('Valera reply 1.49M on the same day is the float for that ticker', () => {
     assert.equal(parseShareCount('1.49M'), 1_490_000);

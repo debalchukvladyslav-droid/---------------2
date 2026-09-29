@@ -288,24 +288,56 @@ function currentSettings(host) {
     return settings;
 }
 
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    })[char]);
+}
+
+async function postTelegram(body) {
+    const { supabase } = await import('./supabase.js');
+    const { data: { session } = {} } = await supabase.auth.getSession();
+    if (!session?.access_token) return { note: 'Потрібно увійти в акаунт.' };
+    const response = await fetch('/api/telegram-float', {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) return { note: payload.error || 'Telegram недоступний.' };
+    return payload;
+}
+
 async function loadTelegramFloats(dates, chat) {
     try {
-        const { supabase } = await import('./supabase.js');
-        const { data: { session } = {} } = await supabase.auth.getSession();
-        if (!session?.access_token) return { floats: {}, note: 'Потрібно увійти в акаунт.' };
-        const response = await fetch('/api/telegram-float', {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${session.access_token}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ dates, chat: chat || '' }),
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) return { floats: {}, note: payload.error || 'Telegram недоступний.' };
+        const payload = await postTelegram({ dates, chat: chat || '' });
         return { floats: payload.floats || {}, note: payload.note || '' };
     } catch (error) {
         return { floats: {}, note: error?.message || 'Telegram недоступний.' };
+    }
+}
+
+async function fillTelegramGroups(host) {
+    const select = get(host, 'telegram-chat');
+    if (!select) return;
+    const saved = select.value || readSettings().telegramChat || '';
+    select.innerHTML = '<option value="">Завантаження груп…</option>';
+    try {
+        const payload = await postTelegram({ mode: 'chats' });
+        const chats = Array.isArray(payload.chats) ? payload.chats : [];
+        const known = new Set(chats.map((chat) => chat.key));
+        const options = [`<option value="">${escapeHtml(chats.length ? 'Оберіть групу' : (payload.note || 'Груп немає'))}</option>`];
+        if (saved && !known.has(saved)) options.push(`<option value="${escapeHtml(saved)}">${escapeHtml(saved)}</option>`);
+        chats.forEach((chat) => {
+            options.push(`<option value="${escapeHtml(chat.key)}">${escapeHtml(chat.title)}</option>`);
+        });
+        select.innerHTML = options.join('');
+        if (saved) select.value = saved;
+    } catch (error) {
+        select.innerHTML = `<option value="">${escapeHtml(error?.message || 'Telegram недоступний')}</option>`;
     }
 }
 
@@ -521,7 +553,8 @@ export function initCriteriaSheetExport(host) {
             <label><span>Скільки тікерів</span><input type="number" min="1" step="1" value="5" data-criteria="limit" disabled></label>
             <button type="button" class="btn-admin-action" data-criteria="write">Завантажити</button>
             <label><span>Автоматичне завантаження</span><input type="checkbox" data-criteria="auto"></label>
-            <label><span>Група Telegram</span><input class="sheet-service-input" type="text" data-criteria="telegram-chat" placeholder="@група або id"></label>
+            <label><span>Група Telegram</span><select data-criteria="telegram-chat"><option value="">Завантаження груп…</option></select></label>
+            <button type="button" class="btn-secondary sheet-btn-compact" data-criteria="telegram-groups">Оновити групи</button>
         </div>
         <p class="admin-section-subtitle">Без галочки кількості записуються всі порожні рядки. Автозапуск стартує після того, як синхронізація таблиці повністю завершилась.</p>`;
 
@@ -530,7 +563,6 @@ export function initCriteriaSheetExport(host) {
     get(host, 'limit-enabled').checked = saved.limitEnabled === true;
     get(host, 'limit').disabled = saved.limitEnabled !== true;
     get(host, 'auto').checked = saved.auto === true;
-    if (saved.telegramChat) get(host, 'telegram-chat').value = saved.telegramChat;
 
     const persist = () => saveSettings(host);
     host.querySelectorAll('[data-criteria]').forEach((element) => {
@@ -540,6 +572,8 @@ export function initCriteriaSheetExport(host) {
     get(host, 'limit-enabled').addEventListener('change', () => {
         get(host, 'limit').disabled = !get(host, 'limit-enabled').checked;
     });
+    get(host, 'telegram-groups').addEventListener('click', () => { void fillTelegramGroups(host); });
+    void fillTelegramGroups(host);
 
     import('./google_sheet_connector.js').then(async (connector) => {
         const response = await connector.fetchSheetServiceAccount();
