@@ -726,6 +726,11 @@ function renderDayStage(dateStr) {
     void renderTickerScreens(dateStr, day);
 }
 
+function placePortraitOverNav(portrait) {
+    if (!portrait || portrait.parentElement === document.body) return;
+    document.body.appendChild(portrait);
+}
+
 function applyVisibility() {
     const page = document.getElementById('view-calendar');
     const stage = document.getElementById('day-stage');
@@ -735,7 +740,10 @@ function applyVisibility() {
     page.classList.toggle('day-stage-open', open);
     document.body.classList.toggle('day-stage-open', open);
     stage.hidden = !open;
-    if (portrait) portrait.hidden = !open || window.innerWidth <= 1200;
+    if (portrait) {
+        placePortraitOverNav(portrait);
+        portrait.hidden = !open || window.innerWidth <= 1024;
+    }
     if (open) renderDayStage(state.selectedDateStr);
     else resetTilt(stage);
 }
