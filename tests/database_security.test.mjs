@@ -61,3 +61,20 @@ test('mentor RPC migration restores review actions and protects comparison data'
     assert.match(sql, /daily_metrics, '\{\}'::jsonb\) - 'review_requests'/i);
     assert.match(sql, /REVOKE ALL ON FUNCTION public\.get_stats_comparison_journal\(UUID\) FROM PUBLIC, anon/i);
 });
+
+test('team directory exposes roster fields without profile secrets', async () => {
+    const sql = await readFile(new URL(
+        '../supabase/migrations/20260929130000_team_directory.sql',
+        import.meta.url,
+    ), 'utf8');
+
+    assert.match(sql, /CREATE OR REPLACE FUNCTION public\.team_directory\(\)/i);
+    assert.match(sql, /CREATE OR REPLACE FUNCTION public\.app_can_read_journal\(target_user_id UUID\)/i);
+    assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.team_directory\(\) TO authenticated/i);
+    assert.match(sql, /REVOKE ALL ON FUNCTION public\.team_directory\(\) FROM PUBLIC, anon/i);
+    assert.match(sql, /ALTER POLICY journal_days_read_owner_or_same_team_mentor/i);
+    assert.match(sql, /ALTER POLICY trades_select/i);
+    assert.doesNotMatch(sql, /gemini/i);
+    assert.doesNotMatch(sql, /user_settings/i);
+    assert.doesNotMatch(sql, /USING \(TRUE\)/i);
+});

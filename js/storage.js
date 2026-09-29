@@ -101,13 +101,22 @@ export async function resolveViewedUserId(docName = state.CURRENT_VIEWED_USER, o
     if (!docName) return setCurrentViewedUserId(null);
 
     const { force = false, syncGlobal = true } = options;
+    const nick = String(docName).replace(/_stats$/, '');
+    const knownId = state._teamProfiles?.[nick]?.id || null;
     if (!force && _profileIdCache.has(docName)) {
-        const cachedUserId = _profileIdCache.get(docName) || null;
+        const cachedUserId = _profileIdCache.get(docName) || knownId || null;
         if (syncGlobal) setCurrentViewedUserId(cachedUserId);
         return cachedUserId;
     }
 
-    const nick = String(docName).replace(/_stats$/, '');
+    // A trader cannot SELECT another profile row. The team directory already
+    // carries the id, so a direct lookup must not replace it with null.
+    if (knownId) {
+        _profileIdCache.set(docName, knownId);
+        if (syncGlobal) setCurrentViewedUserId(knownId);
+        return knownId;
+    }
+
     const { data, error } = await supabase
         .from('profiles')
         .select('id')

@@ -7,10 +7,13 @@ import { cacheValue, readCachedValue } from './local_data_store.js';
 const DEFAULT_TEAM = 'Без куща';
 const EXTRA_TEAMS_KEY = 'pj:extra-teams';
 
+const TEAM_DIRECTORY_CACHE_KEY = 'team-directory';
+
 let _isSwitching = false;
 let _teamsLoadPromise = null;
 let _teamsLoadToken = 0;
 let _teamsLoadWasAuthenticated = false;
+let _teamsDirectoryError = '';
 
 function extractNick(entry = '') {
     return (entry.includes('(') && entry.includes(')'))
@@ -134,18 +137,44 @@ function orderedTeamNames() {
     });
 }
 
+function directorySettings(raw) {
+    const settings = raw && typeof raw === 'object' ? raw : {};
+    const monthly = settings.monthlyDayloss && typeof settings.monthlyDayloss === 'object'
+        ? settings.monthlyDayloss
+        : {};
+    return {
+        avatar_url: String(settings.avatar_url || '').trim(),
+        avatar_emoji: String(settings.avatar_emoji || '').trim().slice(0, 16),
+        defaultDayloss: settings.defaultDayloss,
+        monthlyDayloss: monthly,
+    };
+}
+
+function normalizeDirectoryProfile(row) {
+    const nick = String(row?.nick || '').trim();
+    if (!nick) return null;
+    return {
+        id: row.id,
+        nick,
+        first_name: row.first_name || '',
+        last_name: row.last_name || '',
+        team: row.team || null,
+        mentor_enabled: !!row.mentor_enabled,
+        role: row.role || 'trader',
+        settings: directorySettings(row.settings),
+    };
+}
+
 async function fetchProfiles() {
     const { data: sessionData } = await supabase.auth.getSession();
     if (!sessionData?.session) return [];
 
-    const { data, error } = await supabase
-        .from('profiles')
-        .select('id, nick, first_name, last_name, team, mentor_enabled, email, role, settings')
-        .order('team', { ascending: true })
-        .order('nick', { ascending: true });
-
+    // Direct SELECT on profiles is limited to the signed-in row for a trader,
+    // and the settings column contains private keys. The directory RPC returns
+    // only the fields the team list is allowed to show.
+    const { data, error } = await supabase.rpc('team_directory');
     if (error) throw error;
-    return data || [];
+    return (data || []).map(normalizeDirectoryProfile).filter(Boolean);
 }
 
 async function fetchPublicTeamNames() {
@@ -241,11 +270,14 @@ async function performTeamsLoad(token) {
         }
 
         const userId = sessionData.session.user.id;
-        const cached = await readCachedValue(userId, 'team-profiles');
+        const cached = await readCachedValue(userId, TEAM_DIRECTORY_CACHE_KEY);
         if (!teamsLoadIsCurrent(token)) return;
-        if (Array.isArray(cached?.value) && cached.value.length && !Object.keys(state._teamProfiles || {}).length) {
-            state._teamProfiles = Object.fromEntries(cached.value.map(profile => [profile.nick, profile]));
-            state.TEAM_GROUPS = buildTeamGroups(cached.value);
+        const cachedProfiles = Array.isArray(cached?.value)
+            ? cached.value.map(normalizeDirectoryProfile).filter(Boolean)
+            : [];
+        if (cachedProfiles.length && !Object.keys(state._teamProfiles || {}).length) {
+            state._teamProfiles = Object.fromEntries(cachedProfiles.map(profile => [profile.nick, profile]));
+            state.TEAM_GROUPS = buildTeamGroups(cachedProfiles);
             refreshVisibleTeamUI();
             if (window.renderStatsSourceSelector) window.renderStatsSourceSelector();
         }
@@ -255,14 +287,17 @@ async function performTeamsLoad(token) {
         if (!profiles.length && state.USER_DOC_NAME) {
             throw new Error('Supabase повернув порожній список профілів');
         }
+        _teamsDirectoryError = '';
         state._teamProfiles = Object.fromEntries(profiles.map(profile => [profile.nick, profile]));
         state.TEAM_GROUPS = buildTeamGroups(profiles);
-        await cacheValue(userId, 'team-profiles', profiles);
+        await cacheValue(userId, TEAM_DIRECTORY_CACHE_KEY, profiles);
         fillAuthTeamSelect();
         refreshVisibleTeamUI();
         if (window.renderStatsSourceSelector) window.renderStatsSourceSelector();
     } catch (e) {
         if (!teamsLoadIsCurrent(token)) return;
+        const loadedProfiles = Object.keys(state._teamProfiles || {}).length;
+        _teamsDirectoryError = loadedProfiles > 1 ? '' : (e?.message || 'Не вдалося завантажити команду');
         console.error('Помилка завантаження кущів:', e);
         // Тимчасова помилка мережі/RLS не повинна стирати вже показану команду.
         if (!state.TEAM_GROUPS || Object.keys(state.TEAM_GROUPS).length === 0) {
@@ -664,7 +699,12 @@ function _renderTeamSidebarDOM(container) {
             memberItemsAdded++;
         });
 
-        if (
+        if (memberItemsAdded === 0 && myNick && _teamsDirectoryError) {
+            const hint = document.createElement('div');
+            hint.className = 'team-solo-hint';
+            hint.textContent = 'Не вдалося завантажити інших учасників. Оновіть сторінку ще раз.';
+            groupCard.appendChild(hint);
+        } else if (
             memberItemsAdded === 0 &&
             myNick &&
             members.some((t) => extractNick(t) === myNick)
