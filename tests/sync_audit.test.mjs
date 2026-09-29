@@ -6,7 +6,7 @@ import vm from 'node:vm';
 import * as store from '../js/local_data_store.js';
 import { createDataSyncEngine } from '../js/data_sync_engine.js';
 import { fetchExcelDownload } from '../js/excel_download_core.js';
-import { readSheetRangePages } from '../js/sheet_range_paging.js';
+import { isTransientSheetFetchError, readSheetRangePages } from '../js/sheet_range_paging.js';
 import { isRetryableSyncError } from '../js/data_sync_core.js';
 import { rebaseUploadEpoch } from '../js/upload_queue_core.js';
 import { loadBootProfile } from '../js/boot_profile.js';
@@ -177,6 +177,8 @@ test('large sheet pagination preserves gaps, hyperlinks and fails on network int
         if (range.startsWith('A501:')) throw new TypeError('network interrupted');
         return [['first']];
     } }), /network interrupted/);
+    assert.equal(isTransientSheetFetchError(new TypeError('Failed to fetch')), true);
+    assert.equal(isTransientSheetFetchError(Object.assign(new Error('Sheets service 400'), { status: 400 })), false);
 });
 
 test('HTTP request timeout remains retryable without blocking durable edits', () => {

@@ -26,7 +26,7 @@ import {
 } from './sheet_table.js';
 import { ensureGoogleApi, ensureGoogleIdentity } from './vendor_loader.js';
 import { state } from './state.js';
-import { readSheetRangePages } from './sheet_range_paging.js';
+import { isTransientSheetFetchError, readSheetRangePages } from './sheet_range_paging.js';
 
 const appConfig = window.TRADING_JOURNAL_CONFIG || {};
 const SERVICE_ACCOUNT_EMAIL = String(appConfig.googleServiceAccountEmail || '').trim();
@@ -197,26 +197,40 @@ async function fetchSheetsService(params) {
     if (!token) throw new Error('Supabase session expired');
     const url = new URL('/api/sheets-service', window.location.origin);
     Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
-    console.info('[Sheets service] request', params);
-    const response = await fetch(url.toString(), {
-        headers: {
-            Authorization: `Bearer ${token}`,
-            ...(accessToken ? { 'X-Google-Access-Token': accessToken } : {}),
-        },
-    });
-    const data = await response.json().catch(() => ({}));
-    console.info('[Sheets service] response', {
-        action: params.action || 'metadata',
-        status: response.status,
-        ok: response.ok && data.ok !== false,
-        error: data.error || '',
-    });
-    if (!response.ok || data.ok === false) {
-        const error = new Error(data.error || `Sheets service ${response.status}`);
-        error.status = response.status;
-        throw error;
+    let lastError;
+    for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+            console.info('[Sheets service] request', params);
+            const response = await fetch(url.toString(), {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    ...(accessToken ? { 'X-Google-Access-Token': accessToken } : {}),
+                },
+            });
+            const data = await response.json().catch(() => ({}));
+            console.info('[Sheets service] response', {
+                action: params.action || 'metadata',
+                status: response.status,
+                ok: response.ok && data.ok !== false,
+                error: data.error || '',
+            });
+            if (!response.ok || data.ok === false) {
+                const error = new Error(data.error || `Sheets service ${response.status}`);
+                error.status = response.status;
+                throw error;
+            }
+            return data;
+        } catch (error) {
+            lastError = error;
+            const retry = attempt < 2 && (isTransientSheetFetchError(error) || [502, 503, 504].includes(error?.status));
+            if (!retry) {
+                if (isTransientSheetFetchError(error)) throw new Error('Не вдалося зв’язатися з таблицею. Спробуйте зберегти ще раз.');
+                throw error;
+            }
+            await new Promise(resolve => setTimeout(resolve, 400 * (attempt + 1)));
+        }
     }
-    return data;
+    throw lastError;
 }
 
 export async function autoConnectTraderSheet(options = {}) {

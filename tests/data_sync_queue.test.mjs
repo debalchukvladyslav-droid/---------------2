@@ -62,6 +62,38 @@ test('restore epochs quarantine old edits and require an explicit choice', async
     assert.equal((await store.listDataOperations(user)).length, 0);
 });
 
+test('a closing local database is reopened and the save is kept', async () => {
+    const account = crypto.randomUUID();
+    await store.saveSyncMetadata(account, { epoch: 1, cursor: 0, initialized: true });
+    const probe = indexedDB.open('strum-local-data');
+    const connection = await new Promise((resolve, reject) => {
+        probe.onsuccess = () => resolve(probe.result);
+        probe.onerror = () => reject(probe.error);
+    });
+    const proto = Object.getPrototypeOf(connection);
+    connection.close();
+    const original = proto.transaction;
+    let failed = false;
+    proto.transaction = function transactionOnce(...args) {
+        if (!failed) {
+            failed = true;
+            const error = new Error('The database connection is closing.');
+            error.name = 'InvalidStateError';
+            throw error;
+        }
+        return original.apply(this, args);
+    };
+    try {
+        const saved = await store.commitLocalChanges(account, [{
+            domain: 'journal', entityId: '2026-09-29', value: { notes: 'kept', pnl: 1 },
+        }]);
+        assert.equal(saved.operationIds.length, 1);
+        assert.equal((await store.readCachedDay(account, '2026-09-29')).row.notes, 'kept');
+    } finally {
+        proto.transaction = original;
+    }
+});
+
 test('queues are isolated by account', async () => {
     const other = '22222222-2222-4222-8222-222222222222';
     await store.saveSyncMetadata(other, { epoch: 1, cursor: 0, initialized: true });

@@ -1,3 +1,8 @@
+export function isTransientSheetFetchError(error) {
+    const message = String(error?.message || error || '');
+    return error?.name === 'TypeError' || /failed to fetch|networkerror|load failed/i.test(message);
+}
+
 // Sheets values responses omit trailing empty rows. Keep absolute row positions
 // when concatenating pages, including completely empty intermediate pages.
 export async function readSheetRangePages(range, { rowCount, read, pageSize = 500 }) {

@@ -27,7 +27,16 @@ function openDb() {
         };
         request.onsuccess = () => {
             const db = request.result;
-            db.onversionchange = () => { db.close(); dbPromise = null; };
+            const release = () => {
+                const pending = dbPromise;
+                if (!pending) return;
+                pending.then(open => { if (open === db) dbPromise = null; }).catch(() => {});
+            };
+            db.onversionchange = () => {
+                release();
+                try { db.close(); } catch { /* already closing */ }
+            };
+            db.onclose = release;
             resolve(db);
         };
         request.onerror = () => reject(request.error);
@@ -35,10 +44,19 @@ function openDb() {
     }).catch(error => { dbPromise = null; throw error; });
     return dbPromise;
 }
-async function transact(names, mode, run) {
-    const db = await openDb();
+export function isClosingDatabaseError(error) {
+    return error?.name === 'InvalidStateError'
+        || /database connection is closing/i.test(String(error?.message || ''));
+}
+function runTransaction(db, names, mode, run) {
     return new Promise((resolve, reject) => {
-        const tx = db.transaction(names, mode);
+        let tx;
+        try {
+            tx = db.transaction(names, mode);
+        } catch (error) {
+            reject(error);
+            return;
+        }
         const stores = Object.fromEntries(names.map(name => [name, tx.objectStore(name)]));
         let result;
         let failure;
@@ -49,6 +67,19 @@ async function transact(names, mode, run) {
             try { tx.abort(); } catch { reject(error); }
         });
     });
+}
+async function transact(names, mode, run) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+        const db = await openDb();
+        try {
+            return await runTransaction(db, names, mode, run);
+        } catch (error) {
+            if (attempt || !isClosingDatabaseError(error)) throw error;
+            dbPromise = null;
+            try { db.close(); } catch { /* already closing */ }
+        }
+    }
+    throw syncError('Локальні зміни не збережено.', 'LOCAL_STORAGE_FAILED');
 }
 const entityStore = domain => domain === 'journal' ? STORES.days : STORES.values;
 const entityKey = (userId, domain, entityId) => `${userId}:${domain === 'journal' ? entityId : 'settings'}`;
@@ -532,7 +563,12 @@ export async function withDataSyncLease(userId, owner, run) {
         });
     }
 }
-export async function closeLocalDataStore() { if (dbPromise) (await dbPromise).close(); dbPromise = null; }
+export async function closeLocalDataStore() {
+    const pending = dbPromise;
+    dbPromise = null;
+    if (!pending) return;
+    try { (await pending).close(); } catch { /* already closing */ }
+}
 export function publishSyncState(state, detail = {}) {
     if (typeof document === 'undefined') return;
     document.documentElement.dataset.syncState = state;
