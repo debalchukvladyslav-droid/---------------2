@@ -59,7 +59,7 @@ const TOKEN_STORAGE_KEY = 'sheet_google_access_token';
 const TOKEN_EXPIRES_KEY = 'sheet_google_access_token_expires_at';
 const SCOPES_VERSION_KEY = 'sheet_google_scopes_v';
 const SELECTED_SHEET_TITLE_KEY = 'sheet_selected_sheet_title';
-const SHEET_PREVIEW_MAX_ROWS = 2500;
+const SHEET_PREVIEW_MAX_ROWS = 60;
 const SHEET_PREVIEW_MAX_COLS = 52;
 const AUTO_TABLE_SPREADSHEET_IDS = [
     '1A4sPWQTryHs4QofoM1p0oCaYDWcDM_OPwp3fOQEX4Co',
