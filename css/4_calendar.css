@@ -343,13 +343,15 @@
 .day-portrait[hidden],
 .day-stage[hidden] { display: none !important; }
 
+body.day-stage-open { --day-rail: clamp(360px, 38vw, 520px); }
+
 .day-portrait {
     position: fixed;
     top: 0;
     bottom: 0;
     left: 0;
     z-index: var(--z-sidebar);
-    width: 256px;
+    width: var(--day-rail, 256px);
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
@@ -367,7 +369,37 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 12px;
+}
+
+.day-portrait-head { margin: 0; }
+
+.day-portrait-title {
+    margin: 0;
+    color: var(--text-main);
+    font-family: var(--font-head);
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+
+.day-portrait-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(140px, 0.85fr);
+    gap: 10px;
+    align-items: stretch;
+}
+
+.day-portrait .session-field-playbook {
+    min-height: 0;
+    overflow: auto;
+}
+
+.day-portrait .session-field textarea { min-height: 92px; }
+
+.day-portrait .session-readiness-card,
+.day-portrait .btn-ai {
+    width: 100%;
+    margin: 0;
 }
 
 .day-portrait-kicker {
@@ -495,7 +527,7 @@
     position: fixed;
     top: 0;
     bottom: 0;
-    left: 256px;
+    left: var(--day-rail, 256px);
     right: 430px;
     z-index: var(--z-panel);
     overflow: auto;
@@ -503,7 +535,7 @@
 }
 
 .app-sidebar.collapsed ~ .main-content .day-stage,
-.main-content.expanded .day-stage { left: 256px; }
+.main-content.expanded .day-stage { left: var(--day-rail, 256px); }
 
 .day-stage-scroll {
     position: relative;
@@ -981,7 +1013,7 @@
 }
 
 @media (max-width: 1200px) and (min-width: 1025px) {
-    .day-stage { left: 256px; }
+    .day-stage { left: var(--day-rail, 256px); }
 }
 
 @media (max-width: 1024px) {

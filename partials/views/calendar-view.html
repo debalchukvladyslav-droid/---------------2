@@ -40,26 +40,40 @@
                 </div>
             </div>
 
-            <aside id="day-portrait" class="day-portrait" hidden aria-label="Почати сесію">
+            <aside id="day-portrait" class="day-portrait" hidden aria-label="Підготовка до сесії">
                 <div class="day-portrait-scroll">
-                    <div class="form-group">
-                        <label>🎯 Ціль на сьогодні</label>
-                        <input type="text" id="day-prep-goal" placeholder="Напр. Торгувати тільки за планом, макс 2 угоди">
+                    <header class="day-portrait-head">
+                        <div class="session-modal-kicker">Перед сесією</div>
+                        <h2 class="day-portrait-title">Підготовка до сесії</h2>
+                        <div id="day-portrait-date" class="session-modal-date"></div>
+                    </header>
+                    <div class="day-portrait-grid">
+                        <label class="session-field session-field-goal">
+                            <span class="session-field-label">Ціль дня</span>
+                            <input type="text" id="day-prep-goal" placeholder="Торгувати тільки A+ сетапи, максимум 2 угоди">
+                        </label>
+                        <label class="session-field session-field-plan">
+                            <span class="session-field-label">План сесії</span>
+                            <textarea id="day-prep-plan" rows="4" placeholder="Які сетапи беру, де стоп, коли пропускаю ринок..."></textarea>
+                        </label>
+                        <section class="session-field session-field-playbook">
+                            <div class="session-field-label">Критерії за 2 місяці</div>
+                            <div id="day-prep-criteria" class="session-criteria-hints"></div>
+                        </section>
                     </div>
-                    <div class="form-group">
-                        <label>Критерії за 2 місяці</label>
-                        <div id="day-prep-criteria" class="session-criteria-hints"></div>
-                    </div>
-                    <div class="form-group">
-                        <label>💪 Загальна готовність</label>
-                        <div class="readiness-labels">
-                            <span>🔴 Не готовий</span>
-                            <span id="day-prep-readiness-val" class="readiness-val">5/10</span>
-                            <span>🟢 Готовий</span>
+                    <div class="session-readiness-card day-portrait-readiness">
+                        <div>
+                            <div class="session-field-label">Готовність</div>
+                            <div class="session-readiness-copy">Оціни стан перед першим кліком.</div>
                         </div>
-                        <input type="range" min="1" max="10" value="5" id="day-prep-readiness" class="discipline-slider session-readiness" data-output="day-prep-readiness-val" data-suffix="/10">
+                        <span id="day-prep-readiness-val" class="session-readiness-value">5/10</span>
+                        <div class="session-readiness-head">
+                            <span>Не готовий</span>
+                            <span>Готовий</span>
+                        </div>
+                        <input type="range" min="1" max="10" value="5" id="day-prep-readiness" class="discipline-slider range-full-accent" data-output="day-prep-readiness-val" data-suffix="/10">
                     </div>
-                    <button type="button" class="btn-ai" data-action="session-readiness-check">🤖 AI: Чи готовий торгувати?</button>
+                    <button type="button" class="btn-ai" data-action="session-readiness-check">AI: Чи готовий торгувати?</button>
                     <div id="day-prep-ai-result" class="session-ai-result"></div>
                 </div>
             </aside>

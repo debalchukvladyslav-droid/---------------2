@@ -386,6 +386,7 @@ function ensureBound() {
     mirrorField('day-stage-notes', 'trade-notes');
     mirrorField('day-stage-improvement', 'next-session-improvement');
     mirrorField('day-prep-goal', 'session-goal');
+    mirrorField('day-prep-plan', 'session-plan');
     mirrorRange('day-prep-readiness', 'session-readiness', 'day-prep-readiness-val', 'session-readiness-val');
     document.addEventListener('pointerdown', (event) => {
         const menu = document.getElementById('day-grade-menu');
@@ -891,11 +892,18 @@ function renderPrep(dateStr) {
     const day = state.appData?.journal?.[dateStr] || {};
     const editable = isOwnJournal() && !state.dayDetailsLoading;
     const goal = document.getElementById('day-prep-goal');
+    const plan = document.getElementById('day-prep-plan');
     const readiness = document.getElementById('day-prep-readiness');
     const readinessLabel = document.getElementById('day-prep-readiness-val');
+    const portraitDate = document.getElementById('day-portrait-date');
+    if (portraitDate) portraitDate.textContent = dateStr;
     if (goal) {
         goal.readOnly = !editable;
         setIdleValue(goal, document.getElementById('session-goal')?.value ?? day.sessionGoal ?? '');
+    }
+    if (plan) {
+        plan.readOnly = !editable;
+        setIdleValue(plan, document.getElementById('session-plan')?.value ?? day.sessionPlan ?? '');
     }
     if (readiness) {
         readiness.disabled = !editable;
