@@ -32,6 +32,17 @@ test('settings commit offline without a getUser network request', async () => {
     assert.equal(commits[0][1][0].value.theme, 'local');
 });
 
+test('a known local account does not wait on getSession', async () => {
+    let called = false;
+    const { api, commits } = harness({
+        supabase: { auth: { getSession: async () => { called = true; return new Promise(() => {}); } } },
+    });
+    await api.saveSettings();
+    assert.equal(called, false);
+    assert.equal(commits.length, 1);
+    assert.equal(commits[0][0], 'owner');
+});
+
 test('a failed auth refresh still saves with the signed-in account', async () => {
     const error = new TypeError('Failed to fetch');
     error.name = 'AuthRetryableFetchError';

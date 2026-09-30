@@ -145,8 +145,12 @@ function knownLocalUser() {
 async function getCurrentUserContext({ local = false } = {}) {
     // Local persistence must work without an Auth network round trip. The RPC
     // validates the session when the durable operations eventually reach it.
-    // getSession still refreshes an expiring token and throws AuthRetryableFetchError
-    // when that refresh cannot reach Supabase.
+    // getSession refreshes an expiring token and waits on the same auth lock as
+    // every other Supabase call, so a hung refresh stalls the whole journal boot.
+    if (local) {
+        const known = knownLocalUser();
+        if (known?.id) return { user: known, userId: known.id, email: known.email || '' };
+    }
     if (!local) {
         const user = await getCurrentSupabaseUser();
         return { user, userId: user?.id || null, email: user?.email || '' };
@@ -710,11 +714,19 @@ export async function loadSettings() {
             applySettingsPayload(cached.value);
         }
         if (navigator.onLine === false || state.offlineBoot) return;
-        const { data, error } = await supabase
-            .from('profiles')
-            .select('settings')
-            .eq('id', user.id)
-            .single();
+        const deadline = requestDeadline();
+        let data;
+        let error;
+        try {
+            ({ data, error } = await supabase
+                .from('profiles')
+                .select('settings')
+                .eq('id', user.id)
+                .abortSignal(deadline.signal)
+                .single());
+        } finally {
+            deadline.cancel();
+        }
         if (error) throw error;
         if (!current()) return;
         if (data?.settings && typeof data.settings === 'object') {
@@ -789,7 +801,8 @@ export async function loadSettings() {
             console.log('✅ Settings завантажено з Supabase');
         }
     } catch (e) {
-        console.error('❌ Помилка завантаження settings:', e);
+        if (isRequestAbort(e)) console.warn('[LOAD] settings: сервер не відповів вчасно');
+        else console.error('❌ Помилка завантаження settings:', e);
     }
 }
 
@@ -860,7 +873,7 @@ async function _doSave(opts = {}) {
         const rows = entries.map(([dateStr, entry]) => {
             if (Array.isArray(entry?.trades)) entry.trades = ensureTradeIds(entry.trades);
             const row = dayEntryToJournalRow(userId, dateStr, entry);
-            row.daily_metrics.user_email = email;
+            if (email) row.daily_metrics.user_email = email;
             return row;
         });
 
@@ -922,16 +935,48 @@ function _computeAggregation(journal) {
     };
 }
 
+function isRequestAbort(error) {
+    return error?.name === 'AbortError'
+        || /aborted|abort/i.test(String(error?.message || error?.details || ''));
+}
+
+function requestDeadline(timeoutMs = 12000) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    return { signal: controller.signal, cancel() { clearTimeout(timeout); } };
+}
+
+function settleWithin(operation, timeoutMs) {
+    let timeoutId;
+    const deadline = new Promise((resolve) => {
+        timeoutId = setTimeout(() => resolve({ settled: false }), timeoutMs);
+    });
+    return Promise.race([
+        Promise.resolve(operation).then(
+            (value) => ({ settled: true, value }),
+            (error) => ({ settled: true, error }),
+        ),
+        deadline,
+    ]).finally(() => clearTimeout(timeoutId));
+}
+
 async function loadBootstrapJournal(nick, userId, months) {
     const ordered = [...new Set(months)].sort();
     if (!userId || !ordered.length) return false;
     const first = getMonthRange(ordered[0]).start;
     const last = getMonthRange(ordered.at(-1)).end;
-    const { data, error } = await supabase.rpc('get_app_bootstrap', {
-        target_user_id: userId,
-        date_from: first,
-        date_to: last,
-    });
+    const deadline = requestDeadline();
+    let data;
+    let error;
+    try {
+        ({ data, error } = await supabase.rpc('get_app_bootstrap', {
+            target_user_id: userId,
+            date_from: first,
+            date_to: last,
+        }).abortSignal(deadline.signal));
+    } finally {
+        deadline.cancel();
+    }
     if (error) {
         console.warn('[LOAD] bootstrap unavailable, using month queries:', error.message);
         return false;
@@ -992,22 +1037,32 @@ export async function loadMonth(nick, mk, userId = null) {
         }
         if (navigator.onLine === false || state.offlineBoot) return;
         const { start, end } = getMonthRange(mk);
-        const { data, error } = await supabase
-            .from('journal_days')
-            .select('id, user_id, trade_date, pnl, gross_pnl, commissions, locates, notes, mentor_comment, ai_advice, daily_metrics')
-            .eq('user_id', targetUserId)
-            .gte('trade_date', start)
-            .lte('trade_date', end)
-            .order('trade_date', { ascending: true });
+        const deadline = requestDeadline();
+        let data;
+        let error;
+        let tradeResult;
+        try {
+            ({ data, error } = await supabase
+                .from('journal_days')
+                .select('id, user_id, trade_date, pnl, gross_pnl, commissions, locates, notes, mentor_comment, ai_advice, daily_metrics')
+                .eq('user_id', targetUserId)
+                .gte('trade_date', start)
+                .lte('trade_date', end)
+                .order('trade_date', { ascending: true })
+                .abortSignal(deadline.signal));
 
-        if (error) throw error;
-        const tradeResult = await supabase
-            .from('trades')
-            .select('id, trade_date, version, payload, deleted_at')
-            .eq('user_id', targetUserId)
-            .gte('trade_date', start)
-            .lte('trade_date', end)
-            .is('deleted_at', null);
+            if (error) throw error;
+            tradeResult = await supabase
+                .from('trades')
+                .select('id, trade_date, version, payload, deleted_at')
+                .eq('user_id', targetUserId)
+                .gte('trade_date', start)
+                .lte('trade_date', end)
+                .is('deleted_at', null)
+                .abortSignal(deadline.signal);
+        } finally {
+            deadline.cancel();
+        }
         const rows = mergeTradeRows(data || [], tradeResult.error ? [] : tradeResult.data || []);
         await cacheJournalRows(targetUserId, rows.filter((row) => !_dirtyJournalDates.has(row.trade_date)), { dirty: false });
 
@@ -1035,7 +1090,8 @@ export async function loadMonth(nick, mk, userId = null) {
         state._availableMonthKeys.add(mk);
         console.log(`[LOAD] ✅ ${mk}: завантажено ${rows.length} днів із Supabase`);
     } catch (e) {
-        console.error(`❌ Помилка завантаження місяця ${mk}:`, e);
+        if (isRequestAbort(e)) console.warn(`[LOAD] ${mk}: сервер не відповів вчасно`);
+        else console.error(`❌ Помилка завантаження місяця ${mk}:`, e);
     }
 }
 
@@ -1316,14 +1372,23 @@ function hideLoadingToast() {
 export async function initializeApp() {
     console.log('⏳ Завантаження бази даних для:', state.CURRENT_VIEWED_USER);
     showGlobalLoader('app-init', 'Завантаження журналу...');
+    let deferredServerNotice = false;
+    let serverJournal = Promise.resolve(false);
 
     try {
         const nick = state.CURRENT_VIEWED_USER;
         const isViewingOwnProfile = nick === state.USER_DOC_NAME;
         const viewedUserId = getCurrentViewedUserId() || await resolveViewedUserId(nick, { force: true });
         if (!viewedUserId) throw new Error(`Не вдалося визначити userId для ${nick}`);
-        if (isViewingOwnProfile) await ensureDataSyncMetadata(viewedUserId);
-        else stopDataSync();
+        if (isViewingOwnProfile) {
+            const cachedEpoch = await readCachedEpoch(viewedUserId);
+            if (cachedEpoch != null) await ensureDataSyncMetadata(viewedUserId);
+            else {
+                void ensureDataSyncMetadata(viewedUserId).catch((error) => {
+                    console.warn('[LOAD] sync metadata deferred:', error?.message || error);
+                });
+            }
+        } else stopDataSync();
         const previousAppData = state.appData && typeof state.appData === 'object' ? state.appData : {};
         const baseAppData = getDefaultAppData();
         if (!isViewingOwnProfile) {
@@ -1353,72 +1418,107 @@ export async function initializeApp() {
         const restoredLocalDays = await hydrateLocalJournal(viewedUserId, [prevMk, currentMk]);
         if (restoredLocalDays) {
             console.log(`[LOAD] local-first: rendered ${restoredLocalDays} cached days before server sync`);
+        }
+
+        serverJournal = (async () => {
+            if (navigator.onLine === false || state.offlineBoot) return true;
+            const [bootstrapLoaded] = await Promise.all([
+                loadBootstrapJournal(nick, viewedUserId, [prevMk, currentMk]),
+                isViewingOwnProfile ? loadSettings() : Promise.resolve(),
+            ]);
+            if (!isCurrentProfileRequest(nick, viewedUserId)) return false;
+            if (!bootstrapLoaded) {
+                await Promise.all([
+                    loadMonth(nick, currentMk, viewedUserId),
+                    loadMonth(nick, prevMk, viewedUserId),
+                ]);
+            }
+            if (state.selectedDateStr) {
+                const selMk = monthKey(state.selectedDateStr);
+                if (selMk !== currentMk && selMk !== prevMk) {
+                    await loadMonth(nick, selMk, viewedUserId);
+                }
+            }
+            return isCurrentProfileRequest(nick, viewedUserId);
+        })();
+
+        const finishJournalShell = async () => {
+            state.appData.unassignedImages = Array.isArray(state.appData.unassignedImages)
+                ? state.appData.unassignedImages
+                : [];
+
+            const s = state.appData.settings;
+            const themeRadio = document.getElementById('theme-' + (s.theme || 'dark'));
+            const fontRadio = document.getElementById('font-' + (s.font || 'inter'));
+            const daylossInput = document.getElementById('setting-dayloss-limit');
+            const daylossMonthInput = document.getElementById('setting-dayloss-month');
+
+            if (themeRadio) themeRadio.checked = true;
+            if (fontRadio) fontRadio.checked = true;
+            if (daylossInput) daylossInput.value = s.defaultDayloss || -1000;
+            if (daylossMonthInput) daylossMonthInput.value = state.selectedDateStr?.slice(0, 7) || new Date().toISOString().slice(0, 7);
+
+            if (s.theme === 'custom' && s.customTheme) {
+                ['bg-main', 'bg-panel', 'text-main', 'accent', 'profit', 'loss'].forEach((f, i) => {
+                    const el = document.getElementById(`ct-${f}`);
+                    if (el) el.value = s.customTheme[['bgMain', 'bgPanel', 'textMain', 'accent', 'profit', 'loss'][i]];
+                });
+            }
+
+            if (window.initSelectors) window.initSelectors();
+            state.statsSourceSelection = { type: 'current', key: state.CURRENT_VIEWED_USER };
+            if (window.applyTheme) window.applyTheme(true);
+            if (window.updateAutoFlags) await window.updateAutoFlags();
+            if (window.renderErrorsList) window.renderErrorsList();
+            if (window.renderSettingsChecklist) window.renderSettingsChecklist();
+            if (window.renderSettingsSliders) window.renderSettingsSliders();
+            if (window.renderDaylossSettings) window.renderDaylossSettings();
+            if (window.renderMyTradeTypes) window.renderMyTradeTypes();
             if (window.renderView) await window.renderView();
             if (window.selectDate) window.selectDate(state.selectedDateStr);
-        }
+            if (window.renderJournalScore) void window.renderJournalScore();
+            if (window.applyAccessRights) window.applyAccessRights();
+            if (window.updateDriveUI) window.updateDriveUI();
+            if (isViewingOwnProfile) beginDataSync(viewedUserId);
+        };
 
-        const [bootstrapLoaded] = await Promise.all([
-            navigator.onLine === false || state.offlineBoot ? Promise.resolve(true) : loadBootstrapJournal(nick, viewedUserId, [prevMk, currentMk]),
-            isViewingOwnProfile ? loadSettings() : Promise.resolve(),
-        ]);
-        if (!bootstrapLoaded) {
-            await Promise.all([
-                loadMonth(nick, currentMk, viewedUserId),
-                loadMonth(nick, prevMk, viewedUserId),
-            ]);
-        }
+        const refreshWhenServerArrives = () => {
+            void serverJournal.then(async (current) => {
+                if (!current || !isCurrentProfileRequest(nick, viewedUserId)) return;
+                if (window.applyTheme) window.applyTheme(true);
+                if (window.updateAutoFlags) await window.updateAutoFlags();
+                if (window.renderView) await window.renderView();
+                if (window.selectDate) window.selectDate(state.selectedDateStr);
+            }).catch((error) => {
+                console.warn('[LOAD] server journal deferred:', error?.message || error);
+            });
+        };
 
-        if (state.selectedDateStr) {
-            const selMk = monthKey(state.selectedDateStr);
-            if (selMk !== currentMk && selMk !== prevMk) {
-                await loadMonth(nick, selMk, viewedUserId);
+        // Cached days open the journal immediately. A stalled server read must
+        // not fail boot after the calendar can already render.
+        if (restoredLocalDays || navigator.onLine === false || state.offlineBoot) {
+            await finishJournalShell();
+            if (navigator.onLine !== false && !state.offlineBoot) refreshWhenServerArrives();
+        } else {
+            const result = await settleWithin(serverJournal, 8000);
+            if (result.error) console.warn('[LOAD] server journal:', result.error?.message || result.error);
+            await finishJournalShell();
+            if (!result.settled) {
+                deferredServerNotice = true;
+                refreshWhenServerArrives();
             }
         }
-
-        state.appData.unassignedImages = Array.isArray(state.appData.unassignedImages)
-            ? state.appData.unassignedImages
-            : [];
-
-        const s = state.appData.settings;
-        const themeRadio = document.getElementById('theme-' + (s.theme || 'dark'));
-        const fontRadio = document.getElementById('font-' + (s.font || 'inter'));
-        const daylossInput = document.getElementById('setting-dayloss-limit');
-        const daylossMonthInput = document.getElementById('setting-dayloss-month');
-
-        if (themeRadio) themeRadio.checked = true;
-        if (fontRadio) fontRadio.checked = true;
-        if (daylossInput) daylossInput.value = s.defaultDayloss || -1000;
-        if (daylossMonthInput) daylossMonthInput.value = state.selectedDateStr?.slice(0, 7) || new Date().toISOString().slice(0, 7);
-
-        if (s.theme === 'custom' && s.customTheme) {
-            ['bg-main', 'bg-panel', 'text-main', 'accent', 'profit', 'loss'].forEach((f, i) => {
-                const el = document.getElementById(`ct-${f}`);
-                if (el) el.value = s.customTheme[['bgMain', 'bgPanel', 'textMain', 'accent', 'profit', 'loss'][i]];
-            });
-        }
-
-        if (window.initSelectors) window.initSelectors();
-        state.statsSourceSelection = { type: 'current', key: state.CURRENT_VIEWED_USER };
-        if (window.applyTheme) window.applyTheme(true);
-        if (window.updateAutoFlags) await window.updateAutoFlags();
-        if (window.renderErrorsList) window.renderErrorsList();
-        if (window.renderSettingsChecklist) window.renderSettingsChecklist();
-        if (window.renderSettingsSliders) window.renderSettingsSliders();
-        if (window.renderDaylossSettings) window.renderDaylossSettings();
-        if (window.renderMyTradeTypes) window.renderMyTradeTypes();
-        if (window.renderView) await window.renderView();
-        if (window.selectDate) window.selectDate(state.selectedDateStr);
-        if (window.renderJournalScore) void window.renderJournalScore();
-        if (window.applyAccessRights) window.applyAccessRights();
-        if (window.updateDriveUI) window.updateDriveUI();
-        if (isViewingOwnProfile) beginDataSync(viewedUserId);
     } catch (e) {
         console.error('Data load failed:', e);
         state.appData = normalizeAppData(getDefaultAppData());
         showLoadingToast('❌ Не вдалося завантажити дані.', true, true);
     } finally {
         hideGlobalLoader('app-init');
-        hideLoadingToast();
+        if (!deferredServerNotice) hideLoadingToast();
+    }
+    if (deferredServerNotice) {
+        showLoadingToast('Сервер журналу ще відповідає. Календар відкрито, дані оновляться автоматично.', true);
+        void serverJournal.finally(() => hideLoadingToast());
     }
 }
 

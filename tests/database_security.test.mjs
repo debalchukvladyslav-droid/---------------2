@@ -78,3 +78,26 @@ test('team directory exposes roster fields without profile secrets', async () =>
     assert.doesNotMatch(sql, /user_settings/i);
     assert.doesNotMatch(sql, /USING \(TRUE\)/i);
 });
+
+test('team directory outlives the shared authenticated statement timeout', async () => {
+    const sql = await readFile(new URL(
+        '../supabase/migrations/20260930130000_keep_team_directory_available.sql',
+        import.meta.url,
+    ), 'utf8');
+
+    assert.match(sql, /SET statement_timeout = '12s'/i);
+    assert.match(sql, /SET lock_timeout = '4s'/i);
+    assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.team_directory\(\) TO authenticated/i);
+    assert.match(sql, /REVOKE ALL ON FUNCTION public\.team_directory\(\) FROM PUBLIC, anon/i);
+    assert.match(sql, /public\.app_is_approved\(\)/);
+    assert.doesNotMatch(sql, /gemini/i);
+    assert.doesNotMatch(sql, /USING \(TRUE\)/i);
+});
+
+test('a busy team directory retries before it is reported as a sidebar failure', async () => {
+    const source = await readFile(new URL('../js/teams.js', import.meta.url), 'utf8');
+    const load = source.slice(source.indexOf('async function performTeamsLoad'), source.indexOf('export function loadTeams'));
+    assert.match(load, /loadDirectoryProfiles\(token\)/);
+    assert.match(load, /console\.warn\('\[teams\] directory refresh deferred:'/);
+    assert.match(source, /isTransientDirectoryError/);
+});

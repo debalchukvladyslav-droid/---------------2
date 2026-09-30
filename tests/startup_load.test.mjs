@@ -14,6 +14,9 @@ test('startup loads core months and light dashboard feeds while keeping heavy an
     assert.doesNotMatch(initializeBody, /window\.loadImages\(\)/);
     assert.doesNotMatch(initializeBody, /loadScreenshotRegistry/);
     assert.match(initializeBody, /loadMonth\(nick, currentMk, viewedUserId\)/);
+    assert.match(initializeBody, /settleWithin\(serverJournal, 8000\)/);
+    const localOpen = initializeBody.slice(initializeBody.indexOf('if (restoredLocalDays || navigator.onLine === false || state.offlineBoot)'));
+    assert.doesNotMatch(localOpen.slice(0, localOpen.indexOf('} else {')), /await serverJournal/);
     assert.match(main, /setTimeout\(async \(\) => \{/);
     assert.match(main, /\}, 5000\)/);
     assert.doesNotMatch(realtime, /loadTradeDays/);

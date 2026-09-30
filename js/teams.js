@@ -165,6 +165,13 @@ function normalizeDirectoryProfile(row) {
     };
 }
 
+function isTransientDirectoryError(error) {
+    const message = String(error?.message || error?.details || '');
+    return error?.code === '57014'
+        || error?.code === '55P03'
+        || /statement timeout|canceling statement|lock timeout|lock not available|failed to fetch|networkerror|load failed/i.test(message);
+}
+
 async function fetchProfiles() {
     const { data: sessionData } = await supabase.auth.getSession();
     if (!sessionData?.session) return [];
@@ -175,6 +182,20 @@ async function fetchProfiles() {
     const { data, error } = await supabase.rpc('team_directory');
     if (error) throw error;
     return (data || []).map(normalizeDirectoryProfile).filter(Boolean);
+}
+
+async function loadDirectoryProfiles(token) {
+    let lastError;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+            return await fetchProfiles();
+        } catch (error) {
+            lastError = error;
+            if (attempt === 1 || !isTransientDirectoryError(error) || !teamsLoadIsCurrent(token)) break;
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+    }
+    throw lastError;
 }
 
 async function fetchPublicTeamNames() {
@@ -282,7 +303,7 @@ async function performTeamsLoad(token) {
             if (window.renderStatsSourceSelector) window.renderStatsSourceSelector();
         }
 
-        const profiles = await fetchProfiles();
+        const profiles = await loadDirectoryProfiles(token);
         if (!teamsLoadIsCurrent(token)) return;
         if (!profiles.length && state.USER_DOC_NAME) {
             throw new Error('Supabase повернув порожній список профілів');
@@ -297,6 +318,11 @@ async function performTeamsLoad(token) {
     } catch (e) {
         if (!teamsLoadIsCurrent(token)) return;
         const loadedProfiles = Object.keys(state._teamProfiles || {}).length;
+        if (loadedProfiles > 0 && isTransientDirectoryError(e)) {
+            _teamsDirectoryError = '';
+            console.warn('[teams] directory refresh deferred:', e?.message || e);
+            return;
+        }
         _teamsDirectoryError = loadedProfiles > 1 ? '' : (e?.message || 'Не вдалося завантажити команду');
         console.error('Помилка завантаження кущів:', e);
         // Тимчасова помилка мережі/RLS не повинна стирати вже показану команду.
