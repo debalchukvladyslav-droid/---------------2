@@ -40,26 +40,32 @@
                 </div>
             </div>
 
-            <aside id="day-portrait" class="day-portrait" hidden aria-label="Підготовка до сесії">
+            <aside id="day-portrait" class="day-portrait" hidden aria-label="Почати сесію">
                 <div class="day-portrait-scroll">
-                    <header class="day-prep-head">
-                        <div>
-                            <p class="day-portrait-kicker">Підготовка до сесії</p>
-                            <p class="day-prep-sub">Перед відкриттям ринку</p>
+                    <div class="form-group">
+                        <label>🎯 Ціль на сьогодні</label>
+                        <input type="text" id="day-prep-goal" placeholder="Напр. Торгувати тільки за планом, макс 2 угоди">
+                    </div>
+                    <div class="form-group">
+                        <label>Критерії за 2 місяці</label>
+                        <div id="day-prep-criteria" class="session-criteria-hints"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>💪 Загальна готовність</label>
+                        <div class="readiness-labels">
+                            <span>🔴 Не готовий</span>
+                            <span id="day-prep-readiness-val" class="readiness-val">5/10</span>
+                            <span>🟢 Готовий</span>
                         </div>
-                        <strong id="day-prep-progress">0/0</strong>
-                    </header>
-                    <div id="day-portrait-checklist" class="day-prep-list"></div>
-                    <button type="button" class="day-prep-add" data-action="day-prep-add">+ Додати пункт</button>
-                    <label class="day-prep-notes">
-                        <span>Нотатки перед сесією</span>
-                        <textarea id="day-prep-notes" rows="4" placeholder="Що важливо памʼятати перед відкриттям…"></textarea>
-                    </label>
-                    <button type="button" class="day-prep-start" data-action="session-modal-open">Почати сесію</button>
+                        <input type="range" min="1" max="10" value="5" id="day-prep-readiness" class="discipline-slider session-readiness" data-output="day-prep-readiness-val" data-suffix="/10">
+                    </div>
+                    <button type="button" class="btn-ai" data-action="session-readiness-check">🤖 AI: Чи готовий торгувати?</button>
+                    <div id="day-prep-ai-result" class="session-ai-result"></div>
                 </div>
             </aside>
 
             <div id="day-stage" class="day-stage" hidden>
+                <div class="day-stage-scroll">
                 <button type="button" class="day-stage-veil" data-action="day-stage-close" aria-label="Закрити день"></button>
                 <div class="day-stage-frame">
                     <button type="button" class="day-stage-form" data-action="day-stage-form">Форма</button>
@@ -76,9 +82,7 @@
                             <article class="day-stage-card day-tilt" id="day-stage-card" data-tilt></article>
                         </div>
                         <div class="day-stage-scores" id="day-stage-scores"></div>
-                        <div class="day-stage-screens" id="day-stage-screens"></div>
                     </div>
-                    <section class="day-stage-trades" id="day-stage-trades" aria-label="Угоди за день"></section>
                     <div class="day-stage-thoughts">
                         <label class="day-stage-thought day-tilt" data-tilt>
                             <span>Думка дня</span>
@@ -89,6 +93,8 @@
                             <textarea id="day-stage-improvement" rows="3" placeholder="Одна конкретна дія для дисципліни наступного разу…"></textarea>
                         </label>
                     </div>
+                    <section class="day-stage-trades" id="day-stage-trades" aria-label="Угоди за день"></section>
+                </div>
                 </div>
             </div>
         </div>

@@ -11,7 +11,7 @@ import { getCalendarDayResult, getEffectiveDayPnl, isSheetOnlyPnl, visibleTradeR
 import { pickSheetRowsSource } from './datagrid_rows.js';
 import { getNyseDaySchedule } from './nyse_calendar.js';
 import { resolveMonthlyDayloss } from './data_utils.js';
-import { openDayStage, refreshDayStage, syncDayExtras } from './day_stage.js';
+import { openDayStage, refreshDayStage, refreshDayTypeScreens, syncDayExtras, noteDayFly } from './day_stage.js';
 
 let _selectDateRequestId = 0;
 let _dayEditorDirty = false;
@@ -333,6 +333,7 @@ export function updateDashboardWidgets(year, month) {
 }
 
 export async function shiftDate(offset) {
+    noteDayFly(offset);
     let parts = state.selectedDateStr.split('-');
     let d = new Date(parts[0], parts[1] - 1, parts[2]); 
     do {
@@ -571,7 +572,7 @@ function fillSelectedDateUI(dateStr) {
             const safePnl = sanitizeHTML(String(pnl));
             const safeKf = sanitizeHTML(String(kf));
             ttHtml += `
-                <div style="display: flex; gap: 5px; align-items: center;">
+                <div class="trade-type-result" style="display: flex; gap: 5px; align-items: center;">
                     <label style="flex: 1; margin:0;">${safeTT}</label>
                     <input type="text" inputmode="decimal" class="tt-input-pnl" data-name="${safeTT}" placeholder="PnL $" value="${safePnl}" style="width: 70px; padding: 6px;">
                     <input type="text" inputmode="decimal" class="tt-input-kf" data-name="${safeTT}" placeholder="КФ" value="${safeKf}" style="width: 60px; padding: 6px;">
@@ -625,6 +626,7 @@ function fillSelectedDateUI(dateStr) {
 
     if (window.refreshReviewRequestButtons) window.refreshReviewRequestButtons();
     syncDayExtras(state.selectedDateStr);
+    refreshDayTypeScreens(state.selectedDateStr);
     refreshDayStage();
     _dayEditorDirty = false;
 }

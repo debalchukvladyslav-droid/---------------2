@@ -9,6 +9,9 @@ import { saveSettings } from './storage.js';
 let stageWanted = false;
 let bound = false;
 let screenToken = 0;
+let flyDirection = 0;
+let lastStageDate = '';
+let flightToken = 0;
 const tiltQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
 const GRADES = ['A', 'B', 'C', 'D', 'E', 'F'];
 const SCORES = [
@@ -312,6 +315,30 @@ function bindScoreDrag(root) {
     });
 }
 
+function mirrorRange(stageId, formId, stageLabelId, formLabelId) {
+    const stageEl = document.getElementById(stageId);
+    const formEl = document.getElementById(formId);
+    if (!stageEl || !formEl || stageEl.dataset.mirrorBound === '1') return;
+    stageEl.dataset.mirrorBound = '1';
+    const paint = (source, labelId) => {
+        const label = document.getElementById(labelId);
+        if (label) label.textContent = `${source.value}/10`;
+    };
+    stageEl.addEventListener('input', () => {
+        if (formEl.value !== stageEl.value) {
+            formEl.value = stageEl.value;
+            formEl.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        paint(stageEl, stageLabelId);
+    });
+    formEl.addEventListener('input', () => {
+        if (document.activeElement === stageEl) return;
+        if (stageEl.value !== formEl.value) stageEl.value = formEl.value;
+        paint(stageEl, stageLabelId);
+        paint(formEl, formLabelId);
+    });
+}
+
 function ensureBound() {
     if (bound) return;
     const stage = document.getElementById('day-stage');
@@ -321,15 +348,13 @@ function ensureBound() {
     bindScoreDrag(stage);
     mirrorField('day-stage-notes', 'trade-notes');
     mirrorField('day-stage-improvement', 'next-session-improvement');
-    mirrorField('day-prep-notes', 'session-plan');
+    mirrorField('day-prep-goal', 'session-goal');
+    mirrorRange('day-prep-readiness', 'session-readiness', 'day-prep-readiness-val', 'session-readiness-val');
     document.addEventListener('pointerdown', (event) => {
         const menu = document.getElementById('day-grade-menu');
         if (!menu || menu.hidden) return;
         if (event.target?.closest?.('#day-grade-menu, [data-action="day-grade-open"]')) return;
         menu.hidden = true;
-    });
-    document.getElementById('sidebar-checklist-container')?.addEventListener('change', () => {
-        if (stageShouldShow()) renderPrep(state.selectedDateStr);
     });
     document.addEventListener('keydown', (event) => {
         if (event.key !== 'Escape' || !stageShouldShow()) return;
@@ -341,6 +366,147 @@ function ensureBound() {
     });
     document.addEventListener('app:view-enter', () => applyVisibility());
     window.addEventListener('resize', () => applyVisibility());
+}
+
+const FLY_MS = 760;
+const FLY_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
+
+function boxOf(element) {
+    return {
+        left: element.offsetLeft,
+        top: element.offsetTop,
+        width: element.offsetWidth,
+        height: element.offsetHeight,
+    };
+}
+
+function clearFlightArtifacts(hero) {
+    flightToken += 1;
+    if (!hero) return;
+    hero.classList.remove('is-flying');
+    hero.querySelectorAll('.day-stage-card-fly-out, .day-stage-ghost-fly').forEach((node) => node.remove());
+    hero.querySelectorAll('.day-stage-ghost').forEach((ghost) => {
+        ghost.getAnimations().forEach((animation) => animation.cancel());
+        ghost.classList.remove('is-slot-hidden');
+        ghost.style.opacity = '';
+        ghost.style.transform = '';
+        ghost.style.filter = '';
+    });
+    const card = document.getElementById('day-stage-card');
+    if (!card) return;
+    card.style.transition = 'none';
+    card.getAnimations().forEach((animation) => animation.cancel());
+    card.style.transform = '';
+    card.style.filter = '';
+    card.style.opacity = '';
+    card.style.zIndex = '';
+    requestAnimationFrame(() => {
+        if (card.isConnected) card.style.transition = '';
+    });
+}
+
+function placeFlightClone(node, hero, box, className) {
+    node.removeAttribute('id');
+    node.querySelectorAll('[id]').forEach((child) => child.removeAttribute('id'));
+    node.classList.remove('day-tilt');
+    node.classList.add(className);
+    node.style.position = 'absolute';
+    node.style.right = 'auto';
+    node.style.margin = '0';
+    node.style.left = `${box.left}px`;
+    node.style.top = `${box.top}px`;
+    node.style.width = `${box.width}px`;
+    node.style.height = `${box.height}px`;
+    node.style.pointerEvents = 'none';
+    hero.appendChild(node);
+}
+
+function flyCarousel({ card, outgoing, leaving, direction, hero, prevGhost, nextGhost, cardBox, destBox }) {
+    const token = ++flightToken;
+    const toNext = direction > 0;
+    const sourceGhost = toNext ? nextGhost : prevGhost;
+    const destGhost = toNext ? prevGhost : nextGhost;
+    const rotIn = toNext ? 14 : -14;
+    const rotOut = toNext ? -14 : 14;
+    const rest = getComputedStyle(card).transform;
+    const cardRect = card.getBoundingClientRect();
+    const sourceRect = sourceGhost.getBoundingClientRect();
+    const destRect = destGhost.getBoundingClientRect();
+    const dxIn = (sourceRect.left + sourceRect.width / 2) - (cardRect.left + cardRect.width / 2);
+    const dyIn = (sourceRect.top + sourceRect.height / 2) - (cardRect.top + cardRect.height / 2);
+    const scaleIn = Math.max(0.36, Math.min(0.58, sourceRect.width / Math.max(cardRect.width, 1)));
+    const step = Math.round((Math.abs(dxIn) || 220) + sourceRect.width * 0.85);
+
+    hero.classList.add('is-flying');
+    destGhost.classList.add('is-slot-hidden');
+
+    const enterFrom = `translateX(${toNext ? step : -step}px) rotate(${rotIn}deg) scale(0.9)`;
+    const enterTo = `rotate(${rotIn}deg) scale(0.9)`;
+    sourceGhost.animate([
+        { transform: enterFrom, opacity: 0, filter: 'blur(12px)' },
+        { transform: enterTo, opacity: 0.78, filter: 'blur(3px)' },
+    ], { duration: FLY_MS, easing: FLY_EASE, fill: 'both' });
+
+    if (leaving) {
+        placeFlightClone(leaving, hero, destBox, 'day-stage-ghost-fly');
+        const leaveFrom = `rotate(${rotOut}deg) scale(0.9)`;
+        const leaveTo = `translateX(${toNext ? -step : step}px) rotate(${rotOut}deg) scale(0.9)`;
+        leaving.animate([
+            { transform: leaveFrom, opacity: 0.78, filter: 'blur(3px)' },
+            { transform: leaveTo, opacity: 0, filter: 'blur(12px)' },
+        ], { duration: FLY_MS, easing: FLY_EASE, fill: 'both' });
+    }
+
+    placeFlightClone(outgoing, hero, cardBox, 'day-stage-card-fly-out');
+    outgoing.style.zIndex = '1';
+    const outRect = outgoing.getBoundingClientRect();
+    const dxOut = (destRect.left + destRect.width / 2) - (outRect.left + outRect.width / 2);
+    const dyOut = (destRect.top + destRect.height / 2) - (outRect.top + outRect.height / 2);
+    const scaleOut = Math.max(0.36, Math.min(0.58, destRect.width / Math.max(outRect.width, 1)));
+    outgoing.animate([
+        { transform: 'none', filter: 'blur(0px)', opacity: 1 },
+        { transform: `translate(${dxOut}px, ${dyOut}px) rotate(${rotOut}deg) scale(${scaleOut})`, filter: 'blur(8px)', opacity: 0 },
+    ], { duration: FLY_MS, easing: FLY_EASE, fill: 'both' });
+
+    card.style.zIndex = '4';
+    card.style.transition = 'none';
+    const incoming = card.animate([
+        { transform: `translate(${dxIn}px, ${dyIn}px) rotate(${rotIn}deg) scale(${scaleIn})`, filter: 'blur(8px)', opacity: 0.66 },
+        { transform: rest && rest !== 'none' ? rest : 'perspective(900px) rotateX(0deg) rotateY(0deg)', filter: 'blur(0px)', opacity: 1 },
+    ], { duration: FLY_MS, easing: FLY_EASE, fill: 'both' });
+
+    destGhost.animate([
+        { opacity: 0, offset: 0 },
+        { opacity: 0, offset: 0.62 },
+        { opacity: 0.78, offset: 1 },
+    ], { duration: FLY_MS, easing: 'linear', fill: 'both' });
+
+    let settled = false;
+    const finish = () => {
+        if (settled || token !== flightToken) return;
+        settled = true;
+        card.style.transition = 'none';
+        destGhost.classList.remove('is-slot-hidden');
+        sourceGhost.getAnimations().forEach((animation) => animation.cancel());
+        destGhost.getAnimations().forEach((animation) => animation.cancel());
+        incoming.cancel();
+        card.style.transform = '';
+        card.style.filter = '';
+        card.style.opacity = '';
+        card.style.zIndex = '';
+        hero.classList.remove('is-flying');
+        hero.querySelectorAll('.day-stage-card-fly-out, .day-stage-ghost-fly').forEach((node) => node.remove());
+        requestAnimationFrame(() => {
+            card.style.transition = '';
+        });
+    };
+    incoming.onfinish = finish;
+    window.setTimeout(finish, FLY_MS + 90);
+}
+
+export function noteDayFly(offset) {
+    if (!stageShouldShow() || tiltQuery.matches) return;
+    flyDirection = offset < 0 ? -1 : 1;
 }
 
 function renderGhost(element, dateStr) {
@@ -465,9 +631,31 @@ function renderCard(dateStr, day) {
     gradeCell.append(gradeBtn, menu);
     stats.append(gradeCell);
 
+    const stageHero = card.closest('.day-stage-hero');
+    if (stageHero?.classList.contains('is-flying') && lastStageDate === dateStr) {
+        card.replaceChildren(monthNode, hero, tone, stats);
+        return;
+    }
+
+    const direction = flyDirection;
+    flyDirection = 0;
+    const prevGhost = document.getElementById('day-stage-ghost-prev');
+    const nextGhost = document.getElementById('day-stage-ghost-next');
+    const ghostsVisible = prevGhost && nextGhost && prevGhost.offsetWidth > 0 && nextGhost.offsetWidth > 0;
+    const shouldFly = Boolean(direction && lastStageDate && lastStageDate !== dateStr && !tiltQuery.matches && stageHero && ghostsVisible);
+    const cardBox = shouldFly ? boxOf(card) : null;
+    const destGhost = shouldFly ? (direction > 0 ? prevGhost : nextGhost) : null;
+    const destBox = destGhost ? boxOf(destGhost) : null;
+    const leaving = destGhost ? destGhost.cloneNode(true) : null;
+    const outgoing = shouldFly ? card.cloneNode(true) : null;
     card.replaceChildren(monthNode, hero, tone, stats);
-    renderGhost(document.getElementById('day-stage-ghost-prev'), shiftWeekday(dateStr, -1));
-    renderGhost(document.getElementById('day-stage-ghost-next'), shiftWeekday(dateStr, 1));
+    renderGhost(prevGhost, shiftWeekday(dateStr, -1));
+    renderGhost(nextGhost, shiftWeekday(dateStr, 1));
+    if (shouldFly) {
+        clearFlightArtifacts(stageHero);
+        flyCarousel({ card, outgoing, leaving, direction, hero: stageHero, prevGhost, nextGhost, cardBox, destBox });
+    }
+    lastStageDate = dateStr;
 }
 
 function renderScores(day) {
@@ -562,74 +750,38 @@ function renderTrades(dateStr, day) {
     host.append(table);
 }
 
-function checkedIds(day) {
-    const fromForm = [...document.querySelectorAll('#sidebar-checklist-container .checklist-checkbox')]
-        .filter((box) => box.checked)
-        .map((box) => box.value);
-    if (document.querySelector('#sidebar-checklist-container .checklist-checkbox')) return new Set(fromForm);
-    return new Set(Array.isArray(day?.checkedParams) ? day.checkedParams : []);
-}
-
-function updatePrepProgress() {
-    const progress = document.getElementById('day-prep-progress');
-    const boxes = [...document.querySelectorAll('#day-portrait-checklist .day-prep-check')];
-    if (!progress) return;
-    const done = boxes.filter((box) => box.checked).length;
-    progress.textContent = boxes.length ? `${done}/${boxes.length}` : '0/0';
-}
-
 function renderPrep(dateStr) {
-    const host = document.getElementById('day-portrait-checklist');
     const day = state.appData?.journal?.[dateStr] || {};
     const editable = isOwnJournal() && !state.dayDetailsLoading;
-    const add = document.querySelector('[data-action="day-prep-add"]');
-    if (add) add.hidden = !editable;
-    const notes = document.getElementById('day-prep-notes');
-    if (notes) {
-        notes.readOnly = !editable;
-        setIdleValue(notes, document.getElementById('session-plan')?.value ?? day.sessionPlan ?? '');
+    const goal = document.getElementById('day-prep-goal');
+    const readiness = document.getElementById('day-prep-readiness');
+    const readinessLabel = document.getElementById('day-prep-readiness-val');
+    if (goal) {
+        goal.readOnly = !editable;
+        setIdleValue(goal, document.getElementById('session-goal')?.value ?? day.sessionGoal ?? '');
     }
-    if (!host) return;
-    host.replaceChildren();
-    const items = Array.isArray(state.appData?.settings?.checklist) ? state.appData.settings.checklist : [];
-    const checked = checkedIds(day);
-    if (!items.length) host.append(emptyLine('Додайте перший пункт підготовки.'));
-    items.forEach((item) => {
-        const id = String(item?.id || '');
-        const row = document.createElement('label');
-        row.className = 'day-prep-item';
-        const input = document.createElement('input');
-        input.type = 'checkbox';
-        input.className = 'day-prep-check';
-        input.checked = checked.has(id);
-        input.disabled = !editable;
-        if (input.checked) row.classList.add('is-done');
-        input.addEventListener('change', () => {
-            row.classList.toggle('is-done', input.checked);
-            const formBox = document.querySelector(`#sidebar-checklist-container .checklist-checkbox[value="${CSS.escape(id)}"]`);
-            if (formBox && formBox.checked !== input.checked) {
-                formBox.checked = input.checked;
-                formBox.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-            updatePrepProgress();
-        });
-        const text = document.createElement('span');
-        text.className = 'day-prep-name';
-        text.textContent = String(item?.name || 'Пункт');
-        row.append(input, text);
-        host.append(row);
-    });
-    updatePrepProgress();
+    if (readiness) {
+        readiness.disabled = !editable;
+        const value = document.getElementById('session-readiness')?.value || day.sessionReadiness || 5;
+        if (document.activeElement !== readiness) readiness.value = String(value);
+        if (readinessLabel) readinessLabel.textContent = `${readiness.value}/10`;
+    }
+    const ai = document.getElementById('day-prep-ai-result');
+    const formAi = document.getElementById('session-ai-result');
+    if (ai && formAi) {
+        ai.style.display = formAi.style.display;
+        ai.style.background = formAi.style.background;
+        ai.style.border = formAi.style.border;
+        ai.innerHTML = formAi.innerHTML;
+    }
+    window.renderSessionPlaybook?.();
 }
 
 async function renderTickerScreens(dateStr, day) {
-    const host = document.getElementById('day-stage-screens');
+    const host = document.getElementById('trade-type-screens');
     if (!host) return;
     const token = ++screenToken;
     host.replaceChildren();
-    const title = document.createElement('h3');
-    title.className = 'day-stage-section-title';
-    title.textContent = 'Скріншоти за тікерами';
     const rows = visibleTradeRows(day?.trades);
     const seenSymbol = new Set();
     const matches = [];
@@ -646,19 +798,19 @@ async function renderTickerScreens(dateStr, day) {
         });
     });
     if (!matches.length) {
-        host.append(title, emptyLine('Немає скрінів, привʼязаних до тікерів цього дня.'));
+        host.append(emptyLine('Немає скрінів, привʼязаних до тікерів цього дня.'));
         return;
     }
     const strip = document.createElement('div');
-    strip.className = 'day-stage-screen-strip';
-    host.append(title, strip);
+    strip.className = 'trade-type-screen-strip';
+    host.append(strip);
     const resolved = await Promise.all(matches.map(async (item) => ({ ...item, src: await getStorageUrl(item.path) })));
-    if (token !== screenToken || state.selectedDateStr !== dateStr || !stageShouldShow()) return;
+    if (token !== screenToken || state.selectedDateStr !== dateStr) return;
     const sources = resolved.map((item) => item.src).filter(Boolean);
     resolved.forEach((item) => {
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = 'day-stage-screen';
+        button.className = 'trade-type-screen';
         button.title = item.symbol.toUpperCase();
         const image = document.createElement('img');
         image.alt = `Скрін ${item.symbol}`;
@@ -724,6 +876,11 @@ function renderDayStage(dateStr) {
     renderPrep(dateStr);
     renderTags();
     void renderTickerScreens(dateStr, day);
+}
+
+export function refreshDayTypeScreens(dateStr = state.selectedDateStr) {
+    if (!dateStr) return;
+    void renderTickerScreens(dateStr, state.appData?.journal?.[dateStr] || {});
 }
 
 function placePortraitOverNav(portrait) {

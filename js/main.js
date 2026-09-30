@@ -579,7 +579,7 @@ async function renderSessionCriteriaHints(containerId) {
 
 window.refreshSessionCriteria = function() {
     const anchor = getTodayEST();
-    ['session-criteria-hints', 'sm-criteria-hints'].forEach((id) => {
+    ['session-criteria-hints', 'sm-criteria-hints', 'day-prep-criteria'].forEach((id) => {
         const container = document.getElementById(id);
         if (!container || container.textContent.startsWith('Завантаження')) return;
         paintSessionCriteria(container, anchor);
@@ -588,6 +588,7 @@ window.refreshSessionCriteria = function() {
 
 window.renderSessionPlaybook = function() {
     void renderSessionCriteriaHints('session-criteria-hints');
+    void renderSessionCriteriaHints('day-prep-criteria');
 };
 
 window.saveSessionData = function() {
@@ -1037,6 +1038,13 @@ window.checkSessionReadiness = async function() {
         resultEl.style.background = 'rgba(139,92,246,0.08)';
         resultEl.style.border = '1px solid var(--accent)';
         resultEl.innerHTML = renderMarkdown(res);
+        const prepResult = document.getElementById('day-prep-ai-result');
+        if (prepResult) {
+            prepResult.style.display = 'block';
+            prepResult.style.background = resultEl.style.background;
+            prepResult.style.border = resultEl.style.border;
+            prepResult.innerHTML = resultEl.innerHTML;
+        }
         if (!state.appData.journal[state.selectedDateStr]) state.appData.journal[state.selectedDateStr] = {};
         state.appData.journal[state.selectedDateStr].sessionAiResult = res;
         markJournalDayDirty(state.selectedDateStr);

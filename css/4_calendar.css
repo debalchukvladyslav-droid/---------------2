@@ -498,7 +498,6 @@
     left: 256px;
     right: 430px;
     z-index: var(--z-panel);
-    display: flex;
     overflow: auto;
     color: var(--text-main);
 }
@@ -506,9 +505,15 @@
 .app-sidebar.collapsed ~ .main-content .day-stage,
 .main-content.expanded .day-stage { left: 256px; }
 
+.day-stage-scroll {
+    position: relative;
+    min-height: 100%;
+}
+
 .day-stage-veil {
     position: absolute;
     inset: 0;
+    z-index: 0;
     border: 0;
     padding: 0;
     cursor: pointer;
@@ -912,6 +917,7 @@
     border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
     background: color-mix(in srgb, var(--bg-panel) 82%, transparent);
     color: var(--text-muted);
+    transition: opacity 0.4s ease;
 }
 
 .day-stage-ghost strong {
@@ -935,6 +941,62 @@
     color: var(--loss);
     border-color: color-mix(in srgb, var(--loss) 50%, transparent);
     box-shadow: 0 0 32px color-mix(in srgb, var(--loss) 28%, transparent);
+}
+
+.day-stage-hero.is-flying .day-stage-ghost {
+    transition: none;
+}
+
+.day-stage-ghost.is-slot-hidden {
+    opacity: 0;
+    transition: none;
+}
+
+.day-stage-card.is-fly-from-next,
+.day-stage-card.is-fly-from-prev {
+    filter: blur(9px);
+    opacity: 0.55;
+    transition: none !important;
+}
+
+.day-stage-card.is-fly-from-next { transform: translateX(46%) rotate(13deg) scale(0.76) !important; }
+.day-stage-card.is-fly-from-prev { transform: translateX(-46%) rotate(-13deg) scale(0.76) !important; }
+
+.day-stage-card.is-fly-settle {
+    transform: none !important;
+    filter: none;
+    opacity: 1;
+    transition: transform 0.62s cubic-bezier(0.22, 0.8, 0.24, 1), filter 0.62s ease, opacity 0.48s ease !important;
+}
+
+.day-stage-card-fly-out {
+    position: absolute;
+    z-index: 1;
+    margin: 0;
+    pointer-events: none;
+}
+
+.day-stage-card-fly-out.is-fly-to-prev {
+    transform: translateX(-46%) rotate(-13deg) scale(0.76);
+    filter: blur(9px);
+    opacity: 0.4;
+}
+
+.day-stage-card-fly-out.is-fly-to-next {
+    transform: translateX(46%) rotate(13deg) scale(0.76);
+    filter: blur(9px);
+    opacity: 0.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .day-stage-card.is-fly-from-next,
+    .day-stage-card.is-fly-from-prev,
+    .day-stage-card.is-fly-settle,
+    .day-stage-card-fly-out {
+        transform: none !important;
+        filter: none !important;
+        transition: none !important;
+    }
 }
 
 .day-stage-card-month {
@@ -1136,6 +1198,42 @@
     font-weight: 800;
 }
 
+#form-sidebar .trade-type-result { display: none !important; }
+
+.trade-type-screens { margin: 4px 0 12px; }
+
+.trade-type-screen-strip {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+}
+
+.trade-type-screen {
+    flex: 0 0 132px;
+    height: 86px;
+    padding: 0;
+    position: relative;
+    overflow: hidden;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--bg-main);
+    cursor: pointer;
+}
+
+.trade-type-screen img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.trade-type-screen span {
+    position: absolute;
+    left: 6px;
+    bottom: 6px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: color-mix(in srgb, #000 62%, transparent);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
 .day-trade-table {
     display: flex;
     flex-direction: column;
@@ -1186,12 +1284,11 @@ button.day-trade-row:hover { background: color-mix(in srgb, var(--accent) 8%, tr
 .day-stage-thought { min-height: 132px; }
 .day-stage-thought textarea { min-height: 84px; }
 
-.day-prep-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 10px;
-}
+.day-portrait .form-group { margin: 0; }
+.day-portrait .form-group input[type="text"],
+.day-portrait .session-readiness { width: 100%; box-sizing: border-box; }
+.day-portrait .btn-ai { width: 100%; }
+.day-portrait .readiness-labels { display: flex; justify-content: space-between; gap: 6px; font-size: 0.75rem; }
 
 .day-prep-sub {
     margin: 4px 0 0;
