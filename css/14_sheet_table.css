@@ -1398,6 +1398,10 @@ body[data-theme="light"] .sheet-auto-sync__row select option {
     font-size: 0.82rem;
 }
 
+.shs-bot-rows {
+    max-height: 520px;
+}
+
 .shs-bot-block-title {
     margin: 16px 0 8px;
     font-size: 0.92rem;

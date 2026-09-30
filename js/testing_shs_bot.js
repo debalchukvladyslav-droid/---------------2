@@ -1,5 +1,5 @@
 import { fetchWithSession } from './authenticated_fetch.js';
-import { buildShsDayMap } from './shs_trades_core.js';
+import { buildShsDayMap, newYorkStamp, normalizeShsTicker } from './shs_trades_core.js';
 
 const MAX_DAYS = 31;
 const CHUNK_DAYS = 7;
@@ -39,6 +39,23 @@ function chunks(start, end) {
 function money(value) {
     const amount = Number(value);
     return Number.isFinite(amount) ? amount.toFixed(2) : '—';
+}
+
+function plainNumber(value) {
+    const amount = Number(value);
+    return Number.isFinite(amount) ? String(amount) : '—';
+}
+
+function effectLabel(value) {
+    const effect = String(value || '').toLowerCase();
+    if (/close|cover|flatten|exit/.test(effect)) return 'Вихід';
+    if (/reduce/.test(effect)) return 'Частковий вихід';
+    if (/open/.test(effect)) return 'Вхід';
+    return value ? String(value) : '—';
+}
+
+function stampOf(row) {
+    return newYorkStamp(row?.first_fill_at || row?.last_fill_at || row?.submitted_at || row?.created_at || row?.date);
 }
 
 function textCell(row, value) {
@@ -87,23 +104,75 @@ function fillTable(host, id, headers, rows, cells) {
 }
 
 function renderResult(host, nick, payload) {
-    const orders = payload.orders || [];
-    const locates = payload.locates || [];
-    const dayMap = buildShsDayMap(orders, locates, nick);
+    const orders = [...(payload.orders || [])].sort((a, b) => (stampOf(a)?.epoch || 0) - (stampOf(b)?.epoch || 0));
+    const locates = [...(payload.locates || [])].sort((a, b) => String(a?.created_at || a?.date || '').localeCompare(String(b?.created_at || b?.date || '')));
+    const anchor = orders.find((row) => row?.login_name)?.login_name || nick;
+    const dayMap = buildShsDayMap(orders, locates, anchor);
     const dates = Object.keys(dayMap).sort();
-    const trades = dates.flatMap((date) => (dayMap[date].trades || []).map((trade) => ({ date, ...trade, locates: dayMap[date].locates })));
-    const locateOnly = dates.filter((date) => !(dayMap[date].trades || []).length).length;
+    const trades = dates.flatMap((date) => (dayMap[date].trades || []).map((trade) => ({ date, ...trade })));
+    const coverage = payload.coverage || {};
+    const expectedOrders = Number(coverage.expectedOrders) || orders.length;
+    const expectedLocates = Number(coverage.expectedLocates) || locates.length;
+    const shortDays = Array.isArray(coverage.shortDays) ? coverage.shortDays : [];
     get(host, 'summary').textContent = [
         `Акаунт ${nick}.`,
-        `Ордерів: ${orders.length}.`,
-        `Локатів: ${locates.length}.`,
-        `Днів: ${dates.length}.`,
-        `Зібраних угод: ${trades.length}.`,
-        locateOnly ? `Днів лише з локатами: ${locateOnly}.` : '',
-        payload.truncated ? 'Стрічка обрізала надто довгий день.' : '',
+        `Ордерів: ${orders.length}${expectedOrders > orders.length ? ` з ${expectedOrders} у боті` : ''}.`,
+        `Локатів: ${locates.length}${expectedLocates > locates.length ? ` з ${expectedLocates} у боті` : ''}.`,
+        `Зібраних позицій: ${trades.length}.`,
+        shortDays.length
+            ? `За ${shortDays.join(', ')} бот віддав лише останні 200 ордерів усього столу. Фільтр по акаунту і сторінки він не приймає, тож старіші ордери цього дня не приходять.`
+            : 'За цей період ліміт стрічки вмістив усі ордери столу.',
         'Журнал не змінено.',
     ].filter(Boolean).join(' ');
 
+    fillTable(
+        host,
+        'orders',
+        ['Дата', 'Час NY', 'Тікер', 'Дія', 'Ефект', 'Сторона', 'Статус', 'Заявлено', 'Виконано', 'Ціна', 'Тип', 'Угода', 'Демо', 'Логін', 'Нік', 'Закрито NY'],
+        orders,
+        (order) => {
+            const stamp = stampOf(order);
+            const closed = newYorkStamp(order.closed_at);
+            return [
+                stamp?.date || '—',
+                stamp?.time || '—',
+                normalizeShsTicker(order.ticker) || order.ticker || '—',
+                effectLabel(order.position_effect),
+                order.position_effect || '—',
+                order.side || '—',
+                order.status || '—',
+                plainNumber(order.size),
+                plainNumber(order.filled_size),
+                plainNumber(order.avg_filled_price),
+                order.order_type || '—',
+                order.trade_type || '—',
+                order.is_demo ? 'так' : 'ні',
+                order.login_name || '—',
+                order.account_nickname || '—',
+                closed?.time || '—',
+            ];
+        },
+    );
+    fillTable(
+        host,
+        'locates',
+        ['Дата', 'Час', 'Тікер', 'Статус', 'Розмір', 'Ціна', 'Бот', 'Трейдер', 'Користувач'],
+        locates,
+        (row) => {
+            const stamp = newYorkStamp(row.created_at);
+            return [
+                String(row.date || stamp?.date || '').slice(0, 10) || '—',
+                stamp?.time || '—',
+                normalizeShsTicker(row.ticker) || row.ticker || '—',
+                row.status || '—',
+                plainNumber(row.size),
+                plainNumber(row.price),
+                row.bot_nickname || '—',
+                row.trader || '—',
+                row.real_user || '—',
+            ];
+        },
+    );
     fillTable(
         host,
         'days',
@@ -137,6 +206,13 @@ function renderResult(host, nick, payload) {
 async function loadRange(nick, start, end) {
     const orders = [];
     const locates = [];
+    const coverage = {
+        expectedOrders: 0,
+        receivedOrders: 0,
+        expectedLocates: 0,
+        receivedLocates: 0,
+        shortDays: [],
+    };
     let truncated = false;
     for (const range of chunks(start, end)) {
         const url = `/api/shs-trades?mode=data&trader=${encodeURIComponent(nick)}&start=${range.start}&end=${range.end}`;
@@ -145,9 +221,15 @@ async function loadRange(nick, start, end) {
         if (!response.ok) throw new Error(body.message || 'Не вдалося забрати угоди');
         orders.push(...(body.orders || []));
         locates.push(...(body.locates || []));
+        const part = body.coverage || {};
+        coverage.expectedOrders += Number(part.expectedOrders) || 0;
+        coverage.receivedOrders += Number(part.receivedOrders) || 0;
+        coverage.expectedLocates += Number(part.expectedLocates) || 0;
+        coverage.receivedLocates += Number(part.receivedLocates) || 0;
+        if (Array.isArray(part.shortDays)) coverage.shortDays.push(...part.shortDays);
         if (body.truncated) truncated = true;
     }
-    return { orders, locates, truncated };
+    return { orders, locates, truncated, coverage };
 }
 
 export function initShsBotTest(host) {
@@ -163,7 +245,7 @@ export function initShsBotTest(host) {
             </div>
             <span class="admin-polygon-state is-active">Без запису в журнал</span>
         </div>
-        <p class="admin-section-subtitle">Оберіть акаунт і період. Нижче буде те, що бот повернув: ордери, локати і зібрані входи. Комісії звідси не беруться.</p>
+        <p class="admin-section-subtitle">Оберіть акаунт і період. Нижче кожен ордер входу і виходу, час у Нью-Йорку, локати і зібрана позиція. Бот за один день віддає лише останні 200 ордерів усього столу.</p>
         <div class="testing-sheet-mapping">
             <label>
                 <span>Акаунт</span>
@@ -183,6 +265,10 @@ export function initShsBotTest(host) {
         </div>
         <p class="admin-polygon-result" data-shs="status">Завантажую список акаунтів…</p>
         <p class="admin-polygon-result" data-shs="summary">Результат з’явиться після вибору акаунта і періоду.</p>
+        <h5 class="shs-bot-block-title">Ордери</h5>
+        <div class="sheet-rows-list shs-bot-rows" data-shs="orders"></div>
+        <h5 class="shs-bot-block-title">Локати</h5>
+        <div class="sheet-rows-list shs-bot-rows" data-shs="locates"></div>
         <h5 class="shs-bot-block-title">Дні</h5>
         <div class="sheet-rows-list" data-shs="days"></div>
         <h5 class="shs-bot-block-title">Зібрані входи</h5>

@@ -18,6 +18,15 @@ function order(partial) {
     };
 }
 
+test('account nickname selects the same fills as the login', () => {
+    const days = buildShsDayMap([
+        order({ login_name: 'OTHER', account_nickname: 'OLEKPONO', filled_size: 10, avg_filled_price: 3, first_fill_at: '2026-09-23T14:30:00Z' }),
+        order({ login_name: 'OTHER', account_nickname: 'OLEKPONO', position_effect: 'close', side: 'buy', filled_size: 10, avg_filled_price: 2, first_fill_at: '2026-09-23T14:45:00Z' }),
+    ], [], 'OLEKPONO');
+    assert.equal(days['2026-09-23'].trades.length, 1);
+    assert.equal(days['2026-09-23'].trades[0].gross, 10);
+});
+
 test('ticker drops the exchange ending', () => {
     assert.equal(normalizeShsTicker('benf.nq'), 'BENF');
 });

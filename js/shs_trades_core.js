@@ -60,11 +60,11 @@ function heldBetween(opened, closed) {
 }
 
 function orderNickMatches(order, nick) {
-    return nicksMatch(order?.trader, nick) || nicksMatch(order?.login_name, nick) || nicksMatch(order?.real_user, nick);
+    return nicksMatch(order?.trader, nick) || nicksMatch(order?.login_name, nick) || nicksMatch(order?.real_user, nick) || nicksMatch(order?.account_nickname, nick);
 }
 
 function locateNickMatches(row, nick) {
-    return nicksMatch(row?.trader, nick) || nicksMatch(row?.real_user, nick);
+    return nicksMatch(row?.trader, nick) || nicksMatch(row?.real_user, nick) || nicksMatch(row?.login_name, nick) || nicksMatch(row?.account_nickname, nick);
 }
 
 function classifyFill(order) {
