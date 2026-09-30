@@ -163,3 +163,9 @@ test('recovery database executes real SQL and protects changes and restore trans
         assert.equal(settings[0].record.revision, 9160);
     });
 });
+
+test('a sync page keeps one copy of each heavy setting key', async () => {
+    const sql = await readFile(new URL('../supabase/migrations/20260930180000_compact_setting_history_pages.sql', import.meta.url), 'utf8');
+    assert.match(sql, /domain is distinct from 'setting' or h\.revision = 1/);
+    assert.match(sql, /last_cursor < s\.cursor/);
+});

@@ -6,6 +6,7 @@ import { hasExactEntryTime, presentSnapshot, snapshotIsFrozen } from '../lib/mas
 const attempted = new Set();
 const queue = [];
 let draining = false;
+let marketDataUnavailable = false;
 const BLOCK_KEY = 'tj_criteria_not_synced_v1';
 
 function blockedKeys() {
@@ -73,7 +74,7 @@ async function persistSnapshot(dateStr, trade, snapshot) {
 }
 
 export async function ensureTradeCriteria(dateStr, trade, { manual = false, highLowSessionStart, volumeSessionStart } = {}) {
-    if (!ownJournal() || !trade) return null;
+    if (!ownJournal() || !trade || (marketDataUnavailable && !manual)) return null;
     const ticker = String(trade.symbol || trade.ticker || '').trim().toUpperCase();
     const opened = trade.opened || trade.entryTime || trade.time || '';
     if (!ticker || !trade.id || !hasExactEntryTime(opened)) return null;
@@ -99,6 +100,12 @@ export async function ensureTradeCriteria(dateStr, trade, { manual = false, high
             }),
         });
         const payload = await response.json().catch(() => ({}));
+        if (response.status === 503 && /не налаштовано/i.test(String(payload?.error || ''))) {
+            marketDataUnavailable = true;
+            queue.length = 0;
+            console.warn('[trade-criteria]', payload.error);
+            return null;
+        }
         if (response.status === 409 || payload?.reason === 'not-synced') {
             if (!manual) blockKey(key);
             else attempted.delete(key);
@@ -130,7 +137,7 @@ function drain() {
 }
 
 export function scheduleCriteriaForDates(dates = []) {
-    if (!ownJournal()) return;
+    if (!ownJournal() || marketDataUnavailable) return;
     const journal = state.appData?.journal || {};
     const blocked = blockedKeys();
     dates.forEach((dateStr) => {
