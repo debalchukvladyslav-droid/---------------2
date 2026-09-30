@@ -613,7 +613,6 @@ body.day-stage-open { --day-rail: 280px; }
 }
 
 .day-stage-arrow,
-.day-stage-close,
 .day-stage-form,
 .day-stage-date {
     border: 1px solid color-mix(in srgb, var(--border) 70%, var(--accent) 30%);
@@ -624,7 +623,6 @@ body.day-stage-open { --day-rail: 280px; }
 }
 
 .day-stage-arrow,
-.day-stage-close,
 .day-stage-form {
     width: 36px;
     height: 36px;
@@ -636,14 +634,15 @@ body.day-stage-open { --day-rail: 280px; }
 
 .day-stage-form {
     display: none;
+    position: absolute;
+    top: 18px;
+    right: 18px;
     width: auto;
     padding: 0 12px;
     border-radius: 999px;
     font-size: 0.82rem;
     font-weight: 700;
 }
-
-.day-stage-close { margin-left: 4px; font-size: 1.2rem; line-height: 1; }
 
 .day-stage-date {
     min-width: 0;
@@ -1080,15 +1079,6 @@ body.day-stage-open { --day-rail: 280px; }
     box-shadow: 0 10px 30px color-mix(in srgb, #000 28%, transparent);
     backdrop-filter: blur(12px);
 }
-
-.day-stage-close,
-.day-stage-form {
-    position: absolute;
-    top: 18px;
-}
-
-.day-stage-close { right: 18px; }
-.day-stage-form { right: 60px; }
 
 .day-stage-hero {
     position: relative;
