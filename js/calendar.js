@@ -645,11 +645,15 @@ async function openDayEditor(dateStr) {
     const sidebar = document.getElementById('form-sidebar');
     const mobile = window.innerWidth <= 1024;
 
-    if (!mobile && sidebar?.classList.contains('collapsed') && window.toggleRightSidebar) {
-        window.toggleRightSidebar();
+    const needsForm = !mobile && sidebar?.classList.contains('collapsed');
+    if (needsForm) {
+        openDayStage({ pendingForm: true });
+        requestAnimationFrame(() => {
+            if (sidebar.classList.contains('collapsed')) window.toggleRightSidebar?.();
+        });
+    } else {
+        openDayStage();
     }
-
-    openDayStage();
     if (!mobile) {
         requestAnimationFrame(focusActiveDayEditorField);
     }

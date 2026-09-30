@@ -38,10 +38,10 @@ function isCalendarActive() {
     return document.getElementById('view-calendar')?.classList.contains('active') === true;
 }
 
-function stageShouldShow() {
+function stageShouldShow(options = {}) {
     if (!stageWanted || !isCalendarActive() || !state.selectedDateStr) return false;
     if (window.innerWidth <= 1024) return true;
-    return isDayFormOpen();
+    return isDayFormOpen() || options.pendingForm === true;
 }
 
 function formatLongDate(dateStr) {
@@ -1038,21 +1038,64 @@ function placePortraitOverNav(portrait) {
     document.body.appendChild(portrait);
 }
 
-function applyVisibility() {
+const APPEAR_MS = 300;
+const hideTimers = new WeakMap();
+
+function revealLayer(element) {
+    if (!element) return;
+    const pending = hideTimers.get(element);
+    if (pending) clearTimeout(pending);
+    const entering = element.hidden || element.classList.contains('is-leaving');
+    element.hidden = false;
+    element.classList.remove('is-leaving');
+    if (!entering || tiltQuery.matches) {
+        element.classList.remove('is-appearing');
+        return;
+    }
+    element.classList.add('is-appearing');
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            if (!element.isConnected || element.classList.contains('is-leaving')) return;
+            element.classList.remove('is-appearing');
+        });
+    });
+}
+
+function concealLayer(element) {
+    if (!element || element.hidden || element.classList.contains('is-leaving')) return;
+    if (tiltQuery.matches) {
+        element.hidden = true;
+        element.classList.remove('is-appearing');
+        return;
+    }
+    element.classList.remove('is-appearing');
+    element.classList.add('is-leaving');
+    const timer = setTimeout(() => {
+        if (!element.classList.contains('is-leaving')) return;
+        element.hidden = true;
+        element.classList.remove('is-leaving');
+        if (element.id === 'day-stage') resetTilt(element);
+    }, APPEAR_MS);
+    hideTimers.set(element, timer);
+}
+
+function applyVisibility(options = {}) {
     const page = document.getElementById('view-calendar');
     const stage = document.getElementById('day-stage');
     const portrait = document.getElementById('day-portrait');
     if (!page || !stage) return;
-    const open = stageShouldShow();
+    const open = stageShouldShow(options);
     page.classList.toggle('day-stage-open', open);
     document.body.classList.toggle('day-stage-open', open);
-    stage.hidden = !open;
     if (portrait) {
         placePortraitOverNav(portrait);
-        portrait.hidden = !open || window.innerWidth <= 1024;
+        if (open && window.innerWidth > 1024) revealLayer(portrait);
+        else concealLayer(portrait);
     }
-    if (open) renderDayStage(state.selectedDateStr);
-    else resetTilt(stage);
+    if (open) {
+        revealLayer(stage);
+        renderDayStage(state.selectedDateStr);
+    } else concealLayer(stage);
 }
 
 export function syncDayExtras(dateStr) {
@@ -1112,10 +1155,10 @@ export async function addPrepItem() {
     }
 }
 
-export function openDayStage() {
+export function openDayStage(options = {}) {
     ensureBound();
     stageWanted = true;
-    applyVisibility();
+    applyVisibility(options);
 }
 
 export function closeDayStage() {
