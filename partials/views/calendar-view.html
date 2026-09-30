@@ -71,9 +71,22 @@
                     <button type="button" class="day-stage-form" data-action="day-stage-form">Форма</button>
                     <button type="button" class="day-stage-close" data-action="day-stage-close" aria-label="Закрити день">×</button>
                     <header class="day-stage-top">
-                        <button type="button" class="day-stage-arrow" data-action="date-shift" data-offset="-1" title="Попередній день" aria-label="Попередній день">❮</button>
-                        <button type="button" class="day-stage-date" id="day-stage-date" data-action="date-picker">Сьогодні</button>
-                        <button type="button" class="day-stage-arrow" data-action="date-shift" data-offset="1" title="Наступний день" aria-label="Наступний день">❯</button>
+                        <div class="day-stage-datebar">
+                            <button type="button" class="day-stage-arrow" data-action="date-shift" data-offset="-1" title="Попередній день" aria-label="Попередній день">❮</button>
+                            <button type="button" class="day-stage-date" id="day-stage-date" data-action="date-picker" aria-expanded="false" aria-controls="day-stage-date-calendar">Сьогодні</button>
+                            <button type="button" class="day-stage-arrow" data-action="date-shift" data-offset="1" title="Наступний день" aria-label="Наступний день">❯</button>
+                        </div>
+                        <div class="day-stage-date-calendar" id="day-stage-date-calendar" hidden>
+                            <div class="day-stage-date-calendar-head">
+                                <button type="button" class="day-stage-date-nav" data-action="day-date-month" data-offset="-1" aria-label="Попередній місяць">‹</button>
+                                <div class="day-stage-date-month" id="day-stage-date-month">Місяць</div>
+                                <button type="button" class="day-stage-date-nav" data-action="day-date-month" data-offset="1" aria-label="Наступний місяць">›</button>
+                            </div>
+                            <div class="day-stage-date-weekdays" aria-hidden="true">
+                                <span>П</span><span>В</span><span>С</span><span>Ч</span><span>П</span><span>С</span><span>В</span>
+                            </div>
+                            <div class="day-stage-date-grid" id="day-stage-date-grid"></div>
+                        </div>
                     </header>
                     <div class="day-stage-center">
                         <div class="day-stage-hero">

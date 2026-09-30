@@ -254,9 +254,20 @@ function activateAction(action, trigger, event = null) {
         'session-readiness-check': () => window.checkSessionReadiness?.(),
         'day-save': () => window.saveEntry?.(),
         'date-picker': () => {
+            if (trigger?.id === 'day-stage-date') {
+                void import('./day_stage.js').then((module) => module.toggleDayDateCalendar());
+                return;
+            }
             const input = document.getElementById('trade-date');
             if (input?.showPicker) input.showPicker();
             else input?.focus();
+        },
+        'day-date-month': () => {
+            const offset = Number(trigger?.dataset?.offset ?? 0);
+            void import('./day_stage.js').then((module) => module.shiftDayDateCalendar(offset));
+        },
+        'day-date-pick': () => {
+            void import('./day_stage.js').then((module) => module.pickDayDate(trigger?.dataset?.date || ''));
         },
         'date-shift': () => {
             const offset = Number(trigger?.dataset?.offset ?? 0);

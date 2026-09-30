@@ -12,6 +12,7 @@ let screenToken = 0;
 let flyDirection = 0;
 let lastStageDate = '';
 let flightToken = 0;
+let dayDateMonth = null;
 const tiltQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
 const GRADES = ['A', 'B', 'C', 'D', 'E', 'F'];
 const SCORES = [
@@ -218,9 +219,10 @@ function sparkline(nets, profit) {
     const span = max - min || 1;
     const width = 128;
     const height = 46;
+    const padX = 4;
     const coords = points.map((point, index) => {
-        const x = (index / (points.length - 1)) * width;
-        const y = height - ((point - min) / span) * (height - 4) - 2;
+        const x = padX + (index / (points.length - 1)) * (width - padX * 2);
+        const y = height - ((point - min) / span) * (height - 8) - 4;
         return `${x.toFixed(1)},${y.toFixed(1)}`;
     });
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -356,8 +358,19 @@ function ensureBound() {
         if (event.target?.closest?.('#day-grade-menu, [data-action="day-grade-open"]')) return;
         menu.hidden = true;
     });
+    document.addEventListener('pointerdown', (event) => {
+        const calendar = document.getElementById('day-stage-date-calendar');
+        if (!calendar || calendar.hidden) return;
+        if (event.target?.closest?.('#day-stage-date-calendar, #day-stage-date')) return;
+        setDayDateCalendarOpen(false);
+    });
     document.addEventListener('keydown', (event) => {
         if (event.key !== 'Escape' || !stageShouldShow()) return;
+        const calendar = document.getElementById('day-stage-date-calendar');
+        if (calendar && !calendar.hidden) {
+            setDayDateCalendarOpen(false);
+            return;
+        }
         const tag = document.activeElement?.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
         if (overlayBlocksEscape()) return;
@@ -507,6 +520,80 @@ function flyCarousel({ card, outgoing, leaving, direction, hero, prevGhost, next
 export function noteDayFly(offset) {
     if (!stageShouldShow() || tiltQuery.matches) return;
     flyDirection = offset < 0 ? -1 : 1;
+}
+
+function dateParts(dateStr) {
+    const [year, month, day] = String(dateStr || '').split('-').map(Number);
+    if (!year || !month || !day) return null;
+    return { year, month: month - 1, day };
+}
+
+function setDayDateCalendarOpen(open) {
+    const calendar = document.getElementById('day-stage-date-calendar');
+    const trigger = document.getElementById('day-stage-date');
+    if (!calendar || !trigger) return;
+    calendar.hidden = !open;
+    trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) {
+        const parsed = dateParts(state.selectedDateStr);
+        const now = new Date();
+        dayDateMonth = parsed
+            ? { year: parsed.year, month: parsed.month }
+            : { year: now.getFullYear(), month: now.getMonth() };
+        renderDayDateCalendar();
+    }
+}
+
+export function toggleDayDateCalendar() {
+    const calendar = document.getElementById('day-stage-date-calendar');
+    if (!calendar) return;
+    setDayDateCalendarOpen(calendar.hidden);
+}
+
+export function shiftDayDateCalendar(offset) {
+    if (!dayDateMonth) setDayDateCalendarOpen(true);
+    if (!dayDateMonth || !Number.isFinite(offset) || !offset) return;
+    const next = new Date(dayDateMonth.year, dayDateMonth.month + offset, 1);
+    dayDateMonth = { year: next.getFullYear(), month: next.getMonth() };
+    renderDayDateCalendar();
+}
+
+export function pickDayDate(dateStr) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
+    setDayDateCalendarOpen(false);
+    if (dateStr !== state.selectedDateStr) window.selectDate?.(dateStr);
+}
+
+function renderDayDateCalendar() {
+    const grid = document.getElementById('day-stage-date-grid');
+    const label = document.getElementById('day-stage-date-month');
+    if (!grid || !label || !dayDateMonth) return;
+    const { year, month } = dayDateMonth;
+    const monthName = new Intl.DateTimeFormat('uk-UA', { month: 'long', year: 'numeric' }).format(new Date(year, month, 1));
+    label.textContent = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+    grid.replaceChildren();
+    const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    for (let i = 0; i < firstWeekday; i += 1) {
+        const empty = document.createElement('span');
+        empty.className = 'day-stage-date-day is-empty';
+        grid.append(empty);
+    }
+    for (let day = 1; day <= daysInMonth; day += 1) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'day-stage-date-day';
+        button.dataset.action = 'day-date-pick';
+        button.dataset.date = dateStr;
+        button.textContent = String(day);
+        const result = getCalendarDayResult(state.appData?.journal?.[dateStr] || {});
+        if (result.value !== null && state.appData?.journal?.[dateStr]?.traderAbsent !== true && state.appData?.journal?.[dateStr]?.demoTrading !== true) {
+            button.classList.add(result.value >= 0 ? 'is-profit' : 'is-loss');
+        }
+        if (dateStr === state.selectedDateStr) button.classList.add('is-active');
+        grid.append(button);
+    }
 }
 
 function renderGhost(element, dateStr) {
@@ -875,6 +962,7 @@ function renderDayStage(dateStr) {
     renderTrades(dateStr, day);
     renderPrep(dateStr);
     renderTags();
+    if (!document.getElementById('day-stage-date-calendar')?.hidden) renderDayDateCalendar();
     void renderTickerScreens(dateStr, day);
 }
 

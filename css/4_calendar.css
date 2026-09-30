@@ -538,6 +538,13 @@
 .day-stage-frame > * { pointer-events: auto; }
 
 .day-stage-top {
+    position: relative;
+    z-index: var(--z-dropdown);
+    width: fit-content;
+    margin: 0 auto;
+}
+
+.day-stage-datebar {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -588,6 +595,130 @@
     white-space: nowrap;
 }
 
+.day-stage-top { position: relative; z-index: var(--z-dropdown); }
+
+.day-stage-date-calendar {
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: var(--z-popover);
+    width: min(92vw, 320px);
+    padding: 10px;
+    border: 1px solid color-mix(in srgb, var(--border) 84%, var(--accent) 16%);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--bg-main) 88%, var(--bg-panel));
+    box-shadow: 0 18px 48px color-mix(in srgb, #000 42%, transparent);
+}
+
+.day-stage-date-calendar[hidden] { display: none !important; }
+
+.day-stage-date-calendar-head {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) 34px;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.day-stage-date-nav,
+.day-stage-date-month {
+    height: 32px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-panel);
+    color: var(--text-main);
+    font: inherit;
+}
+
+.day-stage-date-nav {
+    display: inline-grid;
+    place-items: center;
+    padding: 0;
+    color: var(--accent);
+    font-size: 1.35rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.day-stage-date-month {
+    display: grid;
+    place-items: center;
+    min-width: 0;
+    padding: 0 8px;
+    font-size: 0.84rem;
+    font-weight: 800;
+    text-align: center;
+}
+
+.day-stage-date-nav:hover {
+    border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
+}
+
+.day-stage-date-weekdays,
+.day-stage-date-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.day-stage-date-weekdays { margin-bottom: 4px; }
+
+.day-stage-date-weekdays span {
+    display: grid;
+    place-items: center;
+    height: 22px;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+.day-stage-date-grid { gap: 2px; }
+
+.day-stage-date-day {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 100%;
+    aspect-ratio: 1;
+    min-height: 32px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-main);
+    font: inherit;
+    font-size: 0.86rem;
+    cursor: pointer;
+}
+
+.day-stage-date-day:hover {
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    color: var(--accent);
+}
+
+.day-stage-date-day.is-empty { pointer-events: none; }
+
+.day-stage-date-day.is-profit::after,
+.day-stage-date-day.is-loss::after {
+    content: "";
+    position: absolute;
+    bottom: 4px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+}
+
+.day-stage-date-day.is-profit::after { background: var(--profit); }
+.day-stage-date-day.is-loss::after { background: var(--loss); }
+
+.day-stage-date-day.is-active {
+    background: var(--accent);
+    color: #fff;
+    font-weight: 800;
+}
+
+.day-stage-date-day.is-active::after { background: #fff; }
+
 .day-stage-center {
     flex: 1;
     display: flex;
@@ -615,6 +746,7 @@
     flex-direction: column;
     justify-content: space-between;
     border-radius: 28px;
+    overflow-x: clip;
     border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
     background:
         radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, var(--bg-panel) 70%, transparent), var(--bg-panel) 62%);
@@ -872,9 +1004,12 @@
     }
 }
 
-.day-stage-top {
+.day-stage-datebar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
     width: fit-content;
-    margin: 0 auto;
     padding: 6px;
     border-radius: 999px;
     border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
@@ -1015,9 +1150,17 @@
     justify-content: space-between;
     gap: 12px;
     margin-top: 8px;
+    min-width: 0;
 }
 
-.day-stage-spark { width: 120px; height: 46px; flex: 0 0 auto; }
+.day-stage-spark {
+    width: 120px;
+    max-width: 38%;
+    height: 46px;
+    flex: 1 1 96px;
+    min-width: 0;
+    overflow: hidden;
+}
 .day-stage-card-tone {
     margin: 6px 0 0;
     text-align: center;
@@ -1408,6 +1551,8 @@ button.day-trade-row:hover { background: color-mix(in srgb, var(--accent) 8%, tr
 .day-tag-add { padding: 6px 10px; background: transparent; }
 
 .day-form-extras { display: none; }
+
+body.day-stage-open #form-sidebar .header-actions { display: none; }
 
 body.day-stage-open #form-sidebar .day-form-stage-field {
     position: absolute !important;
