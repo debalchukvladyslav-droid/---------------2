@@ -2,6 +2,7 @@ import { state } from './state.js';
 import { parseDecimalInput, showPrompt, showToast } from './utils.js';
 import { resolveMonthlyDayloss } from './data_utils.js';
 import { getCalendarDayResult, visibleTradeRows } from './trade_filters.js';
+import { pickSheetRowsSource } from './datagrid_rows.js';
 import { getNyseDaySchedule } from './nyse_calendar.js';
 import { findScreenshotsForTicker, getStorageUrl, openScreenshotForTrade, openZoomGallery } from './gallery.js';
 import { saveSettings } from './storage.js';
@@ -76,7 +77,41 @@ function tradeKf(trade) {
 }
 
 function tradeComment(trade) {
-    return String(trade?.comment ?? trade?.notes ?? trade?.review ?? trade?.sheet?.comment ?? '').trim();
+    const sheet = trade?.sheet && typeof trade.sheet === 'object' ? trade.sheet : {};
+    return String(trade?.comment ?? trade?.notes ?? trade?.review ?? sheet.comment ?? sheet.traderComment ?? sheet.teamLeadComment ?? '').trim();
+}
+
+function preferredSheetId() {
+    try {
+        const storageKey = state.myUserId ? `sheet_spreadsheet_id:${state.myUserId}` : 'sheet_spreadsheet_id';
+        return localStorage.getItem(storageKey) || sessionStorage.getItem(storageKey) || '';
+    } catch {
+        return '';
+    }
+}
+
+function dayTradeRows(dateStr, day) {
+    const imported = pickSheetRowsSource(state.appData?.sheetRows || {}, preferredSheetId());
+    const sheetRows = Array.isArray(imported?.byDay?.[dateStr]) ? imported.byDay[dateStr] : [];
+    if (sheetRows.length) {
+        return [...sheetRows]
+            .sort((a, b) => (Number(a?.sheet?.sheetRow) || 0) - (Number(b?.sheet?.sheetRow) || 0))
+            .map((trade) => ({ trade }));
+    }
+    return visibleTradeRows(day?.trades);
+}
+
+function sheetScreenshotUrl(trade) {
+    const url = String(trade?.sheet?.screenshotUrl || '').trim();
+    return url.startsWith('http') ? url : '';
+}
+
+function galleryPathsForSheetScreenshot(trade) {
+    const url = sheetScreenshotUrl(trade);
+    const driveId = url.match(/[?&]id=([a-zA-Z0-9_-]+)/)?.[1] || '';
+    if (!driveId) return [];
+    const meta = state.appData?.screenMeta || {};
+    return Object.keys(meta).filter((path) => String(meta[path]?.driveId || '') === driveId);
 }
 
 function emptyLine(text) {
@@ -620,7 +655,7 @@ function renderCard(dateStr, day) {
     const result = absent ? { value: null } : getCalendarDayResult(day || {});
     const pnl = result.value;
     const schedule = absent ? null : getNyseDaySchedule(dateStr);
-    const rows = visibleTradeRows(day?.trades);
+    const rows = dayTradeRows(dateStr, day);
     const nets = dayNets(rows);
     const wins = nets.filter((net) => net > 0).length;
     const rate = nets.length ? Math.round((wins / nets.length) * 100) : null;
@@ -780,7 +815,7 @@ function renderTrades(dateStr, day) {
     const host = document.getElementById('day-stage-trades');
     if (!host) return;
     host.replaceChildren();
-    const rows = visibleTradeRows(day?.trades);
+    const rows = dayTradeRows(dateStr, day);
     const head = document.createElement('div');
     head.className = 'day-stage-trades-head';
     const title = document.createElement('h3');
@@ -812,7 +847,10 @@ function renderTrades(dateStr, day) {
         const net = Number(trade?.net);
         const hasNet = Number.isFinite(net);
         const comment = tradeComment(trade);
-        const hasScreen = findScreenshotsForTicker(dateStr, trade?.symbol).length > 0;
+        const screenUrl = sheetScreenshotUrl(trade);
+        const linked = galleryPathsForSheetScreenshot(trade);
+        const gallery = findScreenshotsForTicker(dateStr, trade?.symbol);
+        const hasScreen = Boolean(screenUrl) || linked.length > 0 || gallery.length > 0;
         const row = document.createElement(hasScreen ? 'button' : 'div');
         if (hasScreen) row.type = 'button';
         row.className = `day-trade-row${hasNet ? (net >= 0 ? ' is-profit-row' : ' is-loss-row') : ''}`;
@@ -821,7 +859,7 @@ function renderTrades(dateStr, day) {
         symbol.className = 'day-trade-symbol';
         symbol.textContent = String(trade?.symbol || '?').toUpperCase();
         const type = document.createElement('span');
-        type.textContent = String(trade?.type || '—');
+        type.textContent = String(trade?.type || trade?.sheet?.tradeType || '—');
         const pnl = document.createElement('strong');
         pnl.className = hasNet && net >= 0 ? 'is-profit' : 'is-loss';
         pnl.textContent = hasNet ? formatSignedMoney(net) : '—';
@@ -831,7 +869,19 @@ function renderTrades(dateStr, day) {
         note.className = 'day-trade-comment';
         note.textContent = comment || '—';
         row.append(symbol, type, pnl, kf, note);
-        if (hasScreen) row.addEventListener('click', () => { void openScreenshotForTrade(dateStr, trade); });
+        if (hasScreen) {
+            row.addEventListener('click', () => {
+                if (gallery.length) {
+                    void openScreenshotForTrade(dateStr, trade);
+                    return;
+                }
+                const path = linked[0] || screenUrl;
+                if (!path) return;
+                void getStorageUrl(path).then((src) => {
+                    if (src) openZoomGallery(src, [src]);
+                });
+            });
+        }
         table.append(row);
     });
     host.append(table);
@@ -869,15 +919,19 @@ async function renderTickerScreens(dateStr, day) {
     if (!host) return;
     const token = ++screenToken;
     host.replaceChildren();
-    const rows = visibleTradeRows(day?.trades);
-    const seenSymbol = new Set();
+    const rows = dayTradeRows(dateStr, day);
     const matches = [];
     const seenPath = new Set();
     rows.forEach(({ trade }) => {
         const symbol = String(trade?.symbol || '').trim();
-        const key = symbol.toUpperCase();
-        if (!symbol || seenSymbol.has(key)) return;
-        seenSymbol.add(key);
+        const direct = sheetScreenshotUrl(trade);
+        const linked = galleryPathsForSheetScreenshot(trade);
+        (linked.length ? linked : (direct ? [direct] : [])).forEach((path) => {
+            if (!path || seenPath.has(path)) return;
+            seenPath.add(path);
+            matches.push({ path, symbol: symbol || '?' });
+        });
+        if (!symbol) return;
         findScreenshotsForTicker(dateStr, symbol).forEach((item) => {
             if (!item?.path || seenPath.has(item.path)) return;
             seenPath.add(item.path);

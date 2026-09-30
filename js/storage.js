@@ -190,8 +190,27 @@ function isCurrentProfileRequest(nick, userId) {
     return state.CURRENT_VIEWED_USER === nick && getCurrentViewedUserId() === userId;
 }
 
+function dayReviewMetrics(day) {
+    const source = day?.dayScores && typeof day.dayScores === 'object' ? day.dayScores : {};
+    const dayScores = {};
+    ['discipline', 'plan', 'emotion', 'entries'].forEach((key) => {
+        const score = Number(source[key]);
+        if (Number.isFinite(score) && score >= 1 && score <= 10) dayScores[key] = Math.round(score);
+    });
+    const grade = String(day?.dayGrade || '').trim().toUpperCase();
+    const dayTags = Array.isArray(day?.dayTags)
+        ? day.dayTags.map((tag) => String(tag).trim()).filter(Boolean).slice(0, 16)
+        : [];
+    return {
+        dayScores,
+        dayGrade: 'ABCDEF'.includes(grade) ? grade : '',
+        dayTags,
+    };
+}
+
 function dayEntryToJournalRow(userId, tradeDate, entry) {
     const day = normalizeDayEntry(entry);
+    const review = dayReviewMetrics(day);
 
     return {
         user_id: userId,
@@ -244,6 +263,9 @@ function dayEntryToJournalRow(userId, tradeDate, entry) {
             sessionReviewDone: day.sessionReviewDone ?? false,
             sessionEndRecorded: day.sessionEndRecorded === true,
             sessionReviewCompletedAt: day.sessionReviewCompletedAt ?? '',
+            dayScores: review.dayScores,
+            dayGrade: review.dayGrade,
+            dayTags: review.dayTags,
             trades: Array.isArray(day.trades) ? day.trades : [],
             tradePolygons: day.tradePolygons && typeof day.tradePolygons === 'object' ? day.tradePolygons : {},
             review_requests: day.review_requests && typeof day.review_requests === 'object' ? day.review_requests : {},
@@ -297,6 +319,7 @@ function journalRowToDayEntry(row) {
         sessionEndRecorded: metrics.sessionEndRecorded === true || metrics.sessionReviewDone === true
             || String(metrics.sessionReviewCompletedAt || '').trim() !== '',
         sessionReviewCompletedAt: metrics.sessionReviewCompletedAt,
+        ...dayReviewMetrics(metrics),
         trades: metrics.trades || [],
         tradePolygons: metrics.tradePolygons && typeof metrics.tradePolygons === 'object' ? metrics.tradePolygons : {},
         review_requests: metrics.review_requests && typeof metrics.review_requests === 'object' ? metrics.review_requests : {},
@@ -335,6 +358,7 @@ function journalRowToMonthEntry(row) {
                 || String(metrics.sessionGoal || '').trim() !== '' || String(metrics.sessionPlan || '').trim() !== '',
             sessionEndRecorded: metrics.sessionEndRecorded === true || metrics.sessionReviewDone === true
                 || String(metrics.sessionReviewCompletedAt || '').trim() !== '',
+            ...dayReviewMetrics(metrics),
             trades: metrics.trades || [],
             tradePolygons: metrics.tradePolygons && typeof metrics.tradePolygons === 'object' ? metrics.tradePolygons : {},
         }),

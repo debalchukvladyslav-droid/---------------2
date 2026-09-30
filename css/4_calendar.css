@@ -1154,6 +1154,8 @@
 }
 
 .day-stage-spark {
+    position: relative;
+    z-index: 0;
     width: 120px;
     max-width: 38%;
     height: 46px;
@@ -1183,6 +1185,8 @@
 .day-stage-card.is-red .day-stage-card-tone { color: var(--loss); }
 
 .day-stage-card-stats {
+    position: relative;
+    z-index: var(--z-dropdown);
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
     gap: 8px;
@@ -1213,6 +1217,7 @@
 
 .day-grade-menu {
     position: absolute;
+    z-index: var(--z-dropdown);
     left: 0;
     bottom: calc(100% + 8px);
     display: flex;
@@ -1220,7 +1225,7 @@
     padding: 6px;
     border-radius: 999px;
     border: 1px solid var(--border);
-    background: var(--bg-panel);
+    background: var(--card);
     box-shadow: 0 14px 32px color-mix(in srgb, #000 36%, transparent);
 }
 
@@ -1229,7 +1234,7 @@
     height: 32px;
     border-radius: 999px;
     border: 1px solid var(--border);
-    background: transparent;
+    background: var(--card);
     color: var(--text-main);
     font: inherit;
     font-weight: 800;
