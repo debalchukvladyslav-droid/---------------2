@@ -32,6 +32,18 @@ test('settings commit offline without a getUser network request', async () => {
     assert.equal(commits[0][1][0].value.theme, 'local');
 });
 
+test('a failed auth refresh still saves with the signed-in account', async () => {
+    const error = new TypeError('Failed to fetch');
+    error.name = 'AuthRetryableFetchError';
+    const { api, commits } = harness({
+        supabase: { auth: { getSession: async () => { throw error; }, getUser: async () => { throw error; } } },
+    });
+    await api.saveSettings();
+    assert.equal(commits.length, 1);
+    assert.equal(commits[0][0], 'owner');
+    assert.equal(commits[0][1][0].value.theme, 'local');
+});
+
 test('an unloaded settings collection is kept instead of being saved as empty', async () => {
     const previous = { tickers: { AAPL: 1 }, theme: 'dark' };
     const { api, commits, state } = harness({ readCachedValue: async () => ({ value: previous }) });

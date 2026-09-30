@@ -131,17 +131,39 @@ export async function resolveViewedUserId(docName = state.CURRENT_VIEWED_USER, o
     return resolvedUserId;
 }
 
+function isRetryableAuthFetchError(error) {
+    return error?.name === 'AuthRetryableFetchError'
+        || /failed to fetch|networkerror|load failed/i.test(String(error?.message || ''));
+}
+
+function knownLocalUser() {
+    const userId = state.myUserId || null;
+    if (!userId) return null;
+    return { id: userId, email: state.appData?.settings?.email || '' };
+}
+
 async function getCurrentUserContext({ local = false } = {}) {
     // Local persistence must work without an Auth network round trip. The RPC
     // validates the session when the durable operations eventually reach it.
-    const session = local ? await supabase.auth.getSession() : null;
-    if (session?.error) throw session.error;
-    const user = local ? session?.data?.session?.user : await getCurrentSupabaseUser();
-    return {
-        user,
-        userId: user?.id || null,
-        email: user?.email || ''
-    };
+    // getSession still refreshes an expiring token and throws AuthRetryableFetchError
+    // when that refresh cannot reach Supabase.
+    if (!local) {
+        const user = await getCurrentSupabaseUser();
+        return { user, userId: user?.id || null, email: user?.email || '' };
+    }
+    try {
+        const session = await supabase.auth.getSession();
+        if (session?.error) {
+            if (!isRetryableAuthFetchError(session.error)) throw session.error;
+        } else {
+            const user = session?.data?.session?.user || null;
+            return { user, userId: user?.id || null, email: user?.email || '' };
+        }
+    } catch (error) {
+        if (!isRetryableAuthFetchError(error)) throw error;
+    }
+    const user = knownLocalUser();
+    return { user, userId: user?.id || null, email: user?.email || '' };
 }
 
 export function resetRuntimeDataForAccountSwitch() {
