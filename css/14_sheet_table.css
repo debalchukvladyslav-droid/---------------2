@@ -1397,3 +1397,23 @@ body[data-theme="light"] .sheet-auto-sync__row select option {
     color: var(--text-muted);
     font-size: 0.82rem;
 }
+
+.shs-bot-block-title {
+    margin: 16px 0 8px;
+    font-size: 0.92rem;
+}
+
+.shs-bot-raw {
+    margin: 8px 0 0;
+    max-height: 280px;
+    overflow: auto;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-main);
+    color: var(--text-main);
+    font-size: 0.75rem;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
