@@ -194,6 +194,7 @@ export function resetRuntimeDataForAccountSwitch() {
     state._monthListLoaded = false;
     state._availableMonthKeys = new Set();
     state.autoFlagsCache = { records: new Set(), absoluteRecord: null };
+    _loadedSettingsCollections.clear();
     clearStatsCache();
 }
 
@@ -408,6 +409,7 @@ function applySettingsPayload(payload) {
             : incoming[key] && typeof incoming[key] === 'object' && !Array.isArray(incoming[key]);
         if (!valid) continue;
         state.appData[key] = key === 'tradeTypes' ? normalizeTradeTypesList(incoming[key]) : incoming[key];
+        noteLoadedSettingsCollection(key, state.appData[key]);
         delete incoming[key];
     }
     if (incoming.learnCache === null || (incoming.learnCache && typeof incoming.learnCache === 'object')) {
@@ -415,6 +417,7 @@ function applySettingsPayload(payload) {
         delete incoming.learnCache;
     }
     state.appData.settings = { ...state.appData.settings, ...incoming };
+    noteLoadedSettingsCollection('monthlyDayloss', state.appData.settings?.monthlyDayloss);
 }
 
 async function applySynchronizedChanges(userId, changes) {
@@ -503,11 +506,37 @@ const DESTRUCTIVE_SETTINGS_KEYS = [
     'tickers', 'screenMeta', 'sheetRows', 'cumulativeSheetRows', 'unassignedImages',
     'aiChatHistory', 'aiSavedChats', 'weeklyComments', 'monthlyDayloss',
 ];
+const _loadedSettingsCollections = new Set();
 
 function collectionSize(value) {
     if (Array.isArray(value)) return value.length;
     if (value && typeof value === 'object') return Object.keys(value).length;
     return 0;
+}
+
+function noteLoadedSettingsCollection(key, value) {
+    if (DESTRUCTIVE_SETTINGS_KEYS.includes(key) && collectionSize(value) > 0) {
+        _loadedSettingsCollections.add(key);
+    }
+}
+
+function keepCollection(key, current, previous, empty) {
+    if (current == null) return previous ?? empty;
+    if (collectionSize(current) === 0 && collectionSize(previous) > 0 && !_loadedSettingsCollections.has(key)) {
+        return previous;
+    }
+    noteLoadedSettingsCollection(key, current);
+    return current;
+}
+
+function adoptKeptSettingsCollection(key, value) {
+    if (collectionSize(value) === 0 || _loadedSettingsCollections.has(key)) return;
+    _loadedSettingsCollections.add(key);
+    if (key === 'monthlyDayloss') {
+        state.appData.settings = { ...(state.appData.settings || {}), monthlyDayloss: value };
+        return;
+    }
+    if (collectionSize(state.appData?.[key]) === 0) state.appData[key] = value;
 }
 
 function destructiveSettingsReset(previous, next) {
@@ -645,28 +674,38 @@ async function performSettingsSave(context) {
         const settingsPayload = {
             ...previousSettings,
             ...state.appData.settings,
-            aiChatHistory: keep(Array.isArray(state.appData.aiChatHistory) ? state.appData.aiChatHistory : null, previousSettings.aiChatHistory, []),
-            aiSavedChats: keep(Array.isArray(state.appData.aiSavedChats) ? state.appData.aiSavedChats : null, previousSettings.aiSavedChats, []),
+            aiChatHistory: keepCollection('aiChatHistory', Array.isArray(state.appData.aiChatHistory) ? state.appData.aiChatHistory : null, previousSettings.aiChatHistory, []),
+            aiSavedChats: keepCollection('aiSavedChats', Array.isArray(state.appData.aiSavedChats) ? state.appData.aiSavedChats : null, previousSettings.aiSavedChats, []),
             errorTypes: keep(Array.isArray(state.appData.errorTypes) ? state.appData.errorTypes : null, previousSettings.errorTypes, []),
             learnCache: keep(state.appData.learnCache && typeof state.appData.learnCache === 'object' ? state.appData.learnCache : null, previousSettings.learnCache, null),
-            tickers: keep(state.appData.tickers && typeof state.appData.tickers === 'object' ? state.appData.tickers : null, previousSettings.tickers, {}),
-            screenMeta: keep(state.appData.screenMeta && typeof state.appData.screenMeta === 'object' ? state.appData.screenMeta : null, previousSettings.screenMeta, {}),
+            tickers: keepCollection('tickers', state.appData.tickers && typeof state.appData.tickers === 'object' ? state.appData.tickers : null, previousSettings.tickers, {}),
+            screenMeta: keepCollection('screenMeta', state.appData.screenMeta && typeof state.appData.screenMeta === 'object' ? state.appData.screenMeta : null, previousSettings.screenMeta, {}),
             tradeTypes: keep(Array.isArray(state.appData.tradeTypes) ? state.appData.tradeTypes : null, previousSettings.tradeTypes, []),
-            unassignedImages: keep(Array.isArray(state.appData.unassignedImages) ? state.appData.unassignedImages : null, previousSettings.unassignedImages, []),
+            unassignedImages: keepCollection('unassignedImages', Array.isArray(state.appData.unassignedImages) ? state.appData.unassignedImages : null, previousSettings.unassignedImages, []),
             screenTags: keep(state.appData.screenTags && typeof state.appData.screenTags === 'object' ? state.appData.screenTags : null, previousSettings.screenTags, {}),
             screenDiscipline: keep(
                 state.appData.screenDiscipline && typeof state.appData.screenDiscipline === 'object' ? state.appData.screenDiscipline : null,
                 previousSettings.screenDiscipline,
                 {},
             ),
-            sheetRows: keep(state.appData.sheetRows && typeof state.appData.sheetRows === 'object' ? state.appData.sheetRows : null, previousSettings.sheetRows, {}),
-            cumulativeSheetRows: keep(
+            sheetRows: keepCollection('sheetRows', state.appData.sheetRows && typeof state.appData.sheetRows === 'object' ? state.appData.sheetRows : null, previousSettings.sheetRows, {}),
+            cumulativeSheetRows: keepCollection(
+                'cumulativeSheetRows',
                 state.appData.cumulativeSheetRows && typeof state.appData.cumulativeSheetRows === 'object' ? state.appData.cumulativeSheetRows : null,
                 previousSettings.cumulativeSheetRows,
                 {},
             ),
-            weeklyComments: keep(state.appData.weeklyComments && typeof state.appData.weeklyComments === 'object' ? state.appData.weeklyComments : null, previousSettings.weeklyComments, {}),
+            weeklyComments: keepCollection('weeklyComments', state.appData.weeklyComments && typeof state.appData.weeklyComments === 'object' ? state.appData.weeklyComments : null, previousSettings.weeklyComments, {}),
+            monthlyDayloss: keepCollection(
+                'monthlyDayloss',
+                state.appData.settings?.monthlyDayloss && typeof state.appData.settings.monthlyDayloss === 'object'
+                    ? state.appData.settings.monthlyDayloss
+                    : null,
+                previousSettings.monthlyDayloss,
+                {},
+            ),
         };
+        DESTRUCTIVE_SETTINGS_KEYS.forEach((key) => adoptKeptSettingsCollection(key, settingsPayload[key]));
         const resetKeys = destructiveSettingsReset(previousSettings, settingsPayload);
         if (resetKeys.length >= 3) {
             throw syncError(`Збереження зупинено: одночасно очищуються важливі дані (${resetKeys.join(', ')}). Оновіть сторінку.`, 'DATA_LOSS_GUARD');

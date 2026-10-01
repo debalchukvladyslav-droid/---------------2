@@ -65,14 +65,43 @@ test('an unloaded settings collection is kept instead of being saved as empty', 
     assert.deepEqual(commits[0][1][0].value.tickers, { AAPL: 1 });
 });
 
+test('startup defaults do not count as clearing cached collections', async () => {
+    const previous = {
+        tickers: { AAPL: 1 },
+        screenMeta: { shot: { tag: 'a' } },
+        unassignedImages: ['img'],
+        monthlyDayloss: { '2026-10': -500 },
+        theme: 'dark',
+    };
+    const { api, commits, state } = harness({ readCachedValue: async () => ({ value: previous }) });
+    state.appData.settings = { theme: 'local', monthlyDayloss: {} };
+    state.appData.tickers = {};
+    state.appData.screenMeta = {};
+    state.appData.unassignedImages = [];
+    await api.saveSettings();
+    assert.equal(commits.length, 1);
+    const saved = commits[0][1][0].value;
+    assert.equal(saved.theme, 'local');
+    assert.deepEqual(saved.tickers, previous.tickers);
+    assert.deepEqual(saved.screenMeta, previous.screenMeta);
+    assert.deepEqual(saved.unassignedImages, previous.unassignedImages);
+    assert.deepEqual(saved.monthlyDayloss, previous.monthlyDayloss);
+    assert.deepEqual(state.appData.tickers, previous.tickers);
+    assert.deepEqual(state.appData.settings.monthlyDayloss, previous.monthlyDayloss);
+});
+
 test('settings guard blocks an explicit clear of several populated collections', async () => {
     const previous = { tickers: { A: 1 }, screenMeta: { shot: {} }, cumulativeSheetRows: { row: {} } };
     const { api, commits, state } = harness({ readCachedValue: async () => ({ value: previous }) });
+    state.appData.tickers = { A: 1 };
+    state.appData.screenMeta = { shot: {} };
+    state.appData.cumulativeSheetRows = { row: {} };
+    await api.saveSettings();
     state.appData.tickers = {};
     state.appData.screenMeta = {};
     state.appData.cumulativeSheetRows = {};
     await assert.rejects(api.saveSettings(), { code: 'DATA_LOSS_GUARD' });
-    assert.equal(commits.length, 0);
+    assert.equal(commits.length, 1);
 });
 
 test('a summary-only journal day cannot be marked dirty', () => {

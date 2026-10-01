@@ -39,11 +39,14 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    event.respondWith(caches.match(request).then((cached) => cached || fetch(request).then((response) => {
-        if (response.ok && ['image', 'manifest'].includes(request.destination)) {
-            const copy = response.clone();
-            caches.open(CACHE).then((cache) => cache.put(request, copy));
-        }
-        return response;
-    })));
+    event.respondWith(caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((response) => {
+            if (response.ok && ['image', 'manifest'].includes(request.destination)) {
+                const copy = response.clone();
+                caches.open(CACHE).then((cache) => cache.put(request, copy));
+            }
+            return response;
+        }).catch(() => new Response('', { status: 504, statusText: 'Offline' }));
+    }));
 });
