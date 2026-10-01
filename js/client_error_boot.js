@@ -203,11 +203,13 @@
 
     window.addEventListener('unhandledrejection', (event) => {
         const reason = event.reason;
+        const message = reason instanceof Error
+            ? reason.message
+            : (typeof reason === 'string' ? reason : reason?.message || 'Unhandled rejection');
+        if (/signal is aborted|The user aborted a request|Request was aborted/i.test(message)) return;
         report({
             kind: 'unhandledrejection',
-            message: reason instanceof Error
-                ? reason.message
-                : (typeof reason === 'string' ? reason : reason?.message || 'Unhandled rejection'),
+            message,
             stack: reason instanceof Error ? reason.stack || '' : '',
         });
     });

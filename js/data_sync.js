@@ -6,11 +6,16 @@ import { mergeTradeRows, syncError } from './data_sync_core.js';
 let handlers = {};
 let activeUserId = null;
 const metadataRequests = new Map();
+function abortedRequest(error) {
+    return error?.name === 'AbortError'
+        || /abort/i.test(String(error?.message || error?.details || ''));
+}
 async function rpc(name, parameters) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 25000);
     try {
         const { data, error } = await supabase.rpc(name, parameters).abortSignal(controller.signal);
+        if (abortedRequest(error)) throw syncError('Запит до бази перервано. Його буде повторено.', 'ABORT');
         if (error) throw error;
         if (!data || typeof data !== 'object') throw syncError('Некоректна відповідь бази.', 'INVALID_SYNC_RESPONSE');
         return data;
@@ -32,6 +37,7 @@ const transport = {
                 let query = supabase.from('journal_days').select('*').eq('user_id', userId).order('trade_date', { ascending: true }).limit(40);
                 if (after) query = query.gt('trade_date', after);
                 const { data, error } = await query.abortSignal(controller.signal);
+                if (abortedRequest(error)) throw syncError('Запит до бази перервано. Його буде повторено.', 'ABORT');
                 if (error) throw error;
                 rows.push(...(data || []));
                 if (!data?.length || data.length < 40) break;
@@ -96,7 +102,11 @@ export async function ensureDataSyncMetadata(userId) {
 if (channel) channel.onmessage = event => {
     if (event.data?.userId !== activeUserId) return;
     if (event.data.type === 'pending') engine.notify();
-    if (event.data.type === 'changed') void handlers.onOtherTab?.(activeUserId);
+    if (event.data.type === 'changed') {
+        void Promise.resolve(handlers.onOtherTab?.(activeUserId)).catch((error) => {
+            console.warn('[Data sync] інша вкладка:', error?.message || error);
+        });
+    }
 };
 if (typeof window !== 'undefined') {
     let lastPassiveSyncAt = 0;

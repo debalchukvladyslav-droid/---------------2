@@ -54,6 +54,8 @@ test('the same failure keeps a stable fingerprint', () => {
 test('browser noise is not reported', () => {
     assert.equal(isIgnorableClientError('Script error.'), true);
     assert.equal(isIgnorableClientError('ResizeObserver loop completed'), true);
+    assert.equal(isIgnorableClientError('AbortError: signal is aborted without reason'), true);
+    assert.equal(normalizeClientError({ message: 'AbortError: signal is aborted without reason', kind: 'unhandledrejection', page: '/' }), null);
     assert.equal(normalizeClientError({ message: 'Script error.', page: '/calendar' }), null);
     assert.equal(safeClientPage('/calendar#access_token=abc'), '/calendar');
 });
