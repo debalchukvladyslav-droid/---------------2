@@ -3,7 +3,8 @@ import { closeNextSessionDetails, openNextSessionDetails } from './next_session_
 import { renderNextSessionBacktest } from './next_session_backtest.js';
 import { renderAggressivenessBacktest } from './aggressiveness_backtest.js';
 import { rememberShsTrader } from './shs_sync.js';
-import { showToast } from './utils.js';
+import { parseDecimalInput, showToast } from './utils.js';
+import { state } from './state.js';
 import { INVALID_IMAGE_FORMAT_MESSAGE, isJpegOrPng } from './image_file_validation.js';
 import { copyClientErrorReport, downloadClientErrorReports, refreshClientErrorReports } from './admin.js';
 import { cancelLearnReplaySetup, enterLearnReplay, focusLearnReplayStop, onLearnRunButton, setLearnReplaySpeed, showLearnMode, toggleLearnReplay } from './learn_replay.js';
@@ -47,6 +48,31 @@ function setExternalLinkDefaults() {
         if (!href || href.startsWith(window.location.origin)) return;
         link.setAttribute('rel', 'noopener noreferrer');
         if (!link.getAttribute('target')) link.setAttribute('target', '_blank');
+    });
+}
+
+function saveDepositSetting() {
+    const input = document.getElementById('setting-deposit');
+    if (!input || !state.appData) return;
+    const raw = String(input.value || '').trim();
+    if (!state.appData.settings) state.appData.settings = {};
+    if (!raw) {
+        state.appData.settings.deposit = null;
+    } else {
+        const value = parseDecimalInput(raw);
+        if (value === null || value <= 0) {
+            showToast('Введіть депозит більший за нуль');
+            return;
+        }
+        state.appData.settings.deposit = value;
+    }
+    const saved = state.appData.settings.deposit;
+    import('./storage.js').then(({ saveToLocal }) => saveToLocal()).then(() => {
+        window.renderDaylossSettings?.();
+        window.renderView?.();
+        showToast(saved ? `Депозит збережено: ${saved}$` : 'Депозит прибрано');
+    }).catch((error) => {
+        showToast(`Не вдалося зберегти депозит: ${error?.message || 'помилка'}`);
     });
 }
 
@@ -310,6 +336,7 @@ function activateAction(action, trigger, event = null) {
         'theme-save': () => window.saveThemeSettings?.(),
         'theme-custom-reset': () => window.resetCustomTheme?.(),
         'dayloss-save': () => window.saveDaylossSetting?.(),
+        'deposit-save': () => saveDepositSetting(),
         'dayloss-months-toggle': () => window.toggleDaylossMonthsPanel?.(),
         'dayloss-months-save': () => window.saveAllDaylossMonths?.(),
         'backup-rollback-latest': () => window.rollbackLatestBackup?.(),

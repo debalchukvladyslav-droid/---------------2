@@ -3,6 +3,7 @@ import { state } from './state.js';
 import { ensureChartJs } from './vendor_loader.js';
 import { getEffectiveDayPnl } from './trade_filters.js';
 import { resolveMonthlyDayloss } from './data_utils.js';
+import { assessDrawdownRisk } from './drawdown_risk_core.js';
 
 let _miniChart = null;
 let _lastMiniChartArgs = null;
@@ -240,6 +241,43 @@ function getMonthDayloss(year, monthIndex) {
     return resolveMonthlyDayloss(state.appData?.settings, mk);
 }
 
+function previousMonthKey(monthKey) {
+    const [year, month] = String(monthKey || '').split('-').map(Number);
+    if (!year || !month) return '';
+    const date = new Date(Date.UTC(year, month - 2, 1));
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+function renderDrawdownHint(journal) {
+    const hint = document.getElementById('dash-drawdown-hint');
+    const metric = document.getElementById('dash-equity-drawdown');
+    const rows = Object.keys(journal || {})
+        .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date))
+        .sort()
+        .map((date) => ({ date, pnl: getEffectiveDayPnl(journal[date]) }))
+        .filter((row) => Number.isFinite(row.pnl));
+    const monthKey = rows.length ? rows[rows.length - 1].date.slice(0, 7) : '';
+    const prevKey = previousMonthKey(monthKey);
+    const settings = state.appData?.settings;
+    const advice = assessDrawdownRisk({
+        days: rows,
+        deposit: settings?.deposit,
+        dayloss: monthKey ? resolveMonthlyDayloss(settings, monthKey) : -1000,
+        previousDayloss: prevKey ? resolveMonthlyDayloss(settings, prevKey) : -1000,
+    });
+
+    if (hint) {
+        hint.hidden = !advice.text;
+        hint.textContent = advice.text;
+        hint.classList.remove('is-soften', 'is-cut', 'is-quarter', 'is-pause');
+        if (advice.level !== 'calm') hint.classList.add(`is-${advice.level}`);
+    }
+    if (metric) {
+        metric.classList.toggle('is-warn', advice.level === 'soften' || advice.level === 'cut');
+        metric.classList.toggle('is-danger', advice.level === 'quarter' || advice.level === 'pause');
+    }
+}
+
 function buildAllTimeEquityMap(journal) {
     const rows = Object.keys(journal || {})
         .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
@@ -328,6 +366,7 @@ export function updateDashMiniEquityChart(year, monthIndex) {
     });
 
     setMetric('dash-equity-drawdown', currentPullback, 'abs');
+    renderDrawdownHint(journal);
 
     const ctx = canvas.getContext('2d');
     if (_miniChart) {
@@ -359,13 +398,6 @@ export function updateDashMiniEquityChart(year, monthIndex) {
         canvas.parentElement?.classList.add('dash-mini-equity-empty');
     } else {
         canvas.parentElement?.classList.remove('dash-mini-equity-empty');
-    }
-
-    const drawdownMetric = document.getElementById('dash-equity-drawdown');
-    if (drawdownMetric) {
-        const daylossAbs = Math.abs(dayloss);
-        drawdownMetric.classList.toggle('is-warn', currentPullback <= -(daylossAbs / 2) && currentPullback > -daylossAbs);
-        drawdownMetric.classList.toggle('is-danger', currentPullback <= -daylossAbs);
     }
 
     _miniChart = new Chart(ctx, {

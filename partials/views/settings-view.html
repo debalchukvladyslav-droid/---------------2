@@ -20,8 +20,16 @@
                     <input type="number" id="setting-dayloss-limit" step="1" placeholder="Напр. -1000">
                 </div>
             </div>
+            <div class="settings-dayloss-row">
+                <div class="form-group settings-narrow">
+                    <label for="setting-deposit">Депозит ($)</label>
+                    <input type="number" id="setting-deposit" min="0" step="1" placeholder="Напр. 100000" inputmode="decimal">
+                </div>
+            </div>
+            <p class="settings-copy-sm">Відкат на головній рахується від цього депозиту. 10 000 із 100 000 — це 10%.</p>
             <div class="settings-dayloss-actions">
                 <button class="btn-primary btn-auto" data-action="dayloss-save">Зберегти для місяця</button>
+                <button class="btn-secondary btn-auto" data-action="deposit-save">Зберегти депозит</button>
                 <button class="btn-secondary btn-auto" data-action="dayloss-months-toggle">Всі місяці з даними</button>
             </div>
             <div id="settings-dayloss-months-panel" class="settings-dayloss-months-panel" hidden>

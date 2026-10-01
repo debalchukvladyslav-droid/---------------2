@@ -36,6 +36,7 @@ export const state = {
             ocrPos: 'left', 
             ocrRect: {top: 0, left: 0, width: 250, height: 80}, 
             defaultDayloss: -1000,
+            deposit: null,
             monthlyDayloss: {},
             glassEnabled: true,
             dashboardLayout: null,

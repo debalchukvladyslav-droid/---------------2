@@ -18,6 +18,7 @@ export function getDefaultSettings() {
         ocrPos: 'left',
         ocrRect: { top: 0, left: 0, width: 250, height: 80 },
         defaultDayloss: -1000,
+        deposit: null,
         monthlyDayloss: {},
         cumulativeMonthlyDayloss: {},
         cumulativeIncludeDemo: true,
@@ -322,6 +323,8 @@ export function normalizeAppData(rawData) {
     normalizedSettings.sliders = Array.isArray(normalizedSettings.sliders) ? normalizedSettings.sliders : [];
     normalizedSettings.gemini_keys = Array.isArray(normalizedSettings.gemini_keys) ? normalizedSettings.gemini_keys : [];
     normalizedSettings.monthlyDayloss = typeof normalizedSettings.monthlyDayloss === 'object' ? normalizedSettings.monthlyDayloss : {};
+    const deposit = Number(normalizedSettings.deposit);
+    normalizedSettings.deposit = Number.isFinite(deposit) && deposit > 0 ? deposit : null;
     normalizedSettings.cumulativeMonthlyDayloss =
         normalizedSettings.cumulativeMonthlyDayloss && typeof normalizedSettings.cumulativeMonthlyDayloss === 'object'
             ? normalizedSettings.cumulativeMonthlyDayloss

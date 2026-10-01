@@ -1371,6 +1371,11 @@ function renderDaylossMonthsList() {
 window.renderDaylossSettings = function() {
     syncDaylossInputs();
     renderDaylossMonthsList();
+    const depositInput = document.getElementById('setting-deposit');
+    const deposit = Number(state.appData?.settings?.deposit);
+    if (depositInput && document.activeElement !== depositInput) {
+        depositInput.value = Number.isFinite(deposit) && deposit > 0 ? deposit : '';
+    }
 };
 
 window.toggleDaylossMonthsPanel = function() {
