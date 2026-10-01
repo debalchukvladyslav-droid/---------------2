@@ -5,11 +5,12 @@ import {
     archiveFileName,
     archiveQuery,
     archiveSlot,
+    archiveTradeDate,
     nyClock,
     summarizeArchive,
 } from '../lib/shs_day_archive.js';
 
-test('noon and 15:50 New York are the only archive slots, including both DST offsets', () => {
+test('noon and 15:50 New York stay on the session day, and 9:00 Kyiv stores the previous day', () => {
     assert.equal(archiveSlot(new Date('2026-10-01T16:00:00Z')), '1200');
     assert.equal(nyClock(new Date('2026-10-01T16:00:00Z')).date, '2026-10-01');
     assert.equal(archiveSlot(new Date('2026-10-01T17:00:00Z')), '');
@@ -20,6 +21,11 @@ test('noon and 15:50 New York are the only archive slots, including both DST off
     assert.equal(archiveSlot(new Date('2026-01-15T17:00:00Z')), '1200');
     assert.equal(archiveSlot(new Date('2026-01-15T19:50:00Z')), '');
     assert.equal(archiveSlot(new Date('2026-01-15T20:50:00Z')), '1550');
+    assert.equal(archiveSlot(new Date('2026-10-02T06:00:00Z')), '0900');
+    assert.equal(archiveTradeDate(new Date('2026-10-02T06:00:00Z'), '0900'), '2026-10-01');
+    assert.equal(archiveSlot(new Date('2026-10-03T06:00:00Z')), '0900');
+    assert.equal(archiveTradeDate(new Date('2026-10-03T06:00:00Z'), '0900'), '2026-10-02');
+    assert.equal(archiveSlot(new Date('2026-10-02T06:20:00Z')), '');
 });
 
 test('the archive asks the desk feed for every served endpoint without a trader filter', () => {
@@ -53,4 +59,8 @@ test('desk archive stays off the two Vercel cron jobs and wakes the existing fun
     assert.match(sql, /50 20 \* \* 1-5/);
     assert.match(sql, /task=shs-archive/);
     assert.match(sql, /revoke all on table public.shs_desk_archives from public, anon, authenticated/);
+    const morning = await readFile(new URL('../supabase/migrations/20261001143000_shs_archive_kyiv_morning.sql', import.meta.url), 'utf8');
+    assert.match(morning, /shs-desk-archive-kyiv-morning/);
+    assert.match(morning, /0 6 \* \* 2-6/);
+    assert.match(morning, /'0900'/);
 });

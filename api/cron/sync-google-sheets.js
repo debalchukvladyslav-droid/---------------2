@@ -111,7 +111,7 @@ export default async function handler(req, res) {
             const archive = await runShsDayArchive({
                 now: new Date(),
                 force,
-                slot: force && (requested === '1200' || requested === '1550') ? requested : '',
+                slot: force && ['1200', '1550', '0900'].includes(requested) ? requested : '',
             });
             return sendJson(res, archive.ok ? 200 : 502, { task: 'shs-archive', ...archive });
         }
