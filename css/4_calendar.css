@@ -1264,7 +1264,7 @@ body.day-stage-open { --day-rail: 280px; }
 .day-grade-menu {
     position: absolute;
     z-index: var(--z-dropdown);
-    left: 0;
+    right: 0;
     bottom: calc(100% + 8px);
     display: flex;
     gap: 4px;
