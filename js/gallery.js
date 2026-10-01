@@ -8,6 +8,7 @@ import { buildScreenshotPath } from './storage_paths.js';
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 import { INVALID_IMAGE_FORMAT_MESSAGE, isJpegOrPng } from './image_file_validation.js';
 import { loadScreenshotRegistry, mergeScreenshotRegistry } from './screenshot_registry.js';
+import { removeScreenshotFromAppData, screenshotStillListed } from './screenshot_registry_core.js';
 import { supabase } from './supabase.js';
 
 let zoomSources = [];
@@ -854,11 +855,19 @@ function showConfirmModal(message, onConfirm) {
 async function moveScreenshotToTrash(path) {
     const owner = state.myUserId;
     if (state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) throw new Error('Read-only profile');
+    // The visible list lives in user_settings. Drop it locally before sync,
+    // otherwise the next pull puts the same path back on screen.
+    removeScreenshotFromAppData(state.appData, path).forEach(markJournalDayDirty);
+    await renderAssignedScreens();
     await flushPendingDataSync();
     const { error } = await supabase.rpc('soft_delete_screenshot', { p_storage_path: path, p_user_id: owner });
     if (error) throw error;
     if (state.myUserId !== owner) return;
     await syncDataNow();
+    if (screenshotStillListed(state.appData, path)) {
+        removeScreenshotFromAppData(state.appData, path).forEach(markJournalDayDirty);
+        await flushPendingDataSync();
+    }
     await loadImages();
     window.renderView?.();
     showToast('Переміщено в кошик. Відновлення доступне протягом 30 днів.');

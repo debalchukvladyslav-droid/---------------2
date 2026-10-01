@@ -488,6 +488,7 @@ export async function syncDriveScreenshots(silent = false) {
             if (meta?.driveId) existingDriveIds.add(String(meta.driveId));
         }
         const ignored = new Set(state.appData?.settings?.driveIgnored || []);
+        const deletedDriveIds = new Set(state.appData?.settings?.driveDeletedIds || []);
         for (const day of Object.values(state.appData.journal || {})) {
             for (const arr of Object.values(day.screenshots || {})) {
                 for (const p of arr) existingPaths.add(p);
@@ -510,6 +511,7 @@ export async function syncDriveScreenshots(silent = false) {
 
         let metaUpdatedCount = 0;
         for (const record of fileRecords) {
+            if (deletedDriveIds.has(String(record.file.id))) continue;
             if (!record.existingPath || ignored.has(record.existingPath)) continue;
             if (upsertDriveScreenMeta(record.existingPath, record.file)) metaUpdatedCount++;
         }
@@ -528,7 +530,8 @@ export async function syncDriveScreenshots(silent = false) {
         }
 
         const newFiles = fileRecords.filter(record =>
-            !existingDriveIds.has(String(record.file.id))
+            !deletedDriveIds.has(String(record.file.id))
+            && !existingDriveIds.has(String(record.file.id))
             && !record.existingPath
             && record.variants.every(path => !ignored.has(path))
         );
