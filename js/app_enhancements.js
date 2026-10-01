@@ -170,6 +170,7 @@ function activateAction(action, trigger, event = null) {
     const actions = {
         'auth-submit': () => window.handleAuth?.(),
         'auth-toggle-mode': () => window.toggleAuthMode?.(),
+        'auth-toggle-password': () => window.toggleAuthPasswordVisibility?.(trigger),
         'reset-send': () => window.sendResetCode?.(),
         'reset-verify': () => window.verifyResetCode?.(),
         'reset-apply': () => window.applyNewPassword?.(),

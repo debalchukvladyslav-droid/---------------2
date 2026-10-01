@@ -81,6 +81,43 @@
 
 .auth-input:last-of-type { margin-bottom: 14px; }
 
+.auth-pass-field {
+    position: relative;
+    margin-bottom: 10px;
+}
+.auth-pass-field .auth-input {
+    margin-bottom: 0;
+    padding-right: 44px;
+}
+.auth-pass-field .auth-input::-ms-reveal,
+.auth-pass-field .auth-input::-ms-clear {
+    display: none;
+}
+.auth-pass-toggle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 40px;
+    height: 100%;
+    display: grid;
+    place-items: center;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+}
+.auth-pass-toggle:hover,
+.auth-pass-toggle:focus-visible {
+    color: var(--text-main);
+}
+.auth-pass-toggle svg { display: block; }
+.auth-pass-toggle .auth-pass-icon--hide { display: none; }
+.auth-pass-toggle.is-visible .auth-pass-icon--show { display: none; }
+.auth-pass-toggle.is-visible .auth-pass-icon--hide { display: block; }
+
 .register-fields { display: none; }
 
 .auth-error {

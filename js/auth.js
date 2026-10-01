@@ -448,6 +448,24 @@ function syncTeamGroupState(selectedTeam, displayFullName) {
     }
 }
 
+export function toggleAuthPasswordVisibility(trigger) {
+    const inputId = trigger?.getAttribute('aria-controls') || 'auth-pass';
+    const input = document.getElementById(inputId);
+    if (!input || !trigger) return false;
+    const reveal = input.type === 'password';
+    let caret = null;
+    try { caret = input.selectionStart; } catch { caret = null; }
+    input.type = reveal ? 'text' : 'password';
+    trigger.classList.toggle('is-visible', reveal);
+    trigger.setAttribute('aria-pressed', reveal ? 'true' : 'false');
+    trigger.setAttribute('aria-label', reveal ? 'Сховати пароль' : 'Показати пароль');
+    input.focus();
+    if (typeof caret === 'number') {
+        try { input.setSelectionRange(caret, caret); } catch { /* some browsers block caret on password fields */ }
+    }
+    return true;
+}
+
 export function toggleAuthMode() {
     state.isRegisterMode = !state.isRegisterMode;
     const submitBtn = document.getElementById('btn-submit');
@@ -678,7 +696,9 @@ export function showResetStep(step) {
     document.getElementById('btn-submit').style.display = step === 0 ? 'block' : 'none';
     document.getElementById('auth-switch-text').parentElement.style.display = step === 0 ? 'block' : 'none';
     document.getElementById('auth-nick').style.display = step === 0 ? 'block' : 'none';
-    document.getElementById('auth-pass').style.display = step === 0 ? 'block' : 'none';
+    const passField = document.getElementById('auth-pass-field');
+    if (passField) passField.style.display = step === 0 ? '' : 'none';
+    else document.getElementById('auth-pass').style.display = step === 0 ? 'block' : 'none';
     const tgBtn = document.getElementById('btn-auth-telegram');
     if (tgBtn) tgBtn.style.display = step === 0 && !state.isRegisterMode ? '' : 'none';
     if (step === 1) {
@@ -701,8 +721,20 @@ export function showPasswordRecoveryForm() {
     if (subtitle) subtitle.textContent = 'Введіть новий пароль для акаунта';
     step.innerHTML = `
         <p class="reset-text">Посилання підтверджено. Введіть новий пароль мінімум 6 символів.</p>
-        <input type="password" id="reset-new-pass" class="auth-input" placeholder="Новий пароль" autocomplete="new-password" minlength="6">
-        <input type="password" id="reset-confirm-pass" class="auth-input" placeholder="Повторіть пароль" autocomplete="new-password" minlength="6">
+        <div class="auth-pass-field">
+            <input type="password" id="reset-new-pass" class="auth-input" placeholder="Новий пароль" autocomplete="new-password" minlength="6">
+            <button type="button" class="auth-pass-toggle" data-action="auth-toggle-password" aria-label="Показати пароль" aria-pressed="false" aria-controls="reset-new-pass">
+                <svg class="auth-pass-icon auth-pass-icon--show" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="auth-pass-icon auth-pass-icon--hide" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/></svg>
+            </button>
+        </div>
+        <div class="auth-pass-field">
+            <input type="password" id="reset-confirm-pass" class="auth-input" placeholder="Повторіть пароль" autocomplete="new-password" minlength="6">
+            <button type="button" class="auth-pass-toggle" data-action="auth-toggle-password" aria-label="Показати пароль" aria-pressed="false" aria-controls="reset-confirm-pass">
+                <svg class="auth-pass-icon auth-pass-icon--show" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="auth-pass-icon auth-pass-icon--hide" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/></svg>
+            </button>
+        </div>
         <div id="reset-error-3" class="auth-error" role="alert" aria-live="polite"></div>
         <button class="btn-primary" data-action="reset-apply">Зберегти пароль</button>
     `;

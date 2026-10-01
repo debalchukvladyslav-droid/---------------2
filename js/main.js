@@ -8,7 +8,7 @@ import { cacheValue, readCachedValue } from './local_data_store.js';
 import { state } from './state.js';
 import { getDefaultDayEntry, resolveMonthlyDayloss } from './data_utils.js';
 import { hasImportedNetPnl } from './trade_filters.js';
-import { toggleAuthMode, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm, canAccessMentorReviewQueue, mentorAcceptReviewRequest, ensureAuthUserProfile, rejectBlockedProfile, rejectPendingProfile, submitRegistrationRequest, isPasswordRecoveryUrl, showPasswordRecoveryForm } from './auth.js';
+import { toggleAuthMode, toggleAuthPasswordVisibility, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm, canAccessMentorReviewQueue, mentorAcceptReviewRequest, ensureAuthUserProfile, rejectBlockedProfile, rejectPendingProfile, submitRegistrationRequest, isPasswordRecoveryUrl, showPasswordRecoveryForm } from './auth.js';
 import { loadTeams, openTeamManager, createNewTeam, moveTrader, deleteTeam, renameTeam, deleteTraderProfile, renderTeamSidebar, switchUser } from './teams.js';
 import { saveToLocal, saveJournalData, saveSettings, loadSettings, markJournalDayDirty, markAllJournalDirty, initializeApp, resetRuntimeDataForAccountSwitch, exportData, importData, loadMonth, loadTradeDays, resolveViewedUserId, setCurrentViewedUserId,
          loadBackgroundGallery, flushPendingDataSync } from './storage.js';
@@ -306,6 +306,7 @@ window.renderMarketSentiment = renderMarketSentiment;
 window.refreshMarketSentiment = refreshMarketSentiment;
 window.openMarketSentimentSource = openMarketSentimentSource;
 window.toggleAuthMode = toggleAuthMode;
+window.toggleAuthPasswordVisibility = toggleAuthPasswordVisibility;
 window.handleAuth = handleAuth;
 window.logout = logout;
 window.activateMentorMode = activateMentorMode;
