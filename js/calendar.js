@@ -671,17 +671,23 @@ export async function selectDate(dateStr) {
     fillSelectedDateUI(dateStr);
 
     const dayData = state.appData.journal[dateStr];
-    if (dayData?.__detailsLoaded) return;
+    if (dayData?.__detailsLoaded) {
+        // A slower day can still be loading. Its request must not leave this day locked.
+        if (requestId === _selectDateRequestId && state.dayDetailsLoading) {
+            setDayDetailsLoading(false);
+            fillSelectedDateUI(dateStr);
+        }
+        return;
+    }
 
     showGlobalLoader('day-details', `Завантаження дня ${dateStr}...`);
     setDayDetailsLoading(true);
     try {
         await loadDayDetails(dateStr);
-        if (requestId !== _selectDateRequestId || state.selectedDateStr !== dateStr) return;
-        fillSelectedDateUI(dateStr);
     } finally {
         if (requestId === _selectDateRequestId && state.selectedDateStr === dateStr) {
             setDayDetailsLoading(false);
+            fillSelectedDateUI(dateStr);
         }
     }
 }

@@ -589,13 +589,6 @@ body.day-stage-open { --day-rail: 280px; }
     transform: translateY(14px);
 }
 
-@media (prefers-reduced-motion: reduce) {
-    .day-stage,
-    .day-portrait,
-    .day-stage-veil,
-    .day-stage-frame { transition: none; }
-}
-
 .day-stage-frame > * { pointer-events: auto; }
 
 .day-stage-top {

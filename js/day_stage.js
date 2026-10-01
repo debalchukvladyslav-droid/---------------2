@@ -1048,7 +1048,7 @@ function revealLayer(element) {
     const entering = element.hidden || element.classList.contains('is-leaving');
     element.hidden = false;
     element.classList.remove('is-leaving');
-    if (!entering || tiltQuery.matches) {
+    if (!entering) {
         element.classList.remove('is-appearing');
         return;
     }
@@ -1063,11 +1063,6 @@ function revealLayer(element) {
 
 function concealLayer(element) {
     if (!element || element.hidden || element.classList.contains('is-leaving')) return;
-    if (tiltQuery.matches) {
-        element.hidden = true;
-        element.classList.remove('is-appearing');
-        return;
-    }
     element.classList.remove('is-appearing');
     element.classList.add('is-leaving');
     const timer = setTimeout(() => {
