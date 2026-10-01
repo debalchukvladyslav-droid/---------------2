@@ -1,6 +1,7 @@
 sync_config.json
 sync_history.json
 config.js
+.cursor/local-agent-account.json
 .env
 .env.*
 !.env.test.example

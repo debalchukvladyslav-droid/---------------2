@@ -18,9 +18,12 @@ function harness(overrides = {}) {
         ensureDataSyncMetadata: async () => {}, commitLocalChanges: async (...args) => { commits.push(args); return { pending: 1 }; },
         readCachedValue: async () => null, readCachedDay: async () => null, readDirtyJournalRows: async () => [],
         publishSyncState() {}, notifyDataSync() {}, clearStatsCache() {},
+        ensureTradeIds: (trades) => Array.isArray(trades) ? trades : [],
+        normalizeDayEntry: (entry) => ({ ...(entry || {}) }),
+        dayReviewMetrics: () => ({ dayScores: {}, dayGrade: '', dayTags: [] }),
         ...overrides,
     });
-    vm.runInContext(`${source}\nglobalThis.audit = { saveSettings, loadSettings, markJournalDayDirty };`, context);
+    vm.runInContext(`${source}\nglobalThis.audit = { saveSettings, loadSettings, saveJournalData, markJournalDayDirty };`, context);
     return { state, handlers, commits, api: context.audit };
 }
 
@@ -102,6 +105,39 @@ test('settings guard blocks an explicit clear of several populated collections',
     state.appData.cumulativeSheetRows = {};
     await assert.rejects(api.saveSettings(), { code: 'DATA_LOSS_GUARD' });
     assert.equal(commits.length, 1);
+});
+
+test('a startup save keeps cached trades when several open days have none', async () => {
+    const cached = {
+        '2026-09-01': [{ id: 't1', symbol: 'AAA' }],
+        '2026-09-02': [{ id: 't2', symbol: 'BBB' }],
+        '2026-09-03': [{ id: 't3', symbol: 'CCC' }],
+    };
+    const { api, commits, state } = harness({
+        readCachedDay: async (_userId, dateStr) => ({ row: { daily_metrics: { trades: cached[dateStr] || [] } } }),
+    });
+    Object.keys(cached).forEach((dateStr) => {
+        state.appData.journal[dateStr] = { pnl: 1, trades: [], __detailsLoaded: true };
+        api.markJournalDayDirty(dateStr);
+    });
+    await api.saveJournalData({ immediate: true });
+    assert.equal(commits.length, 1);
+    const saved = Object.fromEntries(commits[0][1].map((change) => [change.entityId, change.value.daily_metrics.trades]));
+    assert.deepEqual(saved['2026-09-01'], cached['2026-09-01']);
+    assert.deepEqual(saved['2026-09-02'], cached['2026-09-02']);
+    assert.deepEqual(saved['2026-09-03'], cached['2026-09-03']);
+    assert.deepEqual(state.appData.journal['2026-09-01'].trades, cached['2026-09-01']);
+});
+
+test('one emptied day can still be saved without its trades', async () => {
+    const { api, commits, state } = harness({
+        readCachedDay: async () => ({ row: { daily_metrics: { trades: [{ id: 't1' }] } } }),
+    });
+    state.appData.journal['2026-09-01'] = { pnl: 1, trades: [], __detailsLoaded: true };
+    api.markJournalDayDirty('2026-09-01');
+    await api.saveJournalData({ immediate: true });
+    assert.equal(commits.length, 1);
+    assert.deepEqual(commits[0][1][0].value.daily_metrics.trades, []);
 });
 
 test('a summary-only journal day cannot be marked dirty', () => {

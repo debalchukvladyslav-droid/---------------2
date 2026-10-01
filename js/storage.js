@@ -897,15 +897,18 @@ async function _doSave(opts = {}) {
 
         const entries = sourceEntries
             .filter(([dateStr, entry]) => /^\d{4}-\d{2}-\d{2}$/.test(dateStr) && entry?.__detailsLoaded !== false);
-        const emptiedTradeDays = [];
+        const cachedTrades = new Map();
         for (const [dateStr, entry] of entries) {
             if (Array.isArray(entry?.trades) && entry.trades.length > 0) continue;
-            const cached = await readCachedDay(userId, dateStr);
-            const previousTrades = cached?.row?.daily_metrics?.trades;
-            if (Array.isArray(previousTrades) && previousTrades.length > 0) emptiedTradeDays.push(dateStr);
+            const previousTrades = (await readCachedDay(userId, dateStr))?.row?.daily_metrics?.trades;
+            if (Array.isArray(previousTrades) && previousTrades.length > 0) cachedTrades.set(dateStr, previousTrades);
         }
-        if (emptiedTradeDays.length >= 3) {
-            throw syncError(`Збереження зупинено: зникли угоди одразу у ${emptiedTradeDays.length} днях. Оновіть сторінку.`, 'DATA_LOSS_GUARD');
+        if (cachedTrades.size >= 3) {
+            cachedTrades.forEach((trades, dateStr) => {
+                const entry = journal[dateStr];
+                if (entry) entry.trades = cloneData(trades);
+            });
+            console.warn(`[journal] угоди ${cachedTrades.size} днів залишено з кешу: у пам’яті їх не було`);
         }
         const revisionsAtSave = new Map(entries.map(([dateStr]) => [dateStr, _journalDateRevisions.get(dateStr) || 0]));
 
