@@ -6,6 +6,7 @@ import { buildGauge } from '../../lib/aggressiveness_service.js';
 import { createAggressivenessStore } from '../../lib/aggressiveness_http.js';
 import { createBreadthProvider } from '../../lib/market_data_provider.js';
 import { buildLiveNextSession, loadMechanicalSignals } from '../../lib/next_session_service.js';
+import { checkArchiveDriveFolder, runShsDayArchive } from '../../lib/shs_day_archive_run.js';
 
 export const config = { maxDuration: 300 };
 
@@ -74,6 +75,16 @@ async function claimWorkerWake(req) {
     return claimed === true;
 }
 
+async function claimShsArchiveWake(req) {
+    if (String(req.query?.task || '') !== 'shs-archive') return false;
+    const wakeToken = String(requestBody(req).wakeToken || '').trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(wakeToken)) return false;
+    const claimed = await supabaseRest('rpc/claim_shs_archive_wake', {
+        method: 'POST', body: JSON.stringify({ wake_token: wakeToken }),
+    });
+    return claimed === true;
+}
+
 export default async function handler(req, res) {
     const cronSecret = process.env.CRON_SECRET || '';
     if (!cronSecret) {
@@ -82,11 +93,28 @@ export default async function handler(req, res) {
     }
     const vercelCronAuthorized = req.headers.authorization === `Bearer ${cronSecret}`;
     const supabaseWorkerAuthorized = vercelCronAuthorized ? false : await claimWorkerWake(req).catch(() => false);
-    if (!vercelCronAuthorized && !supabaseWorkerAuthorized) {
+    const shsArchiveAuthorized = vercelCronAuthorized || supabaseWorkerAuthorized
+        ? false
+        : await claimShsArchiveWake(req).catch(() => false);
+    if (!vercelCronAuthorized && !supabaseWorkerAuthorized && !shsArchiveAuthorized) {
         return sendJson(res, 401, { ok: false, error: 'Unauthorized' });
     }
 
     try {
+        if (String(req.query?.task || '') === 'shs-archive' && String(req.query?.probe || '') === 'drive') {
+            const drive = await checkArchiveDriveFolder();
+            return sendJson(res, drive.ok ? 200 : 502, { task: 'shs-archive', probe: 'drive', drive });
+        }
+        if (String(req.query?.task || '') === 'shs-archive') {
+            const force = vercelCronAuthorized && String(req.query?.force || '') === '1';
+            const requested = String(req.query?.slot || '');
+            const archive = await runShsDayArchive({
+                now: new Date(),
+                force,
+                slot: force && (requested === '1200' || requested === '1550') ? requested : '',
+            });
+            return sendJson(res, archive.ok ? 200 : 502, { task: 'shs-archive', ...archive });
+        }
         if (String(req.query?.task || '') === 'source-sync') {
             const results = await processSourceJobs({ maxJobs: 8, maxDurationMs: 270_000 });
             return sendJson(res, 200, {
