@@ -10,10 +10,10 @@ import { getDefaultDayEntry, resolveMonthlyDayloss } from './data_utils.js';
 import { hasImportedNetPnl } from './trade_filters.js';
 import { toggleAuthMode, toggleAuthPasswordVisibility, handleAuth, logout, loadMentorStatusForAccount, activateMentorMode, deactivateMentorMode, applyAccessRights, saveMentorComment, savePrivateNote, loadPrivateNote, showResetStep, sendResetCode, verifyResetCode, applyNewPassword, resetPassword, showMigrationForm, canAccessMentorReviewQueue, mentorAcceptReviewRequest, ensureAuthUserProfile, rejectBlockedProfile, rejectPendingProfile, submitRegistrationRequest, isPasswordRecoveryUrl, showPasswordRecoveryForm } from './auth.js';
 import { loadTeams, openTeamManager, createNewTeam, moveTrader, deleteTeam, renameTeam, deleteTraderProfile, renderTeamSidebar, switchUser } from './teams.js';
-import { saveToLocal, saveJournalData, saveSettings, loadSettings, markJournalDayDirty, markAllJournalDirty, initializeApp, resetRuntimeDataForAccountSwitch, exportData, importData, loadMonth, loadTradeDays, resolveViewedUserId, setCurrentViewedUserId,
+import { saveToLocal, saveJournalData, saveSettings, markJournalDayDirty, markAllJournalDirty, initializeApp, resetRuntimeDataForAccountSwitch, exportData, importData, loadMonth, loadTradeDays, resolveViewedUserId, setCurrentViewedUserId,
          loadBackgroundGallery, flushPendingDataSync } from './storage.js';
 import { applyTheme, resetCustomTheme, saveThemeSettings, switchTab, toggleMobileSidebar, switchMainTab, scrollMainTabs, toggleMoreTabs, toggleMobileMoreMenu, closeMobileMoreMenu, bindMainTabRoutes, syncMainTabFromRoute, refreshCurrentMainTitle } from './ui.js';
-import { shiftDate, selectDateFromInput, saveEntry, autoSaveCurrentDay, renderView, selectDate, updateAutoFlags, initSelectors, renderSidebarTradesList } from './calendar.js';
+import { shiftDate, selectDateFromInput, saveEntry, autoSaveCurrentDay, renderView, selectDate, updateAutoFlags, updateDashboardWidgets, initSelectors, renderSidebarTradesList } from './calendar.js';
 import { onDayFormVisibilityChanged } from './day_stage.js';
 import { toggleStatsDropdown, toggleTree, toggleStatsFilter, refreshStatsView, closeStatsDropdown, renderStatsSourceSelector, selectStatsSource, renderTradeTypeSelector, selectTradeTypeFilter, toggleStatsEquityMode, toggleStatsCompareMode, closeStatsCompareMode, openStatsComparisonWithTrader } from './stats.js';
 import { buildExceptionKfRows, combineStatsSheetRows } from './stats_sheet_metrics.js';
@@ -476,6 +476,23 @@ function sheetStoreDayCount(store) {
     return count;
 }
 
+function sheetStoreTradeCount(store) {
+    if (!store || typeof store !== 'object') return 0;
+    let count = 0;
+    Object.values(store).forEach((byDay) => {
+        if (!byDay || typeof byDay !== 'object') return;
+        Object.values(byDay).forEach((rows) => {
+            if (Array.isArray(rows)) count += rows.length;
+        });
+    });
+    return count;
+}
+
+function sheetStoreIsNewer(incoming, current) {
+    if (sheetStoreDayCount(incoming) > sheetStoreDayCount(current)) return true;
+    return sheetStoreTradeCount(incoming) > sheetStoreTradeCount(current);
+}
+
 function adoptSheetStore(key) {
     const current = state.appData?.[key];
     if (sheetStoreDayCount(current) > 0) return current;
@@ -521,6 +538,7 @@ function parseStoredSheetValue(value) {
 let sessionSheetRowsPromise = null;
 
 function ensureSessionSheetRows() {
+    if (state._sheetRowsReconciled) return Promise.resolve();
     if (!sessionSheetRowsPromise) {
         sessionSheetRowsPromise = loadSessionSheetRows().finally(() => {
             sessionSheetRowsPromise = null;
@@ -532,29 +550,33 @@ function ensureSessionSheetRows() {
 async function loadSessionSheetRows() {
     adoptSheetStore('sheetRows');
     adoptSheetStore('cumulativeSheetRows');
-    if (sessionCriteriaRows(getTodayEST()).length) return;
+    const userId = state.myUserId;
+    if (!userId || state._sheetRowsReconciled) return;
     try {
-        await loadSettings();
+        const { data, error } = await supabase
+            .from('user_settings')
+            .select('key, value')
+            .eq('user_id', userId)
+            .in('key', ['sheetRows', 'cumulativeSheetRows']);
+        if (error || !Array.isArray(data)) return;
+        let replaced = false;
+        data.forEach((row) => {
+            const value = parseStoredSheetValue(row.value);
+            if (!sheetStoreIsNewer(value, state.appData?.[row.key])) return;
+            state.appData[row.key] = value;
+            replaced = true;
+        });
+        state._sheetRowsReconciled = true;
+        if (!replaced) return;
+        const now = state.todayObj instanceof Date ? state.todayObj : new Date();
+        updateDashboardWidgets(now.getFullYear(), now.getMonth());
+        window.requestTradesDatagridRefresh?.();
     } catch (error) {
         console.warn('[session criteria] settings reload failed:', error?.message || error);
     }
-    adoptSheetStore('sheetRows');
-    adoptSheetStore('cumulativeSheetRows');
-    if (sessionCriteriaRows(getTodayEST()).length) return;
-    const userId = state.myUserId;
-    if (!userId) return;
-    const { data, error } = await supabase
-        .from('user_settings')
-        .select('key, value')
-        .eq('user_id', userId)
-        .in('key', ['sheetRows', 'cumulativeSheetRows']);
-    if (error || !Array.isArray(data)) return;
-    data.forEach((row) => {
-        const value = parseStoredSheetValue(row.value);
-        if (sheetStoreDayCount(value) <= sheetStoreDayCount(state.appData?.[row.key])) return;
-        state.appData[row.key] = value;
-    });
 }
+
+window.reconcileSheetRows = ensureSessionSheetRows;
 
 function showSessionCriteriaLoading(container) {
     if (!container) return;
@@ -571,7 +593,13 @@ async function renderSessionCriteriaHints(containerId) {
     const anchor = getTodayEST();
     const generation = String(Number(container.dataset.criteriaGeneration || 0) + 1);
     container.dataset.criteriaGeneration = generation;
-    if (paintSessionCriteria(container, anchor) > 0) return;
+    if (paintSessionCriteria(container, anchor) > 0) {
+        void ensureSessionSheetRows().then(() => {
+            if (container.dataset.criteriaGeneration !== generation) return;
+            paintSessionCriteria(container, anchor);
+        });
+        return;
+    }
     showSessionCriteriaLoading(container);
     await ensureSessionSheetRows();
     if (container.dataset.criteriaGeneration !== generation) return;

@@ -666,6 +666,9 @@ export function markAllJournalDirty() {
 
 async function performSettingsSave(context) {
     try {
+        if (window.reconcileSheetRows) {
+            try { await window.reconcileSheetRows(); } catch (_) { /* keep the server sheet if this read fails */ }
+        }
         const { user } = await getCurrentUserContext({ local: true });
         if (!user || !context || context.generation !== _accountContextGeneration || user.id !== context.userId) return;
         await ensureDataSyncMetadata(user.id);
@@ -705,6 +708,10 @@ async function performSettingsSave(context) {
                 {},
             ),
         };
+        if (!state._sheetRowsReconciled) {
+            delete settingsPayload.sheetRows;
+            delete settingsPayload.cumulativeSheetRows;
+        }
         DESTRUCTIVE_SETTINGS_KEYS.forEach((key) => adoptKeptSettingsCollection(key, settingsPayload[key]));
         const resetKeys = destructiveSettingsReset(previousSettings, settingsPayload);
         if (resetKeys.length >= 3) {

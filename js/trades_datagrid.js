@@ -2,6 +2,7 @@
 
 import { state } from './state.js';
 import { collectDatagridRows } from './datagrid_rows.js';
+import { isNotTakenTrade, notTakenTradePv } from './data_utils.js';
 import { getCurrentStoredSpreadsheetId } from './sheet_table.js';
 
 const DATAGRID_PAGE_SIZE = 250;
@@ -278,11 +279,15 @@ function badge(htmlClass, text) {
 
 function buildTradeRowHtml(dateStr, trade, tradeIndex, source) {
     const sh = sheetOf(trade);
-    const net = Number(trade.net);
-    const profitClass = Number.isFinite(net) && net < 0 ? 'datagrid-profit datagrid-profit--loss' : 'datagrid-profit';
+    const skipped = isNotTakenTrade(trade);
+    const pvNet = skipped ? notTakenTradePv(trade) : null;
+    const net = skipped ? pvNet : Number(trade.net);
+    const profitClass = skipped
+        ? 'datagrid-profit datagrid-profit--skipped'
+        : (Number.isFinite(net) && net < 0 ? 'datagrid-profit datagrid-profit--loss' : 'datagrid-profit');
     const profitCell = Number.isFinite(net)
-        ? `<td class="${profitClass}">${formatMoney(net)}</td>`
-        : '<td>—</td>';
+        ? `<td class="${profitClass}"${skipped ? ' title="Угоду не брав. Сума з колонки PV."' : ''}>${formatMoney(net)}</td>`
+        : `<td${skipped ? ' class="datagrid-profit datagrid-profit--skipped" title="Угоду не брав. Сума з колонки PV."' : ''}>—</td>`;
 
     const typeLabel = sh.tradeType || trade.type || '';
     const profitRisk = nonEmpty(sh.profitRisk);

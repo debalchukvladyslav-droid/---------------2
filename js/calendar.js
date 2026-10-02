@@ -10,7 +10,7 @@ import { findScreenshotsForTicker, getStorageUrl, openScreenshotForTrade } from 
 import { getCalendarDayResult, getEffectiveDayPnl, isSheetOnlyPnl, visibleTradeRows } from './trade_filters.js';
 import { pickSheetRowsSource } from './datagrid_rows.js';
 import { getNyseDaySchedule } from './nyse_calendar.js';
-import { resolveMonthlyDayloss } from './data_utils.js';
+import { compareRecentTradeRows, isNotTakenTrade, notTakenTradePv, resolveMonthlyDayloss } from './data_utils.js';
 import { openDayStage, refreshDayStage, refreshDayTypeScreens, syncDayExtras, noteDayFly } from './day_stage.js';
 
 let _selectDateRequestId = 0;
@@ -280,16 +280,7 @@ export function updateDashboardWidgets(year, month) {
                 });
             }
         }
-        rows.sort((a, b) => {
-            if (a.source === 'sheet' && b.source === 'sheet') {
-                // Preserve the spreadsheet's real bottom-to-top order. Date and
-                // time must not reshuffle rows that the trader entered later.
-                return b.sheetRowNumber - a.sheetRowNumber;
-            }
-            const c = b.date.localeCompare(a.date);
-            if (c !== 0) return c;
-            return Math.abs(b.net) - Math.abs(a.net);
-        });
+        rows.sort(compareRecentTradeRows);
         const top = rows.slice(0, 12);
 
         if (top.length === 0) {
@@ -297,25 +288,36 @@ export function updateDashboardWidgets(year, month) {
         } else {
             list.innerHTML = top
                 .map((r, rowIndex) => {
-                    const isPos = r.net >= 0;
+                    const skipped = isNotTakenTrade(r.trade);
+                    const pvNet = skipped ? notTakenTradePv(r.trade) : null;
+                    const shownNet = skipped ? pvNet : r.net;
+                    const hasMoney = Number.isFinite(shownNet);
+                    const isPos = hasMoney && shownNet >= 0;
                     const dateObj = new Date(r.date + 'T00:00:00');
                     const dateStr = dateObj.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
-                    const arrow = isPos
+                    const arrow = skipped
+                        ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/></svg>'
+                        : isPos
                         ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>'
                         : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>';
                     const safeDate = sanitizeHTML(r.date);
                     const safeSym = sanitizeHTML(r.sym);
                     const hasScreen = findScreenshotsForTicker(r.date, r.sym).length > 0;
-                    return `<div class="recent-trade-item" role="button" tabindex="0" data-recent-date="${safeDate}" data-recent-idx="${r.idx}" data-recent-row="${rowIndex}">
+                    const moneyText = hasMoney ? `${shownNet > 0 ? '+' : ''}$${shownNet.toFixed(2)}` : '—';
+                    const resultClass = skipped ? 'skipped' : (isPos ? 'pos' : 'neg');
+                    const resultNote = skipped
+                        ? (hasMoney ? 'PV' : 'не взято')
+                        : (r.kf ? sanitizeHTML(r.kf) : '');
+                    return `<div class="recent-trade-item${skipped ? ' is-not-taken' : ''}" role="button" tabindex="0" data-recent-date="${safeDate}" data-recent-idx="${r.idx}" data-recent-row="${rowIndex}"${skipped ? ' title="Угоду не брав. Сума з колонки PV."' : ''}>
                 <div class="recent-trade-left">
-                    <div class="recent-trade-dir-icon ${isPos ? 'long' : 'short'}">${arrow}</div>
+                    <div class="recent-trade-dir-icon ${skipped ? 'skipped' : (isPos ? 'long' : 'short')}">${arrow}</div>
                     <div>
                         <div class="recent-trade-symbol">${safeSym}</div>
                         <div class="recent-trade-meta">${dateStr}${r.type ? ' · ' + sanitizeHTML(r.type) : ''} · ${hasScreen ? 'є скріншот' : 'без скріншота'}</div>
                     </div>
                 </div>
                 <div class="recent-trade-right">
-                    <div class="recent-trade-result"><div class="recent-trade-pnl ${isPos ? 'pos' : 'neg'}">${isPos ? '+' : ''}$${r.net.toFixed(2)}</div>${r.kf ? `<div class="recent-trade-kf">${sanitizeHTML(r.kf)}</div>` : ''}</div>
+                    <div class="recent-trade-result"><div class="recent-trade-pnl ${resultClass}">${moneyText}</div>${resultNote ? `<div class="recent-trade-kf">${resultNote}</div>` : ''}</div>
                 </div>
             </div>`;
                 })

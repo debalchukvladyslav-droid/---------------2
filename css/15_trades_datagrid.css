@@ -308,6 +308,11 @@
     color: var(--loss, #ef4444);
 }
 
+.datagrid-profit--skipped {
+    color: var(--text-muted);
+    font-weight: 650;
+}
+
 .datagrid-profit-sep {
     color: var(--text-muted);
     font-weight: 500;

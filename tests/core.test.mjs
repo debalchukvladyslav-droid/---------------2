@@ -27,7 +27,7 @@ const {
     isMentorViewingOtherJournalState,
     isViewingOtherProfileState,
 } = await import('../js/access_control.js');
-const { buildAutoTradeTypesData, DEFAULT_TRADE_TYPES, deriveDayKfFromTrades, getTradeResult, isNotTakenTrade, normalizeAppData, normalizeDayEntry, resolveMonthlyDayloss: resolveJournalMonthlyDayloss } = await import('../js/data_utils.js');
+const { buildAutoTradeTypesData, compareRecentTradeRows, DEFAULT_TRADE_TYPES, deriveDayKfFromTrades, getTradeResult, isNotTakenTrade, normalizeAppData, normalizeDayEntry, notTakenTradePv, resolveMonthlyDayloss: resolveJournalMonthlyDayloss } = await import('../js/data_utils.js');
 const { ecnFeeColumnIndex, parsePPROReportDate, parsePPROTotalReportRows, parseSheetDateCellToIso, parseSheetDateCellsToIsoSequence, reconcileDayLocates } = await import('../js/parser_utils.js');
 const { sanitizeHTML, safeExternalUrl, sanitizeRichHTML } = await import('../js/sanitize.js');
 const { mergeGoogleSheetTradesIntoJournal } = await import('../js/sheet_journal_merge.js');
@@ -524,6 +524,22 @@ test('stored daily KФ wins and missing trade R stays unknown', () => {
     assert.equal(normalizeDayEntry({ kf: 2.25, trades: [{ profitRisk: '1R' }] }).kf, 2.25);
     assert.equal(deriveDayKfFromTrades([{ net: 100 }]), null);
     assert.equal(normalizeDayEntry({ kf: null, trades: [{ net: 100 }] }).kf, null);
+});
+
+test('recent sheet trades follow the latest date, and a skipped entry shows PV instead of realized PnL', () => {
+    assert.equal(isNotTakenTrade({ sheet: { tradeType: 'не брала візуально' } }), true);
+    assert.equal(notTakenTradePv({ net: 999, sheet: { tradeType: 'не брав(ла) свій підхід', pv: '-1 250,5' } }), -1250.5);
+    assert.equal(notTakenTradePv({ net: 40, sheet: { tradeType: 'синя%', pv: '80' } }), null);
+    assert.equal(notTakenTradePv({ sheet: { tradeType: 'не брав', pv: '#DIV/0!' } }), null);
+
+    const ordered = [
+        { date: '2026-09-02', sheetRowNumber: 900, source: 'sheet', net: 1 },
+        { date: '2026-10-02', sheetRowNumber: 12, source: 'sheet', net: 2 },
+        { date: '2026-10-02', sheetRowNumber: 40, source: 'sheet', net: 3 },
+        { date: '2026-10-01', sheetRowNumber: 800, source: 'sheet', net: 4 },
+    ].sort(compareRecentTradeRows);
+
+    assert.deepEqual(ordered.map((row) => row.net), [3, 2, 4, 1]);
 });
 
 test('not-taken sheet trade types are detected but excluded from auto trade PnL buckets', () => {

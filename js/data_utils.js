@@ -156,7 +156,38 @@ export function isNotTakenTrade(trade) {
 
     if (!text.trim()) return false;
     return /\bdo\s*not\s*take\b|\bnot\s*taken\b|\bno\s*trade\b|\bskip(?:ped)?\b/i.test(text)
-        || /не\s*брав|не\s*взяв|пропустив|пропущен|без\s*входу/i.test(text);
+        || /не\s*бра(?:в|ла|ли)|не\s*взяв|пропустив|пропущен|без\s*входу/i.test(text);
+}
+
+export function parseSheetMoney(value) {
+    if (value == null || value === '') return null;
+    const text = String(value).trim();
+    if (!text || text === '/' || text === '—' || text === '-' || /^#/.test(text)) return null;
+    const wrappedNegative = /^\(.*\)$/.test(text);
+    const normalized = text.replace(/\s/g, '').replace(',', '.').replace(/[^0-9.+-]/g, '');
+    if (!/[0-9]/.test(normalized)) return null;
+    const parsed = Number(normalized);
+    if (!Number.isFinite(parsed)) return null;
+    return wrappedNegative ? -Math.abs(parsed) : parsed;
+}
+
+/** Hypothetical result from the PV column. Realized PnL stays untouched. */
+export function notTakenTradePv(trade) {
+    if (!isNotTakenTrade(trade)) return null;
+    const sheet = trade?.sheet && typeof trade.sheet === 'object' ? trade.sheet : {};
+    return parseSheetMoney(sheet.pv);
+}
+
+export function compareRecentTradeRows(a, b) {
+    const dateCmp = String(b?.date || '').localeCompare(String(a?.date || ''));
+    if (dateCmp !== 0) return dateCmp;
+    const rowA = Number(a?.sheetRowNumber);
+    const rowB = Number(b?.sheetRowNumber);
+    if (Number.isFinite(rowA) && Number.isFinite(rowB) && rowA !== rowB) return rowB - rowA;
+    if (a?.source === 'sheet' || b?.source === 'sheet') {
+        return String(b?.opened || '').localeCompare(String(a?.opened || ''));
+    }
+    return Math.abs(Number(b?.net) || 0) - Math.abs(Number(a?.net) || 0);
 }
 
 function parseTradeKf(value) {
