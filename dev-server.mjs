@@ -19,6 +19,7 @@ import sheetsServiceHandler from './api/sheets-service.js';
 import serviceBotEndpointHandler from './api/service-bots/[endpoint].js';
 import tradeCriteriaHandler from './lib/trade_criteria_http.js';
 import telegramFloatHandler from './lib/telegram_float_http.js';
+import assistantHandler from './api/assistant.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
@@ -399,6 +400,13 @@ const server = http.createServer((req, res) => {
         handleGemini(req, res).catch((e) => {
             console.error(e);
             sendJson(res, 500, { message: e.message || 'Server error' });
+        });
+        return;
+    }
+    if (u.pathname === '/api/assistant') {
+        handleVercelRoute(assistantHandler, req, res, u).catch((e) => {
+            console.error('[Assistant]', e);
+            if (!res.headersSent) sendJson(res, 500, { message: e.message || 'Server error' });
         });
         return;
     }

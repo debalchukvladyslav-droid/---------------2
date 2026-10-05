@@ -360,6 +360,15 @@ function activateAction(action, trigger, event = null) {
         'ai-learning-review': () => window.reviewAILearningExample?.(trigger),
         'ai-quick-prompt': () => window.applyAIQuickPrompt?.(trigger?.dataset?.aiPrompt || ''),
         'data-chat-send': () => window.sendDataChatMessage?.(),
+        'assistant-toggle': () => window.toggleAssistantPanel?.(),
+        'assistant-send': () => window.sendAssistantPanelMessage?.(),
+        'assistant-chip': () => window.applyAssistantChip?.(trigger?.dataset?.assistantPrompt || ''),
+        'assistant-ui-hint': () => {
+            try {
+                const hint = JSON.parse(trigger?.dataset?.hint || '{}');
+                window.applyAssistantUiHint?.(hint);
+            } catch { /* ignore */ }
+        },
         'google-auth': () => window.loadSpreadsheetFromServiceInput
             ? window.loadSpreadsheetFromServiceInput()
             : import('./google_sheet_connector.js').then((m) => m.loadSpreadsheetFromServiceInput?.()),
@@ -639,6 +648,11 @@ function bindDeclarativeActions() {
         if (event.target?.matches?.('[data-action="data-chat-input"]') && event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault();
             window.sendDataChatMessage?.();
+            return;
+        }
+        if (event.target?.matches?.('[data-action="assistant-input"]') && event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            window.sendAssistantPanelMessage?.();
             return;
         }
 

@@ -65,6 +65,19 @@ async function loadMarketSessionLow(symbol, dateStr) {
 // Активна угода для поточного дня { symbol, dateStr, tradeIndex }
 let _activeTrade = null;
 
+export function getActiveTradeContext() {
+    if (!_activeTrade) return null;
+    const day = state.appData?.journal?.[_activeTrade.dateStr];
+    const trade = Array.isArray(day?.trades) ? day.trades[_activeTrade.tradeIndex] : null;
+    return {
+        dateStr: _activeTrade.dateStr,
+        tradeIndex: _activeTrade.tradeIndex,
+        ticker: trade?.symbol || trade?.ticker || null,
+        symbol: trade?.symbol || trade?.ticker || null,
+        tradeId: trade?.id || null,
+    };
+}
+
 function ensureLWCharts() {
     if (!lwChartsReady) {
         lwChartsReady = new Promise((resolve, reject) => {

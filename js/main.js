@@ -35,7 +35,7 @@ import { renderAdminPanel, renderTestingPanel } from './admin.js';
 import { initSidebarAccount, refreshSidebarAccount } from './sidebar_account.js';
 import { initMentorReviewUI, refreshMentorReviewQueue, setMentorReviewNavBadges } from './mentor_review.js';
 
-import { initTradesView, populateDateSelect, populateSymbolSelect, loadTradeChart, openTradesAtDayIndex } from './trades_view2.js';
+import { initTradesView, populateDateSelect, populateSymbolSelect, loadTradeChart, openTradesAtDayIndex, getActiveTradeContext } from './trades_view2.js';
 import { initSheetTableView, saveSheetMapping, backfillCumulativeCalendarGaps } from './sheet_table.js';
 import { renderTradesDatagrid, disposeTradesDatagrid, TRADE_TYPES } from './trades_datagrid.js';
 import { initNotifications } from './notifications.js';
@@ -68,6 +68,14 @@ import { getTrustedServerNow, isEndOfSessionReviewTime } from './session_schedul
 import { renderDashboardAI, refreshDashboardAI, toggleDashboardAIHistory, rotateDashboardAI, openDashboardMentor, closeDashboardMentor, sendDashboardMentorMessage, switchDashboardMentorTab } from './dashboard_ai.js';
 import { analyzeLossPatterns, renderLossPatternAnalysis } from './loss_pattern_analysis.js';
 import { continueAILearning, evaluateAILearning, initAILearningCenter, renderAILearningCenter, runAILearning, runAIPaperDecision, startNewAILearning, toggleAILearningDay, reviewAILearningExample } from './ai_learning.js';
+import {
+    initAssistantPanel,
+    toggleAssistantPanel,
+    sendAssistantPanelMessage,
+    applyAssistantChip,
+    applyAssistantUiHint,
+    refreshAssistantChips,
+} from './assistant/panel.js';
 import { closeCumulativeWeekly, openCumulativeWeekly, saveCumulativeDayloss, toggleCumulativeDayloss } from './cumulative_weekly_ui.js';
 import { initTerminalShortcuts } from './terminal_shortcuts.js';
 import { initExcelExport } from './excel_export.js';
@@ -1087,6 +1095,12 @@ window.openSOSModal = openSOSModal;
 window.closeSOSModal = closeSOSModal;
 window.sendSOSMessage = sendSOSMessage;
 window.sendDataChatMessage = sendDataChatMessage;
+window.toggleAssistantPanel = toggleAssistantPanel;
+window.sendAssistantPanelMessage = sendAssistantPanelMessage;
+window.applyAssistantChip = applyAssistantChip;
+window.applyAssistantUiHint = applyAssistantUiHint;
+window.refreshAssistantChips = refreshAssistantChips;
+window.getActiveTradeContext = getActiveTradeContext;
 window.renderAIAdviceUI = renderAIAdviceUI;
 window.setupOCRDrawing = setupOCRDrawing;
 window.loadLatestImageForOCR = loadLatestImageForOCR;
@@ -1894,6 +1908,8 @@ initExcelExport();
 document.addEventListener('app:shell-ready', initExcelExport);
 initTeamReport(); window.renderTeamReport=renderTeamReport;
 document.addEventListener('app:shell-ready', initTeamReport);
+initAssistantPanel();
+document.addEventListener('app:shell-ready', initAssistantPanel);
 initPwa(); initTradeCardGestures();
 initRealtimeSync();
 initDurableUploads();
