@@ -127,7 +127,7 @@ test('equity drawdown of 3 dayloss triggers pause even in a green month path', (
     // Peak 10000 → equity 7000 → pullback 3000 = 3 dayloss
     assert.equal(result.level, 'pause');
     assert.ok(result.equityR <= -3);
-    assert.match(result.text, /dayloss/);
+    assert.match(result.text, /дейлос/);
 });
 
 test('equity drawdown of 1 dayloss is reduce', () => {

@@ -168,17 +168,18 @@ function buildText(level, { reason, monthR, prevMonthR, equityR, recoveryR }) {
     if (level === 'normal') return '';
     const pct = riskPercent(level);
     const head = `Ризик ${pct}%`;
+    const depth = Math.abs(equityR).toFixed(1);
+    const monthDepth = Math.abs(monthR).toFixed(1);
 
     if (reason === 'equity') {
-        const depth = Math.abs(equityR).toFixed(1);
         if (level === 'pause') {
-            return `${head}. Відкат від піку ≈ ${depth} dayloss. Пауза до відновлення +1 dayloss від локального мінімуму.`;
+            return `${head}. Відкат від піку ≈ ${depth} дейлос. Пауза до відновлення +1 дейлос від локального мінімуму.`;
         }
         if (level === 'defensive') {
-            return `${head}. Глибокий відкат від equity high (≈ ${depth} dayloss). Захисний режим.`;
+            return `${head}. Глибокий відкат від піку (≈ ${depth} дейлос). Захисний режим.`;
         }
         if (level === 'reduce') {
-            return `${head}. Відкат від піку ≈ ${depth} dayloss. Працюй половиною ризику до відновлення.`;
+            return `${head}. Відкат від піку ≈ ${depth} дейлос. Працюй половиною ризику до відновлення.`;
         }
         return `${head}. Невеликий відкат від піку. Трохи зменш розмір.`;
     }
@@ -188,20 +189,19 @@ function buildText(level, { reason, monthR, prevMonthR, equityR, recoveryR }) {
             return `${head}. Затяжна просадка: попередній місяць сильно мінусовий, поточний продовжує падіння.`;
         }
         if (level === 'defensive') {
-            return `${head}. Просадка затяжна: попередній місяць був значно негативним, а поточний продовжує падіння. Захисний режим до відновлення +1 dayloss від локального мінімуму.`;
+            return `${head}. Просадка затяжна: попередній місяць був значно негативним, а поточний продовжує падіння. Захисний режим до відновлення +1 дейлос від локального мінімуму.`;
         }
         return `${head}. Другий місяць залишається слабким, але поточна просадка поки невелика. Працюй ${pct}% стандартного ризику до початку відновлення.`;
     }
 
-    // month
     if (level === 'pause') {
-        return `${head}. Місяць уже ≈ ${Math.abs(monthR).toFixed(1)} dayloss у мінусі. Пауза або мінімальний ризик.`;
+        return `${head}. Місяць уже ≈ ${monthDepth} дейлос у мінусі. Пауза або мінімальний ризик.`;
     }
     if (level === 'defensive') {
-        return `${head}. Місяць глибоко в мінусі (≈ ${Math.abs(monthR).toFixed(1)} dayloss). Захисний режим.`;
+        return `${head}. Місяць глибоко в мінусі (≈ ${monthDepth} дейлос). Захисний режим.`;
     }
     if (level === 'reduce') {
-        return `${head}. Місяць близько −1 dayloss або гірше. Працюй половиною ризику.`;
+        return `${head}. Місяць близько −1 дейлос або гірше. Працюй половиною ризику.`;
     }
     if (prevMonthR <= -1 && monthR < 0) {
         return `${head}. Минулий місяць був слабким, поточний ще не відіграв. Тримай ризик меншим.`;
