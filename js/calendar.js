@@ -326,7 +326,13 @@ export function updateDashboardWidgets(year, month) {
             list.querySelectorAll('.recent-trade-item').forEach((el) => {
                 el.addEventListener('click', () => {
                     const ds = el.getAttribute('data-recent-date');
-                    if (ds) void openDayEditor(ds);
+                    const ix = parseInt(el.getAttribute('data-recent-idx') || '0', 10);
+                    const rowIndex = parseInt(el.getAttribute('data-recent-row') || '0', 10);
+                    const selectedRow = top[rowIndex];
+                    const trade = ix >= 0
+                        ? state.appData?.journal?.[ds]?.trades?.[ix] || selectedRow?.trade
+                        : selectedRow?.trade;
+                    void openScreenshotForTrade(ds, trade);
                 });
             });
         }

@@ -6476,12 +6476,17 @@ button.aggressiveness-ledger-line {
     font-weight: 600;
     line-height: 1.35;
 }
-.dash-drawdown-hint.is-cut {
+.dash-drawdown-hint.is-caution {
+    border-color: color-mix(in srgb, var(--gold) 45%, var(--border));
+    background: color-mix(in srgb, var(--gold) 12%, transparent);
+    color: var(--gold);
+}
+.dash-drawdown-hint.is-reduce {
     border-color: color-mix(in srgb, var(--loss) 42%, var(--gold));
     background: color-mix(in srgb, var(--loss) 14%, transparent);
     color: color-mix(in srgb, var(--loss) 35%, var(--gold));
 }
-.dash-drawdown-hint.is-quarter,
+.dash-drawdown-hint.is-defensive,
 .dash-drawdown-hint.is-pause {
     border-color: color-mix(in srgb, var(--loss) 50%, var(--border));
     background: color-mix(in srgb, var(--loss) 12%, transparent);

@@ -269,12 +269,14 @@ function renderDrawdownHint(journal) {
     if (hint) {
         hint.hidden = !advice.text;
         hint.textContent = advice.text;
-        hint.classList.remove('is-soften', 'is-cut', 'is-quarter', 'is-pause');
-        if (advice.level !== 'calm') hint.classList.add(`is-${advice.level}`);
+        hint.classList.remove('is-caution', 'is-reduce', 'is-defensive', 'is-pause', 'is-soften', 'is-cut', 'is-quarter');
+        if (advice.level && advice.level !== 'normal' && advice.level !== 'calm') {
+            hint.classList.add(`is-${advice.level}`);
+        }
     }
     if (metric) {
-        metric.classList.toggle('is-warn', advice.level === 'soften' || advice.level === 'cut');
-        metric.classList.toggle('is-danger', advice.level === 'quarter' || advice.level === 'pause');
+        metric.classList.toggle('is-warn', advice.level === 'caution' || advice.level === 'reduce');
+        metric.classList.toggle('is-danger', advice.level === 'defensive' || advice.level === 'pause');
     }
 }
 

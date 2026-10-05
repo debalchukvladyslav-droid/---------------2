@@ -1,8 +1,21 @@
-/** Підказка біля відкату: місяць задає тон, 10% депозиту — жорстке гальмо. */
+/** Ступінчастий risk manager: глибина + тривалість у dayloss, повернення повільніше за різку. */
 
-const LEVELS = ['calm', 'soften', 'cut', 'quarter', 'pause'];
-const ACCOUNT_ENTER = { soften: 0.05, cut: 0.10, quarter: 0.15, pause: 0.20 };
-const ACCOUNT_EXIT = { soften: 0.02, cut: 0.05, quarter: 0.10, pause: 0.15 };
+const LEVELS = ['normal', 'caution', 'reduce', 'defensive', 'pause'];
+const RISK_MULTIPLIER = {
+    normal: 1,
+    caution: 0.75,
+    reduce: 0.5,
+    defensive: 0.25,
+    pause: 0,
+};
+
+/** Скільки dayloss треба відіграти від локального мінімуму, щоб увійти в м’якший рівень. */
+const RECOVERY_TO_ENTER = {
+    defensive: 1,
+    reduce: 1,
+    caution: 2,
+    normal: 3,
+};
 
 function money(value) {
     const number = Number(value);
@@ -13,6 +26,15 @@ function money(value) {
 function levelRank(level) {
     const index = LEVELS.indexOf(level);
     return index < 0 ? 0 : index;
+}
+
+function harsher(a, b) {
+    return levelRank(a) >= levelRank(b) ? a : b;
+}
+
+function lossAbs(dayloss, fallback = 1000) {
+    const value = Math.abs(money(dayloss));
+    return value > 0 ? value : fallback;
 }
 
 function previousMonthKey(monthKey) {
@@ -46,134 +68,239 @@ function buildCurve(days) {
             pnl: money(day.pnl),
             equity,
             peak,
+            monthKey,
             monthPnl: monthPnl[monthKey],
             pullback: money(peak - equity),
         };
     });
 }
 
-function stepAccount(level, ratio) {
-    let escalated = 'calm';
-    if (ratio >= ACCOUNT_ENTER.pause) escalated = 'pause';
-    else if (ratio >= ACCOUNT_ENTER.quarter) escalated = 'quarter';
-    else if (ratio >= ACCOUNT_ENTER.cut) escalated = 'cut';
-    else if (ratio >= ACCOUNT_ENTER.soften) escalated = 'soften';
-    if (levelRank(escalated) > levelRank(level)) return escalated;
+/** Рівень за глибиною в одиницях dayloss (R ≤ 0). */
+function levelFromDepthR(r) {
+    if (r <= -3) return 'pause';
+    if (r <= -2) return 'defensive';
+    if (r <= -1) return 'reduce';
+    if (r <= -0.5) return 'caution';
+    return 'normal';
+}
 
-    let next = level;
-    while (next !== 'calm' && ratio < ACCOUNT_EXIT[next]) {
-        next = LEVELS[levelRank(next) - 1];
+function equitySeverity(pullback, line) {
+    if (!(line > 0) || pullback <= 0) return 'normal';
+    return levelFromDepthR(-pullback / line);
+}
+
+function monthlySeverity(monthR) {
+    return levelFromDepthR(monthR);
+}
+
+/**
+ * Послідовність слабких місяців.
+ * Два мінуси самі по собі ≠ pause: потрібна глибина поточного місяця.
+ */
+function streakSeverity(prevMonthR, currentMonthR) {
+    if (prevMonthR <= -2 && currentMonthR <= -1.5) return 'pause';
+    if (prevMonthR <= -1 && currentMonthR <= -0.75) return 'defensive';
+    // Минулий був помітно червоним, поточний ще мінус, але майже flat → максимум reduce.
+    if (prevMonthR <= -1 && currentMonthR < 0) return 'reduce';
+    return 'normal';
+}
+
+function instantaneousSeverity({ pullback, line, monthR, prevMonthR }) {
+    return harsher(
+        equitySeverity(pullback, line),
+        harsher(monthlySeverity(monthR), streakSeverity(prevMonthR, monthR))
+    );
+}
+
+function recoveryAllows(level, recoveryR, atPeak) {
+    if (level === 'pause') return true;
+    if (atPeak) return true;
+    const need = RECOVERY_TO_ENTER[level];
+    return Number.isFinite(need) ? recoveryR >= need : true;
+}
+
+function stepLatchedLevel(latched, severity, recoveryR, atPeak) {
+    let next = latched;
+    if (levelRank(severity) > levelRank(next)) next = severity;
+
+    while (levelRank(next) > levelRank(severity)) {
+        const softer = LEVELS[levelRank(next) - 1];
+        if (!recoveryAllows(softer, recoveryR, atPeak)) break;
+        next = softer;
     }
     return next;
 }
 
-function latchAccount(curve, deposit) {
-    let level = 'calm';
+function latchRisk(curve, line, prevMonthByKey) {
+    let level = 'normal';
+    let trough = 0;
+    let peak = 0;
+
     curve.forEach((point) => {
-        level = stepAccount(level, point.pullback / deposit);
+        peak = point.peak;
+        if (point.pullback <= 0) trough = point.equity;
+        else trough = Math.min(trough, point.equity);
+
+        const atPeak = point.pullback <= 0;
+        const recoveryR = line > 0 ? Math.max(0, (point.equity - trough) / line) : 0;
+        const monthR = line > 0 ? point.monthPnl / line : 0;
+        const prevMonthR = prevMonthByKey[point.monthKey] ?? 0;
+        const severity = instantaneousSeverity({
+            pullback: point.pullback,
+            line,
+            monthR,
+            prevMonthR,
+        });
+        level = stepLatchedLevel(level, severity, recoveryR, atPeak);
     });
-    const current = curve[curve.length - 1];
-    return {
-        level,
-        ratio: current ? current.pullback / deposit : 0,
-    };
+
+    const last = curve[curve.length - 1];
+    const atPeak = !last || last.pullback <= 0;
+    const recoveryR = last && line > 0 ? Math.max(0, (last.equity - trough) / line) : 0;
+    return { level, recoveryR, trough, atPeak };
 }
 
-function accountText(level, ratio) {
-    const percent = Math.max(1, Math.round(ratio * 100));
-    if (level === 'pause') return `Відкат ${percent}% депозиту. Пауза і розбір.`;
-    if (level === 'quarter') return `Відкат ${percent}% депозиту. Ризик на чверть.`;
-    if (level === 'cut') return `Відкат ${percent}% депозиту. Варто порізати ризик удвічі.`;
-    if (level === 'soften') return `Відкат ${percent}% депозиту. Можна трохи зменшити ризик.`;
-    return '';
+function riskPercent(level) {
+    return Math.round((RISK_MULTIPLIER[level] ?? 1) * 100);
 }
 
-function monthlyAdvice({ monthNow, monthPeak, prevMonthPnl, dayloss, previousDayloss }) {
-    const lossLine = Math.max(1, Math.abs(money(dayloss)) || 1000);
-    const prevLine = Math.max(1, Math.abs(money(previousDayloss)) || lossLine);
-    const prevRed = prevMonthPnl <= -prevLine;
-    const monthRed = monthNow < -0.004;
-    const monthSerious = monthNow <= -lossLine;
-    const giveback = Math.max(0, money(monthPeak - monthNow));
-    const ratio = monthPeak > 0 ? giveback / monthPeak : 0;
-    const meaningfulGiveback = giveback >= lossLine;
-    const mostGiveback = monthPeak > 0 && ratio >= 0.5 && meaningfulGiveback;
-    const someGiveback = monthPeak > 0 && ratio >= 0.3 && meaningfulGiveback;
+function buildText(level, { reason, monthR, prevMonthR, equityR, recoveryR }) {
+    if (level === 'normal') return '';
+    const pct = riskPercent(level);
+    const head = `Ризик ${pct}%`;
 
-    if (prevRed && monthRed) {
-        return { level: 'pause', text: 'Другий місяць у мінусі. Пауза або ризик на чверть.' };
+    if (reason === 'equity') {
+        const depth = Math.abs(equityR).toFixed(1);
+        if (level === 'pause') {
+            return `${head}. Відкат від піку ≈ ${depth} dayloss. Пауза до відновлення +1 dayloss від локального мінімуму.`;
+        }
+        if (level === 'defensive') {
+            return `${head}. Глибокий відкат від equity high (≈ ${depth} dayloss). Захисний режим.`;
+        }
+        if (level === 'reduce') {
+            return `${head}. Відкат від піку ≈ ${depth} dayloss. Працюй половиною ризику до відновлення.`;
+        }
+        return `${head}. Невеликий відкат від піку. Трохи зменш розмір.`;
     }
-    if (monthSerious || (monthRed && mostGiveback)) {
-        return { level: 'cut', text: 'Місяць у мінусі. Поріж ризик удвічі.' };
+
+    if (reason === 'streak') {
+        if (level === 'pause') {
+            return `${head}. Затяжна просадка: попередній місяць сильно мінусовий, поточний продовжує падіння.`;
+        }
+        if (level === 'defensive') {
+            return `${head}. Просадка затяжна: попередній місяць був значно негативним, а поточний продовжує падіння. Захисний режим до відновлення +1 dayloss від локального мінімуму.`;
+        }
+        return `${head}. Другий місяць залишається слабким, але поточна просадка поки невелика. Працюй ${pct}% стандартного ризику до початку відновлення.`;
     }
-    if (prevRed && mostGiveback) {
-        return { level: 'quarter', text: 'Минулий місяць у мінусі, і цей віддає прибуток. Поріж ризик.' };
+
+    // month
+    if (level === 'pause') {
+        return `${head}. Місяць уже ≈ ${Math.abs(monthR).toFixed(1)} dayloss у мінусі. Пауза або мінімальний ризик.`;
     }
-    if (monthNow > 0 && mostGiveback) {
-        return { level: 'cut', text: 'Віддав більшу частину місяця. Варто порізати ризик.' };
+    if (level === 'defensive') {
+        return `${head}. Місяць глибоко в мінусі (≈ ${Math.abs(monthR).toFixed(1)} dayloss). Захисний режим.`;
     }
-    if (prevRed && someGiveback) {
-        return { level: 'cut', text: 'Минулий місяць у мінусі, і цей віддає прибуток. Поріж ризик.' };
+    if (level === 'reduce') {
+        return `${head}. Місяць близько −1 dayloss або гірше. Працюй половиною ризику.`;
     }
-    if (monthRed) {
-        return { level: 'soften', text: 'Місяць у мінусі. Можна трохи зменшити ризик.' };
+    if (prevMonthR <= -1 && monthR < 0) {
+        return `${head}. Минулий місяць був слабким, поточний ще не відіграв. Тримай ризик меншим.`;
     }
-    if (monthNow > 0 && someGiveback) {
-        return { level: 'soften', text: 'Віддаєш прибуток місяця. Можна трохи зменшити ризик.' };
-    }
-    if (prevRed) {
-        return { level: 'soften', text: 'Минулий місяць у мінусі. Тримай ризик меншим.' };
-    }
-    return { level: 'calm', text: '' };
+    return `${head}. Місяць у невеликому мінусі. Можна трохи зменшити ризик.`;
 }
 
-function chooseText(level, account, monthly) {
-    if (level === 'calm') return '';
-    const accountRank = levelRank(account.level);
-    const monthlyRank = levelRank(monthly.level);
-    if (accountRank >= monthlyRank && accountRank >= levelRank('cut')) return accountText(account.level, account.ratio);
-    if (monthlyRank >= accountRank && monthly.text) return monthly.text;
-    if (account.text) return account.text;
-    return monthly.text || '';
+function pickReason(level, equityLevel, monthLevel, streakLevel) {
+    if (level === 'normal') return 'normal';
+    if (levelRank(equityLevel) >= levelRank(level) && equityLevel !== 'normal') return 'equity';
+    if (levelRank(streakLevel) >= levelRank(level) && streakLevel !== 'normal') return 'streak';
+    if (levelRank(monthLevel) >= levelRank(level) && monthLevel !== 'normal') return 'month';
+    if (streakLevel !== 'normal') return 'streak';
+    if (monthLevel !== 'normal') return 'month';
+    if (equityLevel !== 'normal') return 'equity';
+    return 'month';
 }
 
 export function assessDrawdownRisk({ days, deposit, dayloss = -1000, previousDayloss = -1000 } = {}) {
     const curve = buildCurve(normalizeDays(days));
     if (!curve.length) {
-        return { level: 'calm', text: '', reason: 'empty', pullback: 0, accountRatio: 0 };
+        return {
+            level: 'normal',
+            text: '',
+            reason: 'empty',
+            pullback: 0,
+            accountRatio: 0,
+            riskMultiplier: 1,
+            monthR: 0,
+            prevMonthR: 0,
+            equityR: 0,
+        };
     }
 
     const last = curve[curve.length - 1];
-    const monthKey = last.date.slice(0, 7);
+    const monthKey = last.monthKey;
     const prevKey = previousMonthKey(monthKey);
-    let monthPeak = 0;
+    const line = lossAbs(dayloss);
+    const prevLine = lossAbs(previousDayloss, line);
+
+    const monthTotals = {};
     curve.forEach((point) => {
-        if (point.date.slice(0, 7) !== monthKey) return;
-        monthPeak = Math.max(monthPeak, point.monthPnl);
+        monthTotals[point.monthKey] = point.monthPnl;
     });
-    const prevPoint = [...curve].reverse().find((point) => point.date.slice(0, 7) === prevKey);
+
+    /** Для кожного місяця — R попереднього (у dayloss того попереднього місяця). */
+    const prevMonthByKey = {};
+    Object.keys(monthTotals).forEach((key) => {
+        const prev = previousMonthKey(key);
+        if (!prev || !Object.prototype.hasOwnProperty.call(monthTotals, prev)) {
+            prevMonthByKey[key] = 0;
+            return;
+        }
+        // Для попередніх місяців у кривій dayloss поточного/попереднього близькі;
+        // фінальний prevMonthR для last рахуємо з previousDayloss нижче.
+        prevMonthByKey[key] = monthTotals[prev] / (key === monthKey ? prevLine : line);
+    });
+    // Уточнення для поточного місяця: нормалізація через previousDayloss.
+    if (Object.prototype.hasOwnProperty.call(monthTotals, prevKey)) {
+        prevMonthByKey[monthKey] = monthTotals[prevKey] / prevLine;
+    }
+
+    const latched = latchRisk(curve, line, prevMonthByKey);
+    const monthR = last.monthPnl / line;
+    const prevMonthR = prevMonthByKey[monthKey] ?? 0;
+    const equityR = last.pullback > 0 ? -last.pullback / line : 0;
+
+    const equityLevel = equitySeverity(last.pullback, line);
+    const monthLevel = monthlySeverity(monthR);
+    const streakLevel = streakSeverity(prevMonthR, monthR);
+    const spot = instantaneousSeverity({
+        pullback: last.pullback,
+        line,
+        monthR,
+        prevMonthR,
+    });
+    const level = latched.level;
+    const reason = pickReason(level, equityLevel, monthLevel, streakLevel);
+
     const depositValue = Number(deposit);
-    const hasDeposit = Number.isFinite(depositValue) && depositValue > 0;
-    const account = hasDeposit
-        ? latchAccount(curve, depositValue)
-        : { level: 'calm', ratio: 0 };
-    account.text = accountText(account.level, account.ratio);
-    const monthly = monthlyAdvice({
-        monthNow: last.monthPnl,
-        monthPeak,
-        prevMonthPnl: prevPoint ? prevPoint.monthPnl : 0,
-        dayloss,
-        previousDayloss,
-    });
-    const level = LEVELS[Math.max(levelRank(account.level), levelRank(monthly.level))];
+    const accountRatio = Number.isFinite(depositValue) && depositValue > 0
+        ? last.pullback / depositValue
+        : 0;
 
     return {
         level,
-        text: chooseText(level, account, monthly),
-        reason: levelRank(account.level) >= levelRank(monthly.level) && account.level !== 'calm' ? 'account' : monthly.level === 'calm' ? 'calm' : 'month',
+        text: buildText(level, { reason, monthR, prevMonthR, equityR, recoveryR: latched.recoveryR }),
+        reason: level === 'normal' ? 'normal' : reason,
         pullback: last.pullback,
-        accountRatio: account.ratio,
+        accountRatio,
+        riskMultiplier: RISK_MULTIPLIER[level] ?? 1,
         monthPnl: last.monthPnl,
-        monthPeak: money(monthPeak),
+        monthPeak: money(Math.max(0, ...curve.filter((p) => p.monthKey === monthKey).map((p) => p.monthPnl))),
+        monthR,
+        prevMonthR,
+        equityR,
+        spotLevel: spot,
+        recoveryR: latched.recoveryR,
     };
 }
+
+export { LEVELS, RISK_MULTIPLIER };
