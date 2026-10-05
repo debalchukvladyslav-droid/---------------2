@@ -114,6 +114,50 @@ test('agent respects maxRounds cap', async () => {
     assert.match(result.answer, /ліміт/i);
 });
 
+test('agent failovers on Groq 413 payload/TPM errors', async () => {
+    let calls = 0;
+    const fetchImpl = async (url) => {
+        calls += 1;
+        if (String(url).includes('groq.com')) {
+            return {
+                ok: false,
+                status: 413,
+                async json() {
+                    return {
+                        error: {
+                            message: 'Request too large for model on tokens per minute (TPM): Limit 8000, Requested 16502',
+                        },
+                    };
+                },
+            };
+        }
+        return {
+            ok: true,
+            async json() {
+                return {
+                    candidates: [{ content: { parts: [{ text: 'Ок, без вигаданих чисел — потрібен tool.' }] } }],
+                };
+            },
+        };
+    };
+
+    const result = await runAssistantAgent({
+        db: createDb(),
+        user: { id: 'u1' },
+        message: 'скажи winrate з голови',
+        fetchImpl,
+        env: {
+            GROQ_API_KEY: 'gsk-test',
+            GEMINI_API_KEY: 'AIza-test',
+            ASSISTANT_PROVIDER: 'groq',
+        },
+    });
+
+    assert.equal(result.provider, 'gemini');
+    assert.match(result.answer, /tool|чисел/i);
+    assert.ok(calls >= 2);
+});
+
 test('empty message fails with 400', async () => {
     await assert.rejects(
         () => runAssistantAgent({

@@ -23,6 +23,21 @@ function trade(partial) {
     };
 }
 
+test('normalizeTradeRecord treats entry-style side as tradeType and defaults direction to short', () => {
+    const row = normalizeTradeRecord({
+        trade_date: '2026-09-30',
+        ticker: 'TGE',
+        side: 'синя%',
+        pnl: -100,
+        entry_price: 5,
+        exit_price: 5.2,
+        payload: { stop: 5.4, opened: '08:10' },
+    });
+    assert.equal(row.side, 'short');
+    assert.equal(row.tradeType, 'синя%');
+    assert.ok(Number.isFinite(row.rMultiple));
+});
+
 test('performance engine groups by time bucket and setup', () => {
     const stats = buildPerformanceStats([
         trade({ payload: { opened: '05:10', stop: 5.4 }, pnl: 200 }),

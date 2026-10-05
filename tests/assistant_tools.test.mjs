@@ -69,7 +69,7 @@ test('tools are scoped to user id and bound trade list length', async () => {
     const db2 = createMockDb(many);
     const handlers2 = createToolHandlers({ db: db2, userId: 'user-a' });
     const listed = await dispatchTool(handlers2, 'get_trades', { from: '2026-09-01', to: '2026-09-30', limit: 100 }, {});
-    assert.ok(listed.count <= 100);
+    assert.ok(listed.count <= 40);
 });
 
 test('get_day uses page context date', async () => {
