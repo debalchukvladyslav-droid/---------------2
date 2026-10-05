@@ -23,8 +23,19 @@ const ALLOWED_MODELS = new Set([
 import { SwarmError, SwarmOrchestrator } from '../lib/swarm_orchestrator.js';
 import { RagReranker, supabaseVectorSearch } from '../lib/rag_reranker.js';
 import { enrichMarketData } from '../lib/market_enrichment.js';
+import assistantHandler from '../lib/assistant/http.js';
+
+export const config = { maxDuration: 60 };
+
+function isAssistantRequest(req) {
+    if (String(req.query?.action || '') === 'assistant') return true;
+    const path = String(req.url || '').split('?')[0];
+    return path === '/api/assistant' || path.endsWith('/api/assistant');
+}
 
 export default async function handler(req, res) {
+    if (isAssistantRequest(req)) return assistantHandler(req, res);
+
     setCorsHeaders(req, res);
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');

@@ -19,7 +19,7 @@ import sheetsServiceHandler from './api/sheets-service.js';
 import serviceBotEndpointHandler from './api/service-bots/[endpoint].js';
 import tradeCriteriaHandler from './lib/trade_criteria_http.js';
 import telegramFloatHandler from './lib/telegram_float_http.js';
-import assistantHandler from './api/assistant.js';
+import assistantHandler from './lib/assistant/http.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
