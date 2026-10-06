@@ -139,22 +139,33 @@ function getTraderDayloss(profile, periodStart) {
     return Math.max(1, Math.abs(resolveMonthlyDayloss(settings, monthKey)));
 }
 
-function getScopedProfiles() {
+function getScopedProfiles({ ignoreSelection = false } = {}) {
     if (!canAccessMentorReviewQueue()) return [];
 
-    const myNick = state.USER_DOC_NAME ? state.USER_DOC_NAME.replace('_stats', '') : '';
-    const myTeam = state._teamProfiles?.[myNick]?.team || DEFAULT_TEAM;
+    const selectedNick = ignoreSelection ? '' : document.getElementById('mr-trader')?.value || '';
 
     return Object.values(state._teamProfiles || {})
         .filter((p) => {
-            if (!p?.id || !p?.nick || p.mentor_enabled || p.role === 'mentor') return false;
-            return (p.team || DEFAULT_TEAM) === myTeam;
+            if (!p?.id || !p?.nick) return false;
+            return !selectedNick || p.nick === selectedNick;
         })
         .sort((a, b) => {
             const teamCmp = String(a.team || DEFAULT_TEAM).localeCompare(String(b.team || DEFAULT_TEAM), 'uk');
             if (teamCmp !== 0) return teamCmp;
             return profileDisplayName(a).localeCompare(profileDisplayName(b), 'uk');
         });
+}
+
+function syncTraderSelect() {
+    const select = document.getElementById('mr-trader');
+    if (!select) return;
+    const current = select.value;
+    const profiles = getScopedProfiles({ ignoreSelection: true });
+    select.innerHTML = '<option value="">Усі трейдери</option>' + profiles.map((profile) => {
+        const team = profile.team || DEFAULT_TEAM;
+        return `<option value="${escapeHtml(profile.nick)}">${escapeHtml(profileDisplayName(profile))} · ${escapeHtml(profile.nick)} · ${escapeHtml(team)}</option>`;
+    }).join('');
+    select.value = profiles.some((profile) => profile.nick === current) ? current : '';
 }
 
 function makeRowKey(userId, dateStr) {
@@ -224,13 +235,26 @@ function latestRecordedAt(rows) {
     }, '');
 }
 
+function latestFieldRecordedAt(rows, key) {
+    const hasValue = key === 'prep' ? hasPreparation
+        : key === 'pnl' ? (row) => Number.isFinite(rowPnl(row))
+            : hasThought;
+    return rows.reduce((latest, row) => {
+        if (!hasValue(row)) return latest;
+        const metrics = parseMetrics(row.daily_metrics);
+        const value = metrics?.reviewRecordedAt?.[key] || row.created_at || row.updated_at;
+        if (!value || Number.isNaN(new Date(value).getTime())) return latest;
+        return !latest || new Date(value).getTime() > new Date(latest).getTime() ? value : latest;
+    }, '');
+}
+
 function shortDates(dates, max = 3) {
     if (!dates.length) return '';
     const head = dates.slice(0, max).join(', ');
     return dates.length > max ? `${head} +${dates.length - max}` : head;
 }
 
-function makeBaseCell(key, label, missingDates, pendingDates, okDetail = 'заповнено') {
+function makeBaseCell(key, label, missingDates, pendingDates, okDetail = 'заповнено', recordedAt = '') {
     if (missingDates.length) {
         return {
             key,
@@ -249,7 +273,14 @@ function makeBaseCell(key, label, missingDates, pendingDates, okDetail = 'зап
             date: pendingDates[0],
         };
     }
-    return { key, label, tone: 'green', detail: okDetail, date: null };
+    const recorded = formatRecordedAt(recordedAt);
+    return {
+        key,
+        label,
+        tone: 'green',
+        detail: recorded ? `${okDetail} · записано ${recorded}` : okDetail,
+        date: null,
+    };
 }
 
 function calcDrawdown(rows) {
@@ -310,9 +341,9 @@ function buildTraderReview(profile, rowMap, dates, kyiv, periodStart) {
     }
 
     const cells = [
-        makeBaseCell('prep', 'Підготовка до сесії', missingPrep, pendingPrep),
-        makeBaseCell('pnl', 'Результат Gross', missingPnl, pendingPnl, pnlCount ? money(totalPnl) : 'заповнено'),
-        makeBaseCell('thought', 'Думка дня', missingThought, pendingThought),
+        makeBaseCell('prep', 'Підготовка до сесії', missingPrep, pendingPrep, 'заповнено', latestFieldRecordedAt(rows, 'prep')),
+        makeBaseCell('pnl', 'Результат Gross', missingPnl, pendingPnl, pnlCount ? money(totalPnl) : 'заповнено', latestFieldRecordedAt(rows, 'pnl')),
+        makeBaseCell('thought', 'Думка дня', missingThought, pendingThought, 'заповнено', latestFieldRecordedAt(rows, 'thought')),
     ];
 
     if (!missingPnl.length && !pendingPnl.length && negativeDays.length) {
@@ -465,6 +496,7 @@ export async function refreshMentorReviewQueue() {
         return;
     }
 
+    syncTraderSelect();
     const period = document.getElementById('mr-period')?.value || 'today';
     const { start, end, dates, label } = getPeriodDates(period);
     const profiles = getScopedProfiles();
@@ -525,7 +557,7 @@ function writeSeenSet(seen) {
 export async function fetchMentorReviewNotificationHits() {
     if (!canAccessMentorReviewQueue()) return [];
 
-    const profiles = getScopedProfiles();
+    const profiles = getScopedProfiles({ ignoreSelection: true });
     if (!profiles.length) return [];
 
     const period = getPeriodDates('today');
@@ -597,6 +629,10 @@ export function initMentorReviewUI() {
             }
         });
     }
+
+    const traderSelect = root.querySelector('#mr-trader');
+    syncTraderSelect();
+    traderSelect?.addEventListener('change', () => scheduleRefresh());
 
     const syncMrPeriodButtons = () => {
         const v = document.getElementById('mr-period')?.value || 'today';

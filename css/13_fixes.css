@@ -1956,6 +1956,9 @@ body.is-calendar-tab .quick-trade-fab {
     min-height: 32px;
     font-family: inherit;
 }
+.mr-field-trader select {
+    max-width: min(320px, 74vw);
+}
 .mentor-review-filters {
     margin-bottom: 8px;
 }

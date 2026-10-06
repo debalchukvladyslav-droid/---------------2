@@ -235,9 +235,35 @@ function dayReviewMetrics(day) {
     };
 }
 
+function reviewRecordedAt(entry, day) {
+    const previous = entry?.reviewRecordedAt && typeof entry.reviewRecordedAt === 'object'
+        ? entry.reviewRecordedAt
+        : entry?.__syncBase?.daily_metrics?.reviewRecordedAt;
+    const timestamps = previous && typeof previous === 'object' ? { ...previous } : {};
+    const now = new Date().toISOString();
+    const hasPrep = [day.sessionGoal, day.sessionPlan].some((value) => String(value || '').trim())
+        || (Array.isArray(day.checkedParams) && day.checkedParams.length > 0);
+    const hasPnl = [day.pnl, day.gross_pnl].some((value) => value !== null
+        && value !== undefined
+        && value !== ''
+        && Number.isFinite(Number(value)));
+    const hasThought = String(day.notes || '').trim() !== '';
+
+    if (hasPrep && !timestamps.prep) timestamps.prep = now;
+    if (hasPnl && !timestamps.pnl) timestamps.pnl = now;
+    if (hasThought && !timestamps.thought) timestamps.thought = now;
+    if (!hasPrep) delete timestamps.prep;
+    if (!hasPnl) delete timestamps.pnl;
+    if (!hasThought) delete timestamps.thought;
+
+    entry.reviewRecordedAt = timestamps;
+    return timestamps;
+}
+
 function dayEntryToJournalRow(userId, tradeDate, entry) {
     const day = normalizeDayEntry(entry);
     const review = dayReviewMetrics(day);
+    const recordedAt = reviewRecordedAt(entry, day);
 
     return {
         user_id: userId,
@@ -290,6 +316,7 @@ function dayEntryToJournalRow(userId, tradeDate, entry) {
             sessionReviewDone: day.sessionReviewDone ?? false,
             sessionEndRecorded: day.sessionEndRecorded === true,
             sessionReviewCompletedAt: day.sessionReviewCompletedAt ?? '',
+            reviewRecordedAt: recordedAt,
             dayScores: review.dayScores,
             dayGrade: review.dayGrade,
             dayTags: review.dayTags,
@@ -346,6 +373,9 @@ function journalRowToDayEntry(row) {
         sessionEndRecorded: metrics.sessionEndRecorded === true || metrics.sessionReviewDone === true
             || String(metrics.sessionReviewCompletedAt || '').trim() !== '',
         sessionReviewCompletedAt: metrics.sessionReviewCompletedAt,
+        reviewRecordedAt: metrics.reviewRecordedAt && typeof metrics.reviewRecordedAt === 'object'
+            ? metrics.reviewRecordedAt
+            : {},
         ...dayReviewMetrics(metrics),
         trades: metrics.trades || [],
         tradePolygons: metrics.tradePolygons && typeof metrics.tradePolygons === 'object' ? metrics.tradePolygons : {},
