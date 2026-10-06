@@ -1906,7 +1906,8 @@ body.is-calendar-tab .quick-trade-fab {
     color: var(--text-muted);
 }
 .mr-field select,
-.mr-field input[type="number"] {
+.mr-field input[type="number"],
+.mr-field input[type="date"] {
     min-width: 116px;
     padding: 7px 9px;
     border-radius: 8px;
@@ -1950,6 +1951,10 @@ body.is-calendar-tab .quick-trade-fab {
 .mr-period-btn:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
+}
+.mr-field-date input[type="date"] {
+    min-height: 32px;
+    font-family: inherit;
 }
 .mentor-review-filters {
     margin-bottom: 8px;
@@ -2061,6 +2066,13 @@ body.is-calendar-tab .quick-trade-fab {
     font-size: 0.72rem;
     font-family: var(--font-mono);
     flex-shrink: 0;
+}
+.mentor-review-saved {
+    display: block;
+    margin-top: 3px;
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    line-height: 1.3;
 }
 .mentor-review-status {
     display: block;

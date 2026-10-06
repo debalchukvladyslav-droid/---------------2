@@ -77,6 +77,16 @@ function getPeriodDates(period = 'today') {
     let start = new Date(today);
     let label = 'сьогодні';
 
+    if (period === 'date') {
+        const selected = document.getElementById('mr-date')?.value;
+        const todayYmd = localYmd(today);
+        const date = /^\d{4}-\d{2}-\d{2}$/.test(selected || '') && selected <= todayYmd
+            ? selected
+            : todayYmd;
+        const selectedDate = parseYmd(date);
+        return { start: selectedDate, end: selectedDate, dates: [date], label: date };
+    }
+
     if (period === '3d') {
         label = '3 дні';
         const dates = [];
@@ -192,6 +202,26 @@ function money(value) {
     const n = Number(value);
     if (!Number.isFinite(n)) return '—';
     return `${n >= 0 ? '+' : ''}${n.toFixed(2)}$`;
+}
+
+function formatRecordedAt(value) {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return new Intl.DateTimeFormat('uk-UA', {
+        timeZone: 'Europe/Kyiv',
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+    }).format(date).replace(',', ' ·');
+}
+
+function latestRecordedAt(rows) {
+    return rows.reduce((latest, row) => {
+        const value = row?.updated_at || row?.created_at;
+        return !latest || new Date(value).getTime() > new Date(latest).getTime() ? value : latest;
+    }, '');
 }
 
 function shortDates(dates, max = 3) {
@@ -326,12 +356,15 @@ function buildTraderReview(profile, rowMap, dates, kyiv, periodStart) {
         });
     }
 
+    const lastSavedAt = latestRecordedAt(rows);
+
     return {
         profile,
         dayloss,
         cells,
         redCount: cells.filter((c) => c.tone === 'red').length,
         openDate: cells.find((c) => c.tone === 'red' && c.date)?.date || dates[dates.length - 1],
+        lastSavedAt,
     };
 }
 
@@ -343,7 +376,7 @@ async function fetchRowsForProfiles(profiles, startStr, endStr) {
         const chunk = userIds.slice(i, i + 60);
         const { data, error } = await supabase
             .from('journal_days')
-            .select('id, user_id, trade_date, gross_pnl, notes, daily_metrics')
+            .select('id, user_id, trade_date, gross_pnl, notes, daily_metrics, created_at, updated_at')
             .in('user_id', chunk)
             .gte('trade_date', startStr)
             .lte('trade_date', endStr)
@@ -385,6 +418,8 @@ function renderTraderRow(item) {
     const name = profileDisplayName(p);
     const team = p.team || DEFAULT_TEAM;
     const redText = item.redCount ? `${item.redCount} черв.` : 'ок';
+    const savedAt = formatRecordedAt(item.lastSavedAt);
+    const savedText = savedAt ? `Останнє збереження: ${savedAt}` : 'Дані ще не записані';
 
     return `
         <article class="mentor-review-row ${item.redCount ? 'has-red' : ''}">
@@ -392,6 +427,7 @@ function renderTraderRow(item) {
                 <span class="mentor-review-person">
                     <span class="mentor-review-name">${escapeHtml(name)}</span>
                     <span class="mentor-review-nick">${escapeHtml(p.nick)} · ${escapeHtml(team)}</span>
+                    <span class="mentor-review-saved" title="Час останнього збереження даних">${escapeHtml(savedText)}</span>
                 </span>
                 <span class="mentor-review-status">${escapeHtml(redText)}</span>
             </button>
@@ -548,6 +584,20 @@ export function initMentorReviewUI() {
 
     root.querySelector('#mr-refresh-btn')?.addEventListener('click', () => void refreshMentorReviewQueue());
 
+    const dateInput = root.querySelector('#mr-date');
+    if (dateInput) {
+        dateInput.max = getKyivClock().today;
+        dateInput.value = getKyivClock().today;
+        dateInput.addEventListener('change', () => {
+            const hidden = document.getElementById('mr-period');
+            if (hidden && dateInput.value) {
+                hidden.value = 'date';
+                syncMrPeriodButtons();
+                scheduleRefresh();
+            }
+        });
+    }
+
     const syncMrPeriodButtons = () => {
         const v = document.getElementById('mr-period')?.value || 'today';
         root.querySelectorAll('.mr-period-btn').forEach((b) => {
@@ -562,6 +612,7 @@ export function initMentorReviewUI() {
         const hidden = document.getElementById('mr-period');
         if (hidden && period) {
             hidden.value = period;
+            if (period === 'date' && dateInput && !dateInput.value) dateInput.value = getKyivClock().today;
             syncMrPeriodButtons();
             scheduleRefresh();
         }
