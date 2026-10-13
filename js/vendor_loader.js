@@ -45,7 +45,7 @@ export async function ensureChartJs() {
 }
 
 export async function ensureTesseract() {
-    if (!window.Tesseract) await loadScriptOnce('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
+    if (!window.Tesseract) await loadScriptOnce('/vendor/tesseract/tesseract.min.js');
     if (!window.Tesseract) throw new Error('Tesseract не завантажився');
     return window.Tesseract;
 }

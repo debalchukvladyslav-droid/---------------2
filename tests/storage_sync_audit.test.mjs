@@ -9,9 +9,10 @@ const source = (await readFile(new URL('../js/storage.js', import.meta.url), 'ut
 function harness(overrides = {}) {
     let handlers;
     const commits = [];
-    const state = { myUserId: 'owner', USER_DOC_NAME: 'owner_stats', CURRENT_VIEWED_USER: 'owner_stats', appData: { settings: { theme: 'local' }, journal: {} } };
+    const state = { myUserId: 'owner', USER_DOC_NAME: 'owner_stats', CURRENT_VIEWED_USER: 'owner_stats', _sheetRowsReconciled: true, appData: { settings: { theme: 'local' }, journal: {} } };
     const context = vm.createContext({ console, setTimeout, clearTimeout, queueMicrotask, structuredClone,
         navigator: { onLine: true },
+        window: { addEventListener() {} },
         state, cloneData: structuredClone, setDataSyncHandlers: value => { handlers = value; },
         syncError: (message, code) => Object.assign(new Error(message), { code }),
         supabase: { auth: { getSession: async () => ({ data: { session: { user: { id: 'owner' } } } }), getUser: async () => { throw new Error('Network unavailable'); } } },
@@ -105,6 +106,54 @@ test('settings guard blocks an explicit clear of several populated collections',
     state.appData.cumulativeSheetRows = {};
     await assert.rejects(api.saveSettings(), { code: 'DATA_LOSS_GUARD' });
     assert.equal(commits.length, 1);
+});
+
+test('unreconciled sheets remain in the complete settings snapshot across repeated saves', async () => {
+    const previous = { sheetRows: { sheet: { rows: [1, 2] } }, cumulativeSheetRows: { week: { rows: [3] } } };
+    const { api, state, commits } = harness({ readCachedValue: async () => ({ value: previous }) });
+    state._sheetRowsReconciled = false;
+    state.appData.sheetRows = {};
+    state.appData.cumulativeSheetRows = {};
+    await api.saveSettings();
+    await api.saveSettings();
+    for (const [, changes] of commits) {
+        assert.deepEqual(changes[0].value.sheetRows, previous.sheetRows);
+        assert.deepEqual(changes[0].value.cumulativeSheetRows, previous.cumulativeSheetRows);
+    }
+});
+
+test('failed sheet reconciliation does not turn two deliberate clears into a data loss error', async () => {
+    const previous = { screenMeta: { shot: {} }, unassignedImages: ['shot'], sheetRows: { sheet: { rows: [1] } } };
+    const { api, state, commits } = harness({
+        readCachedValue: async () => ({ value: previous }),
+        window: { addEventListener() {}, reconcileSheetRows: async () => { throw new Error('offline'); } },
+    });
+    state._sheetRowsReconciled = false;
+    state.appData.screenMeta = previous.screenMeta;
+    state.appData.unassignedImages = previous.unassignedImages;
+    state.appData.sheetRows = previous.sheetRows;
+    await api.saveSettings();
+    state.appData.screenMeta = {};
+    state.appData.unassignedImages = [];
+    await api.saveSettings();
+    assert.equal(commits.length, 2);
+    assert.deepEqual(commits[1][1][0].value.sheetRows, previous.sheetRows);
+    assert.equal(Object.keys(commits[1][1][0].value.screenMeta).length, 0);
+    assert.equal(commits[1][1][0].value.unassignedImages.length, 0);
+});
+
+test('a settings save discards a delayed cache read after the account changes', async () => {
+    let release;
+    const barrier = new Promise(resolve => { release = resolve; });
+    const { api, state, commits } = harness({ readCachedValue: () => barrier });
+    const pending = api.saveSettings();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    state.myUserId = 'other';
+    state.appData = { settings: { theme: 'other' }, journal: {} };
+    release({ value: { tickers: { oldAccount: true } } });
+    await pending;
+    assert.equal(commits.length, 0);
+    assert.equal(state.appData.tickers, undefined);
 });
 
 test('a startup save keeps cached trades when several open days have none', async () => {

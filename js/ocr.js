@@ -2,7 +2,7 @@
 import { state } from './state.js';
 import { saveToLocal } from './storage.js';
 import { getImgUrl, getStorageUrl } from './gallery.js';
-import { ensureTesseract } from './vendor_loader.js';
+import { createTickerOCRWorker } from './ocr_worker.js';
 import { isOCRSourceUsable } from './ocr_source_guard.js';
 
 let ocrDrawingReady = false;
@@ -757,6 +757,10 @@ function makeOCRVariants(imgObj, zone, scale = 4, names = null) {
 }
 
 async function performOCR(encodedPath, force = false) {
+    let worker = null;
+    const appData = state.appData;
+    const owner = state.myUserId;
+    const current = () => state.appData === appData && state.myUserId === owner;
     const safePath = decodeURIComponent(encodedPath);
     const screenshotDate = findScreenshotDate(safePath);
     console.groupCollapsed(`[OCR ticker] ${safePath}`);
@@ -780,7 +784,7 @@ async function performOCR(encodedPath, force = false) {
     if (trustedTags.length === 1) {
         console.log('[OCR] resolved from manual tag:', trustedTags[0]);
         state.appData.tickers[safePath] = trustedTags[0];
-        saveToLocal();
+        void saveToLocal().catch(error => console.warn('[OCR] ticker save failed:', error));
         updateBadgeUI(encodedPath, false);
         return finishOCRLog(trustedTags[0]);
     }
@@ -812,10 +816,14 @@ async function performOCR(encodedPath, force = false) {
 
         try {
             console.log('[OCR] loading Tesseract...');
-            await ensureTesseract();
+            worker = await createTickerOCRWorker();
             console.log('[OCR] Tesseract ready');
         } catch (error) {
             console.warn('[OCR] Tesseract lazy-load failed:', error);
+            updateBadgeUI(encodedPath, false);
+            return finishOCRLog();
+        }
+        if (!current() || state.appData.tickers[safePath] !== existing) {
             updateBadgeUI(encodedPath, false);
             return finishOCRLog();
         }
@@ -860,12 +868,13 @@ async function performOCR(encodedPath, force = false) {
 
                 const zoneScores = {};
                 const textSnippets = [];
+                await worker.setParameters({
+                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@$!| ',
+                    tessedit_pageseg_mode: zone.h < ih * 0.12 ? '7' : '6',
+                    preserve_interword_spaces: '1',
+                });
                 for (const canvas of variants) {
-                    const { data } = await Tesseract.recognize(canvas, 'eng', {
-                        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@$!| ',
-                        tessedit_pageseg_mode: zone.h < ih * 0.12 ? '7' : '6',
-                        preserve_interword_spaces: '1',
-                    });
+                    const { data } = await worker.recognize(canvas);
 
                     const rawText = String(data.text || '').replace(/\s+/g, ' ').trim();
                     if (rawText) textSnippets.push(rawText.slice(0, OCR_MAX_RAW_TEXT_LOG));
@@ -933,15 +942,20 @@ async function performOCR(encodedPath, force = false) {
             });
         }
 
+        if (!current() || state.appData.tickers[safePath] !== existing) {
+            updateBadgeUI(encodedPath, false);
+            return finishOCRLog();
+        }
         state.appData.tickers[safePath] = ticker;
-        saveToLocal();
+        await saveToLocal();
         updateBadgeUI(encodedPath, false);
         return finishOCRLog(ticker);
     } catch (e) {
         console.error('Помилка OCR:', e);
-        state.appData.tickers[safePath] = '???';
         updateBadgeUI(encodedPath, false);
         return finishOCRLog('???');
+    } finally {
+        if (worker) await worker.terminate().catch(error => console.warn('[OCR] worker cleanup:', error));
     }
 }
 

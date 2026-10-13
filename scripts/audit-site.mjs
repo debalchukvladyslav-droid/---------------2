@@ -2,7 +2,7 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 const rootDir = process.cwd();
-const ignoredDirs = new Set(['.git', '.vercel', 'node_modules']);
+const ignoredDirs = new Set(['.git', '.vercel', '.recovery', '.tools', 'node_modules']);
 const textExtensions = new Set(['.html', '.css', '.js', '.mjs', '.json']);
 
 function toPosix(value) {
@@ -106,11 +106,12 @@ async function collectPartialTree(entryHtml) {
 }
 
 async function collectImportGraph(jsFiles) {
-    const fileSet = new Set(jsFiles);
     const graph = new Map();
     const missing = [];
+    const pending = [...jsFiles];
 
-    for (const file of jsFiles) {
+    for (const file of pending) {
+        if (graph.has(file)) continue;
         const source = await readText(file);
         const specs = [
             ...matchesAll(source, /import\s+(?:[^'"()]+?\s+from\s+)?["']([^"']+)["']/g),
@@ -122,7 +123,8 @@ async function collectImportGraph(jsFiles) {
             const resolved = resolveRelativeImport(file, spec);
             if (!resolved) continue;
             localImports.push(resolved);
-            if (!fileSet.has(resolved)) missing.push({ owner: file, target: resolved });
+            if (await exists(resolved)) pending.push(resolved);
+            else missing.push({ owner: file, target: resolved });
         }
 
         graph.set(file, localImports);

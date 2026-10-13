@@ -2,7 +2,13 @@ export const SILENT_DRIVE_SYNC_TTL_MS = 60_000;
 
 export function isQuietDriveSyncError(error) {
     const status = Number(error?.status) || 0;
-    return error?.code === 'SOURCE_CONNECTION_REQUIRED' || status === 403 || status === 404;
+    return ['SOURCE_CONNECTION_REQUIRED', 'AUTH_REQUIRED'].includes(error?.code) || status === 401 || status === 403 || status === 404;
+}
+
+export function driveSyncErrorMessage(error) {
+    return Number(error?.status) === 401 || error?.code === 'AUTH_REQUIRED'
+        ? 'Сесія закінчилась. Увійдіть у свій акаунт повторно.'
+        : 'Google Drive: поширте папку на service account email';
 }
 
 export function shouldSkipSilentDriveSync({ silent, lastSuccessfulSyncAt, now = Date.now() } = {}) {

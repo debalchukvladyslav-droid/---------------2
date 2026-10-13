@@ -195,6 +195,7 @@ export function resetRuntimeDataForAccountSwitch() {
     state._availableMonthKeys = new Set();
     state.autoFlagsCache = { records: new Set(), absoluteRecord: null };
     _loadedSettingsCollections.clear();
+    state._sheetRowsReconciled = false;
     clearStatsCache();
 }
 
@@ -203,6 +204,8 @@ export function resetRuntimeDataForAccountSwitch() {
 // from the previous profile can suppress the newly loaded rows.
 export function resetJournalLoadStateForProfileSwitch() {
     invalidatePendingPersistenceContext();
+    _loadedSettingsCollections.clear();
+    state._sheetRowsReconciled = false;
     _dirtyJournalDates.clear();
     _journalDateRevisions.clear();
     _dayDetailsPromises.clear();
@@ -696,13 +699,18 @@ export function markAllJournalDirty() {
 
 async function performSettingsSave(context) {
     try {
+        const current = () => context && context.generation === _accountContextGeneration
+            && state.myUserId === context.userId && state.appData === context.appData;
+        if (!current()) return;
         if (window.reconcileSheetRows) {
             try { await window.reconcileSheetRows(); } catch (_) { /* keep the server sheet if this read fails */ }
         }
         const { user } = await getCurrentUserContext({ local: true });
-        if (!user || !context || context.generation !== _accountContextGeneration || user.id !== context.userId) return;
+        if (!user || !current() || user.id !== context.userId) return;
         await ensureDataSyncMetadata(user.id);
+        if (!current()) return;
         const previousSettings = (await readCachedValue(user.id, 'settings'))?.value || {};
+        if (!current()) return;
         const keep = (current, previous, empty) => current == null ? (previous ?? empty) : current;
         const settingsPayload = {
             ...previousSettings,
@@ -739,8 +747,12 @@ async function performSettingsSave(context) {
             ),
         };
         if (!state._sheetRowsReconciled) {
-            delete settingsPayload.sheetRows;
-            delete settingsPayload.cumulativeSheetRows;
+            // This is a complete snapshot: omitting a cached key becomes a
+            // deletion in mergePatch. Keep it until reconciliation succeeds.
+            for (const key of ['sheetRows', 'cumulativeSheetRows']) {
+                if (Object.hasOwn(previousSettings, key)) settingsPayload[key] = cloneData(previousSettings[key]);
+                else delete settingsPayload[key];
+            }
         }
         DESTRUCTIVE_SETTINGS_KEYS.forEach((key) => adoptKeptSettingsCollection(key, settingsPayload[key]));
         const resetKeys = destructiveSettingsReset(previousSettings, settingsPayload);
@@ -762,7 +774,7 @@ async function performSettingsSave(context) {
 }
 
 export function saveSettings() {
-    const context = { generation: _accountContextGeneration, userId: state.myUserId || null };
+    const context = { generation: _accountContextGeneration, userId: state.myUserId || null, appData: state.appData };
     if (!context.userId) return Promise.resolve(false);
     _settingsSaveRequested = true;
     _settingsSaveContext = context;
@@ -780,7 +792,8 @@ export function saveSettings() {
 export async function loadSettings() {
     const generation = _accountContextGeneration;
     const owner = state.myUserId;
-    const current = () => generation === _accountContextGeneration && owner === state.myUserId;
+    const appData = state.appData;
+    const current = () => generation === _accountContextGeneration && owner === state.myUserId && appData === state.appData;
     try {
         const { user } = await getCurrentUserContext({ local: true });
         if (!user || user.id !== owner || !current()) return;
@@ -809,60 +822,7 @@ export async function loadSettings() {
             await cacheValue(user.id, 'settings', data.settings);
             const effective = await readCachedValue(user.id, 'settings');
             if (!current() || _settingsSavePromise || _settingsSaveRequested) return;
-            const incoming = { ...(effective?.value || data.settings) };
-            if (Array.isArray(incoming.unassignedImages)) {
-                state.appData.unassignedImages = incoming.unassignedImages;
-                delete incoming.unassignedImages;
-            }
-            if (Array.isArray(incoming.aiChatHistory)) {
-                state.appData.aiChatHistory = incoming.aiChatHistory;
-                delete incoming.aiChatHistory;
-            }
-            if (Array.isArray(incoming.aiSavedChats)) {
-                state.appData.aiSavedChats = incoming.aiSavedChats;
-                delete incoming.aiSavedChats;
-            }
-            if (Array.isArray(incoming.errorTypes)) {
-                state.appData.errorTypes = incoming.errorTypes;
-                delete incoming.errorTypes;
-            }
-            if (incoming.learnCache && typeof incoming.learnCache === 'object') {
-                state.appData.learnCache = incoming.learnCache;
-                delete incoming.learnCache;
-            }
-            if (incoming.tickers && typeof incoming.tickers === 'object') {
-                state.appData.tickers = incoming.tickers;
-                delete incoming.tickers;
-            }
-            if (incoming.screenMeta && typeof incoming.screenMeta === 'object') {
-                state.appData.screenMeta = incoming.screenMeta;
-                delete incoming.screenMeta;
-            }
-            if (Array.isArray(incoming.tradeTypes)) {
-                state.appData.tradeTypes = normalizeTradeTypesList(incoming.tradeTypes);
-                delete incoming.tradeTypes;
-            }
-            if (incoming.screenTags && typeof incoming.screenTags === 'object') {
-                state.appData.screenTags = incoming.screenTags;
-                delete incoming.screenTags;
-            }
-            if (incoming.screenDiscipline && typeof incoming.screenDiscipline === 'object') {
-                state.appData.screenDiscipline = incoming.screenDiscipline;
-                delete incoming.screenDiscipline;
-            }
-            if (incoming.sheetRows && typeof incoming.sheetRows === 'object') {
-                state.appData.sheetRows = incoming.sheetRows;
-                delete incoming.sheetRows;
-            }
-            if (incoming.cumulativeSheetRows && typeof incoming.cumulativeSheetRows === 'object') {
-                state.appData.cumulativeSheetRows = incoming.cumulativeSheetRows;
-                delete incoming.cumulativeSheetRows;
-            }
-            if (incoming.weeklyComments && typeof incoming.weeklyComments === 'object') {
-                state.appData.weeklyComments = incoming.weeklyComments;
-                delete incoming.weeklyComments;
-            }
-            state.appData.settings = { ...state.appData.settings, ...incoming };
+            applySettingsPayload(effective?.value || data.settings);
             try {
                 const cachedTheme = JSON.parse(localStorage.getItem(`theme:${user.id}`) || 'null');
                 const cachedAt = Date.parse(cachedTheme?.updatedAt || 0);
@@ -1476,6 +1436,8 @@ export async function initializeApp() {
                 ...(previousAppData.settings && typeof previousAppData.settings === 'object' ? previousAppData.settings : {})
             };
         }
+        _loadedSettingsCollections.clear();
+        state._sheetRowsReconciled = false;
         state.appData = normalizeAppData({ ...baseAppData, journal: {} });
         // Rendering can trigger network reads and autosaves. Restore settings
         // before rendering, so defaults cannot overwrite a queued offline edit.

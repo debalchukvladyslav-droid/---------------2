@@ -7,10 +7,10 @@ import { ensureSupabaseStorageUser, uploadToSupabaseStorage } from './supabase_s
 import { buildScreenshotPath, buildScreenshotPathVariants } from './storage_paths.js';
 import { hideGlobalLoader, showGlobalLoader } from './loading.js';
 import { ensureGoogleApi, ensureGoogleIdentity } from './vendor_loader.js';
-import { supabase } from './supabase.js';
+import { fetchWithSession } from './authenticated_fetch.js';
 import { loadScreenshotRegistry, mergeScreenshotRegistry, registerDriveScreenshot } from './screenshot_registry.js';
 import { normalizeScreenshotTimestamp, selectRegistryBackfills } from './screenshot_registry_core.js';
-import { isQuietDriveSyncError, shouldSkipSilentDriveSync } from './drive_sync_core.js';
+import { driveSyncErrorMessage, isQuietDriveSyncError, shouldSkipSilentDriveSync } from './drive_sync_core.js';
 
 const appConfig = window.TRADING_JOURNAL_CONFIG || {};
 const CLIENT_ID = String(appConfig.googleDriveClientId || appConfig.googleSheetsClientId || '').trim();
@@ -224,26 +224,14 @@ async function getTokenSilently() {
     return await tryRestoreDriveToken() ? _accessToken : null;
 }
 
-async function getSupabaseAccessToken() {
-    const { data, error } = await supabase.auth.getSession();
-    if (error) throw error;
-    return data?.session?.access_token || '';
-}
-
 async function fetchServiceDriveJson(params) {
-    const accessToken = await getSupabaseAccessToken();
-    if (!accessToken) throw new Error('Supabase session expired');
     const url = new URL('/api/drive-service', window.location.origin);
     Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
     console.info('[Drive test] service request:', {
         action: params.action || 'list',
         folderId: params.folderId || '',
     });
-    const response = await fetch(url.toString(), {
-        headers: {
-            Authorization: `Bearer ${accessToken}`,
-        },
-    });
+    const response = await fetchWithSession(url.toString());
     const data = await response.json().catch(() => ({}));
     console.info('[Drive test] service response:', {
         action: params.action || 'list',
@@ -262,17 +250,11 @@ async function fetchServiceDriveJson(params) {
 }
 
 async function fetchServiceDriveBlob(fileId) {
-    const accessToken = await getSupabaseAccessToken();
-    if (!accessToken) throw new Error('Supabase session expired');
     const url = new URL('/api/drive-service', window.location.origin);
     url.searchParams.set('action', 'media');
     url.searchParams.set('fileId', fileId);
     console.info('[Drive test] media request:', { fileId });
-    const response = await fetch(url.toString(), {
-        headers: {
-            Authorization: `Bearer ${accessToken}`,
-        },
-    });
+    const response = await fetchWithSession(url.toString());
     console.info('[Drive test] media response:', {
         fileId,
         status: response.status,
@@ -433,7 +415,7 @@ export async function syncDriveScreenshots(silent = false) {
                     });
                     setDriveServiceStatus(`Service account не має доступу: ${error?.message || error}`, 'error');
                     if (isQuietDriveSyncError(error)) {
-                        const message = 'Google Drive: поширте папку на service account email';
+                        const message = driveSyncErrorMessage(error);
                         if (statusEl) statusEl.textContent = message;
                         if (!silent) showToast(message);
                         hideGlobalLoader('drive-sync');
@@ -658,7 +640,7 @@ export async function syncDriveScreenshots(silent = false) {
         });
         showGlobalLoader('drive-sync', quiet ? 'Потрібен доступ до папки' : 'Помилка синхронізації', { type: 'error' });
         hideGlobalLoader('drive-sync', 2600);
-        if (statusEl) statusEl.textContent = quiet ? 'Google Drive: поширте папку на service account email' : '❌ Помилка синхронізації';
+        if (statusEl) statusEl.textContent = quiet ? driveSyncErrorMessage(e) : '❌ Помилка синхронізації';
         if (!silent || !quiet) showToast('❌ Помилка: ' + e.message);
         setDriveServiceStatus(`Помилка синхронізації: ${e.message}`, 'error');
     } finally {

@@ -2,7 +2,7 @@
 
 // 1. ІМПОРТИ
 import { supabase } from './supabase.js';
-import { loadBootProfile } from './boot_profile.js';
+import { loadBootProfile, isExpiredSessionError } from './boot_profile.js';
 import { createDeferredAuthHandler, shouldRestartForAccountSwitch } from './auth_event_dispatch.js';
 import { cacheValue, readCachedValue } from './local_data_store.js';
 import { state } from './state.js';
@@ -544,13 +544,19 @@ function parseStoredSheetValue(value) {
 }
 
 let sessionSheetRowsPromise = null;
+let sessionSheetRowsContext = null;
 
 function ensureSessionSheetRows() {
     if (state._sheetRowsReconciled) return Promise.resolve();
-    if (!sessionSheetRowsPromise) {
-        sessionSheetRowsPromise = loadSessionSheetRows().finally(() => {
-            sessionSheetRowsPromise = null;
+    if (!sessionSheetRowsPromise || sessionSheetRowsContext !== state.appData) {
+        sessionSheetRowsContext = state.appData;
+        const pending = loadSessionSheetRows().finally(() => {
+            if (sessionSheetRowsPromise === pending) {
+                sessionSheetRowsPromise = null;
+                sessionSheetRowsContext = null;
+            }
         });
+        sessionSheetRowsPromise = pending;
     }
     return sessionSheetRowsPromise;
 }
@@ -559,6 +565,7 @@ async function loadSessionSheetRows() {
     adoptSheetStore('sheetRows');
     adoptSheetStore('cumulativeSheetRows');
     const userId = state.myUserId;
+    const appData = state.appData;
     if (!userId || state._sheetRowsReconciled) return;
     try {
         const { data, error } = await supabase
@@ -566,7 +573,7 @@ async function loadSessionSheetRows() {
             .select('key, value')
             .eq('user_id', userId)
             .in('key', ['sheetRows', 'cumulativeSheetRows']);
-        if (error || !Array.isArray(data)) return;
+        if (error || !Array.isArray(data) || userId !== state.myUserId || appData !== state.appData) return;
         let replaced = false;
         data.forEach((row) => {
             const value = parseStoredSheetValue(row.value);
@@ -1598,6 +1605,7 @@ async function bootApp(user) {
         console.log('[INIT] 1/4 loading profile');
         const profileResponse = await loadBootProfile(user.id, {
             readCached: readCachedValue, cache: cacheValue, online: navigator.onLine !== false,
+            refreshSession: () => supabase.auth.refreshSession(),
             read: () => withBootDeadline(
             supabase
                 .from('profiles')
@@ -1617,6 +1625,11 @@ async function bootApp(user) {
         _appInitialized = false;
         clearInitTimeout();
         hideAuthSpinner();
+        if (isExpiredSessionError(error)) {
+            showLoginScreen();
+            showToast('Сесія закінчилась. Увійдіть у свій акаунт повторно.');
+            return;
+        }
         showBootRetry('Профіль не відповів вчасно. Перевірте з’єднання та повторіть запуск.');
         return;
     }
