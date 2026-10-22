@@ -1,9 +1,10 @@
 import { supabaseRest, verifySupabaseUser } from '../lib/google_sheet_sync.js';
-import tradeCriteriaHandler from '../lib/trade_criteria_http.js';
-import telegramFloatHandler from '../lib/telegram_float_http.js';
 
 const TICKER_RE = /^[A-Z0-9.\-^=]{1,20}$/;
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36';
+const nyDateFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+});
 
 function sendJson(res, status, body) {
     res.status(status).setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -11,9 +12,7 @@ function sendJson(res, status, body) {
 }
 
 function nyDate(timestampSeconds) {
-    return new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
-    }).format(new Date(Number(timestampSeconds) * 1000));
+    return nyDateFormatter.format(new Date(Number(timestampSeconds) * 1000));
 }
 
 function mean(values) {
@@ -194,8 +193,14 @@ async function archiveCriteria(ticker, tradeDate, metrics) {
 }
 
 export default async function handler(req, res) {
-    if (String(req.query?.resource || '') === 'entry-criteria') return tradeCriteriaHandler(req, res);
-    if (String(req.query?.resource || '') === 'telegram-float') return telegramFloatHandler(req, res);
+    if (String(req.query?.resource || '') === 'entry-criteria') {
+        const { default: tradeCriteriaHandler } = await import('../lib/trade_criteria_http.js');
+        return tradeCriteriaHandler(req, res);
+    }
+    if (String(req.query?.resource || '') === 'telegram-float') {
+        const { default: telegramFloatHandler } = await import('../lib/telegram_float_http.js');
+        return telegramFloatHandler(req, res);
+    }
     if (req.method !== 'POST') {
         res.setHeader('Allow', 'POST');
         return sendJson(res, 405, { ok: false, error: 'Method not allowed' });

@@ -1,7 +1,3 @@
-import { handleClientErrorReport } from '../../lib/client_error_http.js';
-import { handleShsTrades } from '../../lib/shs_trades_proxy.js';
-import { handleServiceBotEndpoint, sendJson } from '../../lib/service_bots.js';
-
 const ALLOWED_ENDPOINTS = new Set(['summary', 'tickers', 'locates', 'orders', 'snapshot']);
 
 function pickEnv(...names) {
@@ -45,13 +41,21 @@ function handleClientConfig(req, res) {
     return res.status(200).send(`window.TRADING_JOURNAL_CONFIG = ${JSON.stringify(config)};\n`);
 }
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
     const endpoint = String(req.query?.endpoint || '').trim();
     if (endpoint === 'client-config') return handleClientConfig(req, res);
-    if (endpoint === 'client-errors') return handleClientErrorReport(req, res);
-    if (endpoint === 'shs-trades') return handleShsTrades(req, res);
-    if (!ALLOWED_ENDPOINTS.has(endpoint)) {
-        return sendJson(res, 404, { ok: false, error: 'Service bot endpoint not found' });
+    if (endpoint === 'client-errors') {
+        const { handleClientErrorReport } = await import('../../lib/client_error_http.js');
+        return handleClientErrorReport(req, res);
     }
+    if (endpoint === 'shs-trades') {
+        const { handleShsTrades } = await import('../../lib/shs_trades_proxy.js');
+        return handleShsTrades(req, res);
+    }
+    if (!ALLOWED_ENDPOINTS.has(endpoint)) {
+        res.status(404).setHeader('Content-Type', 'application/json; charset=utf-8');
+        return res.end(JSON.stringify({ ok: false, error: 'Service bot endpoint not found' }));
+    }
+    const { handleServiceBotEndpoint } = await import('../../lib/service_bots.js');
     return handleServiceBotEndpoint(req, res, endpoint);
 }
