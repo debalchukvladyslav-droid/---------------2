@@ -19,9 +19,20 @@ test('shared workbook bootstrap opens every sheet in a preset book', () => {
     assert.equal(canBootstrapSharedTraderSheet(trader, presetId, 'Іваненко'), true);
     assert.equal(canBootstrapSharedTraderSheet(trader, '1b4eep8h6YOB8_-i4_ug2p8BuYd4Cfo7IqAIrGG2W23M'), true);
     assert.equal(canBootstrapSharedTraderSheet(trader, 'unknown-sheet'), false);
-    assert.equal(canBootstrapSharedTraderSheet({ role: 'trader', last_name: '' }, presetId), true);
-    assert.equal(canBootstrapSharedTraderSheet({ role: 'trader', last_name: '' }, '1b4eep8h6YOB8_-i4_ug2p8BuYd4Cfo7IqAIrGG2W23M'), false);
     assert.equal(canBootstrapSharedTraderSheet({ role: 'admin', last_name: 'Дебальчук' }, presetId), false);
+});
+
+test('telegram traders without last_name can still open official preset books', () => {
+    // Bug report: illianevid clicked «Дебальчук…» preset and got SOURCE_CONNECTION_REQUIRED
+    // because Telegram signup left last_name empty.
+    const telegramTrader = { role: 'trader', first_name: 'Illia', last_name: '', nick: 'illianevid' };
+    for (const id of SHARED_TRADER_SPREADSHEET_IDS) {
+        assert.equal(canBootstrapSharedTraderSheet(telegramTrader, id), true);
+    }
+    assert.equal(
+        canBootstrapSharedTraderSheet(telegramTrader, '1b4eep8h6YOB8_-i4_ug2p8BuYd4Cfo7IqAIrGG2W23M'),
+        false,
+    );
 });
 
 test('bootstrap metadata lists every sheet so the trader can choose', () => {
