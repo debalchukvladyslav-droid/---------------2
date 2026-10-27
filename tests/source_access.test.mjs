@@ -19,7 +19,8 @@ test('shared workbook bootstrap opens every sheet in a preset book', () => {
     assert.equal(canBootstrapSharedTraderSheet(trader, presetId, 'Іваненко'), true);
     assert.equal(canBootstrapSharedTraderSheet(trader, '1b4eep8h6YOB8_-i4_ug2p8BuYd4Cfo7IqAIrGG2W23M'), true);
     assert.equal(canBootstrapSharedTraderSheet(trader, 'unknown-sheet'), false);
-    assert.equal(canBootstrapSharedTraderSheet({ role: 'trader', last_name: '' }, presetId), false);
+    assert.equal(canBootstrapSharedTraderSheet({ role: 'trader', last_name: '' }, presetId), true);
+    assert.equal(canBootstrapSharedTraderSheet({ role: 'trader', last_name: '' }, '1b4eep8h6YOB8_-i4_ug2p8BuYd4Cfo7IqAIrGG2W23M'), false);
     assert.equal(canBootstrapSharedTraderSheet({ role: 'admin', last_name: 'Дебальчук' }, presetId), false);
 });
 
