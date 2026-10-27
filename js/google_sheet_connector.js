@@ -226,6 +226,7 @@ async function fetchSheetsService(params) {
             if (!response.ok || data.ok === false) {
                 const error = new Error(data.error || `Sheets service ${response.status}`);
                 error.status = response.status;
+                error.code = data.code || '';
                 throw error;
             }
             return data;
