@@ -1,12 +1,5 @@
 import { runGoogleSheetSync, supabaseRest } from '../../lib/google_sheet_sync.js';
-import { processNextLearningJob, runLearningBatch } from '../../lib/ai_learning.js';
-import { runGrandmasterDailyReviews } from '../../lib/grandmaster_review.js';
 import { processSourceJobs } from '../../lib/source_worker.js';
-import { buildGauge } from '../../lib/aggressiveness_service.js';
-import { createAggressivenessStore } from '../../lib/aggressiveness_http.js';
-import { createBreadthProvider } from '../../lib/market_data_provider.js';
-import { buildLiveNextSession, loadMechanicalSignals } from '../../lib/next_session_service.js';
-import { checkArchiveDriveFolder, runShsDayArchive } from '../../lib/shs_day_archive_run.js';
 
 export const config = { maxDuration: 300 };
 
@@ -19,6 +12,10 @@ const NEXT_SESSION_ENABLED = false;
 
 async function storeAggressiveness() {
     try {
+        const [{ buildGauge }, { createAggressivenessStore }, { createBreadthProvider }, { loadMechanicalSignals }] = await Promise.all([
+            import('../../lib/aggressiveness_service.js'), import('../../lib/aggressiveness_http.js'),
+            import('../../lib/market_data_provider.js'), import('../../lib/next_session_service.js'),
+        ]);
         const payload = await buildGauge({
             now: new Date(),
             env: process.env,
@@ -44,6 +41,7 @@ async function storeAggressiveness() {
 async function storeNextSession() {
     if (!NEXT_SESSION_ENABLED) return { ok: false, disabled: true };
     try {
+        const { buildLiveNextSession } = await import('../../lib/next_session_service.js');
         const payload = await buildLiveNextSession();
         return {
             ok: payload.complete === true,
@@ -102,10 +100,12 @@ export default async function handler(req, res) {
 
     try {
         if (String(req.query?.task || '') === 'shs-archive' && String(req.query?.probe || '') === 'drive') {
+            const { checkArchiveDriveFolder } = await import('../../lib/shs_day_archive_run.js');
             const drive = await checkArchiveDriveFolder();
             return sendJson(res, drive.ok ? 200 : 502, { task: 'shs-archive', probe: 'drive', drive });
         }
         if (String(req.query?.task || '') === 'shs-archive') {
+            const { runShsDayArchive } = await import('../../lib/shs_day_archive_run.js');
             const force = vercelCronAuthorized && String(req.query?.force || '') === '1';
             const requested = String(req.query?.slot || '');
             const archive = await runShsDayArchive({
@@ -125,6 +125,9 @@ export default async function handler(req, res) {
             });
         }
         if (String(req.query?.task || '') === 'end-of-day') {
+            const [{ runGrandmasterDailyReviews }, { processNextLearningJob }] = await Promise.all([
+                import('../../lib/grandmaster_review.js'), import('../../lib/ai_learning.js'),
+            ]);
             const grandmaster = await runGrandmasterDailyReviews({ tradeDate: /^\d{4}-\d{2}-\d{2}$/.test(String(req.query?.date || '')) ? String(req.query.date) : undefined });
             const queued = await processNextLearningJob().catch(() => ({ job: null, run: null, status: 'idle' }));
             const nextSession = await storeNextSession();
@@ -132,6 +135,7 @@ export default async function handler(req, res) {
             return sendJson(res, 200, { ok: grandmaster.failed === 0, task: 'end-of-day', grandmaster, aiLearning: queued, nextSession, aggressiveness });
         }
         if (String(req.query?.task || '') === 'ai-learning') {
+            const { processNextLearningJob, runLearningBatch } = await import('../../lib/ai_learning.js');
             const queued = await processNextLearningJob();
             if (String(req.query?.mode || '') === 'job-only') {
                 return sendJson(res, 200, {

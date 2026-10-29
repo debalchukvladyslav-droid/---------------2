@@ -2,6 +2,7 @@
 
 // 1. ІМПОРТИ
 import { supabase } from './supabase.js';
+import { isSupabaseProjectRestricted, SUPABASE_RESTRICTED_MESSAGE } from './supabase_errors.js';
 import { loadBootProfile, isExpiredSessionError } from './boot_profile.js';
 import { createDeferredAuthHandler, shouldRestartForAccountSwitch } from './auth_event_dispatch.js';
 import { cacheValue, readCachedValue } from './local_data_store.js';
@@ -1236,7 +1237,7 @@ function renderSettingsBackups() {
     host.innerHTML = visibleBackups.map((backup) => {
         const reason = BACKUP_REASON_LABELS[backup.reason] || backup.reason || 'копія';
         const days = backup.days || backup.counts?.journal_days || 0;
-        const where = backup.serverBackedUp ? 'сервер · 30 днів' : 'цей браузер';
+        const where = backup.serverBackedUp ? 'сервер · останні 3 копії' : 'цей браузер';
         const remove = backup.serverBackedUp ? '' : `<button type="button" class="btn-secondary" data-action="backup-delete" data-backup-id="${escapeBackupHtml(backup.id)}">Видалити</button>`;
         return `
         <article class="settings-backup-item">
@@ -1630,7 +1631,9 @@ async function bootApp(user) {
             showToast('Сесія закінчилась. Увійдіть у свій акаунт повторно.');
             return;
         }
-        showBootRetry('Профіль не відповів вчасно. Перевірте з’єднання та повторіть запуск.');
+        showBootRetry(isSupabaseProjectRestricted(error)
+            ? SUPABASE_RESTRICTED_MESSAGE
+            : 'Профіль не відповів вчасно. Перевірте з’єднання та повторіть запуск.');
         return;
     }
     if (bootProfileError) console.warn('[AUTH] Could not load profile nick:', bootProfileError);

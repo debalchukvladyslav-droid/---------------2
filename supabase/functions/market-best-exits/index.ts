@@ -1,5 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createPolygonStore } from '../_shared/polygon_store.js';
+import { reserveSharedCacheStorage } from '../_shared/storage_budget.js';
 
 const DEFAULT_ORIGIN = 'https://traderjournal-six.vercel.app';
 const MAX_ITEMS = 200;
@@ -106,13 +107,15 @@ async function writePolygonArchive(symbol: string, date: string, results: any[])
     const url = Deno.env.get('SUPABASE_URL')!;
     const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const path = polygonArchivePath(symbol, date).split('/').map(encodeURIComponent).join('/');
+    const body = JSON.stringify({ version: POLYGON_ARCHIVE_VERSION, symbol, date, provider: 'polygon', savedAt: new Date().toISOString(), results, derived: buildArchiveDerived(results) });
+    await reserveSharedCacheStorage(rest, polygonArchivePath(symbol, date), new TextEncoder().encode(body).byteLength);
     const response = await fetch(`${url}/storage/v1/object/${POLYGON_ARCHIVE_BUCKET}/${path}`, {
         method: 'POST',
         headers: {
             apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json',
             'x-upsert': 'true', 'Cache-Control': 'max-age=31536000',
         },
-        body: JSON.stringify({ version: POLYGON_ARCHIVE_VERSION, symbol, date, provider: 'polygon', savedAt: new Date().toISOString(), results, derived: buildArchiveDerived(results) }),
+        body,
     });
     if (!response.ok) throw new Error(`Polygon archive write ${response.status}`);
 }
@@ -157,10 +160,12 @@ async function writePolygonControl(paused: boolean) {
     const url = Deno.env.get('SUPABASE_URL')!;
     const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const path = POLYGON_CONTROL_PATH.split('/').map(encodeURIComponent).join('/');
+    const body = JSON.stringify({ version: 2, paused, updatedAt: new Date().toISOString() });
+    await reserveSharedCacheStorage(rest, POLYGON_CONTROL_PATH, new TextEncoder().encode(body).byteLength);
     const response = await fetch(`${url}/storage/v1/object/${POLYGON_ARCHIVE_BUCKET}/${path}`, {
         method: 'POST',
         headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'x-upsert': 'true' },
-        body: JSON.stringify({ version: 2, paused, updatedAt: new Date().toISOString() }),
+        body,
     });
     if (!response.ok) throw new Error(`Polygon control write ${response.status}`);
     return { paused, updatedAt: new Date().toISOString() };

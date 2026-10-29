@@ -1,6 +1,7 @@
 // === js/auth.js ===
 import { supabase, TELEGRAM_AUTH_FN, SUPABASE_ANON_KEY, TELEGRAM_LOGIN_RETURN_BASE } from './supabase.js';
 import { state } from './state.js';
+import { isSupabaseProjectRestricted, SUPABASE_RESTRICTED_MESSAGE } from './supabase_errors.js';
 import { normalizeDayEntry } from './data_utils.js';
 import {
     canAccessMentorReviewQueueState,
@@ -71,6 +72,8 @@ export async function rejectPendingProfile(profile) {
 }
 
 function mapAuthError(error, fallback = 'Помилка') {
+    if (isSupabaseProjectRestricted(error)) return SUPABASE_RESTRICTED_MESSAGE;
+    if (Number(error?.status || error?.statusCode) >= 500) return 'Сервіс тимчасово недоступний. Спробуйте увійти пізніше.';
     const code = String(error?.code || '').toLowerCase();
     const message = String(error?.message || '').toLowerCase();
 
@@ -357,6 +360,9 @@ async function getLoginEmailByNick(nick) {
         if (error) throw error;
         return data || null;
     } catch (error) {
+        const missingRpc = ['PGRST202', '42883'].includes(error?.code)
+            || /could not find.*function|function.*(?:not found|does not exist)/i.test(error?.message || '');
+        if (!missingRpc || isSupabaseProjectRestricted(error)) throw error;
         console.warn('[auth] login_email_for_nick unavailable, falling back to profiles:', error);
         const profile = await getProfileByNick(nick, 'email');
         return profile?.email || null;

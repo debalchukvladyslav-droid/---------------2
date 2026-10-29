@@ -3,9 +3,11 @@ const SERVER_TIME_CACHE_MS = 5 * 60 * 1000;
 let serverOffsetMs = null;
 let serverOffsetFetchedAt = 0;
 let serverTimeRequest = null;
+let serverTimeRetryAt = 0;
 
 export async function getTrustedServerNow(options = {}) {
     const localNow = Date.now();
+    if (!options.force && localNow < serverTimeRetryAt) return new Date(localNow + (serverOffsetMs || 0));
     if (!options.force && serverOffsetMs != null && localNow - serverOffsetFetchedAt < SERVER_TIME_CACHE_MS) {
         return new Date(localNow + serverOffsetMs);
     }
@@ -19,14 +21,16 @@ export async function getTrustedServerNow(options = {}) {
             const midpoint = requestStartedAt + (requestFinishedAt - requestStartedAt) / 2;
             serverOffsetMs = Number(payload.epochMs) - midpoint;
             serverOffsetFetchedAt = requestFinishedAt;
+            serverTimeRetryAt = 0;
             return new Date(requestFinishedAt + serverOffsetMs);
         })().finally(() => { serverTimeRequest = null; });
     }
     try {
         return await serverTimeRequest;
     } catch (error) {
+        serverTimeRetryAt = Date.now() + SERVER_TIME_CACHE_MS;
         console.warn('[Session review] server time failed; using local fallback', error?.message || error);
-        return new Date();
+        return new Date(Date.now() + (serverOffsetMs || 0));
     }
 }
 

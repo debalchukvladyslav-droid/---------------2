@@ -1,6 +1,8 @@
 import { supabase } from './supabase.js';
 import { buildScreenshotPathVariants } from './storage_paths.js';
 import { uploadDurably } from './durable_uploads.js';
+import { state } from './state.js';
+import { getDriveMediaUrl, clearDriveMediaUrls } from './drive_media.js';
 
 const DEFAULT_SIGNED_URL_TTL = 60 * 60;
 const AVATAR_SIGNED_URL_TTL = 24 * 60 * 60;
@@ -208,6 +210,11 @@ export async function ensureSupabaseStorageUser() {
 export async function getSupabaseStorageUrl(pathOrUrl, ttl = DEFAULT_SIGNED_URL_TTL) {
     const value = normalizePath(pathOrUrl);
     if (!value) return '';
+    const meta = state.appData?.screenMeta?.[value];
+    if (meta?.remoteOnly || (meta?.source === 'drive' && meta?.driveId) || /\/drive\/[A-Za-z0-9_-]+\//.test(value)) {
+        const remote = await getDriveMediaUrl(value, meta?.driveModifiedTime || '').catch(() => '');
+        if (remote || meta?.remoteOnly || value.endsWith('/reference')) return remote;
+    }
     const supabaseUrlCandidate = getSupabaseUrlCandidate(value);
     if (/^https?:\/\//i.test(value) && !value.includes('firebasestorage') && !supabaseUrlCandidate) return value;
 
@@ -247,4 +254,10 @@ export async function deleteFromSupabaseStorage(storagePathOrUrl) {
     signedUrlCache.delete(candidate.bucket + '/' + candidate.objectPath);
 }
 
-supabase.auth.onAuthStateChange(() => signedUrlCache.clear());
+let driveMediaOwner = null;
+supabase.auth.onAuthStateChange((event, session) => {
+    signedUrlCache.clear();
+    const owner = session?.user?.id || null;
+    if (event === 'SIGNED_OUT' || (driveMediaOwner && owner && driveMediaOwner !== owner)) clearDriveMediaUrls();
+    driveMediaOwner = owner;
+});

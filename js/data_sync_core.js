@@ -1,3 +1,5 @@
+import { isSupabaseProjectRestricted } from './supabase_errors.js';
+
 export const cloneData = value => value === undefined ? undefined : structuredClone(value);
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const unsafeKey = key => ['__proto__', 'prototype', 'constructor'].includes(key);
@@ -182,6 +184,7 @@ export function journalDaysWithTradeRows(days = [], trades = []) {
 export const syncError = (message, code = 'SYNC_FAILED', detail = {}) => Object.assign(new Error(message), { code, ...detail });
 export const retryDelay = (attempt = 0, random = Math.random) => Math.round(Math.min(60000, 1000 * (2 ** Math.min(attempt, 6))) * (0.75 + random() * 0.5));
 export function isRetryableSyncError(error) {
+    if (isSupabaseProjectRestricted(error)) return true;
     const status = Number(error?.status || 0);
     return !['PGRST202', '42883', '42501', 'SYNC_SCHEMA_REQUIRED', 'SYNC_CONFLICT', 'STALE_EPOCH', '22023', '23514'].includes(String(error?.code || ''))
         && status !== 401 && status !== 403 && !(status >= 400 && status < 429 && status !== 408);

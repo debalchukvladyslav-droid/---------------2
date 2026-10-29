@@ -535,6 +535,7 @@ function scheduleRefill(payload) {
     refillAttempts += 1;
     clearTimeout(refillTimer);
     refillTimer = setTimeout(() => {
+        if (document.hidden || !document.getElementById('view-dash')?.classList.contains('active')) return;
         void renderMarketAggressiveness({ force: true });
     }, 65000);
 }
@@ -545,6 +546,10 @@ function armPoll() {
     if (delay == null) return;
     const jitter = Math.floor(Math.random() * 15000);
     pollTimer = setTimeout(() => {
+        if (document.hidden || !document.getElementById('view-dash')?.classList.contains('active')) {
+            armPoll();
+            return;
+        }
         void renderMarketAggressiveness({ force: true });
     }, delay + jitter);
 }

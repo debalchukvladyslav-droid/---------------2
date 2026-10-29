@@ -178,20 +178,6 @@ async function fetchFinvizFloat(ticker) {
     return parseFinvizFloat(await response.text());
 }
 
-async function archiveCriteria(ticker, tradeDate, metrics) {
-    const url = String(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-    if (!url || !key) return false;
-    const path = `${encodeURIComponent(ticker)}/${encodeURIComponent(tradeDate)}.criteria.json`;
-    const response = await fetch(`${url}/storage/v1/object/polygon-cache/${path}`, {
-        method: 'POST',
-        headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'x-upsert': 'true', 'Cache-Control': 'max-age=31536000' },
-        body: JSON.stringify({ version: 1, ticker, date: tradeDate, savedAt: new Date().toISOString(), criteria: metrics }),
-    });
-    if (!response.ok) console.warn(`[Trade criteria archive] ${ticker} ${tradeDate}: HTTP ${response.status}`);
-    return response.ok;
-}
-
 export default async function handler(req, res) {
     if (String(req.query?.resource || '') === 'entry-criteria') {
         const { default: tradeCriteriaHandler } = await import('../lib/trade_criteria_http.js');
@@ -262,7 +248,9 @@ export default async function handler(req, res) {
                         p_metrics: metrics,
                     }),
                 });
-                const archived = await archiveCriteria(ticker, tradeDate, metrics).catch(() => false);
+                // Metrics are already persisted in the journal and included in its
+                // offsite backup. Avoid a second, unbounded copy in Storage.
+                const archived = false;
                 results.push({
                     date: tradeDate,
                     ok: true,

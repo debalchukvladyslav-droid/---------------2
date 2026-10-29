@@ -1,5 +1,7 @@
 import { supabase } from './supabase.js';
 import { state } from './state.js';
+import { showError } from './auth.js';
+import { isSupabaseProjectRestricted, SUPABASE_RESTRICTED_MESSAGE } from './supabase_errors.js';
 import { showToast, showConfirm, showPrompt } from './utils.js';
 import { getSupabaseStorageUrl } from './supabase_storage.js';
 import { cacheValue, readCachedValue } from './local_data_store.js';
@@ -204,6 +206,7 @@ async function fetchPublicTeamNames() {
         if (error) throw error;
         return (data || []).map(row => row.name).filter(Boolean);
     } catch (error) {
+        if (isSupabaseProjectRestricted(error)) throw error;
         console.warn('[teams] public_team_names unavailable:', error);
         return [];
     }
@@ -323,8 +326,14 @@ async function performTeamsLoad(token) {
             console.warn('[teams] directory refresh deferred:', e?.message || e);
             return;
         }
-        _teamsDirectoryError = loadedProfiles > 1 ? '' : (e?.message || 'Не вдалося завантажити команду');
-        console.error('Помилка завантаження кущів:', e);
+        if (isSupabaseProjectRestricted(e)) {
+            _teamsDirectoryError = SUPABASE_RESTRICTED_MESSAGE;
+            if (!state.USER_DOC_NAME) showError(SUPABASE_RESTRICTED_MESSAGE);
+            console.warn('[teams] project service restricted:', e);
+        } else {
+            _teamsDirectoryError = loadedProfiles > 1 ? '' : (e?.message || 'Не вдалося завантажити команду');
+            console.error('Помилка завантаження кущів:', e);
+        }
         // Тимчасова помилка мережі/RLS не повинна стирати вже показану команду.
         if (!state.TEAM_GROUPS || Object.keys(state.TEAM_GROUPS).length === 0) {
             state.TEAM_GROUPS = { [DEFAULT_TEAM]: [] };

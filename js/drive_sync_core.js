@@ -1,4 +1,4 @@
-export const SILENT_DRIVE_SYNC_TTL_MS = 60_000;
+export const SILENT_DRIVE_SYNC_TTL_MS = 5 * 60_000;
 
 export function isQuietDriveSyncError(error) {
     const status = Number(error?.status) || 0;

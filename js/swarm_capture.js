@@ -6,6 +6,7 @@ import { showToast } from './utils.js';
 import { initMarketEnrichment } from './market_enrichment.js';
 import { gradeDiscipline } from './discipline_score.js';
 import { INVALID_IMAGE_FORMAT_MESSAGE, isJpegOrPng } from './image_file_validation.js';
+import { uploadToSupabaseStorage } from './supabase_storage.js';
 
 let recorder; let recognition; let browserTranscript = ''; let chunks = []; let vision = null; let transcript = ''; let chartPath = '';
 const $ = (id) => document.getElementById(id);
@@ -57,7 +58,7 @@ async function analyzeImage(file) {
     try {
         busy(true, 'Завантажую приватний chart і запускаю Vision…'); const { data } = await supabase.auth.getUser(); const userId = data?.user?.id; if (!userId) throw new Error('Сесію втрачено.');
         const extension = file.type === 'image/png' ? 'png' : 'jpg'; chartPath = `${userId}/drafts/${crypto.randomUUID()}.${extension}`;
-        const { error: uploadError } = await supabase.storage.from('trade-charts').upload(chartPath, file, { contentType: file.type, upsert: false }); if (uploadError) throw uploadError;
+        await uploadToSupabaseStorage(`trade-charts/${chartPath}`, file);
         const result = await swarm({ modality: 'vision', chartImageUrl: chartPath, mimeType: file.type }); vision = result.vision; setInput('swarm-setup', vision.setup); summary(`${vision.summary}${vision.risks?.length ? ` Ризики: ${vision.risks.join('; ')}` : ''}`);
     }
     catch (error) { summary(error.code === 'RATE_LIMITED' ? 'Vision free-tier вичерпано. Чернетку можна зберегти без аналізу.' : error.message, true); } finally { busy(false); }

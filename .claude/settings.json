@@ -1,0 +1,38 @@
+{
+    "permissions":  {
+                        "deny":  [
+                                     "Read(.env)",
+                                     "Read(.env.*)",
+                                     "Read(secrets/**)",
+                                     "Read(**/*.session)",
+                                     "Read(.venv/**)",
+                                     "Read(venv/**)",
+                                     "Read(node_modules/**)",
+                                     "Read(dist/**)",
+                                     "Read(build/**)",
+                                     "Read(data/**)",
+                                     "Read(**/dumps/**)",
+                                     "Read(**/*.duckdb)",
+                                     "Read(**/*.parquet)",
+                                     "Read(**/*.csv)",
+                                     "Read(models/**)",
+                                     "Read(**/*.pkl)",
+                                     "Read(**/*.joblib)",
+                                     "Read(**/*.onnx)",
+                                     "Read(**/*.pt)",
+                                     "Read(**/*.pth)",
+                                     "Read(**/*.h5)",
+                                     "Read(**/*.gguf)",
+                                     "Read(logs/**)",
+                                     "Read(**/*.log)",
+                                     "Read(reports/**)",
+                                     "Read(release/**)",
+                                     "Read(staged/**)",
+                                     "Read(**/*.exe)",
+                                     "Read(**/*.zip)",
+                                     "Read(backups/**)",
+                                     "Read(**/*.bak)",
+                                     "Read(**/*.backup)"
+                                 ]
+                    }
+}

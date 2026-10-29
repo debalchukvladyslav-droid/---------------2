@@ -85,6 +85,7 @@ export function mergeScreenshotRegistry(appData, rows = [], ignoredPaths = appDa
             appData.screenMeta[path] = {
                 ...(appData.screenMeta[path] || {}), source: 'drive',
                 driveId: String(row.source_file_id), driveName: row.original_name || '',
+                remoteOnly: row.quality_details?.storageBackend === 'drive',
                 createdAt: sourceCreatedAt || normalizeScreenshotTimestamp(row.created_at, new Date().toISOString()),
                 driveCreatedTime: sourceCreatedAt,
                 driveModifiedTime: sourceModifiedAt,

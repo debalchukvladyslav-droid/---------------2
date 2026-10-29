@@ -1,4 +1,4 @@
-import { getSupabaseEnv, verifySupabaseUser } from '../lib/google_sheet_sync.js';
+import { getSupabaseEnv, verifySupabaseUser, supabaseRest } from '../lib/google_sheet_sync.js';
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const OWNER_BUCKETS = new Set(['screenshots', 'backgrounds', 'avatars', 'trade-charts']);
@@ -6,6 +6,13 @@ const AUTO_CREATE_BUCKETS = new Set(['screenshots', 'backgrounds', 'avatars']);
 const ALLOWED_BUCKETS = new Set(['screenshots', 'backgrounds', 'avatars', 'trade-charts']);
 const LEGACY_READ_BUCKETS = new Set(['files']);
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+
+async function reserveCapacity(userId, bucket, path, bytes) {
+    const result = await supabaseRest('rpc/reserve_storage_capacity', { method: 'POST',
+        body: JSON.stringify({ p_user_id: userId, p_bucket: bucket, p_path: path, p_bytes: bytes }) });
+    return result?.allowed === true;
+}
+const CAPACITY_MESSAGE = 'Сховище майже заповнене. Зверніться до адміністратора, щоб звільнити місце перед завантаженням.';
 
 export const config = {
     api: {
@@ -216,6 +223,9 @@ export default async function handler(req, res) {
             if (!Number.isSafeInteger(request.size) || request.size < 1 || request.size > MAX_UPLOAD_BYTES || !ALLOWED_IMAGE_TYPES.has(request.contentType)) {
                 return sendJson(res, 400, { ok: false, error: 'Invalid image type or size (maximum 25 MB)' });
             }
+            if (!await reserveCapacity(user.id, bucket, objectPath, request.size)) {
+                return sendJson(res, 409, { ok: false, code: 'STORAGE_BUDGET_LIMIT', error: CAPACITY_MESSAGE });
+            }
             await ensureBucketExists({ url, serviceKey, bucket });
             const response = await fetch(`${url}/storage/v1/object/upload/sign/${bucket}/${encodeStoragePath(objectPath)}`, {
                 method: 'POST',
@@ -236,6 +246,9 @@ export default async function handler(req, res) {
         const contentType = String(req.headers['content-type'] || '').split(';', 1)[0].trim().toLowerCase();
         if (!ALLOWED_IMAGE_TYPES.has(contentType)) {
             return sendJson(res, 415, { ok: false, error: 'Only JPEG, PNG, WebP, and GIF images are allowed' });
+        }
+        if (!await reserveCapacity(user.id, bucket, objectPath, body.length)) {
+            return sendJson(res, 409, { ok: false, code: 'STORAGE_BUDGET_LIMIT', error: CAPACITY_MESSAGE });
         }
         if (detectImageType(body) !== contentType) {
             return sendJson(res, 415, { ok: false, error: 'File content does not match its image type' });

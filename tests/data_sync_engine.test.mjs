@@ -105,6 +105,38 @@ test('an idle sync waits five minutes instead of polling continuously', async ()
     engine.stop();
 });
 
+test('quota limits preserve edits and pause automatic retries while allowing a manual retry', async () => {
+    for (const error of [
+        { message:'Service for this project is restricted: exceed_db_size_quota' },
+        { code:'PT507',message:'База майже заповнена' },
+    ]) {
+        let scheduled, calls=0, paused=true;
+        const failures=[];
+        const queue=[{operationId:'edit',userId:'owner',domain:'journal',entityId:'2026-10-29',status:'pending'}];
+        const engine=createDataSyncEngine({
+            store:{readSyncMetadata:async()=>({epoch:1,cursor:0,initialized:true}),listDataOperations:async()=>queue,
+                applyRemoteChanges:async()=>({changed:[]}),
+                recordOperationFailure:async(_user,_ids,_error,_next,blocked)=>failures.push(blocked),
+                acknowledgeOperations:async()=>{queue.pop();return[];}},
+            transport:{pull:async()=>({epoch:1,cursor:0,changes:[],hasMore:false}),apply:async()=>{
+                calls++;if(paused)throw error;return{results:[{operationId:'edit',status:'applied'}]};}},
+            now:()=>1000,lock:async(_user,run)=>run(),schedule:(_callback,delay)=>{scheduled=delay;return 1;},cancel() {},
+        });
+        engine.start('owner');
+        await assert.rejects(engine.sync());
+        assert.equal(scheduled,1800000);
+        await engine.sync();
+        assert.equal(calls,1);
+        assert.deepEqual(failures,[false]);
+        assert.equal(queue.length,1);
+        paused=false;
+        await engine.flush();
+        assert.equal(calls,2);
+        assert.equal(queue.length,0);
+        engine.stop();
+    }
+});
+
 test('account switch during a network request schedules synchronization for the new account', async () => {
     let release;
     const suspended = new Promise(resolve => { release = resolve; });

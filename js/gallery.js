@@ -220,6 +220,12 @@ export async function getStorageUrl(pathOrUrl) {
         const match = pathOrUrl.match(/\/o\/([^?]+)/);
         if (match) storagePath = decodeURIComponent(match[1]);
     }
+    const meta = state.appData?.screenMeta?.[storagePath];
+    if (meta?.remoteOnly || (meta?.source === 'drive' && meta?.driveId) || /\/drive\/[A-Za-z0-9_-]+\//.test(storagePath)) {
+        // Drive URLs are private blob URLs keyed by source revision. The legacy
+        // signed-URL cache must not keep serving an earlier Supabase copy.
+        return getSupabaseStorageUrl(storagePath).catch(() => '');
+    }
     const cached = _getCachedUrl(storagePath);
     if (cached) return cached;
     const missingAt = _getMissingStorageAt(storagePath);

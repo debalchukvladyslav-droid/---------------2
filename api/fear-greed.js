@@ -1,5 +1,3 @@
-import aggressivenessHandler from '../lib/aggressiveness_http.js';
-
 const CNN_FEAR_GREED_URL = 'https://production.dataviz.cnn.io/index/fearandgreed/graphdata';
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_ALLOWED_ORIGINS = new Set([
@@ -19,7 +17,10 @@ function isAggressivenessRequest(req) {
 export const config = { maxDuration: 60 };
 
 export default async function handler(req, res) {
-    if (isAggressivenessRequest(req)) return aggressivenessHandler(req, res);
+    if (isAggressivenessRequest(req)) {
+        const { default: aggressivenessHandler } = await import('../lib/aggressiveness_http.js');
+        return aggressivenessHandler(req, res);
+    }
     setCorsHeaders(req, res);
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');

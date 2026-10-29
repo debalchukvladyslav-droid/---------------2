@@ -267,6 +267,7 @@ export function scanJournalForNotifications() {
 }
 
 async function pollMentorReviewRequests() {
+    if (document.hidden) return;
     try {
         const { fetchMentorReviewNotificationHits } = await import('./mentor_review.js');
         const hits = await fetchMentorReviewNotificationHits();

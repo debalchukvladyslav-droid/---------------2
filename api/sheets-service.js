@@ -199,6 +199,10 @@ async function exportWorkbook(res, user) {
     const date = new Date().toISOString().slice(0, 10);
     const filename = `STRUM-trading-journal-${date}.xlsx`;
     const path = `${user.id}/${crypto.randomUUID()}/${filename}`;
+    const reservation = await supabaseRest('rpc/reserve_storage_capacity', { method: 'POST',
+        body: JSON.stringify({ p_user_id: user.id, p_bucket: 'journal-exports', p_path: path, p_bytes: buffer.byteLength }) });
+    if (reservation?.allowed !== true) return sendJson(res, 409, { ok: false, code: 'STORAGE_BUDGET_LIMIT',
+        error: 'Сховище майже заповнене. Зверніться до адміністратора перед експортом.' });
     const { url, serviceKey } = getSupabaseEnv();
     const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` };
     const uploaded = await fetchWithRetry(`${url}/storage/v1/object/journal-exports/${path}`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'x-upsert': 'false' }, body: Buffer.from(buffer) }, { attempts: 1 });

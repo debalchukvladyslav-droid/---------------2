@@ -1,6 +1,10 @@
 import { getGoogleAccessToken, supabaseRest, verifySupabaseUser } from '../lib/google_sheet_sync.js';
 import { fetchWithRetry } from '../lib/integration_io.js';
 import { resolveSourceConnection, saveVerifiedConnection, sourceProfile, sourceAccessError, shouldProvisionDriveConnection } from '../lib/source_access.js';
+import { runDriveSourceSync } from '../lib/source_worker.js';
+import { authorizedDriveScreenshot, driveScreenshotResponse } from '../lib/drive_screenshot_media.js';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 
 const MAX_PROXY_BYTES = 4 * 1024 * 1024;
 const cleanId = value => /^[a-zA-Z0-9_-]+$/.test(String(value || '')) ? String(value) : '';
@@ -51,6 +55,16 @@ export default async function handler(req, res) {
         if (!user?.id) return sendJson(res, 401, { ok: false, error: 'Unauthorized' });
         const action = String(req.query?.action || 'list');
         const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
+        if (action === 'screenshot' && req.method === 'GET') {
+            const row = await authorizedDriveScreenshot(String(req.query?.path || ''), req.headers.authorization);
+            const { response, metadata } = await driveScreenshotResponse(row);
+            res.status(200).setHeader('Content-Type', metadata.mimeType);
+            res.setHeader('Cache-Control', 'private, max-age=86400');
+            res.setHeader('Vary', 'Authorization');
+            res.setHeader('X-Content-Type-Options', 'nosniff');
+            await pipeline(Readable.fromWeb(response.body), res);
+            return;
+        }
         if (action === 'connect' && req.method === 'POST') {
             const folderId = cleanId(body.folderId);
             if (!folderId) return sendJson(res, 400, { ok: false, error: 'Missing folderId' });
@@ -71,6 +85,16 @@ export default async function handler(req, res) {
             if (!connection.id) throw sourceAccessError('Спочатку підтвердьте підключення папки.');
             const job = await supabaseRest('rpc/enqueue_source_sync', { method: 'POST', body: JSON.stringify({ p_connection_id: connection.id }) });
             return sendJson(res, 202, { ok: true, queued: true, job });
+        }
+        if (action === 'sync' && req.method === 'POST') {
+            if (!body.force && Date.now()-Date.parse(connection.last_sync_at||'')<5*60*1000) {
+                return sendJson(res,200,{ok:true,cached:true,copied:0});
+            }
+            const result = await runDriveSourceSync(connection, { deadline: Date.now() + 45000 });
+            await supabaseRest(`integration_connections?id=eq.${encodeURIComponent(connection.id)}`, {method:'PATCH',
+                body:JSON.stringify({last_sync_at:new Date().toISOString(),last_revision:result.revision,last_error:null,next_sync_at:new Date(Date.now()+5*60*1000).toISOString()})});
+            if (result.continue) await supabaseRest('rpc/enqueue_source_sync', { method: 'POST', body: JSON.stringify({ p_connection_id: connection.id }) });
+            return sendJson(res, 200, { ok: true, ...result });
         }
         if (action === 'disconnect' && req.method === 'POST') {
             if (connection.id) await supabaseRest(`integration_connections?id=eq.${connection.id}`, { method: 'PATCH', body: JSON.stringify({ enabled: false }) });
@@ -107,6 +131,7 @@ export default async function handler(req, res) {
         }
         return sendJson(res, 400, { ok: false, error: 'Unknown action' });
     } catch (error) {
+        if (res.headersSent) { res.destroy(error); return; }
         return sendJson(res, error.status || 500, { ok: false, error: error.message || String(error), code: error.code || '' });
     }
 }

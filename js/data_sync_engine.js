@@ -1,5 +1,6 @@
 import * as localStore from './local_data_store.js';
 import { isRetryableSyncError, retryDelay, syncError } from './data_sync_core.js';
+import { isSupabaseProjectRestricted, SUPABASE_RESTRICTED_MESSAGE } from './supabase_errors.js';
 
 // Transport injection makes interruption, duplicate delivery and two-tab behavior testable.
 export function createDataSyncEngine({ transport, store = localStore, onChange = () => {}, onSnapshot = () => {},
@@ -11,6 +12,7 @@ export function createDataSyncEngine({ transport, store = localStore, onChange =
     let activeTask = null;
     let timer = null;
     let failures = 0;
+    let restrictedUntil = 0;
     const owner = globalThis.crypto.randomUUID();
     const current = (user, version) => userId === user && generation === version;
     const wire = operation => Object.fromEntries(['operationId', 'userId', 'domain', 'entityId', 'baseVersion', 'epoch', 'patch', 'base'].map(key => [key, operation[key]]));
@@ -163,6 +165,7 @@ export function createDataSyncEngine({ transport, store = localStore, onChange =
 
     async function run(requireServer = false) {
         if (!userId) throw syncError('Немає активного облікового запису.', 'AUTH_REQUIRED');
+        if (!requireServer && now() < restrictedUntil) { wake(restrictedUntil - now()); return; }
         if (activeTask) {
             const waitingUser = userId;
             const waitingGeneration = generation;
@@ -182,14 +185,19 @@ export function createDataSyncEngine({ transport, store = localStore, onChange =
                 const result = lock ? await lock(user, task) : await store.withDataSyncLease(user, owner, task);
                 if (result?.locked && requireServer) throw syncError('Інша вкладка синхронізує дані. Повторіть дію після завершення.', 'SYNC_LOCKED');
                 failures = 0;
+                restrictedUntil = 0;
             } catch (error) {
                 failures += 1;
+                if (isSupabaseProjectRestricted(error) || error?.code === 'PT507' || Number(error?.status) === 507) {
+                    restrictedUntil = now() + 30 * 60 * 1000;
+                    if (isSupabaseProjectRestricted(error)) error = Object.assign(new Error(SUPABASE_RESTRICTED_MESSAGE), { cause: error, status: 402 });
+                }
                 await status(user, null, error);
                 throw error;
             } finally {
                 activeTask = null;
                 if (userId && !current(user, version)) wake(0);
-                else if (userId && failures) wake(retryDelay(failures - 1, random));
+                else if (userId && failures) wake(Math.max(retryDelay(failures - 1, random), restrictedUntil - now()));
                 else if (userId) {
                     let delay = idleDelay;
                     try {
@@ -208,7 +216,7 @@ export function createDataSyncEngine({ transport, store = localStore, onChange =
     }
 
     return {
-        start(user) { if (userId !== user) { userId = user || null; generation += 1; } if (userId) wake(0); },
+        start(user) { if (userId !== user) { userId = user || null; generation += 1; restrictedUntil = 0; failures = 0; } if (userId) wake(0); },
         stop() { generation += 1; userId = null; if (timer) cancel(timer); timer = null; },
         notify() { void status().catch(error => onState('error', { message: error.message })); wake(100); },
         flush: () => run(true),

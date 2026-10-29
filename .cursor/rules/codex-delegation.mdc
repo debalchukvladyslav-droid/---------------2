@@ -1,0 +1,9 @@
+---
+description: Delegate parallelizable routine work to Codex to save Cursor usage
+alwaysApply: true
+---
+- You have a codex MCP tool (Codex CLI, uses the user's ChatGPT plan limits, not Cursor's).
+- Delegate to Codex: writing/updating tests, isolated single-file refactors, docs, small well-scoped bug fixes, boilerplate, lint fixes. Send independent tasks as separate Codex calls in parallel.
+- Give Codex a self-contained prompt: goal, exact files, constraints, and "reply with a short summary of changed files only".
+- Keep for yourself: architecture, cross-module changes, anything touching backtest/evaluation/LIVE logic, final review of Codex output.
+- Don't re-read whole files Codex changed; review its diff summary and only open what's needed.

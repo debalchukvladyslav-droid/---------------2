@@ -27,8 +27,13 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       RESTIC_PASSWORD: ${{ secrets.RESTIC_PASSWORD }}
       BACKUP_WORKDIR: .recovery
+      BACKUP_STORAGE_DOWNLOAD_BUDGET_BYTES: '25000000'
+      BACKUP_DATABASE_LOGICAL_BUDGET_BYTES: '20000000'
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
       - uses: supabase/setup-cli@v1
         with:
           version: 2.109.1
@@ -86,9 +91,14 @@ jobs:
         shell: bash
         run: |
           mkdir -p .previous .recovery
-          restic restore latest --target .previous --include '/.recovery/storage/**' --include '/.recovery/storage-manifest.json' || true
-          if [ -d .previous/.recovery/storage ]; then mv .previous/.recovery/storage .recovery/storage; fi
-          if [ -f .previous/.recovery/storage-manifest.json ]; then mv .previous/.recovery/storage-manifest.json .recovery/storage-manifest.json; fi
+          restic snapshots --tag trader-journal --json > .previous/snapshots.json
+          if node -e 'const fs=require("node:fs"); process.exit(JSON.parse(fs.readFileSync(".previous/snapshots.json")).length ? 0 : 1)'; then
+            restic restore latest --tag trader-journal --target .previous --include '**/.recovery/storage/**' --include '**/.recovery/storage-manifest.json'
+          fi
+          previous_storage=$(find .previous -type d -path '*/.recovery/storage' -print -quit)
+          previous_manifest=$(find .previous -type f -path '*/.recovery/storage-manifest.json' -print -quit)
+          if [ -n "$previous_storage" ]; then mv "$previous_storage" .recovery/storage; fi
+          if [ -n "$previous_manifest" ]; then mv "$previous_manifest" .recovery/storage-manifest.json; fi
       - name: Create consistent PostgreSQL archive
         shell: bash
         run: |
@@ -102,9 +112,26 @@ jobs:
           rm .recovery/supabase-dump.sh
           docker run --rm \
             -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGDATABASE \
+            -v "$PWD/scripts:/scripts:ro" postgres:17 \
+            psql --no-psqlrc --set=ON_ERROR_STOP=1 \
+              --set=database_budget="$BACKUP_DATABASE_LOGICAL_BUDGET_BYTES" \
+              --file=/scripts/check-backup-budget.sql
+          docker run --rm \
+            -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD -e PGDATABASE \
             -v "$PWD/.recovery:/backup" postgres:17 \
-            pg_dump --role=postgres --format=custom --compress=6 --file=/backup/database.dump
+            pg_dump --role=postgres --format=custom --compress=6 --file=/backup/database.dump \
+              --exclude-table-data=data_recovery.change_history \
+              --exclude-table-data=data_recovery.restore_points \
+              --exclude-table-data=cron.job_run_details \
+              --exclude-table-data=public.polygon_bars \
+              --exclude-table-data=public.market_time_price_cache \
+              --exclude-table-data=public.market_best_exit_cache
           docker run --rm -v "$PWD/.recovery:/backup" postgres:17 pg_restore --list /backup/database.dump >/dev/null
+      - name: Archive recovery history and restore points without repeated full dumps
+        env:
+          SUPABASE_CLI_BIN: supabase
+        run: |
+          RECOVERY_ARCHIVE_REMOTE="${RCLONE_REMOTE}TraderJournalBackups/free-tier-archive" node scripts/archive-recovery.mjs --archive --prune
       - name: Download changed Storage objects and verify checksums
         run: node scripts/backup-storage.mjs > .recovery/backup-summary.json
       - name: Write backup manifest
@@ -116,7 +143,7 @@ jobs:
       - name: Encrypt, upload, verify, and rotate
         shell: bash
         run: |
-          restic backup .recovery --host trader-journal --tag daily --tag trader-journal
+          restic backup .recovery --exclude '*.tjarchive' --host trader-journal --tag daily --tag trader-journal
           restic check --read-data-subset=2.5%
           restic forget --tag trader-journal --group-by tags --keep-daily 30 --keep-weekly 12 --prune
       - name: Report verified backup

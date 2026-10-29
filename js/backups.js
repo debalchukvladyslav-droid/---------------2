@@ -43,10 +43,9 @@ export async function createCompressedBackup(options = {}) {
     if (!options.force && last?.version === 2 && Date.now() - Date.parse(last.createdAt) < minIntervalMs) return last;
     const entry = pointEntry(await rpc('create_restore_point', { p_reason: reason, p_user_id: owner }));
     assertContext(owner);
-    void offloadOneOlderRestorePoint(owner).catch((error) => console.warn('[Backup offload]', error?.message || error));
     if (serverBackupsLoadedFor !== owner) serverBackupsCache = [];
     serverBackupsLoadedFor = owner;
-    serverBackupsCache = [entry, ...serverBackupsCache].slice(0, 200);
+    serverBackupsCache = [entry, ...serverBackupsCache.filter(point => point.id !== entry.id)].slice(0, 3);
     return entry;
 }
 export function listCompressedBackups() {
@@ -56,7 +55,7 @@ export function listCompressedBackups() {
 }
 export async function listServerBackupsForUser(userId, limit = 100) {
     if (!userId) return [];
-    const capped = Math.min(200, limit);
+    const capped = Math.min(3, limit);
     const [pointsResult, legacyResult] = await Promise.allSettled([
         rpc('list_restore_points', { p_user_id: userId, p_limit: capped }),
         supabase.from('journal_backups')
@@ -71,7 +70,7 @@ export async function listServerBackupsForUser(userId, limit = 100) {
     }
     if (legacy?.error && !legacyMissing) console.warn('[Backups] legacy list skipped:', legacy.error.message || legacy.error);
     return [...(points || []).map(pointEntry), ...(legacy?.data || []).map(legacyEntry)]
-        .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+        .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 3);
 }
 export async function refreshServerBackups(limit = 100) {
     const owner = await getServerBackupUserId();
@@ -114,21 +113,6 @@ async function stageOffloadedSnapshot(point) {
     return rpc('stage_restore_snapshot', { p_restore_point_id: point.id, p_snapshot: snapshot, p_user_id: owner });
 }
 
-async function offloadOneOlderRestorePoint(owner) {
-    const points = await rpc('list_restore_points', { p_user_id: owner, p_limit: 200 });
-    const candidate = (points || []).slice(1).find((point) => point?.offloaded !== true);
-    if (!candidate?.id) return;
-    const full = await rpc('get_restore_point', { p_restore_point_id: candidate.id, p_user_id: owner });
-    if (!full?.snapshot?.tables || full.snapshot?.offloaded) return;
-    const path = `${owner}/${candidate.id}.json`;
-    const uploaded = await supabase.storage.from('journal-backups').upload(path, JSON.stringify(full.snapshot), {
-        upsert: true,
-        contentType: 'application/json',
-    });
-    if (uploaded.error) throw uploaded.error;
-    await rpc('mark_restore_point_offloaded', { p_restore_point_id: candidate.id, p_path: path, p_user_id: owner });
-}
-
 export async function readCompressedBackupEntry(entry) {
     if (entry.version === 2) {
         let point = entry.snapshot?.tables
@@ -169,7 +153,7 @@ export async function restoreCompressedBackup(id) {
 }
 export async function restoreCompressedBackupEntry(entry) { return restorePreparedBackup(await prepareBackupRestore({ ...entry, importedFile: true })); }
 export function deleteCompressedBackup(id) {
-    if (serverBackupsCache.some(entry => entry.id === id)) throw new Error('Серверні точки відновлення зберігаються автоматично протягом 30 днів.');
+    if (serverBackupsCache.some(entry => entry.id === id)) throw new Error('Три останні серверні копії зберігаються автоматично; старші переносяться у зовнішній архів.');
     localStorage.setItem(`${BACKUP_PREFIX}:${state.myUserId}`, JSON.stringify(readLocalEntries().filter(entry => entry.id !== id)));
 }
 export async function downloadCompressedBackup(id) {

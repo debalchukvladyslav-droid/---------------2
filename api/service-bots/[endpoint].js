@@ -37,7 +37,10 @@ function handleClientConfig(req, res) {
         googleServiceAccountEmail: serviceAccountEmail(),
     };
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    // This allowlisted config contains only values already sent to every visitor.
+    // Server time above remains uncached so session scheduling stays accurate.
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    res.setHeader('Vercel-CDN-Cache-Control', 'public, max-age=300');
     return res.status(200).send(`window.TRADING_JOURNAL_CONFIG = ${JSON.stringify(config)};\n`);
 }
 
