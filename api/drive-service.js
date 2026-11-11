@@ -38,13 +38,25 @@ async function assertServiceCanReadFolder(folderId) {
     }
 }
 
-async function driveConnection(user, folderId, { connectionId = '', write = false } = {}) {
+export async function driveConnection(user, folderId, { connectionId = '', write = false } = {}, {
+    resolve = resolveSourceConnection, verifyFolder = assertServiceCanReadFolder, save = saveVerifiedConnection,
+} = {}) {
     try {
-        return await resolveSourceConnection(user, 'drive', folderId, { connectionId, write });
+        const connection = await resolve(user, 'drive', folderId, { connectionId, write });
+        // Admin reads may use a virtual folder scope. Background registration
+        // needs a real, owner-bound connection ID just like trader sync does.
+        if (write && !connection?.id) {
+            if (!connection?.admin || connectionId) throw sourceAccessError();
+            await verifyFolder(folderId);
+            const saved = await save({ userId: user.id, kind: 'drive', resourceId: folderId });
+            if (!saved?.id) throw sourceAccessError('Не вдалося зберегти підключення Google Drive.');
+            return saved;
+        }
+        return connection;
     } catch (error) {
         if (!shouldProvisionDriveConnection(error, { folderId, write, connectionId })) throw error;
-        await assertServiceCanReadFolder(folderId);
-        return await saveVerifiedConnection({ userId: user.id, kind: 'drive', resourceId: folderId });
+        await verifyFolder(folderId);
+        return await save({ userId: user.id, kind: 'drive', resourceId: folderId });
     }
 }
 

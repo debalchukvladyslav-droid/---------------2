@@ -210,7 +210,9 @@ test('sheet date sequence parser infers day/month or month/day from row order', 
     );
 });
 
-test('sheet date parser accepts weekday prefixes and rolls future compact dates to previous year', () => {
+test('sheet date parser accepts weekday prefixes and rolls future compact dates to previous year', (t) => {
+    // November must remain in the future for this test, regardless of the run date.
+    t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-29T12:00:00Z') });
     assert.deepEqual(
         parseSheetDateCellsToIsoSequence(['Пн-1.06', '2.06'], { year: 2026 }),
         ['2026-06-01', '2026-06-02'],

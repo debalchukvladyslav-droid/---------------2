@@ -40,6 +40,10 @@ export async function verifyRecoverySchema({ url, key, fetchImpl = fetch } = {})
     const checks = [
         ['RPC get_data_sync_state', `${base}/rest/v1/rpc/get_data_sync_state`, { method: 'POST', headers, body: '{}' }],
         ['table source_sync_jobs', `${base}/rest/v1/source_sync_jobs?select=id&limit=0`, { headers }],
+        ['RPC get_source_sync_state', `${base}/rest/v1/rpc/get_source_sync_state`, { method: 'POST', headers,
+            body: JSON.stringify({ p_user_id: null }) }],
+        ['RPC register_drive_screenshot_reference', `${base}/rest/v1/rpc/register_drive_screenshot_reference`, { method: 'POST', headers,
+            body: JSON.stringify({ p_connection_id: null, p_epoch: null, p_metadata: {} }) }],
     ];
     for (const [name, endpoint, options] of checks) {
         const response = await fetchImpl(endpoint, { ...options, signal: AbortSignal.timeout(15_000) });

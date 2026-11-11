@@ -37,3 +37,18 @@ test('authorization errors prove that required objects exist', async () => {
     const fetchImpl = async () => new Response(JSON.stringify({ code: '42501' }), { status: 401 });
     assert.equal(await verifyRecoverySchema({ url: 'https://project.supabase.co', key: 'anon', fetchImpl }), true);
 });
+
+test('deployment stops when either Drive RPC is absent even if recovery tables exist', async () => {
+    for (const name of ['get_source_sync_state','register_drive_screenshot_reference']) {
+        const fetchImpl = async (url, options) => {
+            if (url.endsWith('/rpc/register_drive_screenshot_reference')) {
+                assert.deepEqual(JSON.parse(options.body),{p_connection_id:null,p_epoch:null,p_metadata:{}});
+            }
+            return url.endsWith('/rpc/'+name)
+                ? Response.json({code:'PGRST202'},{status:404})
+                : Response.json({code:'42501'},{status:401});
+        };
+        await assert.rejects(verifyRecoverySchema({url:'https://project.supabase.co',key:'anon',fetchImpl}),
+            new RegExp('RPC '+name+' is missing'));
+    }
+});
