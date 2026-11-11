@@ -766,7 +766,13 @@ export async function switchUser(nick) {
     _isSwitching = true;
     // Finish any pending edit while the old profile is still active. After the
     // viewed profile changes, autosave correctly becomes read-only.
-    await window.autoSaveCurrentDay?.();
+    try {
+        await window.autoSaveCurrentDay?.({ preventNavigation: true });
+    } catch (error) {
+        _isSwitching = false;
+        showToast(error?.message || 'Не вдалося зберегти день. Правки залишилися у формі.');
+        return false;
+    }
     if (typeof window.stopSheetAutoSync === 'function') window.stopSheetAutoSync();
     const selectedDocName = `${nick}_stats`;
     state.CURRENT_VIEWED_USER = selectedDocName;

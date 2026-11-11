@@ -1,4 +1,11 @@
 const DATA_SYNC_PROTOCOL = 2;
+
+function cacheLoadedAssets(worker = navigator.serviceWorker.controller) {
+    if (!worker?.postMessage) return;
+    const urls = [...new Set((globalThis.performance?.getEntriesByType?.('resource') || []).map((entry) => entry.name))];
+    worker.postMessage({ type: 'strum:cache-assets', urls });
+}
+
 export function initPwa() {
     if ('serviceWorker' in navigator && (location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname))) {
         navigator.serviceWorker.addEventListener('message', event => {
@@ -7,8 +14,14 @@ export function initPwa() {
                 if (Number(event.data.version) !== DATA_SYNC_PROTOCOL) location.reload();
             }
         });
+        navigator.serviceWorker.addEventListener('controllerchange', () => cacheLoadedAssets());
         const register = () => navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' })
-            .then(registration => registration.update()).catch(error => console.warn('[PWA]', error));
+            .then(async (registration) => {
+                await registration.update();
+                // Initial scripts predate worker installation, so fetch interception
+                // alone cannot make the first successful visit available offline.
+                cacheLoadedAssets(registration.active);
+            }).catch(error => console.warn('[PWA]', error));
         if (document.readyState === 'complete') void register();
         else window.addEventListener('load', register, { once: true });
     }

@@ -6,7 +6,12 @@ import { rememberShsTrader } from './shs_sync.js';
 import { parseDecimalInput, showToast } from './utils.js';
 import { state } from './state.js';
 import { INVALID_IMAGE_FORMAT_MESSAGE, isJpegOrPng } from './image_file_validation.js';
-import { cancelLearnReplaySetup, enterLearnReplay, focusLearnReplayStop, onLearnRunButton, setLearnReplaySpeed, showLearnMode, toggleLearnReplay } from './learn_replay.js';
+import { lazyActions } from './lazy_actions.js';
+
+const { cancelLearnReplaySetup, enterLearnReplay, focusLearnReplayStop, onLearnRunButton, setLearnReplaySpeed, showLearnMode, toggleLearnReplay } = lazyActions(
+    () => import('./learn_replay.js'),
+    ['cancelLearnReplaySetup', 'enterLearnReplay', 'focusLearnReplayStop', 'onLearnRunButton', 'setLearnReplaySpeed', 'showLearnMode', 'toggleLearnReplay'],
+);
 
 const MAX_IMPORT_SIZE_MB = 35;
 let dayFormDirty = false;
@@ -119,8 +124,8 @@ function trackDayFormChanges() {
 
     document.getElementById('btn-save-day')?.addEventListener('click', () => {
         markBusy(document.getElementById('btn-save-day'), 1300);
-        window.setTimeout(() => { dayFormDirty = false; }, 250);
     });
+    window.addEventListener('journal:day-saved', () => { dayFormDirty = false; });
 
     window.addEventListener('beforeunload', (event) => {
         if (!dayFormDirty) return;
@@ -130,15 +135,17 @@ function trackDayFormChanges() {
 }
 
 function addKeyboardShortcuts() {
-    document.addEventListener('keydown', (event) => {
+    document.addEventListener('keydown', async (event) => {
         const isSave = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's';
-        if (!isSave) return;
+        if (!isSave || event.defaultPrevented || event.isComposing) return;
         event.preventDefault();
         if (typeof window.saveEntry === 'function') {
             markBusy(document.getElementById('btn-save-day'), 1300);
-            window.saveEntry();
-            dayFormDirty = false;
-            showToast('День збережено');
+            try {
+                await window.saveEntry();
+            } catch (error) {
+                showToast(`Не вдалося зберегти день: ${error?.message || 'помилка'}`);
+            }
         }
     });
 }
@@ -279,6 +286,7 @@ function activateAction(action, trigger, event = null) {
         'error-type-add': () => window.addNewErrorType?.(),
         'session-readiness-check': () => window.checkSessionReadiness?.(),
         'day-save': () => window.saveEntry?.(),
+        'view-retry': () => window.switchMainTab?.(trigger?.dataset?.tab, { refresh: true, updateRoute: false }),
         'date-picker': () => {
             if (trigger?.id === 'day-stage-date') {
                 void import('./day_stage.js').then((module) => module.toggleDayDateCalendar());
@@ -516,7 +524,12 @@ function activateAction(action, trigger, event = null) {
 
     const fn = actions[action];
     if (!fn) return false;
-    return fn() !== false;
+    const result = fn();
+    if (result?.catch) result.catch((error) => {
+        console.error(`[Action ${action}]`, error);
+        showToast('Не вдалося виконати дію. Спробуйте ще раз.');
+    });
+    return result !== false;
 }
 
 function updateRangeOutput(input) {

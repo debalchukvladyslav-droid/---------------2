@@ -8,13 +8,14 @@ async function doLoadPartials(root = document) {
     ];
     if (!hosts.length) return;
 
-    await Promise.all(hosts.map(async (host) => {
+    const results = await Promise.allSettled(hosts.map(async (host) => {
         const url = host.getAttribute(PARTIAL_ATTR);
         if (!url) return;
 
-        const bust = `v=${encodeURIComponent(window.APP_VERSION || 'dev')}&t=${Date.now()}`;
-        const partialUrl = `${url}${url.includes('?') ? '&' : '?'}${bust}`;
-        const response = await fetch(partialUrl, { cache: 'reload' });
+        const version = `v=${encodeURIComponent(window.APP_VERSION || 'dev')}`;
+        const path = url.startsWith('/') ? url : `/${url}`;
+        const partialUrl = `${path}${path.includes('?') ? '&' : '?'}${version}`;
+        const response = await fetch(partialUrl, { cache: 'no-cache' });
         if (!response.ok) throw new Error(`Partial ${url}: HTTP ${response.status}`);
 
         const html = await response.text();
@@ -31,10 +32,18 @@ async function doLoadPartials(root = document) {
         });
         host.replaceWith(template.content.cloneNode(true));
     }));
+    // Finish every in-flight replacement before a retry inspects the remaining hosts.
+    const failed = results.find((result) => result.status === 'rejected');
+    if (failed) throw failed.reason;
 }
 
 export function loadPartials(root = document) {
     if (root !== document) return doLoadPartials(root);
-    if (!partialsPromise) partialsPromise = doLoadPartials(document);
+    if (!partialsPromise) {
+        partialsPromise = doLoadPartials(document).catch((error) => {
+            partialsPromise = null;
+            throw error;
+        });
+    }
     return partialsPromise;
 }

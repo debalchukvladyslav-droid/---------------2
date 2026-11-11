@@ -79,6 +79,20 @@ export function getWeekRange(weekStart) {
     return { start: dates[0], end: dates[4], dates };
 }
 
+// Older calendar versions stored Kyiv-local Monday midnight as UTC Sunday.
+// Continue reading/editing that entry without rewriting or deleting old notes.
+export function resolveWeeklyComment(comments = {}, weekStart) {
+    const monday = getWeekStartIso(weekStart);
+    if (Object.hasOwn(comments, monday)) return { key: monday, text: String(comments[monday] ?? '') };
+    const previous = parseIso(monday);
+    if (previous) {
+        previous.setUTCDate(previous.getUTCDate() - 1);
+        const legacyKey = isoDate(previous);
+        if (Object.hasOwn(comments, legacyKey)) return { key: legacyKey, text: String(comments[legacyKey] ?? '') };
+    }
+    return { key: monday, text: '' };
+}
+
 export function collectWeekStarts(journal = {}, rowsByDay = {}, currentDate = new Date()) {
     const starts = new Set([getWeekStartIso(currentDate)]);
     [...Object.keys(journal || {}), ...Object.keys(rowsByDay || {})].forEach((dateStr) => {

@@ -686,6 +686,23 @@ function setViewLoading(view, tab, isLoading) {
     }
 }
 
+function showViewError(view, tab) {
+    view.querySelector(':scope > .app-view-error')?.remove();
+    const error = document.createElement('div');
+    error.className = 'app-view-error';
+    error.setAttribute('role', 'alert');
+    const message = document.createElement('p');
+    message.textContent = 'Не вдалося повністю завантажити розділ. Перевірте з’єднання та спробуйте ще раз.';
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'btn-secondary';
+    retry.textContent = 'Повторити';
+    retry.dataset.action = 'view-retry';
+    retry.dataset.tab = tab;
+    error.append(message, retry);
+    view.prepend(error);
+}
+
 let restoreDayModeFocus = false;
 
 function releaseHiddenViewFocus(view) {
@@ -738,7 +755,7 @@ async function runMainTabWork(tab) {
     const tasks = [];
     if (tab === 'team-report' && window.renderTeamReport) tasks.push(Promise.resolve(window.renderTeamReport()));
     if (tab === 'ai') {
-        window.initAILearningCenter?.();
+        if (window.initAILearningCenter) tasks.push(Promise.resolve(window.initAILearningCenter()));
     }
     if (tab === 'stats' && window.refreshStatsView) {
         // РЎРєРёРґР°С”РјРѕ all-time С„С–Р»СЊС‚СЂ РїСЂРё РїРѕРІРµСЂРЅРµРЅРЅС– РЅР° РІРєР»Р°РґРєСѓ вЂ” С‰РѕР± РЅРµ С‚СЂРёРіРµСЂРёР»Рѕ РІР°Р¶РєРµ Р·Р°РІР°РЅС‚Р°Р¶РµРЅРЅСЏ
@@ -814,7 +831,9 @@ async function runMainTabWork(tab) {
     if (tab === 'research') tasks.push(import('./research.js').then((module) => module.openResearchView()));
     if (tab === 'mentor-review' && window.refreshMentorReviewQueue) tasks.push(Promise.resolve(window.refreshMentorReviewQueue()));
 
-    await Promise.allSettled(tasks);
+    const results = await Promise.allSettled(tasks);
+    const failed = results.filter((result) => result.status === 'rejected');
+    if (failed.length) throw new AggregateError(failed.map((result) => result.reason), `Failed to load ${tab}`);
 }
 
 function getDashboardGreetingName() {
@@ -906,18 +925,23 @@ export async function switchMainTab(tab, options = {}) {
     if (!document.getElementById('view-' + tab)) {
         tab = 'dash';
     }
-    document.body?.classList.toggle('is-calendar-tab', tab === 'calendar');
     const previousView = document.querySelector('.view-content.active');
     const previousTab = previousView?.id?.replace(/^view-/, '') || '';
     renderDashQuote();
-    if (previousTab === tab) {
+    if (previousTab === tab && !options.refresh) {
         if (tab === 'dash') window.closeDayPanel?.();
         return;
     }
     if (previousTab === 'learn' && tab !== 'learn') {
         void import('./learn_replay.js').then((module) => module.pauseLearnReplay());
     }
-    await window.autoSaveCurrentDay?.();
+    try {
+        await window.autoSaveCurrentDay?.({ preventNavigation: true });
+    } catch (error) {
+        showToast(error?.message || 'Не вдалося зберегти день. Правки залишилися у формі.');
+        return false;
+    }
+    document.body?.classList.toggle('is-calendar-tab', tab === 'calendar');
     const switchToken = ++mainTabSwitchToken;
     if (options.updateRoute !== false) updateRouteForTab(tab, options.historyMode);
     // Очищаємо старі активні стани
@@ -935,6 +959,7 @@ export async function switchMainTab(tab, options = {}) {
     if(btn) btn.classList.add('active');
     
     let view = document.getElementById('view-' + tab);
+    view?.querySelector(':scope > .app-view-error')?.remove();
     activateMainView(view, tab, previousTab);
     const skipViewLoader = tab === 'stop-errors';
     if (!skipViewLoader) setViewLoading(view, tab, true);
@@ -962,13 +987,19 @@ export async function switchMainTab(tab, options = {}) {
     if (tab === 'dash') window.closeDayPanel?.();
 
     const startedAt = performance.now();
-    await nextPaint();
-    await runMainTabWork(tab);
-    if (!skipViewLoader) {
-        const elapsed = performance.now() - startedAt;
-        if (elapsed < 260) await delay(260 - elapsed);
-        if (switchToken === mainTabSwitchToken && view?.classList.contains('active')) {
-            setViewLoading(view, tab, false);
+    try {
+        await nextPaint();
+        await runMainTabWork(tab);
+    } catch (error) {
+        console.error(`[UI ${tab}]`, error);
+        if (switchToken === mainTabSwitchToken && view?.classList.contains('active')) showViewError(view, tab);
+    } finally {
+        if (!skipViewLoader) {
+            const elapsed = performance.now() - startedAt;
+            if (elapsed < 260) await delay(260 - elapsed);
+            if (switchToken === mainTabSwitchToken && view?.classList.contains('active')) {
+                setViewLoading(view, tab, false);
+            }
         }
     }
 }
@@ -980,8 +1011,12 @@ export function syncMainTabFromRoute() {
 }
 
 export function bindMainTabRoutes() {
-    window.addEventListener('popstate', () => {
-        switchMainTab(getTabFromRoute(), { updateRoute: false });
+    window.addEventListener('popstate', async () => {
+        const switched = await switchMainTab(getTabFromRoute(), { updateRoute: false });
+        if (switched === false) {
+            const current = document.querySelector('.view-content.active')?.id?.replace(/^view-/, '') || 'dash';
+            updateRouteForTab(current, 'replace');
+        }
     });
 }
 

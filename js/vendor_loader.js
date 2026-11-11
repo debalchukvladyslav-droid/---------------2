@@ -10,10 +10,14 @@ export function loadScriptOnce(src, { async = true, defer = true } = {}) {
                 resolve();
                 return;
             }
-            existing.addEventListener('load', () => resolve(), { once: true });
-            existing.addEventListener('error', reject, { once: true });
+            existing.addEventListener('load', () => { existing.dataset.loaded = 'true'; resolve(); }, { once: true });
+            existing.addEventListener('error', () => {
+                existing.remove();
+                reject(new Error(`Не вдалося завантажити скрипт: ${src}`));
+            }, { once: true });
         });
         loadedScripts.set(src, promise);
+        promise.catch(() => loadedScripts.delete(src));
         return promise;
     }
 
@@ -30,11 +34,15 @@ export function loadScriptOnce(src, { async = true, defer = true } = {}) {
             script.dataset.loaded = 'true';
             resolve();
         };
-        script.onerror = () => reject(new Error(`Не вдалося завантажити скрипт: ${src}`));
+        script.onerror = () => {
+            script.remove();
+            reject(new Error(`Не вдалося завантажити скрипт: ${src}`));
+        };
         document.head.appendChild(script);
     });
 
     loadedScripts.set(src, promise);
+    promise.catch(() => loadedScripts.delete(src));
     return promise;
 }
 

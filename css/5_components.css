@@ -3,6 +3,9 @@
    ========================================= */
 
 /* === GALLERY / SCREENSHOTS === */
+.app-view-error { flex: 0 0 auto; margin: 12px; padding: 16px; border: 1px solid var(--loss); border-radius: var(--radius-md); background: var(--bg-panel); }
+.app-view-error p { margin: 0 0 12px; color: var(--text-main); }
+
 .unassigned-gallery { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 20px; padding-top: 12px; align-items: stretch; }
 .unassigned-item { min-width: 280px; max-width: 280px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px; display: flex; flex-direction: column; gap: 10px; position: relative; transition: var(--transition); }
 .unassigned-item:hover { border-color: var(--accent); }

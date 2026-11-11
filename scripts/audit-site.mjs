@@ -185,10 +185,10 @@ async function main() {
     const indexHtml = await readText('index.html');
     const linkedCss = matchesAll(indexHtml, /<link[^>]+href=["']([^"']+\.css)["']/g)
         .filter((href) => !href.startsWith('http'))
-        .map((href) => path.posix.normalize(href));
+        .map((href) => path.posix.normalize(href).replace(/^\//, ''));
     const entryScripts = matchesAll(indexHtml, /<script[^>]+src=["']([^"']+\.js)["']/g)
         .filter((src) => !src.startsWith('http'))
-        .map((src) => path.posix.normalize(src));
+        .map((src) => path.posix.normalize(src).replace(/^\//, ''));
     const partialTree = await collectPartialTree(indexHtml);
 
     const { graph, missing: missingImports } = await collectImportGraph(groups.js);

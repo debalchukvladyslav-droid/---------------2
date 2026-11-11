@@ -12,6 +12,7 @@ import { pickSheetRowsSource } from './datagrid_rows.js';
 import { getNyseDaySchedule } from './nyse_calendar.js';
 import { compareRecentTradeRows, isNotTakenTrade, notTakenTradePv, resolveMonthlyDayloss } from './data_utils.js';
 import { openDayStage, refreshDayStage, refreshDayTypeScreens, syncDayExtras, noteDayFly } from './day_stage.js';
+import { getWeekStartIso, getWeekRange, resolveWeeklyComment } from './cumulative_weekly.js';
 
 let _selectDateRequestId = 0;
 let _dayEditorDirty = false;
@@ -219,7 +220,7 @@ export function updateDashboardWidgets(year, month) {
     }
 
     const winrate = tradingDays > 0 ? (wins / tradingDays) * 100 : 0;
-    const pf = totalLoss > 0 ? totalGross / totalLoss : (totalGross > 0 ? 99 : 0);
+    const pf = totalLoss > 0 ? totalGross / totalLoss : (totalGross > 0 ? Infinity : 0);
 
     const pnlEl = document.getElementById('pro-total-pnl');
     const wrEl = document.getElementById('pro-winrate');
@@ -228,7 +229,7 @@ export function updateDashboardWidgets(year, month) {
     if (pnlEl) pnlEl.textContent = (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(2);
     if (wrEl) wrEl.textContent = winrate.toFixed(1) + '%';
     if (trEl) trEl.textContent = String(totalTrades);
-    if (pfEl) pfEl.textContent = pf.toFixed(2);
+    if (pfEl) pfEl.textContent = pf === Infinity ? '∞' : pf.toFixed(2);
     if (pnlEl) pnlEl.style.color = totalPnl >= 0 ? 'var(--profit)' : 'var(--loss)';
 
     updateDashMiniEquityChart(year, month);
@@ -353,9 +354,7 @@ export async function shiftDate(offset) {
     let newDay = String(d.getDate()).padStart(2, '0');
     let newDateStr = `${newYear}-${newMonth}-${newDay}`;
 
-    applyDateStrToCalendarSelectors(newDateStr);
-
-    await selectDate(newDateStr);
+    if (await selectDate(newDateStr) === false) return false;
     renderView();
 }
 
@@ -367,8 +366,7 @@ export function updateDisplayDate(dateStr) {
 }
 
 export async function selectDateFromInput(dateStr) {
-    applyDateStrToCalendarSelectors(dateStr);
-    await selectDate(dateStr);
+    if (await selectDate(dateStr) === false) return false;
     renderView();
 }
 
@@ -665,13 +663,21 @@ async function openDayEditor(dateStr) {
     if (!mobile) {
         requestAnimationFrame(focusActiveDayEditorField);
     }
-    await loadPromise;
+    if (await loadPromise === false) return false;
     if (!mobile) requestAnimationFrame(focusActiveDayEditorField);
 }
 
 export async function selectDate(dateStr) {
-    if (state.selectedDateStr && state.selectedDateStr !== dateStr) {
-        await autoSaveCurrentDay();
+    if (state.selectedDateStr) {
+        try {
+            await autoSaveCurrentDay({ preventNavigation: true });
+        } catch (error) {
+            applyDateStrToCalendarSelectors(state.selectedDateStr);
+            const dateInput = document.getElementById('trade-date');
+            if (dateInput) dateInput.value = state.selectedDateStr;
+            showToast(error.message);
+            return false;
+        }
     }
     const requestId = ++_selectDateRequestId;
     state.selectedDateStr = dateStr;
@@ -827,6 +833,7 @@ export function saveEntry(options = {}) {
     dayData.__detailsLoaded = true;
     state.appData.journal[state.selectedDateStr] = dayData;
     markJournalDayDirty(state.selectedDateStr);
+    const savedDate = state.selectedDateStr;
     const savedRevision = _dayEditorRevision;
     const saveBtn = document.getElementById('btn-save-day');
     if (!silent) setElementLoading(saveBtn, true, 'Збереження...');
@@ -834,7 +841,10 @@ export function saveEntry(options = {}) {
     // Тихе збереження
     return import('./storage.js').then(module => {
         return module.saveJournalData().then(() => {
-            if (_dayEditorRevision === savedRevision) _dayEditorDirty = false;
+            if (_dayEditorRevision === savedRevision && state.selectedDateStr === savedDate) {
+                _dayEditorDirty = false;
+                window.dispatchEvent(new CustomEvent('journal:day-saved', { detail: { date: savedDate } }));
+            }
             window.dispatchEvent(new CustomEvent('journal:score-refresh'));
             if (!silent) {
                 showGlobalLoader('save-day', 'День збережено', { type: 'success' });
@@ -863,7 +873,7 @@ export function saveEntry(options = {}) {
     });
 }
 
-export function autoSaveCurrentDay() {
+export async function autoSaveCurrentDay({ preventNavigation = false } = {}) {
     if (_dayAutoSaveTimer) {
         clearTimeout(_dayAutoSaveTimer);
         _dayAutoSaveTimer = null;
@@ -871,16 +881,26 @@ export function autoSaveCurrentDay() {
     if (!_dayEditorDirty || state.dayDetailsLoading || state.CURRENT_VIEWED_USER !== state.USER_DOC_NAME) {
         return Promise.resolve(false);
     }
-    if (_dayAutoSavePromise) return _dayAutoSavePromise;
-    _dayAutoSavePromise = saveEntry({ silent: true }).finally(() => { _dayAutoSavePromise = null; });
-    return _dayAutoSavePromise;
+    if (!_dayAutoSavePromise) {
+        _dayAutoSavePromise = saveEntry({ silent: true }).catch((error) => {
+            console.error('[Autosave]', error);
+            return false;
+        }).finally(() => { _dayAutoSavePromise = null; });
+    }
+    const saved = await _dayAutoSavePromise;
+    if (!saved) {
+        const message = 'Не вдалося зберегти день на пристрої. Правки залишилися у формі. Спробуйте зберегти ще раз.';
+        if (preventNavigation) throw Object.assign(new Error(message), { code: 'DAY_SAVE_FAILED' });
+        showToast(message);
+    }
+    // A user can keep typing while the previous revision is being committed.
+    if (saved && preventNavigation && _dayEditorDirty) return autoSaveCurrentDay({ preventNavigation: true });
+    return saved;
 }
 
 // Допоміжні функції для календаря
 export function getMonday(d) { 
-    d = new Date(d); 
-    var day = d.getDay(), diff = d.getDate() - day + (day == 0 ? -6 : 1); 
-    return new Date(d.setDate(diff)).toISOString().split('T')[0]; 
+    return getWeekStartIso(d instanceof Date ? d : new Date(d));
 }
 
 function getMondayKeyFromDateKey(dateKey) {
@@ -889,13 +909,8 @@ function getMondayKeyFromDateKey(dateKey) {
 }
 
 function sumWeekTradingStats(mondayIso) {
-    const [y, m, d] = mondayIso.split('-').map(Number);
-    const start = new Date(y, m - 1, d);
     let sumPnl = 0, sumComm = 0, sumLoc = 0, nPnl = 0;
-    for (let i = 0; i < 5; i++) {
-        const dt = new Date(start);
-        dt.setDate(start.getDate() + i);
-        const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    for (const key of getWeekRange(mondayIso).dates) {
         const j = state.appData.journal[key];
         if (!j) continue;
         const pnl = getEffectiveDayPnl(j);
@@ -917,7 +932,7 @@ function formatLongDateUk(dateKey) {
 
 function appendWeekSummaryForDate(dateKey) {
     const mon = getMondayKeyFromDateKey(dateKey);
-    const wNote = (state.appData.weeklyComments[mon] || '').trim();
+    const wNote = resolveWeeklyComment(state.appData.weeklyComments, mon).text.trim();
     const { sumPnl, nPnl } = sumWeekTradingStats(mon);
     let b = `\n\n— Тиждень з ${mon}`;
     b += wNote ? `\n${excerptTooltip(wNote, 200)}` : `\nБез підсумку тижня (клік по мітці «W»).`;
@@ -926,7 +941,7 @@ function appendWeekSummaryForDate(dateKey) {
 }
 
 function buildWeekHoverText(wkKey) {
-    const wNote = (state.appData.weeklyComments[wkKey] || '').trim();
+    const wNote = resolveWeeklyComment(state.appData.weeklyComments, wkKey).text.trim();
     const { sumPnl, nPnl } = sumWeekTradingStats(wkKey);
     let s = `Тиждень ${wkKey}\n`;
     s += wNote ? `${excerptTooltip(wNote, 320)}\n` : `Клік — додати короткий підсумок тижня.\n`;
@@ -1060,7 +1075,8 @@ function renderCalendarTooltip(el, text, type) {
 
 export function createWeekLabel(wkKey) {
     let w = document.createElement('div'); 
-    let hasComment = state.appData.weeklyComments[wkKey] && state.appData.weeklyComments[wkKey].trim() !== '';
+    const comment = resolveWeeklyComment(state.appData.weeklyComments, wkKey);
+    let hasComment = comment.text.trim() !== '';
     let tooltip = document.getElementById('tooltip');
     
     w.className = 'week-label' + (hasComment ? ' has-comment' : '');
@@ -1074,7 +1090,7 @@ export function createWeekLabel(wkKey) {
     };
     w.onmousemove = (e) => { if (tooltip) positionCalendarTooltip(e, tooltip); };
     w.onmouseleave = () => { if (tooltip) tooltip.style.display = 'none'; };
-    w.onclick = () => { showPrompt(`Підсумок за тиждень (${wkKey}):`, state.appData.weeklyComments[wkKey] || "").then(c => { if (c !== null && /^\d{4}-\d{2}-\d{2}$/.test(wkKey) && !Object.prototype.hasOwnProperty.call(Object.prototype, wkKey)) { state.appData.weeklyComments[wkKey] = c; saveToLocal(); renderView(); } }); };
+    w.onclick = () => { showPrompt(`Підсумок за тиждень (${wkKey}):`, comment.text).then(c => { if (c !== null && /^\d{4}-\d{2}-\d{2}$/.test(wkKey) && !Object.prototype.hasOwnProperty.call(Object.prototype, wkKey)) { state.appData.weeklyComments[comment.key] = c; saveToLocal(); renderView(); } }); };
     return w;
 }
 

@@ -19,7 +19,6 @@ import { onDayFormVisibilityChanged } from './day_stage.js';
 import { toggleStatsDropdown, toggleTree, toggleStatsFilter, refreshStatsView, closeStatsDropdown, renderStatsSourceSelector, selectStatsSource, renderTradeTypeSelector, selectTradeTypeFilter, toggleStatsEquityMode, toggleStatsCompareMode, closeStatsCompareMode, openStatsComparisonWithTrader } from './stats.js';
 import { buildExceptionKfRows, combineStatsSheetRows } from './stats_sheet_metrics.js';
 import { pickSessionCriteriaHints, sessionCriteriaDateMatches } from './session_criteria_core.js';
-import { openAnalyticsExport, closeAnalyticsExport, analyticsExportNext, analyticsExportPrev, addAnalyticsReportPeriod, resetAnalyticsExport, saveAnalyticsExportPreset, loadAnalyticsExportPreset, generateCurrentAnalyticsPdf } from './analytics_export.js';
 import { renderErrorsList, addNewErrorType, deleteErrorType, renderChecklistDisplay, renderSettingsChecklist, addNewChecklistItem, deleteChecklistItem, saveChecklist, renderSidebarSliders, renderSettingsSliders, addNewSliderItem, deleteSliderItem, saveSlidersSettings, renderSettingsTradeTypes, addNewTradeType, deleteTradeType, saveTradeTypes, renderMyTradeTypes, addMyTradeType, deleteMyTradeType, saveMyTradeTypes, renderSettingsSituations, addPlaybookSituation, deletePlaybookSituation, savePlaybookSituations } from './settings.js';
 import { openZoom, openZoomGallery, closeZoom, openOriginal, zoomStep, loadMoreUnassigned, assignImage, removeAssignedImage, deleteFileFromPC, loadImages, renderAssignedScreens, disposeScreensView, openScreenshotForTrade, getStorageUrl } from './gallery.js';
 import { initStopReview, refreshStopReview } from './stop_review.js';
@@ -31,8 +30,6 @@ import { loadLatestCoachInsight, requestSessionCoachAnalysis } from './proactive
 import { setupOCRDrawing, loadLatestImageForOCR, saveVisualOCRSettings, editTicker, forceScan, updateBadgeUI, runOCR, enqueueOCR, enqueueBackgroundOCRForAllScreens, getOCRQueueStatus } from './ocr.js';
 import { importFondexxReport, importPPROReport, importFondexxTrades, importFondexxSummaryByDate } from './parsers.js';
 import { renderPlaybook, addPlaybookSetup, editPlaybookSetup, savePlaybookSetup, deletePlaybookSetup, getPlaybookContext, getPlaybookForSituation, loadPlaybook } from './playbook.js';
-import { loadLearnContent, renderLearnCache } from './learn.js';
-import { renderAdminPanel, renderTestingPanel } from './admin.js';
 import { initSidebarAccount, refreshSidebarAccount } from './sidebar_account.js';
 import { initMentorReviewUI, refreshMentorReviewQueue, setMentorReviewNavBadges } from './mentor_review.js';
 
@@ -62,13 +59,13 @@ import {
 } from './backups.js';
 import { loadPartials } from './partials.js';
 import { applyPersistedBackground, initBackgroundControls } from './backgrounds.js';
-import { initGlobalAppEvents } from './app_events.js';
+import { initAuthKeyboardEvents, initGlobalAppEvents } from './app_events.js';
 import { showGlobalLoader, hideGlobalLoader } from './loading.js';
 import { initOnboarding, startOnboardingTour, resetOnboardingRuntime } from './onboarding.js';
 import { getTrustedServerNow, isEndOfSessionReviewTime } from './session_schedule.js';
 import { renderDashboardAI, refreshDashboardAI, toggleDashboardAIHistory, rotateDashboardAI, openDashboardMentor, closeDashboardMentor, sendDashboardMentorMessage, switchDashboardMentorTab } from './dashboard_ai.js';
 import { analyzeLossPatterns, renderLossPatternAnalysis } from './loss_pattern_analysis.js';
-import { continueAILearning, evaluateAILearning, initAILearningCenter, renderAILearningCenter, runAILearning, runAIPaperDecision, startNewAILearning, toggleAILearningDay, reviewAILearningExample } from './ai_learning.js';
+import { lazyActions } from './lazy_actions.js';
 import {
     initAssistantPanel,
     toggleAssistantPanel,
@@ -89,7 +86,19 @@ import { syncClientErrorReporter } from './client_error_report.js';
 let appShellPromise = null;
 let appShellEventsReady = false;
 
+const { openAnalyticsExport, closeAnalyticsExport, analyticsExportNext, analyticsExportPrev, addAnalyticsReportPeriod, resetAnalyticsExport, saveAnalyticsExportPreset, loadAnalyticsExportPreset, generateCurrentAnalyticsPdf } = lazyActions(
+    () => import('./analytics_export.js'),
+    ['openAnalyticsExport', 'closeAnalyticsExport', 'analyticsExportNext', 'analyticsExportPrev', 'addAnalyticsReportPeriod', 'resetAnalyticsExport', 'saveAnalyticsExportPreset', 'loadAnalyticsExportPreset', 'generateCurrentAnalyticsPdf'],
+);
+const { loadLearnContent, renderLearnCache } = lazyActions(() => import('./learn.js'), ['loadLearnContent', 'renderLearnCache']);
+const { renderAdminPanel, renderTestingPanel } = lazyActions(() => import('./admin.js'), ['renderAdminPanel', 'renderTestingPanel']);
+const { continueAILearning, evaluateAILearning, initAILearningCenter, renderAILearningCenter, runAILearning, runAIPaperDecision, startNewAILearning, toggleAILearningDay, reviewAILearningExample } = lazyActions(
+    () => import('./ai_learning.js'),
+    ['continueAILearning', 'evaluateAILearning', 'initAILearningCenter', 'renderAILearningCenter', 'runAILearning', 'runAIPaperDecision', 'startNewAILearning', 'toggleAILearningDay', 'reviewAILearningExample'],
+);
+
 await loadPartials(document.querySelector('[data-partial="partials/modals/auth-overlay.html"]'));
+initAuthKeyboardEvents();
 
 async function ensureAppShellLoaded() {
     if (!appShellPromise) {
